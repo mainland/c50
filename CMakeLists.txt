@@ -11,6 +11,8 @@ if(C50_ENABLE_SANITIZERS AND C50_ENABLE_THREAD_SANITIZER)
 endif()
 
 include(CTest)
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
 set(C50_CORE_SOURCES
     src/attwinnow.c
@@ -47,13 +49,24 @@ set(C50_CORE_SOURCES
 
 add_library(c50_core STATIC ${C50_CORE_SOURCES})
 add_library(C50::core ALIAS c50_core)
-set_target_properties(c50_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(
+    c50_core
+    PROPERTIES
+        EXPORT_NAME core
+        POSITION_INDEPENDENT_CODE ON
+)
 target_include_directories(
     c50_core
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
+
+add_library(c50_cpp INTERFACE)
+add_library(C50::cpp ALIAS c50_cpp)
+set_target_properties(c50_cpp PROPERTIES EXPORT_NAME cpp)
+target_compile_features(c50_cpp INTERFACE cxx_std_11)
+target_link_libraries(c50_cpp INTERFACE C50::core)
 
 add_executable(c50_cli src/c50.c)
 target_link_libraries(c50_cli PRIVATE C50::core)
@@ -145,6 +158,9 @@ if(BUILD_TESTING)
     add_executable(c50_cpp_api_compile tests/c_api_compile.cpp)
     target_compile_features(c50_cpp_api_compile PRIVATE cxx_std_11)
     target_link_libraries(c50_cpp_api_compile PRIVATE C50::core)
+    add_executable(c50_cpp_api tests/cpp_api.cpp)
+    target_compile_features(c50_cpp_api PRIVATE cxx_std_11)
+    target_link_libraries(c50_cpp_api PRIVATE C50::cpp)
     list(
         APPEND C50_COMPILE_TARGETS
         c50_c_api_compile
@@ -159,6 +175,7 @@ if(BUILD_TESTING)
         c50_c_api_concurrency
         c50_c_api_training_concurrency
         c50_cpp_api_compile
+        c50_cpp_api
     )
     list(
         APPEND C50_EXECUTABLE_TARGETS
@@ -174,8 +191,45 @@ if(BUILD_TESTING)
         c50_c_api_concurrency
         c50_c_api_training_concurrency
         c50_cpp_api_compile
+        c50_cpp_api
     )
 endif()
+
+install(
+    TARGETS c50_core c50_cpp
+    EXPORT C50Targets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+install(
+    DIRECTORY include/c50
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+)
+
+configure_package_config_file(
+    cmake/C50Config.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/C50Config.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
+)
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/C50ConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+install(
+    FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/C50Config.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/C50ConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
+)
+install(
+    EXPORT C50Targets
+    FILE C50Targets.cmake
+    NAMESPACE C50::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
+)
 
 if(C50_ENABLE_THREAD_SANITIZER)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -245,6 +299,21 @@ if(BUILD_TESTING)
         COMMAND c50_c_api_training_concurrency
     )
     add_test(NAME cpp-api-compile COMMAND c50_cpp_api_compile)
+    add_test(NAME cpp-api COMMAND c50_cpp_api)
+    if(NOT C50_ENABLE_SANITIZERS AND NOT C50_ENABLE_THREAD_SANITIZER)
+        add_test(
+            NAME install-consumer
+            COMMAND
+                ${CMAKE_COMMAND}
+                "-DC50_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+                "-DC50_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+                "-DC50_GENERATOR=${CMAKE_GENERATOR}"
+                "-DC50_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+                "-DC50_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
+                "-DC50_CONFIG=$<CONFIG>"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_install.cmake"
+        )
+    endif()
     if(CMAKE_NM AND UNIX)
         add_test(
             NAME writable-global-inventory
