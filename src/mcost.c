@@ -34,9 +34,10 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 
-void GetMCostsInput(c50_input *Cf)
+void GetMCostsInput(c50_context *Context, c50_input *Cf)
 /*   --------------  */
 {
     ClassNo	Pred, Real, p, r;
@@ -44,27 +45,29 @@ void GetMCostsInput(c50_input *Cf)
     CaseNo	i;
     float	Val, Sum=0;
 
-    LineNo = 0;
+    Context->io.line_number = 0;
+    Context->line_buffer_position = Context->line_buffer;
+    Context->line_buffer[0] = '\0';
 
     /*  Read entries from cost file  */
 
-    while ( ReadNameInput(Cf, Name, 1000, ':') )
+    while ( ReadNameInput(Context, Cf, Name, 1000, ':') )
     {
-	if ( ! (Pred = Which(Name, ClassName, 1, MaxClass)) )
+	if ( ! (Pred = Which(Name, Context->schema.class_names, 1, Context->schema.max_class)) )
 	{
-	    Error(BADCOSTCLASS, Name, "");
+	    Error(Context, BADCOSTCLASS, Name, "");
 	}
 
-	if ( ! ReadNameInput(Cf, Name, 1000, ':') ||
-	     ! (Real = Which(Name, ClassName, 1, MaxClass)) )
+	if ( ! ReadNameInput(Context, Cf, Name, 1000, ':') ||
+	     ! (Real = Which(Name, Context->schema.class_names, 1, Context->schema.max_class)) )
 	{
-	    Error(BADCOSTCLASS, Name, "");
+	    Error(Context, BADCOSTCLASS, Name, "");
 	}
 
-	if ( ! ReadNameInput(Cf, Name, 1000, ':') ||
+	if ( ! ReadNameInput(Context, Cf, Name, 1000, ':') ||
 	     sscanf(Name, "%f", &Val) != 1 || Val < 0 )
 	{
-	    Error(BADCOST, "", "");
+	    Error(Context, BADCOST, "", "");
 	    Val = 1;
 	}
 
@@ -72,77 +75,77 @@ void GetMCostsInput(c50_input *Cf)
 	{
 	    /*  Have a non-trivial cost entry  */
 
-	    if ( ! MCost )
+	    if ( ! Context->costs.matrix )
 	    {
 		/*  Set up cost matrices  */
 
-		MCost = Alloc(MaxClass+1, float *);
-		ForEach(p, 1, MaxClass)
+		Context->costs.matrix = Alloc(Context->schema.max_class+1, float *);
+		ForEach(p, 1, Context->schema.max_class)
 		{
-		    MCost[p] = Alloc(MaxClass+1, float);
-		    ForEach(r, 1, MaxClass)
+		    Context->costs.matrix[p] = Alloc(Context->schema.max_class+1, float);
+		    ForEach(r, 1, Context->schema.max_class)
 		    {
-			MCost[p][r] = ( p == r ? 0.0 : 1.0 );
+			Context->costs.matrix[p][r] = ( p == r ? 0.0 : 1.0 );
 		    }
 		}
 	    }
 
-	    MCost[Pred][Real] = Val;
+	    Context->costs.matrix[Pred][Real] = Val;
 	}
     }
     /*  Don't need weights etc. for predict or interpret, or
 	if not using cost weighting  */
 
-    if ( ! (CostWeights = MaxClass == 2 && MaxCase >= 0 && MCost) )
+    if ( ! (Context->costs.weighted = Context->schema.max_class == 2 && Context->cases.max_case >= 0 && Context->costs.matrix) )
     {
 	return;
     }
 
     /*  Determine class frequency distribution  */
 
-    ClassFreq = AllocZero(MaxClass+1, double);
+    Context->training.class_frequencies = AllocZero(Context->schema.max_class+1, double);
 
-    if ( CWtAtt )
+    if ( Context->schema.case_weight_attribute )
     {
-	AvCWt = 1;			/* relative weights not yet set */
-	ForEach(i, 0, MaxCase)
+	Context->average_case_weight = 1;			/* relative weights not yet set */
+	ForEach(i, 0, Context->cases.max_case)
 	{
-	    ClassFreq[Class(Case[i])] += RelCWt(Case[i]);
+	    Context->training.class_frequencies[Class(Context->cases.records[i])] += RelCWt(Context, Context->cases.records[i]);
 	}
     }
     else
     {
-	ForEach(i, 0, MaxCase)
+	ForEach(i, 0, Context->cases.max_case)
 	{
-	    ClassFreq[Class(Case[i])]++;
+	    Context->training.class_frequencies[Class(Context->cases.records[i])]++;
 	}
     }
 
     /*  Find normalised weight multipliers  */
 
-    WeightMul = Alloc(3, float);
+    Context->costs.weight_multipliers = Alloc(3, float);
 
-    Sum = (ClassFreq[1] * MCost[2][1] + ClassFreq[2] * MCost[1][2]) /
-	  (ClassFreq[1] + ClassFreq[2]);
+    Sum = (Context->training.class_frequencies[1] * Context->costs.matrix[2][1] + Context->training.class_frequencies[2] * Context->costs.matrix[1][2]) /
+	  (Context->training.class_frequencies[1] + Context->training.class_frequencies[2]);
 
-    WeightMul[1] = MCost[2][1] / Sum;
-    WeightMul[2] = MCost[1][2] / Sum;
+    Context->costs.weight_multipliers[1] = Context->costs.matrix[2][1] / Sum;
+    Context->costs.weight_multipliers[2] = Context->costs.matrix[1][2] / Sum;
 
-    /*  Adjust MINITEMS to take account of case reweighting  */
+    /*  Adjust Context->options.minimum_cases to take account of case reweighting  */
 
-    MINITEMS *= Min(WeightMul[1], WeightMul[2]);
+    Context->options.minimum_cases *= Min(Context->costs.weight_multipliers[1], Context->costs.weight_multipliers[2]);
 
-    Free(ClassFreq);					ClassFreq = Nil;
+    Free(Context->training.class_frequencies);					Context->training.class_frequencies = Nil;
 }
 
 
 
-void GetMCosts(FILE *Cf)
+void GetMCosts(c50_context *Context, FILE *Cf)
 /*   ---------  */
 {
     c50_input Input;
 
     c50_input_init_file(&Input, Cf);
-    GetMCostsInput(&Input);
+    GetMCostsInput(Context, &Input);
     fclose(Cf);
 }

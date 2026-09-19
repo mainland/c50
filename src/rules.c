@@ -34,17 +34,19 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 
 /*************************************************************************/
 /*								  	 */
-/*	Add a new rule to the current ruleset, by updating Rule[],  	 */
-/*	NRules and, if necessary, RuleSpace			  	 */
+/*	Add a new rule to the current ruleset, by updating Context->rules.rules[],  	 */
+/*	Context->rules.count and, if necessary, Context->rules.capacity			  	 */
 /*								  	 */
 /*************************************************************************/
 
 
-Boolean NewRule(Condition Cond[], int NCond, ClassNo TargetClass,
+Boolean NewRule(c50_context *Context, Condition Cond[], int NCond,
+		ClassNo TargetClass,
 		Boolean *Deleted, CRule Existing,
 		CaseCount Cover, CaseCount Correct, float Prior)
 /*      -------  */
@@ -84,7 +86,7 @@ Boolean NewRule(Condition Cond[], int NCond, ClassNo TargetClass,
 	    memcpy(Lhs[d], Cond[dd], sizeof(CondRec));
 	    if ( Lhs[d]->NodeType == BrSubset )
 	    {
-		Bytes = (MaxAttVal[Lhs[d]->Tested]>>3) + 1;
+		Bytes = (Context->schema.max_attribute_value[Lhs[d]->Tested]>>3) + 1;
 		Lhs[d]->Subset = Alloc(Bytes, Byte);
 		memcpy(Lhs[d]->Subset, Cond[dd]->Subset, Bytes);
 	    }
@@ -102,17 +104,17 @@ Boolean NewRule(Condition Cond[], int NCond, ClassNo TargetClass,
 
     /*  See if rule already exists  */
 
-    for ( r = 1 ; ! Exclude && r <= NRules ; r++ )
+    for ( r = 1 ; ! Exclude && r <= Context->rules.count ; r++ )
     {
-	if ( SameRule(r, Lhs, Size, TargetClass) )
+	if ( SameRule(Context, r, Lhs, Size, TargetClass) )
 	{
-	    Verbosity(1, fprintf(Of, "\tduplicates rule %d\n", r))
+	    Verbosity(1, fprintf(Context->io.output, "\tduplicates rule %d\n", r))
 
 	    /*  Keep the most optimistic error estimate  */
 
-	    if ( Vote > Rule[r]->Vote )
+	    if ( Vote > Context->rules.rules[r]->Vote )
 	    {
-		Rule[r]->Vote = Vote;
+		Context->rules.rules[r]->Vote = Vote;
 	    }
 
 	    Exclude = true;
@@ -135,32 +137,32 @@ Boolean NewRule(Condition Cond[], int NCond, ClassNo TargetClass,
 
     /*  Make sure there is enough room for the new rule  */
 
-    NRules++;
-    if ( NRules >= RuleSpace )
+    Context->rules.count++;
+    if ( Context->rules.count >= Context->rules.capacity )
     {
-	RuleSpace += 100;
-	if ( RuleSpace > 100 )
+	Context->rules.capacity += 100;
+	if ( Context->rules.capacity > 100 )
 	{
-	    Realloc(Rule,  RuleSpace, CRule);
-	    Realloc(Fires, RuleSpace, Byte *);
-	    ForEach(r, RuleSpace-100, RuleSpace-1)
+	    Realloc(Context->rules.rules,  Context->rules.capacity, CRule);
+	    Realloc(Context->rule_build.fires, Context->rules.capacity, Byte *);
+	    ForEach(r, Context->rules.capacity-100, Context->rules.capacity-1)
 	    {
-		Fires[r] = Nil;
+		Context->rule_build.fires[r] = Nil;
 	    }
 	}
 	else
 	{
-	    Rule  = Alloc(RuleSpace, CRule);
-	    Fires = AllocZero(RuleSpace, Byte *);
+	    Context->rules.rules  = Alloc(Context->rules.capacity, CRule);
+	    Context->rule_build.fires = AllocZero(Context->rules.capacity, Byte *);
 	}
     }
 
     /*  Form the new rule  */
 
-    Rule[NRules] = R = Alloc(1, RuleRec);
+    Context->rules.rules[Context->rules.count] = R = Alloc(1, RuleRec);
 
-    R->TNo     = ( Existing ? Existing->TNo : Trial );
-    R->RNo     = ( Existing ? Existing->RNo : NRules );
+    R->TNo     = ( Existing ? Existing->TNo : Context->trees.trial );
+    R->RNo     = ( Existing ? Existing->RNo : Context->rules.count );
     R->Size    = Size;
     R->Lhs     = Lhs;
     R->Rhs     = TargetClass;
@@ -169,17 +171,18 @@ Boolean NewRule(Condition Cond[], int NCond, ClassNo TargetClass,
     R->Prior   = Prior;
     R->Vote    = Vote;
 
-    /*  Record entry in Fires and CovBy  */
+    /*  Record entry in Context->rule_build.fires and Context->rule_build.coverage_counts  */
 
-    ListSort(List, 1, List[0]);
-    Fires[NRules] = Compress(List);
+    ListSort(Context->rule_build.list, 1, Context->rule_build.list[0]);
+    Context->rule_build.fires[Context->rules.count] =
+	Compress(Context, Context->rule_build.list);
 
-    ForEach(i, 1, List[0])
+    ForEach(i, 1, Context->rule_build.list[0])
     {
-	CovBy[List[i]]++;
+	Context->rule_build.coverage_counts[Context->rule_build.list[i]]++;
     }
 
-    Verbosity(1, if ( ! Existing ) PrintRule(R))
+    Verbosity(1, if ( ! Existing ) PrintRule(Context, R))
 
     return true;
 }
@@ -202,7 +205,7 @@ Boolean NewRule(Condition Cond[], int NCond, ClassNo TargetClass,
 /*************************************************************************/
 
 
-Byte *Compress(int *L)
+Byte *Compress(c50_context *Context, int *L)
 /*    --------  */
 {
     int		i, Last=0, Entry, Blocks;
@@ -210,8 +213,8 @@ Byte *Compress(int *L)
 
     /*  Copy first integer (uncompressed)  */
 
-    memcpy(CBuffer, L, 4);
-    p = CBuffer + 4;
+    memcpy(Context->rule_build.compression_buffer, L, 4);
+    p = Context->rule_build.compression_buffer + 4;
 
     ForEach(i, 1, L[0])
     {
@@ -231,8 +234,8 @@ Byte *Compress(int *L)
 	*p++ = Entry;
     }
 
-    Compressed = Alloc(p - CBuffer, Byte);
-    memcpy(Compressed, CBuffer, p - CBuffer);
+    Compressed = Alloc(p - Context->rule_build.compression_buffer, Byte);
+    memcpy(Compressed, Context->rule_build.compression_buffer, p - Context->rule_build.compression_buffer);
 
     return Compressed;
 }
@@ -328,20 +331,21 @@ void ListSort(int *L, int Fp, int Lp)
 /*************************************************************************/
 
 
-Boolean SameRule(RuleNo r, Condition Cond[], int NConds, ClassNo TargetClass)
+Boolean SameRule(c50_context *Context, RuleNo r, Condition Cond[],
+		 int NConds, ClassNo TargetClass)
 /*      --------  */
 {
     int	d, i, Bytes;
 
-    if ( Rule[r]->Size != NConds || Rule[r]->Rhs != TargetClass )
+    if ( Context->rules.rules[r]->Size != NConds || Context->rules.rules[r]->Rhs != TargetClass )
     {
 	return false;
     }
 
     ForEach(d, 1, NConds)
     {
-	if ( Rule[r]->Lhs[d]->NodeType != Cond[d]->NodeType ||
-	     Rule[r]->Lhs[d]->Tested   != Cond[d]->Tested )
+	if ( Context->rules.rules[r]->Lhs[d]->NodeType != Cond[d]->NodeType ||
+	     Context->rules.rules[r]->Lhs[d]->Tested   != Cond[d]->Tested )
 	{
 	    return false;
 	}
@@ -349,25 +353,25 @@ Boolean SameRule(RuleNo r, Condition Cond[], int NConds, ClassNo TargetClass)
 	switch ( Cond[d]->NodeType )
 	{
 	    case BrDiscr:
-		if ( Rule[r]->Lhs[d]->TestValue != Cond[d]->TestValue )
+		if ( Context->rules.rules[r]->Lhs[d]->TestValue != Cond[d]->TestValue )
 		{
 		    return false;
 		}
 		break;
 
 	    case BrThresh:
-		if ( Rule[r]->Lhs[d]->TestValue != Cond[d]->TestValue ||
-		     Rule[r]->Lhs[d]->Cut != Cond[d]->Cut )
+		if ( Context->rules.rules[r]->Lhs[d]->TestValue != Cond[d]->TestValue ||
+		     Context->rules.rules[r]->Lhs[d]->Cut != Cond[d]->Cut )
 		{
 		    return false;
 		}
 		break;
 
 	    case BrSubset:
-		Bytes = (MaxAttVal[Cond[d]->Tested]>>3) + 1;
+		Bytes = (Context->schema.max_attribute_value[Cond[d]->Tested]>>3) + 1;
 		ForEach(i, 0, Bytes-1)
 		{
-		    if ( Rule[r]->Lhs[d]->Subset[i] != Cond[d]->Subset[i] )
+		    if ( Context->rules.rules[r]->Lhs[d]->Subset[i] != Cond[d]->Subset[i] )
 		    {
 			return false;
 		    }
@@ -433,16 +437,16 @@ void FreeRules(CRuleSet RS)
 /*************************************************************************/
 
 
-void PrintRules(CRuleSet RS, String Msg)
+void PrintRules(c50_context *Context, CRuleSet RS, String Msg)
 /*   ----------  */
 {
     int	r;
 
-    fprintf(Of, "\n%s\n", Msg);
+    fprintf(Context->io.output, "\n%s\n", Msg);
 
     ForEach(r, 1, RS->SNRules)
     {
-	PrintRule(RS->SRule[r]);
+	PrintRule(Context, RS->SRule[r]);
     }
 }
 
@@ -455,27 +459,27 @@ void PrintRules(CRuleSet RS, String Msg)
 /*************************************************************************/
 
 
-void PrintRule(CRule R)
+void PrintRule(c50_context *Context, CRule R)
 /*   ---------  */
 {
     int		d;
 
-    fprintf(Of, T_RuleHeader);
-    if ( TRIALS > 1 ) fprintf(Of, "%d/", R->TNo);
-    fprintf(Of, "%d: (%.8g", R->RNo, P1(R->Cover));
+    fprintf(Context->io.output, T_RuleHeader);
+    if ( Context->options.trials > 1 ) fprintf(Context->io.output, "%d/", R->TNo);
+    fprintf(Context->io.output, "%d: (%.8g", R->RNo, P1(R->Cover));
     if ( R->Correct < R->Cover - 0.1 )
     {
-	fprintf(Of, "/%.8g", P1(R->Cover - R->Correct));
+	fprintf(Context->io.output, "/%.8g", P1(R->Cover - R->Correct));
     }
-    fprintf(Of, T_RuleLift, ((R->Correct + 1) / (R->Cover + 2)) / R->Prior);
+    fprintf(Context->io.output, T_RuleLift, ((R->Correct + 1) / (R->Cover + 2)) / R->Prior);
 
     ForEach(d, 1, R->Size)
     {
-	PrintCondition(R->Lhs[d]);
+	PrintCondition(Context, R->Lhs[d]);
     }
 
-    fprintf(Of, "\t->  " T_class " %s  [%.3f]\n",
-		ClassName[R->Rhs], R->Vote/1000.0);
+    fprintf(Context->io.output, "\t->  " T_class " %s  [%.3f]\n",
+		Context->schema.class_names[R->Rhs], R->Vote/1000.0);
 }
 
 
@@ -487,7 +491,7 @@ void PrintRule(CRule R)
 /*************************************************************************/
 
 
-void PrintCondition(Condition C)
+void PrintCondition(c50_context *Context, Condition C)
 /*  --------------  */
 {
     DiscrValue	v, pv, Last, Values;
@@ -499,39 +503,39 @@ void PrintCondition(Condition C)
     v   = C->TestValue;
     Att = C->Tested;
 
-    fprintf(Of, "\t%s", AttName[Att]);
+    fprintf(Context->io.output, "\t%s", Context->schema.attribute_names[Att]);
 
     if ( v < 0 )
     {
-	fprintf(Of, T_IsUnknown);
+	fprintf(Context->io.output, T_IsUnknown);
 	return;
     }
 
     switch ( C->NodeType )
     {
 	case BrDiscr:
-	    fprintf(Of, " = %s\n", AttValName[Att][v]);
+	    fprintf(Context->io.output, " = %s\n", Context->schema.attribute_value_names[Att][v]);
 	    break;
 
 	case BrThresh:
 	    if ( v == 1 )
 	    {
-		fprintf(Of, " = N/A\n");
+		fprintf(Context->io.output, " = N/A\n");
 	    }
 	    else
 	    {
-		CValToStr(C->Cut, Att, CVS);
-		fprintf(Of, " %s %s\n", ( v == 2 ? "<=" : ">" ), CVS);
+		CValToStr(Context, C->Cut, Att, CVS);
+		fprintf(Context->io.output, " %s %s\n", ( v == 2 ? "<=" : ">" ), CVS);
 	    }
 	    break;
 
 	case BrSubset:
 	    /*  Count values at this branch  */
 
-	    Values = Elements(Att, C->Subset, &Last);
+	    Values = Elements(Context, Att, C->Subset, &Last);
 	    if ( Values == 1 )
 	    {
-		fprintf(Of, " = %s\n", AttValName[Att][Last]);
+		fprintf(Context->io.output, " = %s\n", Context->schema.attribute_value_names[Att][Last]);
 		break;
 	    }
 
@@ -542,21 +546,21 @@ void PrintCondition(Condition C)
 		for ( pv = 1 ; ! In(pv, C->Subset) ; pv++ )
 		    ;
 
-		fprintf(Of, " %s [%s-%s]\n", T_InRange,
-			AttValName[Att][pv], AttValName[Att][Last]);
+		fprintf(Context->io.output, " %s [%s-%s]\n", T_InRange,
+			Context->schema.attribute_value_names[Att][pv], Context->schema.attribute_value_names[Att][Last]);
 		break;
 	    }
 
 	    /*  Must keep track of position to break long lines  */
 
-	    fprintf(Of, " %s {", T_ElementOf);
-	    Col = Base = CharWidth(AttName[Att]) + CharWidth(T_ElementOf) + 11;
+	    fprintf(Context->io.output, " %s {", T_ElementOf);
+	    Col = Base = CharWidth(Context->schema.attribute_names[Att]) + CharWidth(T_ElementOf) + 11;
 
-	    ForEach(pv, 1, MaxAttVal[Att])
+	    ForEach(pv, 1, Context->schema.max_attribute_value[Att])
 	    {
 		if ( In(pv, C->Subset) )
 		{
-		    Entry = CharWidth(AttValName[Att][pv]);
+		    Entry = CharWidth(Context->schema.attribute_value_names[Att][pv]);
 
 		    if ( First )
 		    {
@@ -566,18 +570,18 @@ void PrintCondition(Condition C)
 		    if ( Col + Entry + 2 >= Width )
 		    {
 			Col = Base;
-			fprintf(Of, ",\n%*s", Col, "");
+			fprintf(Context->io.output, ",\n%*s", Col, "");
 		    }
 		    else
 		    {
-			fprintf(Of, ", ");
+			fprintf(Context->io.output, ", ");
 			Col += 2;
 		    }
 
-		    fprintf(Of, "%s", AttValName[Att][pv]);
+		    fprintf(Context->io.output, "%s", Context->schema.attribute_value_names[Att][pv]);
 		    Col += Entry;
 		}
 	    }
-	    fprintf(Of, "}\n");
+	    fprintf(Context->io.output, "}\n");
     }
 }

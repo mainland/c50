@@ -4,6 +4,11 @@ project(C50 VERSION 2.07 LANGUAGES C CXX)
 
 option(C50_ENABLE_SANITIZERS
        "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(C50_ENABLE_THREAD_SANITIZER "Enable ThreadSanitizer" OFF)
+
+if(C50_ENABLE_SANITIZERS AND C50_ENABLE_THREAD_SANITIZER)
+    message(FATAL_ERROR "AddressSanitizer and ThreadSanitizer cannot be combined")
+endif()
 
 include(CTest)
 
@@ -60,6 +65,7 @@ set(C50_COMPILE_TARGETS c50_core c50_cli c50_report)
 set(C50_EXECUTABLE_TARGETS c50_cli c50_report)
 
 if(BUILD_TESTING)
+    find_package(Threads REQUIRED)
     add_executable(
         c50_prediction_probe
         tests/prediction_probe.c
@@ -109,6 +115,16 @@ if(BUILD_TESTING)
     target_link_libraries(c50_c_api_model PRIVATE C50::core)
     add_executable(c50_c_api_prediction tests/c_api_prediction.c)
     target_link_libraries(c50_c_api_prediction PRIVATE C50::core)
+    add_executable(
+        c50_c_api_context_isolation
+        tests/c_api_context_isolation.c
+    )
+    target_link_libraries(c50_c_api_context_isolation PRIVATE C50::core)
+    add_executable(c50_c_api_concurrency tests/c_api_concurrency.c)
+    target_link_libraries(
+        c50_c_api_concurrency
+        PRIVATE C50::core Threads::Threads
+    )
     add_executable(c50_cpp_api_compile tests/c_api_compile.cpp)
     target_compile_features(c50_cpp_api_compile PRIVATE cxx_std_11)
     target_link_libraries(c50_cpp_api_compile PRIVATE C50::core)
@@ -120,6 +136,8 @@ if(BUILD_TESTING)
         c50_c_api_failure
         c50_c_api_model
         c50_c_api_prediction
+        c50_c_api_context_isolation
+        c50_c_api_concurrency
         c50_cpp_api_compile
     )
     list(
@@ -130,8 +148,26 @@ if(BUILD_TESTING)
         c50_c_api_failure
         c50_c_api_model
         c50_c_api_prediction
+        c50_c_api_context_isolation
+        c50_c_api_concurrency
         c50_cpp_api_compile
     )
+endif()
+
+if(C50_ENABLE_THREAD_SANITIZER)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        foreach(target IN LISTS C50_COMPILE_TARGETS)
+            target_compile_options(
+                ${target} PRIVATE -fsanitize=thread -fno-omit-frame-pointer
+            )
+        endforeach()
+        foreach(target IN LISTS C50_EXECUTABLE_TARGETS)
+            target_link_options(${target} PRIVATE -fsanitize=thread)
+        endforeach()
+    else()
+        message(FATAL_ERROR
+                "C50_ENABLE_THREAD_SANITIZER requires GCC, Clang, or AppleClang")
+    endif()
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
@@ -177,7 +213,19 @@ if(BUILD_TESTING)
     add_test(NAME c-api-failure COMMAND c50_c_api_failure)
     add_test(NAME c-api-model COMMAND c50_c_api_model)
     add_test(NAME c-api-prediction COMMAND c50_c_api_prediction)
+    add_test(NAME c-api-context-isolation COMMAND c50_c_api_context_isolation)
+    add_test(NAME c-api-concurrency COMMAND c50_c_api_concurrency)
     add_test(NAME cpp-api-compile COMMAND c50_cpp_api_compile)
+    if(CMAKE_NM AND UNIX)
+        add_test(
+            NAME writable-global-inventory
+            COMMAND
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_writable_globals.sh"
+                "${CMAKE_NM}"
+                "$<TARGET_FILE:c50_core>"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/expected/writable-globals.txt"
+        )
+    endif()
     add_test(
         NAME cli-regression
         COMMAND

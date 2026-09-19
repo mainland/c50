@@ -1,7 +1,6 @@
 /* Copyright 2026 Geoffrey Mainland. */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
-#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,17 +8,6 @@
 #include <c50/c50.h>
 
 #include "c50_api_internal.h"
-
-#define C50_ERROR_MESSAGE_CAPACITY 1024
-
-struct c50_context
-{
-    c50_status status;
-    char error_message[C50_ERROR_MESSAGE_CAPACITY];
-    jmp_buf exit_target;
-};
-
-static c50_context *ActiveContext;
 
 static void SetError(c50_context *context, c50_status status,
                      const char *message)
@@ -51,13 +39,42 @@ c50_status c50_context_create(c50_context **out_context)
     }
 
     context->status = C50_STATUS_OK;
+    context->schema.max_discrete_value = 3;
+    context->cases.max_case = -1;
+    context->costs.unit_weights = 1;
+    context->options.trials = 1;
+    context->options.folds = 10;
+    context->options.global_pruning = 1;
+    context->options.minimum_cases = 2;
+    context->options.confidence_factor = 0.25f;
+    context->splits.sample_fraction = 1;
+    context->io.file_stem = "undefined";
+    context->io.option_index = 1;
     *out_context = context;
     return C50_STATUS_OK;
 }
 
 void c50_context_destroy(c50_context *context)
 {
+    if ( ! context ) return;
+    c50_clear_prediction_state(context);
+    free(context->active_rules);
+    free(context->ignored_values);
+    free(context->property_value);
     free(context);
+}
+
+void c50_clear_prediction_state(c50_context *context)
+{
+    if ( ! context ) return;
+    free(context->class_sum);
+    free(context->votes);
+    free(context->trial_predictions);
+    free(context->most_specific_rules);
+    context->class_sum = NULL;
+    context->votes = NULL;
+    context->trial_predictions = NULL;
+    context->most_specific_rules = NULL;
 }
 
 c50_status c50_context_last_status(const c50_context *context)
@@ -101,30 +118,31 @@ c50_status c50_run_operation(c50_context *context,
 {
     if ( ! context || ! operation ) return C50_STATUS_INVALID_ARGUMENT;
 
-    if ( ActiveContext )
+    if ( context->operation_active )
     {
         SetError(context, C50_STATUS_INTERNAL_ERROR,
-                 "a C5.0 operation is already active");
+                 "a C5.0 operation is already active on this context");
         return context->status;
     }
 
     context->status = C50_STATUS_OK;
     context->error_message[0] = '\0';
 
+    context->operation_active = 1;
     if ( ! setjmp(context->exit_target) )
     {
-        ActiveContext = context;
-        operation(user_data);
+        operation(context, user_data);
     }
 
-    ActiveContext = NULL;
-    if ( cleanup ) cleanup(user_data);
+    context->operation_active = 0;
+    if ( cleanup ) cleanup(context, user_data);
     return context->status;
 }
 
-void c50_record_error(c50_status status, const char *message)
+void c50_record_error(c50_context *context, c50_status status,
+                      const char *message)
 {
-    SetError(ActiveContext, status, message);
+    SetError(context, status, message);
 }
 
 c50_status c50_set_context_error(c50_context *context, c50_status status,
@@ -138,15 +156,15 @@ c50_status c50_set_context_error(c50_context *context, c50_status status,
     return status;
 }
 
-int c50_abort_active_operation(int exit_status)
+int c50_abort_active_operation(c50_context *context, int exit_status)
 {
-    if ( ! ActiveContext ) return 0;
+    if ( ! context || ! context->operation_active ) return 0;
 
-    if ( ActiveContext->status == C50_STATUS_OK )
+    if ( context->status == C50_STATUS_OK )
     {
-        SetError(ActiveContext, C50_STATUS_INTERNAL_ERROR,
+        SetError(context, C50_STATUS_INTERNAL_ERROR,
                  exit_status ? "C5.0 operation failed" :
                                "C5.0 operation terminated");
     }
-    longjmp(ActiveContext->exit_target, exit_status ? exit_status : 1);
+    longjmp(context->exit_target, exit_status ? exit_status : 1);
 }

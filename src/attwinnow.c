@@ -34,11 +34,7 @@
 
 #include "defns.i"
 #include "extern.i"
-
-float		*AttImp=Nil;		/* att importance */
-Boolean		*Split=Nil,		/* atts used in unpruned tree */
-		*Used=Nil;		/* atts used in pruned tree */
-
+#include "c50_api_internal.h"
 
 /*************************************************************************/
 /*									 */
@@ -50,7 +46,7 @@ Boolean		*Split=Nil,		/* atts used in unpruned tree */
 /*************************************************************************/
 
 
-void WinnowAtts()
+void WinnowAtts(c50_context *Context)
 /*   ----------  */
 {
     Attribute	Att, Removed=0, Best;
@@ -58,34 +54,33 @@ void WinnowAtts()
     float	Base;
     Boolean	First=true, *Upper;
     ClassNo	c;
-    extern Attribute	*DList;
-    extern int		NDList;
+    Context->attributes_winnowed = false;
 
     /*  Save original case order  */
 
-    SaveCase = Alloc(MaxCase+1, DataRec);
-    ForEach(i, 0, MaxCase)
+    Context->cases.saved_records = Alloc(Context->cases.max_case+1, DataRec);
+    ForEach(i, 0, Context->cases.max_case)
     {
-	SaveCase[i] = Case[i];
+	Context->cases.saved_records[i] = Context->cases.records[i];
     }
 
-    /*  Split data into two halves with equal class frequencies  */
+    /*  Context->training.split_attributes data into two halves with equal class frequencies  */
 
-    Upper = AllocZero(MaxClass+1, Boolean);
+    Upper = AllocZero(Context->schema.max_class+1, Boolean);
 
     Bp = 0;
-    Ep = MaxCase;
-    ForEach(i, 0, MaxCase)
+    Ep = Context->cases.max_case;
+    ForEach(i, 0, Context->cases.max_case)
     {
-	c = Class(SaveCase[i]);
+	c = Class(Context->cases.saved_records[i]);
 
 	if ( Upper[c] )
 	{
-	    Case[Ep--] = SaveCase[i];
+	    Context->cases.records[Ep--] = Context->cases.saved_records[i];
 	}
 	else
 	{
-	    Case[Bp++] = SaveCase[i];
+	    Context->cases.records[Bp++] = Context->cases.saved_records[i];
 	}
 
 	Upper[c] = ! Upper[c];
@@ -96,34 +91,34 @@ void WinnowAtts()
     /*  Use first 50% of the cases for building a winnowing tree
 	and remaining 50% for measuring attribute importance  */
 
-    AttImp = AllocZero(MaxAtt+1, float);
-    Split  = AllocZero(MaxAtt+1, Boolean);
-    Used   = AllocZero(MaxAtt+1, Boolean);
+    Context->training.attribute_importance = AllocZero(Context->schema.max_attribute+1, float);
+    Context->training.split_attributes  = AllocZero(Context->schema.max_attribute+1, Boolean);
+    Context->training.used_attributes   = AllocZero(Context->schema.max_attribute+1, Boolean);
 
-    Base = TrialTreeCost(true);
+    Base = TrialTreeCost(Context, true);
 
     /*  Remove attributes when doing so would reduce error cost  */
 
-    ForEach(Att, 1, MaxAtt)
+    ForEach(Att, 1, Context->schema.max_attribute)
     {
-	if ( AttImp[Att] < 0 )
+	if ( Context->training.attribute_importance[Att] < 0 )
 	{
-	    SpecialStatus[Att] ^= SKIP;
+	    Context->schema.special_status[Att] ^= SKIP;
 	    Removed++;
 	}
     }
 
     /*  If any removed, rebuild tree and reinstate if error increases  */
 
-    if ( Removed && TrialTreeCost(false) > Base )
+    if ( Removed && TrialTreeCost(Context, false) > Base )
     {
-	ForEach(Att, 1, MaxAtt)
+	ForEach(Att, 1, Context->schema.max_attribute)
 	{
-	    if ( AttImp[Att] < 0 )
+	    if ( Context->training.attribute_importance[Att] < 0 )
 	    {
-		AttImp[Att] = 1;
-		SpecialStatus[Att] ^= SKIP;
-		Verbosity(1, fprintf(Of, "  re-including %s\n", AttName[Att]))
+		Context->training.attribute_importance[Att] = 1;
+		Context->schema.special_status[Att] ^= SKIP;
+		Verbosity(1, fprintf(Context->io.output, "  re-including %s\n", Context->schema.attribute_names[Att]))
 	    }
 	}
 
@@ -132,11 +127,11 @@ void WinnowAtts()
 
     /*  Discard unused attributes  */
 
-    ForEach(Att, 1, MaxAtt)
+    ForEach(Att, 1, Context->schema.max_attribute)
     {
-	if ( Att != ClassAtt && ! Skip(Att) && ! Split[Att] )
+	if ( Att != Context->schema.class_attribute && ! Skip(Att) && ! Context->training.split_attributes[Att] )
 	{
-	    SpecialStatus[Att] ^= SKIP;
+	    Context->schema.special_status[Att] ^= SKIP;
 	    Removed++;
 	}
     }
@@ -145,21 +140,21 @@ void WinnowAtts()
 
     if ( ! Removed )
     {
-	fprintf(Of, T_NoWinnow);
+	fprintf(Context->io.output, T_NoWinnow);
     }
     else
     {
-	fprintf(Of, T_AttributesWinnowed, Removed, Plural(Removed));
+	fprintf(Context->io.output, T_AttributesWinnowed, Removed, Plural(Removed));
 
 	/*  Print remaining attributes ordered by importance  */
 
 	while ( true )
 	{
 	    Best = 0;
-	    ForEach(Att, 1, MaxAtt)
+	    ForEach(Att, 1, Context->schema.max_attribute)
 	    {
-		if ( AttImp[Att] >= 1 &&
-		     ( ! Best || AttImp[Att] > AttImp[Best] ) )
+		if ( Context->training.attribute_importance[Att] >= 1 &&
+		     ( ! Best || Context->training.attribute_importance[Att] > Context->training.attribute_importance[Best] ) )
 		{
 		    Best = Att;
 		}
@@ -168,52 +163,52 @@ void WinnowAtts()
 
 	    if ( First )
 	    {
-		fprintf(Of, T_EstImportance);
+		fprintf(Context->io.output, T_EstImportance);
 		First = false;
 	    }
-	    if ( AttImp[Best] >= 1.005 )
+	    if ( Context->training.attribute_importance[Best] >= 1.005 )
 	    {
-		fprintf(Of, "%7d%%  %s\n",
-			    (int) ((AttImp[Best] - 1) * 100 + 0.5),
-			    AttName[Best]);
+		fprintf(Context->io.output, "%7d%%  %s\n",
+			    (int) ((Context->training.attribute_importance[Best] - 1) * 100 + 0.5),
+			    Context->schema.attribute_names[Best]);
 	    }
 	    else
 	    {
-		fprintf(Of, "     <1%%  %s\n", AttName[Best]);
+		fprintf(Context->io.output, "     <1%%  %s\n", Context->schema.attribute_names[Best]);
 	    }
-	    AttImp[Best] = 0;
+	    Context->training.attribute_importance[Best] = 0;
 	}
     }
 
+    Context->attributes_winnowed = Removed != 0;
+
     if ( Removed )
     {
-	Winnowed = true;
+	/*  Reset Context->splits.discrete_attributes  */
 
-	/*  Reset DList  */
-
-	NDList = 0;
-	ForEach(Att, 1, MaxAtt)
+	Context->splits.discrete_attribute_count = 0;
+	ForEach(Att, 1, Context->schema.max_attribute)
 	{
-	    if ( DFreq[Att] && ! Skip(Att) )
+	    if ( Context->splits.discrete_frequencies[Att] && ! Skip(Att) )
 	    {
-		DList[NDList++] = Att;
+		Context->splits.discrete_attributes[Context->splits.discrete_attribute_count++] = Att;
 	    }
 	}
     }
 
     /*  Restore case order and clean up  */
 
-    ForEach(i, 0, MaxCase)
+    ForEach(i, 0, Context->cases.max_case)
     {
-	Case[i] = SaveCase[i];
+	Context->cases.records[i] = Context->cases.saved_records[i];
     }
 
-    FreeUnlessNil(SaveCase);				SaveCase = Nil;
-    FreeUnlessNil(AttImp);				AttImp = Nil;
-    FreeUnlessNil(Split);				Split = Nil;
-    FreeUnlessNil(Used);				Used = Nil;
+    FreeUnlessNil(Context->cases.saved_records);				Context->cases.saved_records = Nil;
+    FreeUnlessNil(Context->training.attribute_importance);				Context->training.attribute_importance = Nil;
+    FreeUnlessNil(Context->training.split_attributes);				Context->training.split_attributes = Nil;
+    FreeUnlessNil(Context->training.used_attributes);				Context->training.used_attributes = Nil;
 
-    Now = 0;
+    Context->progress.stage = 0;
 }
 
 
@@ -227,7 +222,7 @@ void WinnowAtts()
 /*************************************************************************/
 
 
-float TrialTreeCost(Boolean FirstTime)
+float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 /*    -------------  */
 {
     Attribute	Att;
@@ -236,69 +231,70 @@ float TrialTreeCost(Boolean FirstTime)
     int		SaveVERBOSITY;
 
     Verbosity(1,
-	fprintf(Of, ( FirstTime ? "\nWinnow cycle:\n" : "\nCheck:\n" )))
+	fprintf(Context->io.output, ( FirstTime ? "\nWinnow cycle:\n" : "\nCheck:\n" )))
 
     /*  Build and prune trial tree  */
 
-    SaveMaxCase   = MaxCase;
-    SaveVERBOSITY = VERBOSITY;
-    SaveMINITEMS  = MINITEMS;
-    MINITEMS      = Max(MINITEMS / 2, 2.0);
+    SaveMaxCase   = Context->cases.max_case;
+    SaveVERBOSITY = Context->options.verbosity;
+    SaveMINITEMS  = Context->options.minimum_cases;
+    Context->options.minimum_cases      = Max(Context->options.minimum_cases / 2, 2.0);
 
-    Cut = (MaxCase+1) / 2 - 1;
+    Cut = (Context->cases.max_case+1) / 2 - 1;
 
-    InitialiseWeights();
-    LEAFRATIO = 0;
-    VERBOSITY = 0;
-    MaxCase   = Cut;
+    InitialiseWeights(Context);
+    Context->options.leaf_ratio = 0;
+    Context->options.verbosity = 0;
+    Context->cases.max_case   = Cut;
 
-    memset(Tested, 0, MaxAtt+1);		/* reset tested attributes */
+    memset(Context->splits.tested_attributes, 0, Context->schema.max_attribute+1);		/* reset tested attributes */
 
-    SetMinGainThresh();
-    FormTree(0, Cut, 0, &WTree);
+    SetMinGainThresh(Context);
+    FormTree(Context, 0, Cut, 0, &Context->trees.winnow);
 
     if ( FirstTime )
     {
 	/*  Find attributes used in unpruned tree  */
 
-	ScanTree(WTree, Split);
+	ScanTree(Context->trees.winnow, Context->training.split_attributes);
     }
 
-    Prune(WTree);
+    Prune(Context, Context->trees.winnow);
 
-    VERBOSITY = SaveVERBOSITY;
-    MaxCase   = SaveMaxCase;
-    MINITEMS  = SaveMINITEMS;
+    Context->options.verbosity = SaveVERBOSITY;
+    Context->cases.max_case   = SaveMaxCase;
+    Context->options.minimum_cases  = SaveMINITEMS;
 
     Verbosity(2,
-	PrintTree(WTree, "Winnowing tree:");
-	fprintf(Of, "\n  training error cost %g\n", ErrCost(WTree, 0, Cut)))
+	PrintTree(Context, Context->trees.winnow, "Winnowing tree:");
+	fprintf(Context->io.output, "\n  training error cost %g\n",
+		ErrCost(Context, Context->trees.winnow, 0, Cut)))
 
-    Base = ErrCost(WTree, Cut+1, MaxCase);
+    Base = ErrCost(Context, Context->trees.winnow, Cut+1, Context->cases.max_case);
 
     Verbosity(1,
-	fprintf(Of, "  initial error cost %g\n", Base))
+	fprintf(Context->io.output, "  initial error cost %g\n", Base))
 
     if ( FirstTime )
     {
 	/*  Check each attribute used in pruned tree  */
 
-	ScanTree(WTree, Used);
+	ScanTree(Context->trees.winnow, Context->training.used_attributes);
 
-	ForEach(Att, 1, MaxAtt)
+	ForEach(Att, 1, Context->schema.max_attribute)
 	{
 
-	    if ( ! Used[Att] )
+	    if ( ! Context->training.used_attributes[Att] )
 	    {
 		Verbosity(1,
-		    if ( Att != ClassAtt && ! Skip(Att) )
+		    if ( Att != Context->schema.class_attribute && ! Skip(Att) )
 		    {
-			fprintf(Of, "  %s not used\n", AttName[Att]);
+			fprintf(Context->io.output, "  %s not used\n", Context->schema.attribute_names[Att]);
 		    })
 
-		if ( Split[Att] )
+		if ( Context->training.split_attributes[Att] )
 		{
-		    AttImp[Att] = 1;
+		    Context->training.attribute_importance[Att] = 1;
 		}
 
 		continue;
@@ -306,23 +302,23 @@ float TrialTreeCost(Boolean FirstTime)
 
 	    /*  Determine error cost if this attribute omitted  */
 
-	    SpecialStatus[Att] ^= SKIP;
+	    Context->schema.special_status[Att] ^= SKIP;
 
-	    Cost = ErrCost(WTree, Cut+1, MaxCase);
+	    Cost = ErrCost(Context, Context->trees.winnow, Cut+1, Context->cases.max_case);
 
-	    AttImp[Att] = ( Cost < Base ? -1 : Cost / Base );
+	    Context->training.attribute_importance[Att] = ( Cost < Base ? -1 : Cost / Base );
 	    Verbosity(1,
-		fprintf(Of, "  error cost without %s = %g%s\n",
-			    AttName[Att], Cost,
+		fprintf(Context->io.output, "  error cost without %s = %g%s\n",
+			    Context->schema.attribute_names[Att], Cost,
 			    ( Cost < Base ? " - excluded" : "" )))
 
-	    SpecialStatus[Att] ^= SKIP;
+	    Context->schema.special_status[Att] ^= SKIP;
 	}
     }
 
-    if ( WTree )
+    if ( Context->trees.winnow )
     {
-	FreeTree(WTree);				WTree = Nil;
+	FreeTree(Context->trees.winnow);				Context->trees.winnow = Nil;
     }
 
     return Base;
@@ -337,20 +333,20 @@ float TrialTreeCost(Boolean FirstTime)
 /*************************************************************************/
 
 
-float ErrCost(Tree T, CaseNo Fp, CaseNo Lp)
+float ErrCost(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 /*    -------  */
 {
     CaseNo	i;
     float	ErrCost=0;
     ClassNo	Pred;
 
-    if ( MCost )
+    if ( Context->costs.matrix )
     {
 	ForEach(i, Fp, Lp)
 	{
-	    if ( (Pred = TreeClassify(Case[i], T)) != Class(Case[i]) )
+	    if ( (Pred = TreeClassify(Context, Context->cases.records[i], T)) != Class(Context->cases.records[i]) )
 	    {
-		ErrCost += MCost[Pred][Class(Case[i])];
+		ErrCost += Context->costs.matrix[Pred][Class(Context->cases.records[i])];
 	    }
 	}
     }
@@ -358,7 +354,7 @@ float ErrCost(Tree T, CaseNo Fp, CaseNo Lp)
     {
 	ForEach(i, Fp, Lp)
 	{
-	    if ( TreeClassify(Case[i], T) != Class(Case[i]) )
+	    if ( TreeClassify(Context, Context->cases.records[i], T) != Class(Context->cases.records[i]) )
 	    {
 		ErrCost += 1.0;
 	    }
@@ -377,18 +373,18 @@ float ErrCost(Tree T, CaseNo Fp, CaseNo Lp)
 /*************************************************************************/
 
 
-void ScanTree(Tree T, Boolean *Used)
+void ScanTree(Tree T, Boolean *used)
 /*   --------  */
 {
     DiscrValue	v;
 
     if ( T->NodeType )
     {
-	Used[T->Tested] = true;
+	used[T->Tested] = true;
 
 	ForEach(v, 1, T->Forks)
 	{
-	    ScanTree(T->Branch[v], Used);
+	    ScanTree(T->Branch[v], used);
 	}
     }
 }

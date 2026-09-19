@@ -34,6 +34,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 
 /*************************************************************************/
@@ -43,8 +44,8 @@
 /*************************************************************************/
 
 
-double ComputeGain(double BaseInfo, float UnknFrac, DiscrValue MaxVal,
-		   CaseCount TotalCases)
+double ComputeGain(c50_context *Context, double BaseInfo, float UnknFrac,
+		   DiscrValue MaxVal, CaseCount TotalCases)
 /*     -----------  */
 {
     DiscrValue	v;
@@ -59,7 +60,7 @@ double ComputeGain(double BaseInfo, float UnknFrac, DiscrValue MaxVal,
 
     ForEach(v, 1, MaxVal)
     {
-	ThisInfo += TotalInfo(GEnv.Freq[v], 1, MaxClass);
+	ThisInfo += TotalInfo(Context->training.environment->Freq[v], 1, Context->schema.max_class);
     }
     ThisInfo /= TotalCases;
 
@@ -106,8 +107,9 @@ double TotalInfo(double V[], DiscrValue MinVal, DiscrValue MaxVal)
 /*************************************************************************/
 
 
-void PrintDistribution(Attribute Att, DiscrValue MinVal, DiscrValue MaxVal,
-		       double **Freq, double *ValFreq, Boolean ShowNames)
+void PrintDistribution(c50_context *Context, Attribute Att,
+		       DiscrValue MinVal, DiscrValue MaxVal, double **Freq,
+		       double *ValFreq, Boolean ShowNames)
 /*   -----------------  */
 {
     DiscrValue v;
@@ -116,33 +118,33 @@ void PrintDistribution(Attribute Att, DiscrValue MinVal, DiscrValue MaxVal,
 
     (void) ValFreq;
 
-    fprintf(Of, "\n\t\t\t ");
-    ForEach(c, 1, MaxClass)
+    fprintf(Context->io.output, "\n\t\t\t ");
+    ForEach(c, 1, Context->schema.max_class)
     {
-	fprintf(Of, "%7.6s", ClassName[c]);
+	fprintf(Context->io.output, "%7.6s", Context->schema.class_names[c]);
     }
-    fprintf(Of, "\n");
+    fprintf(Context->io.output, "\n");
 
     ForEach(v, MinVal, MaxVal)
     {
 	if ( ShowNames )
 	{
 	    Val = ( ! v ? "unknown" :
-		    MaxAttVal[Att] ? AttValName[Att][v] :
+		    Context->schema.max_attribute_value[Att] ? Context->schema.attribute_value_names[Att][v] :
 		    v == 1 ? "N/A" :
 		    v == 2 ? "below" : "above" );
-	    fprintf(Of, "\t\t[%-7.7s:", Val);
+	    fprintf(Context->io.output, "\t\t[%-7.7s:", Val);
 	}
 	else
 	{
-	    fprintf(Of, "\t\t[%-7d:", v);
+	    fprintf(Context->io.output, "\t\t[%-7d:", v);
 	}
 
-	ForEach(c, 1, MaxClass)
+	ForEach(c, 1, Context->schema.max_class)
 	{
-	    fprintf(Of, " %6.1f", Freq[v][c]);
+	    fprintf(Context->io.output, " %6.1f", Freq[v][c]);
 	}
 
-	fprintf(Of, "]\n");
+	fprintf(Context->io.output, "]\n");
     }
 }

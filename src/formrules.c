@@ -30,10 +30,10 @@
 /*	----------------------------------------			 */
 /*								  	 */
 /*	The cases are partitioned into sublists:			 */
-/*	  * Fail0: those cases that satisfy all undeleted conditions	 */
-/*	  * Fail1: those that satisfy all but one of the above		 */
-/*	  * FailMany: the remaining cases				 */
-/*	Lists are implemented via Succ; Succ[i] is the number of the	 */
+/*	  * Context->rule_build.fail_zero: those cases that satisfy all undeleted conditions	 */
+/*	  * Context->rule_build.fail_one: those that satisfy all but one of the above		 */
+/*	  * Context->rule_build.fail_many: the remaining cases				 */
+/*	Lists are implemented via Context->rule_build.successors; Context->rule_build.successors[i] is the number of the	 */
 /*	case that follows case i.					 */
 /*									 */
 /*************************************************************************/
@@ -41,32 +41,7 @@
 
 #include "defns.i"
 #include "extern.i"
-
-double		*Errors=Nil,		/* [Condition] */
-		*Total=Nil;		/* [Condition] */
-
-float		*Pessimistic=Nil,	/* [Condition] */
-		*CondCost=Nil;		/* [Condition] */
-
-Boolean		**CondFailedBy=Nil,	/* [Condition][CaseNo] */
-		*Deleted=Nil;		/* [Condition] */
-
-Condition	*Stack=Nil;
-
-int		MaxDepth=0,		/* depth of tree */
-		NCond,
-		Bestd;
-
-ClassNo		TargetClass;
-
-short		*NFail=Nil,		/* NFail[i] = conditions failed by i */
-		*LocalNFail=Nil;	/* copy used during rule pruning */
-
-CaseNo		Fail0,
-		Fail1,
-		FailMany,
-		*Succ=Nil;		/* case following case i */
-
+#include "c50_api_internal.h"
 
 
 /*************************************************************************/
@@ -76,85 +51,91 @@ CaseNo		Fail0,
 /*************************************************************************/
 
 
-CRuleSet FormRules(Tree T)
+CRuleSet FormRules(c50_context *Context, Tree T)
     /*	 ---------  */
 {
     int		i;
     CRuleSet	RS;
 
-    NotifyStage(FORMRULES);
-    Progress(-(MaxCase+1.0));
+    NotifyStage(Context, FORMRULES);
+    Progress(Context, -(Context->cases.max_case+1.0));
 
-    Verbosity(2, PrintTree(T, "Pruned tree:"))
+    Verbosity(2, PrintTree(Context, T, "Context->trees.pruned tree:"))
 
     /*  Find essential parameters and allocate storage  */
 
-    MaxDepth = TreeDepth(T);
+    Context->rule_build.max_rule_depth = TreeDepth(T);
 
-    Errors	 = AllocZero(MaxDepth+2, double);
-    Total	 = AllocZero(MaxDepth+2, double);
+    Context->rule_build.condition_errors	 = AllocZero(Context->rule_build.max_rule_depth+2, double);
+    Context->rule_build.condition_totals	 = AllocZero(Context->rule_build.max_rule_depth+2, double);
 
-    Pessimistic	 = AllocZero(MaxDepth+2, float);
-    CondCost	 = AllocZero(MaxDepth+2, float);
+    Context->rule_build.pessimistic_errors	 = AllocZero(Context->rule_build.max_rule_depth+2, float);
+    Context->rule_build.condition_costs	 = AllocZero(Context->rule_build.max_rule_depth+2, float);
 
-    CondFailedBy = AllocZero(MaxDepth+2, Boolean *);
-    Deleted	 = AllocZero(MaxDepth+2, Boolean);
+    Context->rule_build.condition_failed_by = AllocZero(Context->rule_build.max_rule_depth+2, Boolean *);
+    Context->rule_build.deleted_conditions	 = AllocZero(Context->rule_build.max_rule_depth+2, Boolean);
 
-    Stack	 = AllocZero(MaxDepth+2, Condition);
+    Context->rule_build.condition_stack	 = AllocZero(Context->rule_build.max_rule_depth+2, Condition);
 
-    ForEach(i, 0, MaxDepth+1)
+    ForEach(i, 0, Context->rule_build.max_rule_depth+1)
     {
-	Stack[i]	= Alloc(1, CondRec);
-	CondFailedBy[i] = AllocZero(MaxCase+1, Boolean);
+	Context->rule_build.condition_stack[i]	= Alloc(1, CondRec);
+	Context->rule_build.condition_failed_by[i] = AllocZero(Context->cases.max_case+1, Boolean);
     }
 
-    NFail	 = AllocZero(MaxCase+1, short);
-    LocalNFail	 = AllocZero(MaxCase+1, short);
+    Context->rule_build.failure_count	 = AllocZero(Context->cases.max_case+1, short);
+    Context->rule_build.local_failure_count	 = AllocZero(Context->cases.max_case+1, short);
 
-    CovBy	 = AllocZero(MaxCase+2, int);
+    Context->rule_build.coverage_counts	 = AllocZero(Context->cases.max_case+2, int);
 
-    List	 = Alloc(MaxCase+2, CaseNo);
-    Succ	 = Alloc(MaxCase+1, CaseNo);
+    Context->rule_build.list	 = Alloc(Context->cases.max_case+2, CaseNo);
+    Context->rule_build.successors	 = Alloc(Context->cases.max_case+1, CaseNo);
 
-    CBuffer	 = Alloc(4 + (MaxCase+1) + (MaxCase+1)/128, Byte);
+    Context->rule_build.compression_buffer	 = Alloc(4 + (Context->cases.max_case+1) + (Context->cases.max_case+1)/128, Byte);
 
-    NRules = RuleSpace = 0;
-    FindClassFreq(ClassFreq, 0, MaxCase);
+    Context->rules.count = Context->rules.capacity = 0;
+    FindClassFreq(Context, Context->training.class_frequencies, 0, Context->cases.max_case);
 
-    if ( ! BranchBits )
+    if ( ! Context->rule_build.branch_bits )
     {
-	GenerateLogs(Max(MaxCase+1, Max(MaxAtt, Max(MaxClass, MaxDiscrVal))));
-	FindTestCodes();
+	GenerateLogs(Context,
+	    Max(Context->cases.max_case+1,
+		Max(Context->schema.max_attribute,
+		    Max(Context->schema.max_class,
+			Context->schema.max_discrete_value))));
+	FindTestCodes(Context);
     }
 
-    SetupNCost();
+    SetupNCost(Context);
 
     /*  Extract and prune paths from root to leaves  */
 
-    NCond = 0;
-    Scan(T);
+    Context->rule_build.condition_count = 0;
+    Scan(Context, T);
 
-    Default = T->Leaf;
+    Context->default_class = T->Leaf;
 
     /*  Deallocate storage  */
 
-    FreeFormRuleData();
+    FreeFormRuleData(Context);
 
     /*  Select final rules  */
 
-    SiftRules((T->Errors + MaxClass-1) / (MaxCase+1 + MaxClass));
+    SiftRules(Context,
+	      (T->Errors + Context->schema.max_class-1) /
+	      (Context->cases.max_case+1 + Context->schema.max_class));
 
-    FreeVector((void **) NCost, 0, MaxClass);		NCost = Nil;
+    FreeVector((void **) Context->costs.normalized_matrix, 0, Context->schema.max_class);		Context->costs.normalized_matrix = Nil;
 
-    CheckActiveSpace(NRules);
+    CheckActiveSpace(Context, Context->rules.count);
 
     RS = Alloc(1, RuleSetRec);
 
-    RS->SNRules  = NRules;
-    RS->SRule    = Rule;				Rule = Nil;
-    RS->SDefault = Default;
+    RS->SNRules  = Context->rules.count;
+    RS->SRule    = Context->rules.rules;				Context->rules.rules = Nil;
+    RS->SDefault = Context->default_class;
 
-    ConstructRuleTree(RS);
+    ConstructRuleTree(Context, RS);
 
     return RS;
 }
@@ -163,8 +144,8 @@ CRuleSet FormRules(Tree T)
 
 /*************************************************************************/
 /*								  	 */
-/*	Set up normalised costs.  These are all 0/1 if MCost is not	 */
-/*	defined or if cost weighting is used.  Otherwise, MCost is	 */
+/*	Set up normalised costs.  These are all 0/1 if Context->costs.matrix is not	 */
+/*	defined or if cost weighting is used.  Otherwise, Context->costs.matrix is	 */
 /*	divided by an estimated average error cost, determined as	 */
 /*	follows:							 */
 /*									 */
@@ -177,55 +158,55 @@ CRuleSet FormRules(Tree T)
 /*									 */
 /*	The above tends to be pessimistic, so we reduce it somewhat.	 */
 /*								  	 */
-/*	Siftrules requires a row of NCost corresponding to predicted	 */
+/*	Siftrules requires a row of Context->costs.normalized_matrix corresponding to predicted	 */
 /*	class 0 (case not covered by any rule).  All costs in this row	 */
 /*	are set to 1.							 */
 /*								  	 */
 /*************************************************************************/
 
 
-void SetupNCost()
+void SetupNCost(c50_context *Context)
 /*   ----------  */
 {
     ClassNo	Real, Pred;
     double	AvErrCost=0, ProbPred, ProbReal;
 
-    NCost = Alloc(MaxClass+1, float *);
+    Context->costs.normalized_matrix = Alloc(Context->schema.max_class+1, float *);
 
-    ForEach(Pred, 0, MaxClass)
+    ForEach(Pred, 0, Context->schema.max_class)
     {
-	NCost[Pred] = Alloc(MaxClass+1, float);
+	Context->costs.normalized_matrix[Pred] = Alloc(Context->schema.max_class+1, float);
 
-	if ( ! MCost || CostWeights || Pred == 0 )
+	if ( ! Context->costs.matrix || Context->costs.weighted || Pred == 0 )
 	{
-	    ForEach(Real, 1, MaxClass)
+	    ForEach(Real, 1, Context->schema.max_class)
 	    {
-		NCost[Pred][Real] = ( Pred != Real );
+		Context->costs.normalized_matrix[Pred][Real] = ( Pred != Real );
 	    }
 	}
 	else
  	{
-	    ProbPred = ClassFreq[Pred] / (MaxCase+1);
-	    ForEach(Real, 1, MaxClass)
+	    ProbPred = Context->training.class_frequencies[Pred] / (Context->cases.max_case+1);
+	    ForEach(Real, 1, Context->schema.max_class)
 	    {
-		NCost[Pred][Real] = MCost[Pred][Real];
+		Context->costs.normalized_matrix[Pred][Real] = Context->costs.matrix[Pred][Real];
 		if ( Real == Pred ) continue;
 
-		ProbReal = ClassFreq[Real] / (MaxCase+1);
+		ProbReal = Context->training.class_frequencies[Real] / (Context->cases.max_case+1);
 		AvErrCost +=
-		    ProbPred * (ProbReal / (1 - ProbPred)) * MCost[Pred][Real];
+		    ProbPred * (ProbReal / (1 - ProbPred)) * Context->costs.matrix[Pred][Real];
 	    }
 	}
     }
 
-    if ( MCost && ! CostWeights )
+    if ( Context->costs.matrix && ! Context->costs.weighted )
     {
 	AvErrCost = (AvErrCost + 1) / 2;	/* reduced average cost */
-	ForEach(Real, 1, MaxClass)
+	ForEach(Real, 1, Context->schema.max_class)
 	{
-	    ForEach(Pred, 1, MaxClass)
+	    ForEach(Pred, 1, Context->schema.max_class)
 	    {
-		NCost[Pred][Real] /= AvErrCost;
+		Context->costs.normalized_matrix[Pred][Real] /= AvErrCost;
 	    }
 	}
     }
@@ -240,7 +221,7 @@ void SetupNCost()
 /*************************************************************************/
 
 
-void Scan(Tree T)
+void Scan(c50_context *Context, Tree T)
 /*   ----  */
 {
     DiscrValue	v, Last;
@@ -248,8 +229,8 @@ void Scan(Tree T)
 
     if ( T->NodeType )
     {
-	NCond++;
-	Term = Stack[NCond];
+	Context->rule_build.condition_count++;
+	Term = Context->rule_build.condition_stack[Context->rule_build.condition_count];
 
 	Term->NodeType = T->NodeType;
 	Term->Tested   = T->Tested;
@@ -265,7 +246,7 @@ void Scan(Tree T)
 
 	    if ( T->NodeType == BrSubset )
 	    {
-		if ( Elements(T->Tested, T->Subset[v], &Last) == 1 )
+		if ( Elements(Context, T->Tested, T->Subset[v], &Last) == 1 )
 		{
 		    /*  Subset contains a single element  */
 
@@ -280,33 +261,33 @@ void Scan(Tree T)
 		}
 	    }
 
-	    CondCost[NCond] = CondBits(Term);
+	    Context->rule_build.condition_costs[Context->rule_build.condition_count] = CondBits(Context, Term);
 
 	    /*  Adjust number of failed conditions  */
 
-	    PushCondition();
+	    PushCondition(Context);
 
-	    Scan(T->Branch[v]);
+	    Scan(Context, T->Branch[v]);
 
 	    /*  Reset number of failed conditions  */
 
-	    PopCondition();
+	    PopCondition(Context);
 	}
 
-	NCond--;
+	Context->rule_build.condition_count--;
     }
 
     /*  Make a rule from every node of the tree other than the root  */
 
-    if ( NCond > 0 && T->Cases >= 1 )
+    if ( Context->rule_build.condition_count > 0 && T->Cases >= 1 )
     {
 
-	memcpy(LocalNFail, NFail, (MaxCase + 1) * sizeof(short));
+	memcpy(Context->rule_build.local_failure_count, Context->rule_build.failure_count, (Context->cases.max_case + 1) * sizeof(short));
 
-	TargetClass = T->Leaf;
-	PruneRule(Stack, T->Leaf);
+	Context->rule_build.target_class = T->Leaf;
+	PruneRule(Context, Context->rule_build.condition_stack);
 
-	if ( ! T->NodeType ) Progress(T->Cases);
+	if ( ! T->NodeType ) Progress(Context, T->Cases);
     }
 }
 
@@ -314,37 +295,38 @@ void Scan(Tree T)
 
 /*************************************************************************/
 /*								  	 */
-/*	Update NFail when a condition is added to/removed from Stack	 */
+/*	Update Context->rule_build.failure_count when a condition is added to/removed from Context->rule_build.condition_stack	 */
 /*								  	 */
 /*************************************************************************/
 
 
-void PushCondition()
+void PushCondition(c50_context *Context)
 /*   -------------  */
 {
     int i;
 
-    ForEach(i, 0, MaxCase)
+    ForEach(i, 0, Context->cases.max_case)
     {
-	if ( (CondFailedBy[NCond][i] = ! Satisfies(Case[i], Stack[NCond])) )
+	if ( (Context->rule_build.condition_failed_by[Context->rule_build.condition_count][i] =
+	      ! Satisfies(Context, Context->cases.records[i], Context->rule_build.condition_stack[Context->rule_build.condition_count])) )
 	{
-	    NFail[i]++;
+	    Context->rule_build.failure_count[i]++;
 	}
     }
 }
 
 
 
-void PopCondition()
+void PopCondition(c50_context *Context)
 /*   -------------  */
 {
     int i;
 
-    ForEach(i, 0, MaxCase)
+    ForEach(i, 0, Context->cases.max_case)
     {
-	if ( CondFailedBy[NCond][i] )
+	if ( Context->rule_build.condition_failed_by[Context->rule_build.condition_count][i] )
 	{
-	    NFail[i]--;
+	    Context->rule_build.failure_count[i]--;
 	}
     }
 }
@@ -354,7 +336,7 @@ void PopCondition()
 /*************************************************************************/
 /*									 */
 /*	Prune the rule given by the conditions Cond, and the number of	 */
-/*	conditions NCond, and add the resulting rule to the current	 */
+/*	conditions Context->rule_build.condition_count, and add the resulting rule to the current	 */
 /*	ruleset if it is sufficiently accurate				 */
 /*									 */
 /*************************************************************************/
@@ -362,10 +344,10 @@ void PopCondition()
 #define TI(a,b)		(((a)+(b)) * Log((a)+(b)) - (a) * Log(a) - (b) * Log(b))
 
 
-void PruneRule(Condition Cond[], ClassNo TargetClass)
+void PruneRule(c50_context *Context, Condition Cond[])
 /*   ---------  */
 {
-    int		d, id, Bestid, Remaining=NCond;
+    int		d, id, Bestid, Remaining=Context->rule_build.condition_count;
     double	RealTotal, RealCorrect;
     CaseNo	i, LL=0;
     float	Prior;
@@ -373,32 +355,32 @@ void PruneRule(Condition Cond[], ClassNo TargetClass)
 
     (void) Bestid;  /* Used only when VerbOpt is enabled. */
 
-    ForEach(d, 0, NCond)
+    ForEach(d, 0, Context->rule_build.condition_count)
     {
-	Deleted[d] = false;
-	Total[d]   =
-	Errors[d]  = 0;
+	Context->rule_build.deleted_conditions[d] = false;
+	Context->rule_build.condition_totals[d]   =
+	Context->rule_build.condition_errors[d]  = 0;
 
-	if ( d ) Cost += CondCost[d];
+	if ( d ) Cost += Context->rule_build.condition_costs[d];
     }
-    Cost -= LogFact[NCond];
+    Cost -= Context->rule_build.log_factorial[Context->rule_build.condition_count];
 
-    Base = TI(ClassFreq[TargetClass], MaxCase+1 - ClassFreq[TargetClass]);
+    Base = TI(Context->training.class_frequencies[Context->rule_build.target_class], Context->cases.max_case+1 - Context->training.class_frequencies[Context->rule_build.target_class]);
 
     /*  Initialise all fail lists  */
 
-    Bestd = 0;
-    ProcessLists();
+    Context->rule_build.best_condition = 0;
+    ProcessLists(Context);
 
-    ForEach(d, 1, NCond)
+    ForEach(d, 1, Context->rule_build.condition_count)
     {
-	Total[d]  += Total[0];
-	Errors[d] += Errors[0];
+	Context->rule_build.condition_totals[d]  += Context->rule_build.condition_totals[0];
+	Context->rule_build.condition_errors[d] += Context->rule_build.condition_errors[0];
     }
 
     /*  Find conditions to delete  */
 
-    Verbosity(1, fprintf(Of, "\n  Pruning rule for %s", ClassName[TargetClass]))
+    Verbosity(1, fprintf(Context->io.output, "\n  Pruning rule for %s", Context->schema.class_names[Context->rule_build.target_class]))
 
     while (true )
     {
@@ -406,127 +388,127 @@ void PruneRule(Condition Cond[], ClassNo TargetClass)
 	    the pessimistic accuracy of the rule.
 	    Note: d = 0 means all conditions are satisfied  */
 
-	Bestd = id = 0;
+	Context->rule_build.best_condition = id = 0;
 
-	Gain = Base - TI(Total[0]-Errors[0], Errors[0])
-		    - TI(ClassFreq[TargetClass]-Total[0]+Errors[0],
-			 MaxCase+1-ClassFreq[TargetClass]-Errors[0]);
+	Gain = Base - TI(Context->rule_build.condition_totals[0]-Context->rule_build.condition_errors[0], Context->rule_build.condition_errors[0])
+		    - TI(Context->training.class_frequencies[Context->rule_build.target_class]-Context->rule_build.condition_totals[0]+Context->rule_build.condition_errors[0],
+			 Context->cases.max_case+1-Context->training.class_frequencies[Context->rule_build.target_class]-Context->rule_build.condition_errors[0]);
 
 	Verbosity(1,
-	    fprintf(Of, "\n       Err   Used   Pess\tAbsent condition\n"))
+	    fprintf(Context->io.output, "\n       Err   Used   Pess\tAbsent condition\n"))
 
-	ForEach(d, 0, NCond)
+	ForEach(d, 0, Context->rule_build.condition_count)
 	{
-	    if ( Deleted[d] ) continue;
+	    if ( Context->rule_build.deleted_conditions[d] ) continue;
 
-	    if ( Errors[d] > Total[d] ) Errors[d] = Total[d];
+	    if ( Context->rule_build.condition_errors[d] > Context->rule_build.condition_totals[d] ) Context->rule_build.condition_errors[d] = Context->rule_build.condition_totals[d];
 
-	    Pessimistic[d] = ( Total[d] < Epsilon ? 0.5 :
-			       (Errors[d] + 1) / (Total[d] + 2.0) );
+	    Context->rule_build.pessimistic_errors[d] = ( Context->rule_build.condition_totals[d] < Epsilon ? 0.5 :
+			       (Context->rule_build.condition_errors[d] + 1) / (Context->rule_build.condition_totals[d] + 2.0) );
 
 	    Verbosity(1,
-		fprintf(Of, "   %7.1f%7.1f  %4.1f%%",
-		       Errors[d], Total[d], 100 * Pessimistic[d]))
+		fprintf(Context->io.output, "   %7.1f%7.1f  %4.1f%%",
+		       Context->rule_build.condition_errors[d], Context->rule_build.condition_totals[d], 100 * Context->rule_build.pessimistic_errors[d]))
 
 	    if ( ! d )
 	    {
 		Verbosity(1,
-		    fprintf(Of, "\t<base> %.1f/%.1f bits\n", Gain, Cost))
+		    fprintf(Context->io.output, "\t<base> %.1f/%.1f bits\n", Gain, Cost))
 	    }
 	    else
 	    {
 		id++;
 
-		Verbosity(1, PrintCondition(Cond[d]))
+		Verbosity(1, PrintCondition(Context, Cond[d]))
 
-		/*  Bestd identifies the condition with lowest pessimistic
+		/*  Context->rule_build.best_condition identifies the condition with lowest pessimistic
 		    error  estimate  */
 
-		if ( ! Bestd || Pessimistic[d] <= Pessimistic[Bestd] )
+		if ( ! Context->rule_build.best_condition || Context->rule_build.pessimistic_errors[d] <= Context->rule_build.pessimistic_errors[Context->rule_build.best_condition] )
 		{
-		    Bestd  = d;
+		    Context->rule_build.best_condition  = d;
 		    Bestid = id;
 		}
 	    }
 	}
 
-	if ( Remaining == 1 || ! Bestd || 
+	if ( Remaining == 1 || ! Context->rule_build.best_condition ||
 	     ( THEORYFRAC * Cost <= Gain &&
-	       Pessimistic[Bestd] > Pessimistic[0] ) )
+	       Context->rule_build.pessimistic_errors[Context->rule_build.best_condition] > Context->rule_build.pessimistic_errors[0] ) )
 	{
 	    break;
 	}
 
-	Verbosity(1, fprintf(Of, "\teliminate test %d\n", Bestid))
+	Verbosity(1, fprintf(Context->io.output, "\teliminate test %d\n", Bestid))
 
-	Deleted[Bestd] = true;
+	Context->rule_build.deleted_conditions[Context->rule_build.best_condition] = true;
 	Remaining--;
-	Cost -= CondCost[Bestd] - LogFact[Remaining+1] + LogFact[Remaining];
+	Cost -= Context->rule_build.condition_costs[Context->rule_build.best_condition] - Context->rule_build.log_factorial[Remaining+1] + Context->rule_build.log_factorial[Remaining];
 
-	ForEach(d, 1, NCond)
+	ForEach(d, 1, Context->rule_build.condition_count)
 	{
-	    if ( d != Bestd )
+	    if ( d != Context->rule_build.best_condition )
 	    {
-		Total[d]  += Total[Bestd] - Total[0];
-		Errors[d] += Errors[Bestd] - Errors[0];
+		Context->rule_build.condition_totals[d]  += Context->rule_build.condition_totals[Context->rule_build.best_condition] - Context->rule_build.condition_totals[0];
+		Context->rule_build.condition_errors[d] += Context->rule_build.condition_errors[Context->rule_build.best_condition] - Context->rule_build.condition_errors[0];
 	    }
 	}
-	Total[0]  = Total[Bestd];
-	Errors[0] = Errors[Bestd];
+	Context->rule_build.condition_totals[0]  = Context->rule_build.condition_totals[Context->rule_build.best_condition];
+	Context->rule_build.condition_errors[0] = Context->rule_build.condition_errors[Context->rule_build.best_condition];
 
-	ProcessLists();
+	ProcessLists(Context);
     }
 
-    if ( Remaining && Total[0] > 0.99 && THEORYFRAC * Cost <= Gain )
+    if ( Remaining && Context->rule_build.condition_totals[0] > 0.99 && THEORYFRAC * Cost <= Gain )
     {
-	Prior = ClassFreq[TargetClass] / (MaxCase+1.0);
+	Prior = Context->training.class_frequencies[Context->rule_build.target_class] / (Context->cases.max_case+1.0);
 
 	/*  Find list of cases covered by this rule and adjust coverage
 	    if using costs  */
 
-	if ( ! MCost )
+	if ( ! Context->costs.matrix )
 	{
-	    RealTotal   = Total[0];
-	    RealCorrect = Total[0] - Errors[0];
+	    RealTotal   = Context->rule_build.condition_totals[0];
+	    RealCorrect = Context->rule_build.condition_totals[0] - Context->rule_build.condition_errors[0];
 
-	    for ( i = Fail0 ; i >= 0 ; i = Succ[i] )
+	    for ( i = Context->rule_build.fail_zero ; i >= 0 ; i = Context->rule_build.successors[i] )
 	    {
-		List[++LL] = i;
+		Context->rule_build.list[++LL] = i;
 	    }
 	}
 	else
-	if ( CostWeights )
+	if ( Context->costs.weighted )
 	{
 	    /*  Adjust distributions to reverse case weighting  */
 
-	    Prior /= WeightMul[TargetClass];
+	    Prior /= Context->costs.weight_multipliers[Context->rule_build.target_class];
 
 	    RealTotal = 0;
-	    for ( i = Fail0 ; i >= 0 ; i = Succ[i] )
+	    for ( i = Context->rule_build.fail_zero ; i >= 0 ; i = Context->rule_build.successors[i] )
 	    {
-		RealTotal += Weight(Case[i]) / WeightMul[Class(Case[i])];
-		List[++LL] = i;
+		RealTotal += Weight(Context->cases.records[i]) / Context->costs.weight_multipliers[Class(Context->cases.records[i])];
+		Context->rule_build.list[++LL] = i;
 	    }
-	    RealCorrect = (Total[0] - Errors[0]) / WeightMul[TargetClass];
+	    RealCorrect = (Context->rule_build.condition_totals[0] - Context->rule_build.condition_errors[0]) / Context->costs.weight_multipliers[Context->rule_build.target_class];
 	}
 	else
 	{
-	    /*  Errors have been weighted by NCost -- undo  */
+	    /*  Context->rule_build.condition_errors have been weighted by Context->costs.normalized_matrix -- undo  */
 
-	    RealTotal   = Total[0];
+	    RealTotal   = Context->rule_build.condition_totals[0];
 	    RealCorrect = 0;
-	    for ( i = Fail0 ; i >= 0 ; i = Succ[i] )
+	    for ( i = Context->rule_build.fail_zero ; i >= 0 ; i = Context->rule_build.successors[i] )
 	    {
-		RealCorrect += Weight(Case[i]) *
-			       (Class(Case[i]) == TargetClass);
-		List[++LL] = i;
+		RealCorrect += Weight(Context->cases.records[i]) *
+			       (Class(Context->cases.records[i]) == Context->rule_build.target_class);
+		Context->rule_build.list[++LL] = i;
 	    }
 	}
-	List[0] = LL;
+	Context->rule_build.list[0] = LL;
 
 	if ( (RealCorrect + 1) / ((RealTotal + 2) * Prior) >= 0.95 )
 	{
-	    NewRule(Cond, NCond, TargetClass, Deleted, Nil,
+	    NewRule(Context, Cond, Context->rule_build.condition_count, Context->rule_build.target_class, Context->rule_build.deleted_conditions, Nil,
 		    RealTotal, RealCorrect, Prior);
 	}
     }
@@ -536,87 +518,87 @@ void PruneRule(Condition Cond[], ClassNo TargetClass)
 
 /*************************************************************************/
 /*								  	 */
-/*	Change Fail0, Fail1, and FailMany.				 */
-/*	If Bestd has not been set, initialise the lists; otherwise	 */
-/*	record the changes for deleting condition Bestd and reduce	 */
-/*	LocalNFail for cases that do not satisfy condition Bestd	 */
+/*	Change Context->rule_build.fail_zero, Context->rule_build.fail_one, and Context->rule_build.fail_many.				 */
+/*	If Context->rule_build.best_condition has not been set, initialise the lists; otherwise	 */
+/*	record the changes for deleting condition Context->rule_build.best_condition and reduce	 */
+/*	Context->rule_build.local_failure_count for cases that do not satisfy condition Context->rule_build.best_condition	 */
 /*								  	 */
 /*************************************************************************/
 
 
-void ProcessLists()
+void ProcessLists(c50_context *Context)
 /*   ------------  */
 {
     CaseNo	i, iNext, *Prev;
     int		d;
 
-    if ( ! Bestd )
+    if ( ! Context->rule_build.best_condition )
     {
 	/*  Initialise the fail list */
 
-	Fail0 = Fail1 = FailMany = -1;
+	Context->rule_build.fail_zero = Context->rule_build.fail_one = Context->rule_build.fail_many = -1;
 
-	ForEach(i, 0, MaxCase)
+	ForEach(i, 0, Context->cases.max_case)
 	{
-	    if ( ! LocalNFail[i] )
+	    if ( ! Context->rule_build.local_failure_count[i] )
 	    {
-		Increment(0, i, Total, Errors);
-		AddToList(&Fail0, i);
+		Increment(Context, 0, i, Context->rule_build.condition_totals, Context->rule_build.condition_errors);
+		AddToList(Context, &Context->rule_build.fail_zero, i);
 	    }
 	    else
-	    if ( LocalNFail[i] == 1 )
+	    if ( Context->rule_build.local_failure_count[i] == 1 )
 	    {
-		d = SingleFail(i);
-		Increment(d, i, Total, Errors);
-		AddToList(&Fail1, i);
+		d = SingleFail(Context, i);
+		Increment(Context, d, i, Context->rule_build.condition_totals, Context->rule_build.condition_errors);
+		AddToList(Context, &Context->rule_build.fail_one, i);
 	    }
 	    else
 	    {
-		AddToList(&FailMany, i);
+		AddToList(Context, &Context->rule_build.fail_many, i);
 	    }
 	}
     }
     else
     {
-	/*  Change the fail list to remove condition Bestd  */
+	/*  Change the fail list to remove condition Context->rule_build.best_condition  */
 
-	/*  Promote cases from Fail1 to Fail0  */
+	/*  Promote cases from Context->rule_build.fail_one to Context->rule_build.fail_zero  */
 
-	Prev = &Fail1;
+	Prev = &Context->rule_build.fail_one;
 
-	for ( i = Fail1 ; i >= 0 ; )
+	for ( i = Context->rule_build.fail_one ; i >= 0 ; )
 	{
-	    iNext = Succ[i];
-	    if ( CondFailedBy[Bestd][i] )
+	    iNext = Context->rule_build.successors[i];
+	    if ( Context->rule_build.condition_failed_by[Context->rule_build.best_condition][i] )
 	    {
-		DeleteFromList(Prev, i);
-		AddToList(&Fail0, i);
+		DeleteFromList(Context, Prev, i);
+		AddToList(Context, &Context->rule_build.fail_zero, i);
 	    }
 	    else
 	    {
-		Prev = &Succ[i];
+		Prev = &Context->rule_build.successors[i];
 	    }
 	    i = iNext;
 	}
 
-	/*  Check cases in FailMany  */
+	/*  Check cases in Context->rule_build.fail_many  */
 
-	Prev = &FailMany;
+	Prev = &Context->rule_build.fail_many;
 
-	for ( i = FailMany ; i >= 0 ; )
+	for ( i = Context->rule_build.fail_many ; i >= 0 ; )
 	{
-	    iNext = Succ[i];
-	    if ( CondFailedBy[Bestd][i] && --LocalNFail[i] == 1 )
+	    iNext = Context->rule_build.successors[i];
+	    if ( Context->rule_build.condition_failed_by[Context->rule_build.best_condition][i] && --Context->rule_build.local_failure_count[i] == 1 )
 	    {
-		d = SingleFail(i);
-		Increment(d, i, Total, Errors);
+		d = SingleFail(Context, i);
+		Increment(Context, d, i, Context->rule_build.condition_totals, Context->rule_build.condition_errors);
 
-		DeleteFromList(Prev, i);
-		AddToList(&Fail1, i);
+		DeleteFromList(Context, Prev, i);
+		AddToList(Context, &Context->rule_build.fail_one, i);
 	    }
 	    else
 	    {
-		Prev = &Succ[i];
+		Prev = &Context->rule_build.successors[i];
 	    }
 	    i = iNext;
 	}
@@ -627,16 +609,16 @@ void ProcessLists()
 
 /*************************************************************************/
 /*								  	 */
-/*	Add case to list whose first case is *List			 */
+/*	Add case to list whose first case is *Context->rule_build.list			 */
 /*								  	 */
 /*************************************************************************/
 
 
-void AddToList(CaseNo *List, CaseNo N)
+void AddToList(c50_context *Context, CaseNo *head, CaseNo N)
 /*   ---------  */
 {
-    Succ[N] = *List;
-    *List   = N;
+    Context->rule_build.successors[N] = *head;
+    *head   = N;
 }
 
 
@@ -648,10 +630,10 @@ void AddToList(CaseNo *List, CaseNo N)
 /*************************************************************************/
 
 
-void DeleteFromList(CaseNo *Before, CaseNo N)
+void DeleteFromList(c50_context *Context, CaseNo *Before, CaseNo N)
 /*   --------------  */
 {
-    *Before = Succ[N];
+    *Before = Context->rule_build.successors[N];
 }
 
 
@@ -663,14 +645,14 @@ void DeleteFromList(CaseNo *Before, CaseNo N)
 /*************************************************************************/
 
 
-int SingleFail(CaseNo i)
+int SingleFail(c50_context *Context, CaseNo i)
 /*  ----------  */
 {
     int		d;
 
-    ForEach(d, 1, NCond)
+    ForEach(d, 1, Context->rule_build.condition_count)
     {
-	if ( ! Deleted[d] && CondFailedBy[d][i] ) return d;
+	if ( ! Context->rule_build.deleted_conditions[d] && Context->rule_build.condition_failed_by[d][i] ) return d;
     }
 
     return 0;
@@ -680,16 +662,19 @@ int SingleFail(CaseNo i)
 
 /*************************************************************************/
 /*								  	 */
-/*	Case i covers all conditions except d; update Total and Errors	 */
+/*	Case i covers all conditions except d; update Context->rule_build.condition_totals and Context->rule_build.condition_errors	 */
 /*								  	 */
 /*************************************************************************/
 
 
-void Increment(int d, CaseNo i, double *Total, double *Errors)
+void Increment(c50_context *Context, int d, CaseNo i,
+	       double *totals, double *errors)
 /*   ---------  */
 {
-    Total[d] += Weight(Case[i]);
-    Errors[d]+= Weight(Case[i]) * NCost[TargetClass][Class(Case[i])];
+    totals[d] += Weight(Context->cases.records[i]);
+    errors[d] += Weight(Context->cases.records[i]) *
+	Context->costs.normalized_matrix[Context->rule_build.target_class]
+					 [Class(Context->cases.records[i])];
 }
 
 
@@ -704,19 +689,19 @@ void Increment(int d, CaseNo i, double *Total, double *Errors)
 /*************************************************************************/
 
 
-void FreeFormRuleData()
+void FreeFormRuleData(c50_context *Context)
 /*   ----------------  */
 {
-    if ( ! CondFailedBy ) return;
+    if ( ! Context->rule_build.condition_failed_by ) return;
 
-    FreeVector((void **) CondFailedBy, 0, MaxDepth+1);	CondFailedBy = Nil;
-    FreeVector((void **) Stack, 0, MaxDepth+1);		Stack = Nil;
-    Free(Deleted);					Deleted = Nil;
-    Free(Pessimistic);					Pessimistic = Nil;
-    Free(CondCost);					CondCost = Nil;
-    Free(Total);					Total = Nil;
-    Free(Errors);					Errors = Nil;
-    Free(NFail);					NFail = Nil;
-    Free(LocalNFail);					LocalNFail = Nil;
-    Free(Succ);						Succ = Nil;
+    FreeVector((void **) Context->rule_build.condition_failed_by, 0, Context->rule_build.max_rule_depth+1);	Context->rule_build.condition_failed_by = Nil;
+    FreeVector((void **) Context->rule_build.condition_stack, 0, Context->rule_build.max_rule_depth+1);		Context->rule_build.condition_stack = Nil;
+    Free(Context->rule_build.deleted_conditions);					Context->rule_build.deleted_conditions = Nil;
+    Free(Context->rule_build.pessimistic_errors);					Context->rule_build.pessimistic_errors = Nil;
+    Free(Context->rule_build.condition_costs);					Context->rule_build.condition_costs = Nil;
+    Free(Context->rule_build.condition_totals);					Context->rule_build.condition_totals = Nil;
+    Free(Context->rule_build.condition_errors);					Context->rule_build.condition_errors = Nil;
+    Free(Context->rule_build.failure_count);					Context->rule_build.failure_count = Nil;
+    Free(Context->rule_build.local_failure_count);					Context->rule_build.local_failure_count = Nil;
+    Free(Context->rule_build.successors);						Context->rule_build.successors = Nil;
 }

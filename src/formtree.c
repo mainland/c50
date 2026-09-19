@@ -34,25 +34,10 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
-
-Boolean		MultiVal,	/* all atts have many values */
-		Subsample;	/* use subsampling */
-float		AvGainWt,	/* weight of average gain in gain threshold */
-		MDLWt;		/* weight of MDL threshold ditto */
-
-Attribute	*DList=Nil;	/* list of discrete atts */
-int		NDList;		/* number in list */
-
-DiscrValue	MaxLeaves;	/* target maximum tree size */
 
 #define		SAMPLEUNIT	2000
-
-float		ValThresh;	/* minimum GR when evaluating sampled atts */
-Boolean		Sampled;	/* true if sampling used */
-
-Attribute	*Waiting=Nil,	/* attribute wait list */
-		NWaiting=0;
 
 
 
@@ -64,7 +49,7 @@ Attribute	*Waiting=Nil,	/* attribute wait list */
 /*************************************************************************/
 
 
-void InitialiseTreeData()
+void InitialiseTreeData(c50_context *Context)
 /*   ------------------  */
 {
     DiscrValue	v;
@@ -73,198 +58,202 @@ void InitialiseTreeData()
     size_t	NoAttributes;
     size_t	NoCases;
 
-    Raw	     = AllocZero(TRIALS+1, Tree);
-    Pruned   = AllocZero(TRIALS+1, Tree);
+    Context->trees.raw	     = AllocZero(Context->options.trials+1, Tree);
+    Context->trees.pruned   = AllocZero(Context->options.trials+1, Tree);
 
-    Tested   = AllocZero(MaxAtt+1, Byte);
+    Context->splits.tested_attributes   = AllocZero(Context->schema.max_attribute+1, Byte);
 
-    Gain     = AllocZero(MaxAtt+1, float);
-    Info     = AllocZero(MaxAtt+1, float);
-    Bar      = AllocZero(MaxAtt+1, ContValue);
+    Context->splits.gain     = AllocZero(Context->schema.max_attribute+1, float);
+    Context->splits.information     = AllocZero(Context->schema.max_attribute+1, float);
+    Context->splits.thresholds      = AllocZero(Context->schema.max_attribute+1, ContValue);
 
-    EstMaxGR = AllocZero(MaxAtt+1, float);
+    Context->splits.estimated_max_gain_ratio = AllocZero(Context->schema.max_attribute+1, float);
 
     /*  Data for subsets  */
 
-    if ( SUBSET )
+    if ( Context->options.subset_splits )
     {
-	InitialiseBellNumbers();
-	Subset = Alloc(MaxAtt+1, Set *);
+	InitialiseBellNumbers(Context);
+	Context->splits.subsets = Alloc(Context->schema.max_attribute+1, Set *);
 
-	ForEach(Att, 1, MaxAtt)
+	ForEach(Att, 1, Context->schema.max_attribute)
 	{
-	    if ( Discrete(Att) && Att != ClassAtt && ! Skip(Att) )
+	    if ( Discrete(Att) && Att != Context->schema.class_attribute && ! Skip(Att) )
 	    {
-		Subset[Att] = AllocZero(MaxAttVal[Att]+1, Set);
-		ForEach(v, 0, MaxAttVal[Att])
+		Context->splits.subsets[Att] = AllocZero(Context->schema.max_attribute_value[Att]+1, Set);
+		ForEach(v, 0, Context->schema.max_attribute_value[Att])
 		{
-		    Subset[Att][v] = Alloc((MaxAttVal[Att]>>3)+1, Byte);
+		    Context->splits.subsets[Att][v] = Alloc((Context->schema.max_attribute_value[Att]>>3)+1, Byte);
 		}
 	    }
 	}
-	Subsets = AllocZero(MaxAtt+1, int);
+	Context->splits.subset_counts = AllocZero(Context->schema.max_attribute+1, int);
     }
 
-    NoAttributes = ( MaxAtt < 1 ? 0 : (size_t) MaxAtt );
-    DList  = Alloc(NoAttributes, Attribute);
-    NDList = 0;
+    NoAttributes = ( Context->schema.max_attribute < 1 ? 0 : (size_t) Context->schema.max_attribute );
+    Context->splits.discrete_attributes  = Alloc(NoAttributes, Attribute);
+    Context->splits.discrete_attribute_count = 0;
 
-    DFreq = AllocZero(MaxAtt+1, double *);
-    ForEach(Att, 1, MaxAtt)
+    Context->splits.discrete_frequencies = AllocZero(Context->schema.max_attribute+1, double *);
+    ForEach(Att, 1, Context->schema.max_attribute)
     {
-	if ( Att == ClassAtt || Skip(Att) || ! Discrete(Att) ) continue;
+	if ( Att == Context->schema.class_attribute || Skip(Att) || ! Discrete(Att) ) continue;
 
-	DList[NDList++] = Att;
+	Context->splits.discrete_attributes[Context->splits.discrete_attribute_count++] = Att;
 
-	DFreq[Att] = Alloc(MaxClass * (MaxAttVal[Att]+1), double);
+	Context->splits.discrete_frequencies[Att] = Alloc(Context->schema.max_class * (Context->schema.max_attribute_value[Att]+1), double);
     }
 
-    ClassFreq = AllocZero(MaxClass+1, double);
-    ClassSum  = Alloc(MaxClass+1, float);
+    Context->training.class_frequencies = AllocZero(Context->schema.max_class+1, double);
+    Context->class_sum  = Alloc(Context->schema.max_class+1, float);
 
-    if ( BOOST )
+    if ( Context->options.boosting )
     {
-	Vote      = Alloc(MaxClass+1, float);
-	TrialPred = Alloc(TRIALS, ClassNo);
+	Context->votes      = Alloc(Context->schema.max_class+1, float);
+	Context->trial_predictions = Alloc(Context->options.trials, ClassNo);
     }
 
-    if ( RULES )
+    if ( Context->options.rules )
     {
-	MostSpec     = Alloc(MaxClass+1, CRule);
-	PossibleCuts = Alloc(MaxAtt+1, int);
+	Context->most_specific_rules     = Alloc(Context->schema.max_class+1, CRule);
+	Context->splits.possible_cuts = Alloc(Context->schema.max_attribute+1, int);
     }
 
     /*  Check whether all attributes have many discrete values  */
 
-    MultiVal = true;
-    if ( ! SUBSET )
+    Context->splits.all_attributes_multi_valued = true;
+    if ( ! Context->options.subset_splits )
     {
-	for ( Att = 1 ; MultiVal && Att <= MaxAtt ; Att++ )
+	for ( Att = 1 ; Context->splits.all_attributes_multi_valued && Att <= Context->schema.max_attribute ; Att++ )
 	{
-	    if ( ! Skip(Att) && Att != ClassAtt )
+	    if ( ! Skip(Att) && Att != Context->schema.class_attribute )
 	    {
-		MultiVal = MaxAttVal[Att] >= 0.3 * (MaxCase + 1);
+		Context->splits.all_attributes_multi_valued = Context->schema.max_attribute_value[Att] >= 0.3 * (Context->cases.max_case + 1);
 	    }
 	}
     }
 
     /*  See whether there are continuous attributes for subsampling  */
 
-    Subsample = false;
+    Context->splits.use_subsampling = false;
 
     /*  Set parameters for RawExtraErrs() */
 
-    InitialiseExtraErrs();
+    InitialiseExtraErrs(Context);
 
     /*  Set up environment  */
 
-    Waiting = Alloc(MaxAtt+1, Attribute);
+    Context->training.environment = AllocZero(1, EnvRec);
+    Context->splits.waiting_attributes = Alloc(Context->schema.max_attribute+1, Attribute);
 
-    vMax = Max(3, MaxDiscrVal+1);
+    vMax = Max(3, Context->schema.max_discrete_value+1);
 
-    GEnv.Freq = Alloc(vMax+1, double *);
+    Context->training.environment->Freq = Alloc(vMax+1, double *);
     ForEach(v, 0, vMax)
     {
-	GEnv.Freq[v] = Alloc(MaxClass+1, double);
+	Context->training.environment->Freq[v] = Alloc(Context->schema.max_class+1, double);
     }
 
-    GEnv.ValFreq = Alloc(vMax, double);
+    Context->training.environment->ValFreq = Alloc(vMax, double);
 
-    GEnv.ClassFreq = Alloc(MaxClass+1, double);
+    Context->training.environment->ClassFreq = Alloc(Context->schema.max_class+1, double);
 
-    NoCases = ( MaxCase < 0 ? 0 : (size_t) MaxCase + 1 );
-    GEnv.SRec = Alloc(NoCases, SortRec);
+    NoCases = ( Context->cases.max_case < 0 ? 0 : (size_t) Context->cases.max_case + 1 );
+    Context->training.environment->SRec = Alloc(NoCases, SortRec);
 
-    if ( SUBSET )
+    if ( Context->options.subset_splits )
     {
-	GEnv.SubsetInfo = Alloc(MaxDiscrVal+1, double);
-	GEnv.SubsetEntr = Alloc(MaxDiscrVal+1, double);
+	Context->training.environment->SubsetInfo = Alloc(Context->schema.max_discrete_value+1, double);
+	Context->training.environment->SubsetEntr = Alloc(Context->schema.max_discrete_value+1, double);
 
-	GEnv.MergeInfo = Alloc(MaxDiscrVal+1, double *);
-	GEnv.MergeEntr = Alloc(MaxDiscrVal+1, double *);
-	GEnv.WSubset   = Alloc(MaxDiscrVal+1, Set);
-	ForEach(v, 1, MaxDiscrVal)
+	Context->training.environment->MergeInfo = Alloc(Context->schema.max_discrete_value+1, double *);
+	Context->training.environment->MergeEntr = Alloc(Context->schema.max_discrete_value+1, double *);
+	Context->training.environment->WSubset   = Alloc(Context->schema.max_discrete_value+1, Set);
+	ForEach(v, 1, Context->schema.max_discrete_value)
 	{
-	    GEnv.MergeInfo[v] = Alloc(MaxDiscrVal+1, double);
-	    GEnv.MergeEntr[v] = Alloc(MaxDiscrVal+1, double);
-	    GEnv.WSubset[v]   = Alloc((MaxDiscrVal>>3)+1, Byte);
+	    Context->training.environment->MergeInfo[v] = Alloc(Context->schema.max_discrete_value+1, double);
+	    Context->training.environment->MergeEntr[v] = Alloc(Context->schema.max_discrete_value+1, double);
+	    Context->training.environment->WSubset[v]   = Alloc((Context->schema.max_discrete_value>>3)+1, Byte);
 	}
     }
 }
 
 
-void FreeTreeData()
+void FreeTreeData(c50_context *Context)
 /*   ------------  */
 {
     Attribute	Att;
     DiscrValue	vMax;
 
-    FreeUnlessNil(Raw);					Raw = Nil;
-    FreeUnlessNil(Pruned);				Pruned = Nil;
+    FreeUnlessNil(Context->trees.raw);					Context->trees.raw = Nil;
+    FreeUnlessNil(Context->trees.pruned);				Context->trees.pruned = Nil;
 
-    FreeUnlessNil(Tested);				Tested = Nil;
+    FreeUnlessNil(Context->splits.tested_attributes);				Context->splits.tested_attributes = Nil;
 
-    FreeUnlessNil(Gain);				Gain = Nil;
-    FreeUnlessNil(Info);				Info = Nil;
-    FreeUnlessNil(Bar);					Bar = Nil;
+    FreeUnlessNil(Context->splits.gain);				Context->splits.gain = Nil;
+    FreeUnlessNil(Context->splits.information);				Context->splits.information = Nil;
+    FreeUnlessNil(Context->splits.thresholds);					Context->splits.thresholds = Nil;
 
-    FreeUnlessNil(EstMaxGR);				EstMaxGR = Nil;
+    FreeUnlessNil(Context->splits.estimated_max_gain_ratio);				Context->splits.estimated_max_gain_ratio = Nil;
 
-    if ( SUBSET )
+    if ( Context->options.subset_splits )
     {
-	FreeVector((void **) Bell, 1, MaxDiscrVal);	Bell = Nil;
+	FreeVector((void **) Context->splits.bell_numbers, 1, Context->schema.max_discrete_value);	Context->splits.bell_numbers = Nil;
 
-	if ( Subset )
+	if ( Context->splits.subsets )
 	{
-	    ForEach(Att, 1, MaxAtt)
+	    ForEach(Att, 1, Context->schema.max_attribute)
 	    {
-		if ( Subset[Att] )
+		if ( Context->splits.subsets[Att] )
 		{
-		    FreeVector((void **) Subset[Att], 0, MaxAttVal[Att]);
+		    FreeVector((void **) Context->splits.subsets[Att], 0, Context->schema.max_attribute_value[Att]);
 		}
 	    }
-	    Free(Subset);				Subset = Nil;
-	    Free(Subsets);				Subsets = Nil;
+	    Free(Context->splits.subsets);				Context->splits.subsets = Nil;
+	    Free(Context->splits.subset_counts);				Context->splits.subset_counts = Nil;
 	}
     }
 
-    FreeUnlessNil(DList);				DList = Nil;
+    FreeUnlessNil(Context->splits.discrete_attributes);				Context->splits.discrete_attributes = Nil;
 
-    if ( DFreq )
+    if ( Context->splits.discrete_frequencies )
     {
-	ForEach(Att, 1, MaxAtt)
+	ForEach(Att, 1, Context->schema.max_attribute)
 	{
-	    FreeUnlessNil(DFreq[Att]);
+	    FreeUnlessNil(Context->splits.discrete_frequencies[Att]);
 	}
 
-	Free(DFreq);					DFreq = Nil;
+	Free(Context->splits.discrete_frequencies);					Context->splits.discrete_frequencies = Nil;
     }
 
-    FreeUnlessNil(ClassFreq);				ClassFreq = Nil;
-    FreeUnlessNil(ClassSum);				ClassSum = Nil;
+    FreeUnlessNil(Context->training.class_frequencies);				Context->training.class_frequencies = Nil;
+    FreeUnlessNil(Context->splits.possible_cuts);			Context->splits.possible_cuts = Nil;
 
-    FreeUnlessNil(Vote);				Vote = Nil;
-    FreeUnlessNil(TrialPred);				TrialPred = Nil;
-
-    FreeUnlessNil(MostSpec);				MostSpec = Nil;
-    FreeUnlessNil(PossibleCuts);			PossibleCuts = Nil;
-
-    vMax = Max(3, MaxDiscrVal+1);
-    FreeVector((void **) GEnv.Freq, 0, vMax);
-    Free(GEnv.ValFreq);
-    Free(GEnv.ClassFreq);
-    FreeUnlessNil(GEnv.SRec);
-
-    if ( GEnv.SubsetInfo )
+    if ( Context->training.environment )
     {
-	Free(GEnv.SubsetInfo);
-	Free(GEnv.SubsetEntr);
-	FreeVector((void **) GEnv.MergeInfo, 1, MaxDiscrVal);
-	FreeVector((void **) GEnv.MergeEntr, 1, MaxDiscrVal);
-	FreeVector((void **) GEnv.WSubset, 1, MaxDiscrVal);
+	vMax = Max(3, Context->schema.max_discrete_value+1);
+	FreeVector((void **) Context->training.environment->Freq, 0, vMax);
+	Free(Context->training.environment->ValFreq);
+	Free(Context->training.environment->ClassFreq);
+	FreeUnlessNil(Context->training.environment->SRec);
+
+	if ( Context->training.environment->SubsetInfo )
+	{
+	    Free(Context->training.environment->SubsetInfo);
+	    Free(Context->training.environment->SubsetEntr);
+	    FreeVector((void **) Context->training.environment->MergeInfo,
+		       1, Context->schema.max_discrete_value);
+	    FreeVector((void **) Context->training.environment->MergeEntr,
+		       1, Context->schema.max_discrete_value);
+	    FreeVector((void **) Context->training.environment->WSubset,
+		       1, Context->schema.max_discrete_value);
+	}
+
+	Free(Context->training.environment);
+	Context->training.environment = Nil;
     }
 
-    FreeUnlessNil(Waiting);				Waiting = Nil;
+    FreeUnlessNil(Context->splits.waiting_attributes);				Context->splits.waiting_attributes = Nil;
 }
 
 
@@ -273,42 +262,42 @@ void FreeTreeData()
 /*									 */
 /*	Set threshold on minimum gain as follows:			 */
 /*	  * when forming winnowing tree: no minimum			 */
-/*	  * for small problems, AvGain (usual Gain Ratio)		 */
+/*	  * for small problems, AvGain (usual Context->splits.gain Ratio)		 */
 /*	  * for large problems, discounted MDL				 */
 /*	  * for intermediate problems, interpolated			 */
 /*									 */
 /*************************************************************************/
 
 
-void SetMinGainThresh()
+void SetMinGainThresh(c50_context *Context)
 /*   ----------------  */
 {
     float	Frac;
 
-    /*  Set AvGainWt and MDLWt  */
+    /*  Set Context->splits.average_gain_weight and Context->splits.mdl_weight  */
 
-    if ( Now == WINNOWATTS )
+    if ( Context->progress.stage == WINNOWATTS )
     {
-	AvGainWt = MDLWt = 0.0;
+	Context->splits.average_gain_weight = Context->splits.mdl_weight = 0.0;
     }
     else
-    if ( (MaxCase+1) / MaxClass <= 500 )
+    if ( (Context->cases.max_case+1) / Context->schema.max_class <= 500 )
     {
-	AvGainWt = 1.0;
-	MDLWt    = 0.0;
+	Context->splits.average_gain_weight = 1.0;
+	Context->splits.mdl_weight    = 0.0;
     }
     else
-    if ( (MaxCase+1) / MaxClass >= 1000 )
+    if ( (Context->cases.max_case+1) / Context->schema.max_class >= 1000 )
     {
-	AvGainWt = 0.0;
-	MDLWt    = 0.9;
+	Context->splits.average_gain_weight = 0.0;
+	Context->splits.mdl_weight    = 0.9;
     }
     else
     {
-	Frac = ((MaxCase+1) / MaxClass - 500) / 500.0;
+	Frac = ((Context->cases.max_case+1) / Context->schema.max_class - 500) / 500.0;
 
-	AvGainWt = 1 - Frac;
-	MDLWt    = 0.9 * Frac;
+	Context->splits.average_gain_weight = 1 - Frac;
+	Context->splits.mdl_weight    = 0.9 * Frac;
     }
 }
 
@@ -331,7 +320,7 @@ void SetMinGainThresh()
 /*    - on the basis of these figures, and depending on the current	 */
 /*	selection criterion, find the best attribute to branch on. 	 */
 /*	Note:  this version will not allow a split on an attribute	 */
-/*	unless two or more subsets have at least MINITEMS cases 	 */
+/*	unless two or more subsets have at least Context->options.minimum_cases cases 	 */
 /*								 	 */
 /*    - try branching and test whether the resulting tree is better than */
 /*	forming a leaf						 	 */
@@ -339,7 +328,8 @@ void SetMinGainThresh()
 /*************************************************************************/
 
 
-void FormTree(CaseNo Fp, CaseNo Lp, int Level, Tree *Result)
+void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
+	      Tree *Result)
 /*   --------  */
 {
     CaseCount	Cases=0, TreeErrs=0;
@@ -349,122 +339,122 @@ void FormTree(CaseNo Fp, CaseNo Lp, int Level, Tree *Result)
     DiscrValue	v;
 
 
-    assert(Fp >= 0 && Lp >= Fp && Lp <= MaxCase);
+    assert(Fp >= 0 && Lp >= Fp && Lp <= Context->cases.max_case);
 
     /*  Make a single pass through the cases to determine class frequencies
 	and value/class frequencies for all discrete attributes  */
 
-    FindAllFreq(Fp, Lp);
+    FindAllFreq(Context, Fp, Lp);
 
     /*  Choose the best leaf and the least prevalent class  */
 
-    ForEach(c, 2, MaxClass)
+    ForEach(c, 2, Context->schema.max_class)
     {
-	if ( ClassFreq[c] > ClassFreq[BestLeaf] )
+	if ( Context->training.class_frequencies[c] > Context->training.class_frequencies[BestLeaf] )
 	{
 	    BestLeaf = c;
 	}
 	else
-	if ( ClassFreq[c] > 0.1 && ClassFreq[c] < ClassFreq[Least] )
+	if ( Context->training.class_frequencies[c] > 0.1 && Context->training.class_frequencies[c] < Context->training.class_frequencies[Least] )
 	{
 	    Least = c;
 	}
     }
 
-    ForEach(c, 1, MaxClass)
+    ForEach(c, 1, Context->schema.max_class)
     {
-	Cases += ClassFreq[c];
+	Cases += Context->training.class_frequencies[c];
     }
 
-    MaxLeaves = ( LEAFRATIO > 0 ? rint(LEAFRATIO * Cases) : 1E6 );
+    Context->splits.max_leaves = ( Context->options.leaf_ratio > 0 ? rint(Context->options.leaf_ratio * Cases) : 1E6 );
 
-    *Result = Node =
-	Leaf(ClassFreq, BestLeaf, Cases, Cases - ClassFreq[BestLeaf]);
+    *Result = Node = Leaf(Context, Context->training.class_frequencies, BestLeaf, Cases,
+			 Cases - Context->training.class_frequencies[BestLeaf]);
 
     Verbosity(1,
-    	fprintf(Of, "\n<%d> %d cases", Level, No(Fp,Lp));
+	fprintf(Context->io.output, "\n<%d> %d cases", Level, No(Fp,Lp));
 	if ( fabs(No(Fp,Lp) - Cases) >= 0.1 )
 	{
-	    fprintf(Of, ", total weight %.1f", Cases);
+	    fprintf(Context->io.output, ", total weight %.1f", Cases);
 	}
-	fprintf(Of, "\n"))
+	fprintf(Context->io.output, "\n"))
 
     /*  Do not try to split if:
 	- all cases are of the same class
 	- there are not enough cases to split  */
 
-    if ( ClassFreq[BestLeaf] >= 0.999 * Cases  ||
-	 Cases < 2 * MINITEMS ||
-	 MaxLeaves < 2 )
+    if ( Context->training.class_frequencies[BestLeaf] >= 0.999 * Cases  ||
+	 Cases < 2 * Context->options.minimum_cases ||
+	 Context->splits.max_leaves < 2 )
     {
-	if ( Now == FORMTREE ) Progress(Cases);
+	if ( Context->progress.stage == FORMTREE ) Progress(Context, Cases);
 	return;
     }
 
     /*  Calculate base information  */
 
-    GlobalBaseInfo = TotalInfo(ClassFreq, 1, MaxClass) / Cases;
+    Context->splits.base_information = TotalInfo(Context->training.class_frequencies, 1, Context->schema.max_class) / Cases;
 
     /*  Perform preliminary evaluation if using subsampling.
 	Must expect at least 10 of least prevalent class  */
 
-    ValThresh = 0;
-    if ( Subsample && No(Fp, Lp) > 5 * MaxClass * SAMPLEUNIT &&
-	 (ClassFreq[Least] * MaxClass * SAMPLEUNIT) / No(Fp, Lp) >= 10 )
+    Context->splits.value_threshold = 0;
+    if ( Context->splits.use_subsampling && No(Fp, Lp) > 5 * Context->schema.max_class * SAMPLEUNIT &&
+	 (Context->training.class_frequencies[Least] * Context->schema.max_class * SAMPLEUNIT) / No(Fp, Lp) >= 10 )
     {
-	SampleEstimate(Fp, Lp, Cases);
-	Sampled   = true;
+	SampleEstimate(Context, Fp, Lp, Cases);
+	Context->splits.sampled   = true;
     }
     else
     {
-	Sampled = false;
+	Context->splits.sampled = false;
     }
 
-    BestAtt = ChooseSplit(Fp, Lp, Cases, Sampled);
+    BestAtt = ChooseSplit(Context, Fp, Lp, Cases, Context->splits.sampled);
 
     /*  Decide whether to branch or not  */
 
     if ( BestAtt == None )
     {
-	Verbosity(1, fprintf(Of, "\tno sensible splits\n"))
-	if ( Now == FORMTREE ) Progress(Cases);
+	Verbosity(1, fprintf(Context->io.output, "\tno sensible splits\n"))
+	if ( Context->progress.stage == FORMTREE ) Progress(Context, Cases);
     }
     else
     {
 	Verbosity(1,
-	    fprintf(Of, "\tbest attribute %s", AttName[BestAtt]);
+	    fprintf(Context->io.output, "\tbest attribute %s", Context->schema.attribute_names[BestAtt]);
 	    if ( Continuous(BestAtt) )
 	    {
-		fprintf(Of, " cut %.3f", Bar[BestAtt]);
+		fprintf(Context->io.output, " cut %.3f", Context->splits.thresholds[BestAtt]);
 	    }
-	    fprintf(Of, " inf %.3f gain %.3f val %.3f\n",
-		   Info[BestAtt], Gain[BestAtt], Gain[BestAtt] / Info[BestAtt]))
+	    fprintf(Context->io.output, " inf %.3f gain %.3f val %.3f\n",
+		   Context->splits.information[BestAtt], Context->splits.gain[BestAtt], Context->splits.gain[BestAtt] / Context->splits.information[BestAtt]))
 
 	/*  Build a node of the selected test  */
 
 	if ( Discrete(BestAtt) )
 	{
-	    if ( SUBSET && MaxAttVal[BestAtt] > 3 && ! Ordered(BestAtt) )
+	    if ( Context->options.subset_splits && Context->schema.max_attribute_value[BestAtt] > 3 && ! Ordered(BestAtt) )
 	    {
-		SubsetTest(Node, BestAtt);
+		SubsetTest(Context, Node, BestAtt);
 	    }
 	    else
 	    {
-		DiscreteTest(Node, BestAtt);
+		DiscreteTest(Context, Node, BestAtt);
 	    }
 	}
 	else
 	{
-	    ContinTest(Node, BestAtt);
+	    ContinTest(Context, Node, BestAtt);
 	}
 
 	/*  Carry out the recursive divide-and-conquer  */
 
-	++Tested[BestAtt];
+	++Context->splits.tested_attributes[BestAtt];
 
-	Divide(Node, Fp, Lp, Level);
+	Divide(Context, Node, Fp, Lp, Level);
 
-	--Tested[BestAtt];
+	--Context->splits.tested_attributes[BestAtt];
 
 	/*  See whether we would have been no worse off with a leaf  */
 
@@ -476,8 +466,8 @@ void FormTree(CaseNo Fp, CaseNo Lp, int Level, Tree *Result)
 	if ( TreeErrs >= 0.999 * Node->Errors )
 	{
 	    Verbosity(1,
-		fprintf(Of, "<%d> Collapse tree for %d cases to leaf %s\n",
-			    Level, No(Fp,Lp), ClassName[BestLeaf]))
+		fprintf(Context->io.output, "<%d> Collapse tree for %d cases to leaf %s\n",
+			    Level, No(Fp,Lp), Context->schema.class_names[BestLeaf]))
 
 	    UnSprout(Node);
 	}
@@ -492,12 +482,13 @@ void FormTree(CaseNo Fp, CaseNo Lp, int Level, Tree *Result)
 
 /*************************************************************************/
 /*								 	 */
-/*	Estimate Gain[] and Info[] using sample				 */
+/*	Estimate Context->splits.gain[] and Context->splits.information[] using sample				 */
 /*								 	 */
 /*************************************************************************/
 
 
-void SampleEstimate(CaseNo Fp, CaseNo Lp, CaseCount Cases)
+void SampleEstimate(c50_context *Context, CaseNo Fp, CaseNo Lp,
+		    CaseCount Cases)
 /*   --------------  */
 {
     CaseNo	SLp, SampleSize;
@@ -507,45 +498,45 @@ void SampleEstimate(CaseNo Fp, CaseNo Lp, CaseCount Cases)
 
     /*  Phase 1: evaluate all discrete attributes and record best GR  */
 
-    ForEach(Att, 1, MaxAtt)
+    ForEach(Att, 1, Context->schema.max_attribute)
     { 
-	Gain[Att] = None;
+	Context->splits.gain[Att] = None;
 
 	if ( Discrete(Att) )
 	{
-	    EvalDiscrSplit(Att, Cases);
+	    EvalDiscrSplit(Context, Att, Cases);
 
-	    if ( Info[Att] > Epsilon &&
-		 (GR = Gain[Att] / Info[Att]) > ValThresh )
+	    if ( Context->splits.information[Att] > Epsilon &&
+		 (GR = Context->splits.gain[Att] / Context->splits.information[Att]) > Context->splits.value_threshold )
 	    {
-		ValThresh = GR;
+		Context->splits.value_threshold = GR;
 	    }
 	}
     }
 
     /*  Phase 2: generate sample  */
 
-    SampleSize = MaxClass * SAMPLEUNIT;
-    Sample(Fp, Lp, SampleSize);
+    SampleSize = Context->schema.max_class * SAMPLEUNIT;
+    Sample(Context, Fp, Lp, SampleSize);
     SLp = Fp + SampleSize - 1;
 
     /*  Phase 3: evaluate continuous attributes using sample  */
 
-    NewCases   = CountCases(Fp, SLp);
-    SampleFrac = NewCases / Cases;
-    NWaiting   = 0;
+    NewCases   = CountCases(Context, Fp, SLp);
+    Context->splits.sample_fraction = NewCases / Cases;
+    Context->splits.waiting_count   = 0;
 
-    ForEach(Att, 1, MaxAtt) 
+    ForEach(Att, 1, Context->schema.max_attribute)
     { 
 	if ( Continuous(Att) )
 	{
-	    Waiting[NWaiting++] = Att;
+	    Context->splits.waiting_attributes[Context->splits.waiting_count++] = Att;
 	}
     } 
 
-    ProcessQueue(Fp, SLp, NewCases);
+    ProcessQueue(Context, Fp, SLp, NewCases);
 
-    SampleFrac = 1.0;
+    Context->splits.sample_fraction = 1.0;
 }
 
 
@@ -557,7 +548,7 @@ void SampleEstimate(CaseNo Fp, CaseNo Lp, CaseCount Cases)
 /*************************************************************************/
 
 
-void Sample(CaseNo Fp, CaseNo Lp, CaseNo N)
+void Sample(c50_context *Context, CaseNo Fp, CaseNo Lp, CaseNo N)
 /*   ------  */
 {
     CaseNo	i, j;
@@ -580,13 +571,14 @@ void Sample(CaseNo Fp, CaseNo Lp, CaseNo N)
 /*************************************************************************/
 /*								 	 */
 /*	Evaluate splits and choose best attribute to split on.		 */
-/*	If Sampled, Gain[] and Info[] have been estimated on		 */
+/*	If Context->splits.sampled, Context->splits.gain[] and Context->splits.information[] have been estimated on		 */
 /*	sample and unlikely candidates are not evaluated on all cases	 */
 /*								 	 */
 /*************************************************************************/
 
 
-Attribute ChooseSplit(CaseNo Fp, CaseNo Lp, CaseCount Cases, Boolean Sampled)
+Attribute ChooseSplit(c50_context *Context, CaseNo Fp, CaseNo Lp,
+		      CaseCount Cases, Boolean sampled)
 /*        -----------  */
 {
     Attribute	Att;
@@ -595,103 +587,104 @@ Attribute ChooseSplit(CaseNo Fp, CaseNo Lp, CaseCount Cases, Boolean Sampled)
 
     /*  For each available attribute, find the information and gain  */
 
-    NWaiting = 0;
+    Context->splits.waiting_count = 0;
 
-    if ( Sampled )
+    if ( sampled )
     {
 	/*  If samples have been used, do not re-evaluate discrete atts
 	    or atts that have low GR  */
 
-	for ( Att = MaxAtt ; Att > 0 ; Att-- )
+	for ( Att = Context->schema.max_attribute ; Att > 0 ; Att-- )
 	{
 	    if ( ! Continuous(Att) ) continue;
 
-	    if ( EstMaxGR[Att] >= ValThresh )
+	    if ( Context->splits.estimated_max_gain_ratio[Att] >= Context->splits.value_threshold )
 	    {
 		/*  Add attributes in reverse order of estimated max GR  */
 
 		for ( i = 0 ;
-		      i < NWaiting && EstMaxGR[Waiting[i]] < EstMaxGR[Att] ;
+		      i < Context->splits.waiting_count && Context->splits.estimated_max_gain_ratio[Context->splits.waiting_attributes[i]] < Context->splits.estimated_max_gain_ratio[Att] ;
 		      i++ )
 		    ;
 
-		for ( j = NWaiting-1 ; j >= i ; j-- )
+		for ( j = Context->splits.waiting_count-1 ; j >= i ; j-- )
 		{
-		    Waiting[j+1] = Waiting[j];
+		    Context->splits.waiting_attributes[j+1] = Context->splits.waiting_attributes[j];
 		}
-		NWaiting++;
+		Context->splits.waiting_count++;
 
-		Waiting[i] = Att;
+		Context->splits.waiting_attributes[i] = Att;
 	    }
 	    else
 	    {
 		/*  Don't use -- attribute hasn't been fully evaluated.
-		    Leave Gain unchanged to get correct count for Possible  */
+		    Leave Context->splits.gain unchanged to get correct count for Possible  */
 
-		Info[Att] = -1E6;	/* negative so GR also negative */
+		Context->splits.information[Att] = -1E6;	/* negative so GR also negative */
 	    }
 	}
     }
     else
     {
-	for ( Att = MaxAtt ; Att > 0 ; Att-- )
+	for ( Att = Context->schema.max_attribute ; Att > 0 ; Att-- )
 	{
-	    Gain[Att] = None;
+	    Context->splits.gain[Att] = None;
 
-	    if ( Skip(Att) || Att == ClassAtt )
+	    if ( Skip(Att) || Att == Context->schema.class_attribute )
 	    {
 		continue;
 	    }
 
-	    Waiting[NWaiting++] = Att;
+	    Context->splits.waiting_attributes[Context->splits.waiting_count++] = Att;
 	}
     }
 
-    ProcessQueue(Fp, Lp, Cases);
+    ProcessQueue(Context, Fp, Lp, Cases);
 
-    return FindBestAtt(Cases);
+    return FindBestAtt(Context, Cases);
 }
 
 
 
-void ProcessQueue(CaseNo WFp, CaseNo WLp, CaseCount WCases)
+void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
+		  CaseCount WCases)
 /*   ------------  */
 {
     Attribute	Att;
     float	GR;
 
-    for ( ; NWaiting > 0 ; )
+    for ( ; Context->splits.waiting_count > 0 ; )
     {
-	Att = Waiting[--NWaiting];
+	Att = Context->splits.waiting_attributes[--Context->splits.waiting_count];
 
 	if ( Discrete(Att) )
 	{
-	    EvalDiscrSplit(Att, WCases);
+	    EvalDiscrSplit(Context, Att, WCases);
 	}
 	else
-	if ( SampleFrac < 1 )
+	if ( Context->splits.sample_fraction < 1 )
 	{
-	    EstimateMaxGR(Att, WFp, WLp);
+	    EstimateMaxGR(Context, Att, WFp, WLp);
 	}
 	else
-	if ( Sampled )
+	if ( Context->splits.sampled )
 	{
-	    Info[Att] = -1E16;
+	    Context->splits.information[Att] = -1E16;
 
-	    if ( EstMaxGR[Att] > ValThresh )
+	    if ( Context->splits.estimated_max_gain_ratio[Att] > Context->splits.value_threshold )
 	    {
-		EvalContinuousAtt(Att, WFp, WLp);
+		EvalContinuousAtt(Context, Att, WFp, WLp);
 
-		if ( Info[Att] > Epsilon &&
-		     (GR = Gain[Att] / Info[Att]) > ValThresh )
+		if ( Context->splits.information[Att] > Epsilon &&
+		     (GR = Context->splits.gain[Att] / Context->splits.information[Att]) > Context->splits.value_threshold )
 		{
-		    if ( GR > ValThresh ) ValThresh = GR;
+		    if ( GR > Context->splits.value_threshold ) Context->splits.value_threshold = GR;
 		}
 	    }
 	}
 	else
 	{
-	    EvalContinuousAtt(Att, WFp, WLp);
+	    EvalContinuousAtt(Context, Att, WFp, WLp);
 	}
     }
 }
@@ -706,27 +699,27 @@ void ProcessQueue(CaseNo WFp, CaseNo WLp, CaseCount WCases)
 /*************************************************************************/
 
 
-Attribute FindBestAtt(CaseCount Cases)
+Attribute FindBestAtt(c50_context *Context, CaseCount Cases)
 /*	  -----------  */
 {
     double	BestVal, Val, MinGain=1E6, AvGain=0, MDL;
     Attribute	Att, BestAtt, Possible=0;
-    DiscrValue	NBr, BestNBr=MaxDiscrVal+1;
+    DiscrValue	NBr, BestNBr=Context->schema.max_discrete_value+1;
 
-    ForEach(Att, 1, MaxAtt)
+    ForEach(Att, 1, Context->schema.max_attribute)
     {
 	/*  Update the number of possible attributes for splitting and
 	    average gain (unless very many values)  */
 
-	if ( Gain[Att] >= Epsilon &&
-	     ( MultiVal || MaxAttVal[Att] < 0.3 * (MaxCase + 1) ) )
+	if ( Context->splits.gain[Att] >= Epsilon &&
+	     ( Context->splits.all_attributes_multi_valued || Context->schema.max_attribute_value[Att] < 0.3 * (Context->cases.max_case + 1) ) )
 	{
 	    Possible++;
-	    AvGain += Gain[Att];
+	    AvGain += Context->splits.gain[Att];
 	}
 	else
 	{
-	    Gain[Att] = None;
+	    Context->splits.gain[Att] = None;
 	}
     }
 
@@ -736,30 +729,30 @@ Attribute FindBestAtt(CaseCount Cases)
 
     AvGain /= Possible;
     MDL     = Log(Possible) / Cases;
-    MinGain = AvGain * AvGainWt + MDL * MDLWt;
+    MinGain = AvGain * Context->splits.average_gain_weight + MDL * Context->splits.mdl_weight;
 
     Verbosity(2,
-	fprintf(Of, "\tav gain=%.3f, MDL (%d) = %.3f, min=%.3f\n",
+	fprintf(Context->io.output, "\tav gain=%.3f, MDL (%d) = %.3f, min=%.3f\n",
 		    AvGain, Possible, MDL, MinGain))
 
-    /*  Find best attribute according to Gain Ratio criterion subject
+    /*  Find best attribute according to Context->splits.gain Ratio criterion subject
 	to threshold on minimum gain  */
 
     BestVal = -Epsilon;
     BestAtt = None;
 
-    ForEach(Att, 1, MaxAtt)
+    ForEach(Att, 1, Context->schema.max_attribute)
     {
-	if ( Gain[Att] >= 0.999 * MinGain && Info[Att] > 0 )
+	if ( Context->splits.gain[Att] >= 0.999 * MinGain && Context->splits.information[Att] > 0 )
 	{
-	    Val = Gain[Att] / Info[Att];
-	    NBr = ( MaxAttVal[Att] <= 3 || Ordered(Att) ? 3 :
-		    SUBSET ? Subsets[Att] : MaxAttVal[Att] );
+	    Val = Context->splits.gain[Att] / Context->splits.information[Att];
+	    NBr = ( Context->schema.max_attribute_value[Att] <= 3 || Ordered(Att) ? 3 :
+		    Context->options.subset_splits ? Context->splits.subset_counts[Att] : Context->schema.max_attribute_value[Att] );
 
 	    if ( Val > BestVal ||
 		 ( Val > 0.999 * BestVal &&
 		   ( NBr < BestNBr ||
-		     ( NBr == BestNBr && Gain[Att] > Gain[BestAtt] ) ) ) )
+		     ( NBr == BestNBr && Context->splits.gain[Att] > Context->splits.gain[BestAtt] ) ) ) )
 	    {
 		BestAtt = Att;
 		BestVal = Val;
@@ -780,35 +773,35 @@ Attribute FindBestAtt(CaseCount Cases)
 /*************************************************************************/
 
 
-void EvalDiscrSplit(Attribute Att, CaseCount Cases)
+void EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases)
 /*   --------------  */
 {
     DiscrValue	v, NBr;
 
-    Gain[Att] = None;
+    Context->splits.gain[Att] = None;
 
-    if ( Skip(Att) || Att == ClassAtt ) return;
+    if ( Skip(Att) || Att == Context->schema.class_attribute ) return;
 
     if ( Ordered(Att) )
     {
-	EvalOrderedAtt(Att, Cases);
-	NBr = ( GEnv.ValFreq[1] > 0.5 ? 3 : 2 );
+	EvalOrderedAtt(Context, Att, Cases);
+	NBr = ( Context->training.environment->ValFreq[1] > 0.5 ? 3 : 2 );
     }
     else
-    if ( SUBSET && MaxAttVal[Att] > 3 )
+    if ( Context->options.subset_splits && Context->schema.max_attribute_value[Att] > 3 )
     {
-	EvalSubset(Att, Cases);
-	NBr = Subsets[Att];
+	EvalSubset(Context, Att, Cases);
+	NBr = Context->splits.subset_counts[Att];
     }
     else
-    if ( ! Tested[Att] )
+    if ( ! Context->splits.tested_attributes[Att] )
     {
-	EvalDiscreteAtt(Att, Cases);
+	EvalDiscreteAtt(Context, Att, Cases);
 
 	NBr = 0;
-	ForEach(v, 1, MaxAttVal[Att])
+	ForEach(v, 1, Context->schema.max_attribute_value[Att])
 	{
-	    if ( GEnv.ValFreq[v] > 0.5 ) NBr++;
+	    if ( Context->training.environment->ValFreq[v] > 0.5 ) NBr++;
 	}
     }
     else
@@ -818,12 +811,12 @@ void EvalDiscrSplit(Attribute Att, CaseCount Cases)
 
     /*  Check that this test will not give too many leaves  */
 
-    if ( NBr > MaxLeaves + 1 )
+    if ( NBr > Context->splits.max_leaves + 1 )
     {
 	Verbosity(2,
-	    fprintf(Of, "\t(cancelled -- %d leaves, max %d)\n", NBr, MaxLeaves))
+	    fprintf(Context->io.output, "\t(cancelled -- %d leaves, max %d)\n", NBr, Context->splits.max_leaves))
 
-	Gain[Att] = None;
+	Context->splits.gain[Att] = None;
     }
 }
 
@@ -836,7 +829,7 @@ void EvalDiscrSplit(Attribute Att, CaseCount Cases)
 /*************************************************************************/
 
 
-void Divide(Tree T, CaseNo Fp, CaseNo Lp, int Level)
+void Divide(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp, int Level)
 /*   ------  */
 {
     CaseNo	Bp, Ep, Missing, Cases, i;
@@ -846,23 +839,23 @@ void Divide(Tree T, CaseNo Fp, CaseNo Lp, int Level)
     DiscrValue	v;
     Boolean	PrevUnitWeights;
 
-    PrevUnitWeights = UnitWeights;
+    PrevUnitWeights = Context->costs.unit_weights;
 
     Att = T->Tested;
-    Missing = (Ep = Group(0, Fp, Lp, T)) - Fp + 1;
+    Missing = (Ep = Group(Context, 0, Fp, Lp, T)) - Fp + 1;
 
-    KnownCases = T->Cases - (MissingCases = CountCases(Fp, Ep));
+    KnownCases = T->Cases - (MissingCases = CountCases(Context, Fp, Ep));
 
     if ( Missing )
     {
-	UnitWeights = false;
+	Context->costs.unit_weights = false;
 
 	/*  If using costs, must adjust branch factors to undo effects of
 	    reweighting cases  */
 
-	if ( CostWeights )
+	if ( Context->costs.weighted )
 	{
-	    KnownCases = SumNocostWeights(Ep+1, Lp);
+	    KnownCases = SumNocostWeights(Context, Ep+1, Lp);
 	}
 
 	/*  If there are many cases with missing values and many branches,
@@ -874,10 +867,10 @@ void Divide(Tree T, CaseNo Fp, CaseNo Lp, int Level)
 	{
 	    ForEach(i, Fp, Ep)
 	    {
-		if ( Weight(Case[i]) < 0.1 )
+		if ( Weight(Context->cases.records[i]) < 0.1 )
 		{
 		    Missing--;
-		    MissingCases -= Weight(Case[i]);
+		    MissingCases -= Weight(Context->cases.records[i]);
 		    Swap(Fp, i);
 		    Fp++;
 		}
@@ -890,18 +883,18 @@ void Divide(Tree T, CaseNo Fp, CaseNo Lp, int Level)
     Bp = Fp;
     ForEach(v, 1, T->Forks)
     {
-	Ep = Group(v, Bp + Missing, Lp, T);
+	Ep = Group(Context, v, Bp + Missing, Lp, T);
 
 	assert(Bp + Missing <= Lp+1 && Ep <= Lp);
 
 	/*  Bp -> first value in missing + remaining values
 	    Ep -> last value in missing + current group  */
 
-	BranchCases = CountCases(Bp + Missing, Ep);
+	BranchCases = CountCases(Context, Bp + Missing, Ep);
 
 	Factor = ( ! Missing ? 0 :
-		   ! CostWeights ? BranchCases / KnownCases :
-		   SumNocostWeights(Bp + Missing, Ep) / KnownCases );
+		   ! Context->costs.weighted ? BranchCases / KnownCases :
+		   SumNocostWeights(Context, Bp + Missing, Ep) / KnownCases );
 
 	if ( BranchCases + Factor * MissingCases >= MinLeaf )
 	{
@@ -911,11 +904,11 @@ void Divide(Tree T, CaseNo Fp, CaseNo Lp, int Level)
 
 		ForEach(i, Bp, Bp + Missing - 1)
 		{
-		    Weight(Case[i]) *= Factor;
+		    Weight(Context->cases.records[i]) *= Factor;
 		}
 	    }
 
-	    FormTree(Bp, Ep, Level+1, &T->Branch[v]);
+	    FormTree(Context, Bp, Ep, Level+1, &T->Branch[v]);
 
 	    /*  Restore weights if changed  */
 
@@ -923,9 +916,9 @@ void Divide(Tree T, CaseNo Fp, CaseNo Lp, int Level)
 	    {
 		for ( i = Ep ; i >= Bp ; i-- )
 		{
-		    if ( Unknown(Case[i], Att) )
+		    if ( Unknown(Context->cases.records[i], Att) )
 		    {
-			Weight(Case[i]) /= Factor;
+			Weight(Context->cases.records[i]) /= Factor;
 			Swap(i, Ep);
 			Ep--;
 		    }
@@ -936,11 +929,11 @@ void Divide(Tree T, CaseNo Fp, CaseNo Lp, int Level)
 	}
 	else
 	{
-	    T->Branch[v] = Leaf(Nil, T->Leaf, 0.0, 0.0);
+	    T->Branch[v] = Leaf(Context, Nil, T->Leaf, 0.0, 0.0);
 	}
     }
 
-    UnitWeights = PrevUnitWeights;
+    Context->costs.unit_weights = PrevUnitWeights;
 }
 
 
@@ -955,7 +948,8 @@ void Divide(Tree T, CaseNo Fp, CaseNo Lp, int Level)
 /*************************************************************************/
 
 
-CaseNo Group(DiscrValue V, CaseNo Bp, CaseNo Ep, Tree TestNode)
+CaseNo Group(c50_context *Context, DiscrValue V, CaseNo Bp, CaseNo Ep,
+	     Tree TestNode)
 /*     -----  */
 {
     CaseNo	i;
@@ -969,11 +963,11 @@ CaseNo Group(DiscrValue V, CaseNo Bp, CaseNo Ep, Tree TestNode)
     {
 	/*  Group together unknown values (if any)  */
 
-	if ( SomeMiss[Att] )
+	if ( Context->cases.some_missing[Att] )
 	{
 	    ForEach(i, Bp, Ep)
 	    {
-		if ( Unknown(Case[i], Att) )
+		if ( Unknown(Context->cases.records[i], Att) )
 		{
 		    Swap(Bp, i);
 		    Bp++;
@@ -982,7 +976,7 @@ CaseNo Group(DiscrValue V, CaseNo Bp, CaseNo Ep, Tree TestNode)
 	}
     }
     else				/* skip non-existant N/A values */
-    if ( V != 1 || TestNode->NodeType == BrSubset || SomeNA[Att] )
+    if ( V != 1 || TestNode->NodeType == BrSubset || Context->cases.some_not_applicable[Att] )
     {
 	/*  Group cases on the value of attribute Att, and depending
 	    on the type of branch  */
@@ -993,7 +987,7 @@ CaseNo Group(DiscrValue V, CaseNo Bp, CaseNo Ep, Tree TestNode)
 
 		ForEach(i, Bp, Ep)
 		{
-		    if ( DVal(Case[i], Att) == V )
+		    if ( DVal(Context->cases.records[i], Att) == V )
 		    {
 			Swap(Bp, i);
 			Bp++;
@@ -1006,8 +1000,8 @@ CaseNo Group(DiscrValue V, CaseNo Bp, CaseNo Ep, Tree TestNode)
 		Thresh = TestNode->Cut;
 		ForEach(i, Bp, Ep)
 		{
-		    if ( V == 1 ? NotApplic(Case[i], Att) :
-			 (CVal(Case[i], Att) <= Thresh) == (V == 2) )
+		    if ( V == 1 ? NotApplic(Context, Context->cases.records[i], Att) :
+			 (CVal(Context->cases.records[i], Att) <= Thresh) == (V == 2) )
 		    {
 			Swap(Bp, i);
 			Bp++;
@@ -1020,7 +1014,7 @@ CaseNo Group(DiscrValue V, CaseNo Bp, CaseNo Ep, Tree TestNode)
 		SS = TestNode->Subset[V];
 		ForEach(i, Bp, Ep)
 		{
-		    if ( In(XDVal(Case[i], Att), SS) )
+		    if ( In(XDVal(Context->cases.records[i], Att), SS) )
 		    {
 			Swap(Bp, i);
 			Bp++;
@@ -1042,17 +1036,17 @@ CaseNo Group(DiscrValue V, CaseNo Bp, CaseNo Ep, Tree TestNode)
 /*************************************************************************/
 
 
-CaseCount SumWeights(CaseNo Fp, CaseNo Lp)
+CaseCount SumWeights(c50_context *Context, CaseNo Fp, CaseNo Lp)
 /*        ----------  */
 {
     double	Sum=0.0;
     CaseNo	i;
 
-    assert(Fp >= 0 && Lp >= Fp-1 && Lp <= MaxCase);
+    assert(Fp >= 0 && Lp >= Fp-1 && Lp <= Context->cases.max_case);
 
     ForEach(i, Fp, Lp)
     {
-	Sum += Weight(Case[i]);
+	Sum += Weight(Context->cases.records[i]);
     }
 
     return Sum;
@@ -1067,17 +1061,17 @@ CaseCount SumWeights(CaseNo Fp, CaseNo Lp)
 /*************************************************************************/
 
 
-CaseCount SumNocostWeights(CaseNo Fp, CaseNo Lp)
+CaseCount SumNocostWeights(c50_context *Context, CaseNo Fp, CaseNo Lp)
 /*        ----------------  */
 {
     double	Sum=0.0;
     CaseNo	i;
 
-    assert(Fp >= 0 && Lp >= Fp-1 && Lp <= MaxCase);
+    assert(Fp >= 0 && Lp >= Fp-1 && Lp <= Context->cases.max_case);
 
     ForEach(i, Fp, Lp)
     {
-	Sum += Weight(Case[i]) / WeightMul[Class(Case[i])];
+	Sum += Weight(Context->cases.records[i]) / Context->costs.weight_multipliers[Class(Context->cases.records[i])];
     }
 
     return Sum;
@@ -1092,24 +1086,26 @@ CaseCount SumNocostWeights(CaseNo Fp, CaseNo Lp)
 /*************************************************************************/
 
 
-void FindClassFreq(double *CF, CaseNo Fp, CaseNo Lp)
+void FindClassFreq(c50_context *Context, double *Frequencies,
+		   CaseNo Fp, CaseNo Lp)
 /*   -------------  */
 {
     ClassNo	c;
     CaseNo	i;
 
-    assert(Fp >= 0 && Lp >= Fp && Lp <= MaxCase);
+    assert(Fp >= 0 && Lp >= Fp && Lp <= Context->cases.max_case);
 
-    ForEach(c, 0, MaxClass)
+    ForEach(c, 0, Context->schema.max_class)
     {
-	CF[c] = 0;
+	Frequencies[c] = 0;
     }
 
     ForEach(i, Fp, Lp)
     {
-	assert(Class(Case[i]) >= 1 && Class(Case[i]) <= MaxClass);
+	assert(Class(Context->cases.records[i]) >= 1 && Class(Context->cases.records[i]) <= Context->schema.max_class);
 
-	CF[ Class(Case[i]) ] += Weight(Case[i]);
+	Frequencies[Class(Context->cases.records[i])] +=
+	    Weight(Context->cases.records[i]);
     }
 }
 
@@ -1122,7 +1118,7 @@ void FindClassFreq(double *CF, CaseNo Fp, CaseNo Lp)
 /*************************************************************************/
 
 
-void FindAllFreq(CaseNo Fp, CaseNo Lp)
+void FindAllFreq(c50_context *Context, CaseNo Fp, CaseNo Lp)
 /*   -----------  */
 {
     ClassNo	c;
@@ -1133,17 +1129,17 @@ void FindAllFreq(CaseNo Fp, CaseNo Lp)
 
     /*  Zero all values  */
 
-    ForEach(c, 0, MaxClass)
+    ForEach(c, 0, Context->schema.max_class)
     {
-	ClassFreq[c] = 0;
+	Context->training.class_frequencies[c] = 0;
     }
 
-    for ( a = 0 ; a < NDList ; a++ )
+    for ( a = 0 ; a < Context->splits.discrete_attribute_count ; a++ )
     {
-	Att = DList[a];
-	for ( x = MaxClass * (MaxAttVal[Att]+1) - 1 ; x >= 0 ; x-- )
+	Att = Context->splits.discrete_attributes[a];
+	for ( x = Context->schema.max_class * (Context->schema.max_attribute_value[Att]+1) - 1 ; x >= 0 ; x-- )
 	{
-	    DFreq[Att][x] = 0;
+	    Context->splits.discrete_frequencies[Att][x] = 0;
 	}
     }
 
@@ -1151,12 +1147,12 @@ void FindAllFreq(CaseNo Fp, CaseNo Lp)
 
     ForEach(i, Fp, Lp)
     {
-	ClassFreq[ (c=Class(Case[i])) ] += (w=Weight(Case[i]));
+	Context->training.class_frequencies[ (c=Class(Context->cases.records[i])) ] += (w=Weight(Context->cases.records[i]));
 
-	for ( a = 0 ; a < NDList ; a++ )
+	for ( a = 0 ; a < Context->splits.discrete_attribute_count ; a++ )
 	{
-	    Att = DList[a];
-	    DFreq[Att][ MaxClass * XDVal(Case[i], Att) + (c-1) ] += w;
+	    Att = Context->splits.discrete_attributes[a];
+	    Context->splits.discrete_frequencies[Att][ Context->schema.max_class * XDVal(Context->cases.records[i], Att) + (c-1) ] += w;
 	}
     }
 }

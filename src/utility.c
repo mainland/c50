@@ -41,7 +41,7 @@
 #define  NAME T_C50
 
 
-void PrintHeader(String Title)
+void PrintHeader(c50_context *Context, String Title)
 /*   -----------  */
 {
     char	TitleLine[80];
@@ -50,11 +50,11 @@ void PrintHeader(String Title)
 
     clock = time(0);
     sprintf(TitleLine, "%s%s [%s]", NAME, Title, TX_Release(RELEASE));
-    fprintf(Of, "\n%s  \t%s", TitleLine, ctime(&clock));
+    fprintf(Context->io.output, "\n%s  \t%s", TitleLine, ctime(&clock));
 
     Underline = CharWidth(TitleLine);
-    while ( Underline-- ) putc('-', Of);
-    putc('\n', Of);
+    while ( Underline-- ) putc('-', Context->io.output);
+    putc('\n', Context->io.output);
 }
 
 
@@ -66,27 +66,26 @@ void PrintHeader(String Title)
 /*************************************************************************/
 
 
-String	OptArg, Option;
-
-
-char ProcessOption(int Argc, char *Argv[], char *Options)
+char ProcessOption(c50_context *Context, int Argc, char *Argv[],
+		   char *Options)
 /*   -------------  */
 {
     int		i;
-    static int	OptNo=1;
+    if ( Context->io.option_index >= Argc ) return '\00';
 
-    if ( OptNo >= Argc ) return '\00';
-
-    if ( *(Option = Argv[OptNo++]) != '-' ) return '?';
+    if ( *(Context->io.option = Argv[Context->io.option_index++]) != '-' )
+	return '?';
 
     for ( i = 0 ; Options[i] ; i++ )
     {
-	if ( Options[i] == Option[1] )
+	if ( Options[i] == Context->io.option[1] )
 	{
-	    OptArg = (char *) ( Options[i+1] != '+' ? Nil :
-				Option[2] ? Option+2 :
-				OptNo < Argc ? Argv[OptNo++] : "0" );
-	    return Option[1];
+	    Context->io.option_argument =
+		(char *) ( Options[i+1] != '+' ? Nil :
+			   Context->io.option[2] ? Context->io.option+2 :
+			   Context->io.option_index < Argc ?
+			       Argv[Context->io.option_index++] : "0" );
+	    return Context->io.option[1];
 	}
     }
 
@@ -103,7 +102,7 @@ char ProcessOption(int Argc, char *Argv[], char *Options)
 
 
 
-void *Pmalloc(size_t Bytes)
+void *Pmalloc(c50_context *Context, size_t Bytes)
 /*    -------  */
 {
     void *p=Nil;
@@ -113,35 +112,35 @@ void *Pmalloc(size_t Bytes)
 	return p;
     }
 
-    Error(NOMEM, "", "");
+    Error(Context, NOMEM, "", "");
 
     return Nil;
 }
 
 
 
-void *Prealloc(void *Present, size_t Bytes)
+void *Prealloc(c50_context *Context, void *Present, size_t Bytes)
 /*    --------  */
 {
     void *p=Nil;
 
     if ( ! Bytes ) return Nil;
 
-    if ( ! Present ) return Pmalloc(Bytes);
+    if ( ! Present ) return Pmalloc(Context, Bytes);
 
     if ( (p = (void *) realloc(Present, Bytes)) )
     {
 	return p;
     }
 
-    Error(NOMEM, "", "");
+    Error(Context, NOMEM, "", "");
 
     return Nil;
 }
 
 
 
-void *Pcalloc(size_t Number, unsigned int Size)
+void *Pcalloc(c50_context *Context, size_t Number, unsigned int Size)
 /*    -------  */
 {
     void *p=Nil;
@@ -151,7 +150,7 @@ void *Pcalloc(size_t Number, unsigned int Size)
 	return p;
     }
 
-    Error(NOMEM, "", "");
+    Error(Context, NOMEM, "", "");
 
     return Nil;
 }
@@ -191,52 +190,53 @@ typedef	struct _datablockrec
 	}
 	DataBlockRec;
 
-DataBlock	DataMem=Nil;
-int		DataBlockSize=0;
-
-
-
-DataRec NewCase()
+DataRec NewCase(c50_context *Context)
 /*      -------  */
 {
     DataBlock	Prev;
 
-    if ( ! DataMem || DataMem->Allocated == DataBlockSize )
+    if ( ! Context->cases.memory_blocks ||
+	 Context->cases.memory_blocks->Allocated == Context->cases.block_size )
     {
-	DataBlockSize = Min(8192, 262144 / (MaxAtt+2) + 1);
+	Context->cases.block_size =
+	    Min(8192, 262144 / (Context->schema.max_attribute+2) + 1);
 
-	Prev = DataMem;
-	DataMem = AllocZero(1, DataBlockRec);
-	DataMem->Head = Alloc(DataBlockSize * (MaxAtt+2), AttValue);
-	DataMem->Prev = Prev;
+	Prev = Context->cases.memory_blocks;
+	Context->cases.memory_blocks = AllocZero(1, DataBlockRec);
+	Context->cases.memory_blocks->Head =
+	    Alloc(Context->cases.block_size *
+		  (Context->schema.max_attribute+2), AttValue);
+	Context->cases.memory_blocks->Prev = Prev;
     }
 
-    return DataMem->Head + (DataMem->Allocated++) * (MaxAtt+2) + 1;
+    return Context->cases.memory_blocks->Head +
+	(Context->cases.memory_blocks->Allocated++) *
+	(Context->schema.max_attribute+2) + 1;
 }
 
 
 
-void FreeCases()
+void FreeCases(c50_context *Context)
 /*   ---------  */
 {
     DataBlock	Prev;
 
-    while ( DataMem )
+    while ( Context->cases.memory_blocks )
     {
-	Prev = DataMem->Prev;
-	Free(DataMem->Head);
-	Free(DataMem);
-	DataMem = Prev;
+	Prev = Context->cases.memory_blocks->Prev;
+	Free(Context->cases.memory_blocks->Head);
+	Free(Context->cases.memory_blocks);
+	Context->cases.memory_blocks = Prev;
     }
 }
 
 
 
-void FreeLastCase(DataRec Case)
+void FreeLastCase(c50_context *Context, DataRec Case)
 /*   ------------  */
 {
     (void) Case;
-    DataMem->Allocated--;
+    Context->cases.memory_blocks->Allocated--;
 }
 
 
@@ -250,60 +250,57 @@ void FreeLastCase(DataRec Case)
 
 #define	Modify(F,S)	if ( (F -= S) < 0 ) F += 1.0
 
-int	KRFp=0, KRSp=0;
-
-double KRandom()
+double KRandom(KRState *State)
 /*     -------  */
 {
-    static double	URD[55];
     double		V1, V2;
     int			i, j;
 
     /*  Initialisation  */
 
-    if ( KRFp == KRSp )
+    if ( State->first == State->second )
     {
-	KRFp = 0;
-	KRSp = 31;
+	State->first = 0;
+	State->second = 31;
 
 	V1 = 1.0;
 	V2 = 0.314159285;
 
 	ForEach(i, 1, 55)
 	{
-	    URD[ j = (i * 21) % 55 ] = V1;
+	    State->values[ j = (i * 21) % 55 ] = V1;
 	    V1 = V2 - V1;
 	    if ( V1 < 0 ) V1 += 1.0;
-	    V2 = URD[j];
+	    V2 = State->values[j];
 	}
 
 	ForEach(j, 0, 5)
 	{
 	    ForEach(i, 0, 54)
 	    {
-		Modify(URD[i], URD[(i+30) % 55]);
+		Modify(State->values[i], State->values[(i+30) % 55]);
 	    }
 	}
     }
 
-    KRFp = (KRFp + 1) % 55;
-    KRSp = (KRSp + 1) % 55;
-    Modify(URD[KRFp], URD[KRSp]);
+    State->first = (State->first + 1) % 55;
+    State->second = (State->second + 1) % 55;
+    Modify(State->values[State->first], State->values[State->second]);
 
-    return URD[KRFp];
+    return State->values[State->first];
 }
 
 
 
-void ResetKR(int KRInit)
+void ResetKR(KRState *State, int Seed)
 /*   -------  */
 {
-    KRFp = KRSp = 0;
+    State->first = State->second = 0;
 
-    KRInit += 1000;
-    while ( KRInit-- )
+    Seed += 1000;
+    while ( Seed-- )
     {
-	KRandom();
+	KRandom(State);
     }
 }
 
@@ -316,23 +313,23 @@ void ResetKR(int KRInit)
 /*************************************************************************/
 
 
-void C50Exit(int Status)
+void C50Exit(c50_context *Context, int Status)
 /*   -------  */
 {
-    if ( c50_abort_active_operation(Status) ) return;
+    if ( c50_abort_active_operation(Context, Status) ) return;
     exit(Status);
 }
 
 
 
-void Error(int ErrNo, String S1, String S2)
+void ErrorContext(c50_context *Context, int ErrNo, String S1, String S2)
 /*   -----  */
 {
     Boolean	Quit=false, WarningOnly=false;
     char	Buffer[10000], *Msg=Buffer;
 
 
-    if ( Of ) fprintf(Of, "\n");
+    if ( Context->io.output ) fprintf(Context->io.output, "\n");
 
     if ( ErrNo == NOFILE || ErrNo == NOMEM || ErrNo == MODELFILE )
     {
@@ -340,14 +337,14 @@ void Error(int ErrNo, String S1, String S2)
     }
     else
     {
-	sprintf(Msg, TX_Line(LineNo, Fn));
+	sprintf(Msg, TX_Line(Context->io.line_number, Context->io.file_name));
     }
     Msg += strlen(Buffer);
 
     switch ( ErrNo )
     {
 	case NOFILE:
-	    sprintf(Msg, E_NOFILE(Fn, S2));
+	    sprintf(Msg, E_NOFILE(Context->io.file_name, S2));
 	    Quit = true;
 	    break;
 
@@ -459,49 +456,49 @@ void Error(int ErrNo, String S1, String S2)
 	    break;
 
 	case BADDEF1:
-	    sprintf(Msg, E_BADDEF1(AttName[MaxAtt], S1, S2));
+	    sprintf(Msg, E_BADDEF1(Context->schema.attribute_names[Context->schema.max_attribute], S1, S2));
 	    break;
 
 	case BADDEF2:
-	    sprintf(Msg, E_BADDEF2(AttName[MaxAtt], S1, S2));
+	    sprintf(Msg, E_BADDEF2(Context->schema.attribute_names[Context->schema.max_attribute], S1, S2));
 	    break;
 
 	case SAMEATT:
-	    sprintf(Msg, E_SAMEATT(AttName[MaxAtt], S1));
+	    sprintf(Msg, E_SAMEATT(Context->schema.attribute_names[Context->schema.max_attribute], S1));
 	    WarningOnly = true;
 	    break;
 
 	case BADDEF3:
-	    sprintf(Msg, E_BADDEF3, AttName[MaxAtt]);
+	    sprintf(Msg, E_BADDEF3, Context->schema.attribute_names[Context->schema.max_attribute]);
 	    break;
 
 	case BADDEF4:
-	    sprintf(Msg, E_BADDEF4, AttName[MaxAtt]);
+	    sprintf(Msg, E_BADDEF4, Context->schema.attribute_names[Context->schema.max_attribute]);
 	    WarningOnly = true;
 	    break;
 
 	case MODELFILE:
-	    sprintf(Msg, EX_MODELFILE(Fn));
+	    sprintf(Msg, EX_MODELFILE(Context->io.file_name));
 	    sprintf(Msg, "    (%s `%s')\n", S1, S2);
 	    Quit = true;
 	    break;
     }
 
-    if ( Of ) fputs(Buffer, Of);
+    if ( Context->io.output ) fputs(Buffer, Context->io.output);
 	
     if ( ! WarningOnly )
     {
-	ErrMsgs++;
-	c50_record_error(ErrNo == NOMEM ? C50_STATUS_OUT_OF_MEMORY :
+	Context->io.error_count++;
+	c50_record_error(Context, ErrNo == NOMEM ? C50_STATUS_OUT_OF_MEMORY :
 			 ErrNo == NOFILE ? C50_STATUS_IO_ERROR :
 			 C50_STATUS_PARSE_ERROR,
 			 Buffer);
     }
 
-    if ( ErrMsgs == 10 )
+    if ( Context->io.error_count == 10 )
     {
-	if ( Of ) fprintf(Of,  T_ErrorLimit);
-	MaxCase--;
+	if ( Context->io.output ) fprintf(Context->io.output,  T_ErrorLimit);
+	Context->cases.max_case--;
 	Quit = true;
     }
 
@@ -513,26 +510,33 @@ void Error(int ErrNo, String S1, String S2)
 
 
 
+void Error(c50_context *Context, int ErrNo, String S1, String S2)
+/*   -----  */
+{
+    ErrorContext(Context, ErrNo, S1, S2);
+}
+
+
+
 /*************************************************************************/
 /*                                                                       */
 /*      Generate the label for a case                                    */
 /*                                                                       */
 /*************************************************************************/
 
-char	LabelBuffer[1000];
-
-
-String CaseLabel(CaseNo N)
+String CaseLabel(c50_context *Context, CaseNo N)
 /*     ---------  */
 {
     String      p;
 
-    if ( LabelAtt && (p = IgnoredVals + SVal(Case[N], LabelAtt)) )
+    if ( Context->schema.label_attribute &&
+	 (p = Context->ignored_values +
+	      SVal(Context->cases.records[N], Context->schema.label_attribute)) )
 	;
     else
     {
-	sprintf(LabelBuffer, "#%d", N+1);
-	p = LabelBuffer;
+	sprintf(Context->io.label_buffer, "#%d", N+1);
+	p = Context->io.label_buffer;
     }
 
     return p;
@@ -547,12 +551,12 @@ String CaseLabel(CaseNo N)
 /*************************************************************************/
 
 
-FILE *GetFile(String Extension, String RW)
+FILE *GetFile(c50_context *Context, String Extension, String RW)
 /*    --------  */
 {
-    strcpy(Fn, FileStem);
-    strcat(Fn, Extension);
-    return fopen(Fn, RW);
+    strcpy(Context->io.file_name, Context->io.file_stem);
+    strcat(Context->io.file_name, Extension);
+    return fopen(Context->io.file_name, RW);
 }
 
 
@@ -765,16 +769,17 @@ void SecsToTime(int Secs, String Time)
 
 
 
-void SetTSBase(int y)
+void SetTSBase(c50_context *Context, int y)
 /*   ---------  */
 {
     y -= 15;
-    TSBase = y * 365 + y / 4 - y / 100 + y / 400 + (367 * 4) / 12 + 1 - 30;
+    Context->io.timestamp_base =
+	y * 365 + y / 4 - y / 100 + y / 400 + (367 * 4) / 12 + 1 - 30;
 }
 
 
 
-int TStampToMins(String TS)
+int TStampToMins(c50_context *Context, String TS)
 /*  ------------  */
 {
     int		Day, Sec, i;
@@ -801,7 +806,7 @@ int TStampToMins(String TS)
     /*  Return a long time in the future if there is an error  */
 
     return ( Day < 1 || Sec < 0 ? (1 << 30) :
-	     (Day - TSBase) * 1440 + (Sec + 30) / 60 );
+	     (Day - Context->io.timestamp_base) * 1440 + (Sec + 30) / 60 );
 }
 
 
@@ -814,14 +819,14 @@ int TStampToMins(String TS)
 /*************************************************************************/
 
 
-void CValToStr(ContValue CV, Attribute Att, String DS)
+void CValToStr(c50_context *Context, ContValue CV, Attribute Att, String DS)
 /*   ---------  */
 {
     int		Mins;
 
     if ( TStampVal(Att) )
     {
-	DayToDate(floor(CV / 1440) + TSBase, DS);
+	DayToDate(floor(CV / 1440) + Context->io.timestamp_base, DS);
 	DS[10] = ' ';
 	Mins = rint(CV) - floor(CV / 1440) * 1440;
 	SecsToTime(Mins * 60, DS+11);
@@ -851,13 +856,13 @@ void CValToStr(ContValue CV, Attribute Att, String DS)
 /*************************************************************************/
 
 
-void Check(float Val, float Low, float High)
+void Check(c50_context *Context, float Val, float Low, float High)
 /*   -----  */
 {
     if ( Val < Low || Val > High )
     {
-	fprintf(Of, TX_IllegalValue(Val, Low, High));
-	C50Exit(1);
+	fprintf(Context->io.output, TX_IllegalValue(Val, Low, High));
+	C50Exit(Context, 1);
     }
 }
 
@@ -872,104 +877,96 @@ void Check(float Val, float Low, float High)
 /*************************************************************************/
 
 
-void Cleanup()
+void Cleanup(c50_context *Context)
 /*   -------  */
 {
     int		t, r;
 
-    extern DataRec	*Blocked;
-    extern Tree		*SubDef;
-    extern int		SubSpace, ActiveSpace, PropValSize;
-    extern RuleNo	*Active;
-    extern float	*AttImp;
-    extern char		*PropVal;
-    extern Boolean	*Split, *Used;
-    extern FILE		*Uf;
+    NotifyStage(Context, CLEANUP);
 
-    NotifyStage(CLEANUP);
-
-    CheckClose(Uf);					Uf = Nil;
-    CheckClose(TRf);					TRf = Nil;
+    CheckClose(Context->progress.update_file);					Context->progress.update_file = Nil;
+    CheckClose(Context->io.model_file);					Context->io.model_file = Nil;
 
     /*  Boost voting (construct.c)  */
 
-    FreeUnlessNil(BVoteBlock);				BVoteBlock = Nil;
+    FreeUnlessNil(Context->training.boost_vote_block);				Context->training.boost_vote_block = Nil;
+    FreeUnlessNil(Context->training.wrong_predictions);
+    Context->training.wrong_predictions = Nil;
 
     /*  Stuff from attribute winnowing  */
 
-    FreeUnlessNil(SaveCase);				SaveCase = Nil;
-    FreeUnlessNil(AttImp);				AttImp = Nil;
-    FreeUnlessNil(Split);				Split = Nil;
-    FreeUnlessNil(Used);				Used = Nil;
+    FreeUnlessNil(Context->cases.saved_records);				Context->cases.saved_records = Nil;
+    FreeUnlessNil(Context->training.attribute_importance);
+    Context->training.attribute_importance = Nil;
+    FreeUnlessNil(Context->training.split_attributes);
+    Context->training.split_attributes = Nil;
+    FreeUnlessNil(Context->training.used_attributes);
+    Context->training.used_attributes = Nil;
 
-    FreeUnlessNil(PropVal);				PropVal = Nil;
-							PropValSize = 0;
-
-    if ( RULES )
+    if ( Context->options.rules )
     {
-	FreeFormRuleData();
-	FreeSiftRuleData();
+	FreeFormRuleData(Context);
+	FreeSiftRuleData(Context);
     }
 
     /*  May have interrupted a winnowing tree  */
 
-    if ( WINNOW && WTree )
+    if ( Context->options.winnow && Context->trees.winnow )
     {
-	FreeTree(WTree);				WTree = Nil;
+	FreeTree(Context->trees.winnow);				Context->trees.winnow = Nil;
     }
 
-    FreeUnlessNil(Blocked);				Blocked = Nil;
+    FreeUnlessNil(Context->cross_validation.blocked_cases);
+    Context->cross_validation.blocked_cases = Nil;
 
-    FreeData();
+    FreeData(Context);
 
-    if ( MCost )
+    if ( Context->costs.matrix )
     {
-	FreeVector((void **) MCost, 1, MaxClass);	MCost = Nil;
-	FreeUnlessNil(WeightMul);			WeightMul = Nil;
+	FreeVector((void **) Context->costs.matrix, 1, Context->schema.max_class);	Context->costs.matrix = Nil;
+	FreeUnlessNil(Context->costs.weight_multipliers);			Context->costs.weight_multipliers = Nil;
     }
 
-    ForEach(t, 0, MaxTree)
+    ForEach(t, 0, Context->trees.max_tree)
     {
-	FreeClassifier(t);
+	FreeClassifier(Context, t);
     }
 
-    if ( RULES )
+    if ( Context->options.rules )
     {
-	/*  May be incomplete ruleset in Rule[]  */
+	/*  May be incomplete ruleset in Context->rules.rules[]  */
 
-	if ( Rule )
+	if ( Context->rules.rules )
 	{
-	    ForEach(r, 1, NRules)
+	    ForEach(r, 1, Context->rules.count)
 	    {
-		FreeRule(Rule[r]);
+		FreeRule(Context->rules.rules[r]);
 	    }
-	    Free(Rule);					Rule = Nil;
+	    Free(Context->rules.rules);					Context->rules.rules = Nil;
 	}						
 
-	FreeUnlessNil(RuleSet);				RuleSet = Nil;
-	FreeUnlessNil(LogCaseNo);			LogCaseNo = Nil;
-	FreeUnlessNil(LogFact);				LogFact = Nil;
+	FreeUnlessNil(Context->rules.sets);				Context->rules.sets = Nil;
+	FreeUnlessNil(Context->rule_build.log_case_count);			Context->rule_build.log_case_count = Nil;
+	FreeUnlessNil(Context->rule_build.log_factorial);				Context->rule_build.log_factorial = Nil;
     }
 
-    FreeTreeData();
+    FreeTreeData(Context);
 
-    FreeUnlessNil(Active);				Active = Nil;
-							ActiveSpace = 0;
+    FreeUnlessNil(Context->evaluation.utility_errors);				Context->evaluation.utility_errors = Nil;
+    FreeUnlessNil(Context->evaluation.utility_bands);				Context->evaluation.utility_bands = Nil;
+    FreeUnlessNil(Context->evaluation.utility_costs);				Context->evaluation.utility_costs = Nil;
 
-    FreeUnlessNil(UtilErr);				UtilErr = Nil;
-    FreeUnlessNil(UtilBand);				UtilBand = Nil;
-    FreeUnlessNil(UtilCost);				UtilCost = Nil;
+    FreeUnlessNil(Context->cases.some_missing);				Context->cases.some_missing = Nil;
+    FreeUnlessNil(Context->cases.some_not_applicable);				Context->cases.some_not_applicable = Nil;
 
-    FreeUnlessNil(SomeMiss);				SomeMiss = Nil;
-    FreeUnlessNil(SomeNA);				SomeNA = Nil;
+    FreeNames(Context);
 
-    FreeNames();
+    FreeUnlessNil(Context->trees.printed_subtrees);
+    Context->trees.printed_subtrees = Nil;
+    Context->trees.printed_subtree_capacity = 0;
+    Context->cases.max_case = -1;
 
-    FreeUnlessNil(SubDef);				SubDef = Nil;
-							SubSpace = 0;
-    MaxCase = -1;
-
-    NotifyStage(0);
+    NotifyStage(Context, 0);
 }
 
 

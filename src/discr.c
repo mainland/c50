@@ -33,16 +33,17 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 
 /*************************************************************************/
 /*									 */
-/*	Set Info[] and Gain[] for discrete partition of cases		 */
+/*	Set Context->splits.information[] and Context->splits.gain[] for discrete partition of cases		 */
 /*									 */
 /*************************************************************************/
 
 
-void EvalDiscreteAtt(Attribute Att, CaseCount Cases)
+void EvalDiscreteAtt(c50_context *Context, Attribute Att, CaseCount Cases)
 /*   ---------------  */
 {
     CaseCount	KnownCases;
@@ -50,36 +51,37 @@ void EvalDiscreteAtt(Attribute Att, CaseCount Cases)
     DiscrValue	v;
     double	BaseInfo;
 
-    SetDiscrFreq(Att);
-    KnownCases = Cases - GEnv.ValFreq[0];
+    SetDiscrFreq(Context, Att);
+    KnownCases = Cases - Context->training.environment->ValFreq[0];
 
     /*  Check reasonable subsets  */
 
-    ForEach(v, 1, MaxAttVal[Att])
+    ForEach(v, 1, Context->schema.max_attribute_value[Att])
     {
-	if ( GEnv.ValFreq[v] >= MINITEMS ) ReasonableSubsets++;
+	if ( Context->training.environment->ValFreq[v] >= Context->options.minimum_cases ) ReasonableSubsets++;
     }
 
     if ( ReasonableSubsets < 2 )
     {
-	Verbosity(2, fprintf(Of, "\tAtt %s: poor split\n", AttName[Att]))
+	Verbosity(2, fprintf(Context->io.output, "\tAtt %s: poor split\n", Context->schema.attribute_names[Att]))
 	return;
     }
 
-    BaseInfo = ( ! GEnv.ValFreq[0] ? GlobalBaseInfo :
-		     DiscrKnownBaseInfo(KnownCases, MaxAttVal[Att]) );
+    BaseInfo = ( ! Context->training.environment->ValFreq[0] ? Context->splits.base_information :
+		     DiscrKnownBaseInfo(Context, KnownCases, Context->schema.max_attribute_value[Att]) );
 
-    Gain[Att] = ComputeGain(BaseInfo, GEnv.ValFreq[0] / Cases, MaxAttVal[Att],
+    Context->splits.gain[Att] = ComputeGain(Context, BaseInfo, Context->training.environment->ValFreq[0] / Cases, Context->schema.max_attribute_value[Att],
 			    KnownCases);
-    Info[Att] = TotalInfo(GEnv.ValFreq, 0, MaxAttVal[Att]) / Cases;
+    Context->splits.information[Att] = TotalInfo(Context->training.environment->ValFreq, 0, Context->schema.max_attribute_value[Att]) / Cases;
 
     Verbosity(2,
     {
-    	fprintf(Of, "\tAtt %s", AttName[Att]);
-    	Verbosity(3,
-	    PrintDistribution(Att, 0, MaxAttVal[Att], GEnv.Freq, GEnv.ValFreq,
+	fprintf(Context->io.output, "\tAtt %s", Context->schema.attribute_names[Att]);
+	Verbosity(3,
+	    PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], Context->training.environment->Freq, Context->training.environment->ValFreq,
 			      true))
-    	fprintf(Of, "\tinf %.3f, gain %.3f\n", Info[Att], Gain[Att]);
+	fprintf(Context->io.output, "\tinf %.3f, gain %.3f\n",
+		Context->splits.information[Att], Context->splits.gain[Att]);
     })
 }
 
@@ -87,12 +89,12 @@ void EvalDiscreteAtt(Attribute Att, CaseCount Cases)
 
 /*************************************************************************/
 /*									 */
-/*	Set Info[] and Gain[] for ordered split on cases		 */
+/*	Set Context->splits.information[] and Context->splits.gain[] for ordered split on cases		 */
 /*									 */
 /*************************************************************************/
 
 
-void EvalOrderedAtt(Attribute Att, CaseCount Cases)
+void EvalOrderedAtt(c50_context *Context, Attribute Att, CaseCount Cases)
 /*   --------------  */
 {
     CaseCount	KnownCases;
@@ -102,51 +104,51 @@ void EvalOrderedAtt(Attribute Att, CaseCount Cases)
     DiscrValue	v, BestV;
     double	BaseInfo, ThisGain, BestInfo, BestGain=None;
 
-    SetDiscrFreq(Att);
-    KnownCases = Cases - GEnv.ValFreq[0];
+    SetDiscrFreq(Context, Att);
+    KnownCases = Cases - Context->training.environment->ValFreq[0];
 
-    BaseInfo = ( ! GEnv.ValFreq[0] ? GlobalBaseInfo :
-		     DiscrKnownBaseInfo(KnownCases, MaxAttVal[Att]) );
+    BaseInfo = ( ! Context->training.environment->ValFreq[0] ? Context->splits.base_information :
+		     DiscrKnownBaseInfo(Context, KnownCases, Context->schema.max_attribute_value[Att]) );
 
-    Verbosity(2, fprintf(Of, "\tAtt %s", AttName[Att]))
-    Verbosity(3, PrintDistribution(Att, 0, MaxAttVal[Att], GEnv.Freq,
-				   GEnv.ValFreq, true))
+    Verbosity(2, fprintf(Context->io.output, "\tAtt %s", Context->schema.attribute_names[Att]))
+    Verbosity(3, PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], Context->training.environment->Freq,
+				   Context->training.environment->ValFreq, true))
 
     /*  Move elts of Freq[] starting with the third up one place
 	and aggregate class frequencies  */
 
-    HoldFreqRow = GEnv.Freq[MaxAttVal[Att]+1];
-    ForEach(c, 1, MaxClass)
+    HoldFreqRow = Context->training.environment->Freq[Context->schema.max_attribute_value[Att]+1];
+    ForEach(c, 1, Context->schema.max_class)
     {
 	HoldFreqRow[c] = 0;
     }
-    SplitFreq[0] = GEnv.ValFreq[0];
-    SplitFreq[1] = GEnv.ValFreq[1];
-    SplitFreq[2] = GEnv.ValFreq[2];
+    SplitFreq[0] = Context->training.environment->ValFreq[0];
+    SplitFreq[1] = Context->training.environment->ValFreq[1];
+    SplitFreq[2] = Context->training.environment->ValFreq[2];
     SplitFreq[3] = 0;
 
-    for ( v = MaxAttVal[Att] ; v > 2 ; v-- )
+    for ( v = Context->schema.max_attribute_value[Att] ; v > 2 ; v-- )
     {
-	GEnv.Freq[v+1] = GEnv.Freq[v];
-	ForEach(c, 1, MaxClass)
+	Context->training.environment->Freq[v+1] = Context->training.environment->Freq[v];
+	ForEach(c, 1, Context->schema.max_class)
 	{
-	    HoldFreqRow[c] += GEnv.Freq[v][c];
+	    HoldFreqRow[c] += Context->training.environment->Freq[v][c];
 	}
-	SplitFreq[3] += GEnv.ValFreq[v];
+	SplitFreq[3] += Context->training.environment->ValFreq[v];
     }
 
-    GEnv.Freq[3] = HoldFreqRow;
+    Context->training.environment->Freq[3] = HoldFreqRow;
 
     /*  Try various cuts, saving the one with maximum gain  */
 
-    ForEach(v, 3, MaxAttVal[Att])
+    ForEach(v, 3, Context->schema.max_attribute_value[Att])
     {
-	if ( GEnv.ValFreq[v] > 0 &&
-	     SplitFreq[2] >= MINITEMS && SplitFreq[3] >= MINITEMS )
+	if ( Context->training.environment->ValFreq[v] > 0 &&
+	     SplitFreq[2] >= Context->options.minimum_cases && SplitFreq[3] >= Context->options.minimum_cases )
 	{
 	    Tries++;
 	    ThisGain =
-		ComputeGain(BaseInfo, GEnv.ValFreq[0] / Cases, 3, KnownCases);
+		ComputeGain(Context, BaseInfo, Context->training.environment->ValFreq[0] / Cases, 3, KnownCases);
 
 	    if ( ThisGain > BestGain )
 	    {
@@ -156,21 +158,21 @@ void EvalOrderedAtt(Attribute Att, CaseCount Cases)
 	    }
 
 	    Verbosity(3,
-	    {   fprintf(Of, "\t\tFrom %s (gain %.3f)",
-			AttValName[Att][v], ThisGain);
-		PrintDistribution(Att, 0, 3, GEnv.Freq, GEnv.ValFreq, false);
+	    {   fprintf(Context->io.output, "\t\tFrom %s (gain %.3f)",
+			Context->schema.attribute_value_names[Att][v], ThisGain);
+		PrintDistribution(Context, Att, 0, 3, Context->training.environment->Freq, Context->training.environment->ValFreq, false);
 	    })
 	}
 
 	/*  Move val v from right branch to left branch  */
 
-	ForEach(c, 1, MaxClass)
+	ForEach(c, 1, Context->schema.max_class)
 	{
-	    GEnv.Freq[2][c] += GEnv.Freq[v+1][c];
-	    GEnv.Freq[3][c] -= GEnv.Freq[v+1][c];
+	    Context->training.environment->Freq[2][c] += Context->training.environment->Freq[v+1][c];
+	    Context->training.environment->Freq[3][c] -= Context->training.environment->Freq[v+1][c];
 	}
-	SplitFreq[2] += GEnv.ValFreq[v];
-	SplitFreq[3] -= GEnv.ValFreq[v];
+	SplitFreq[2] += Context->training.environment->ValFreq[v];
+	SplitFreq[3] -= Context->training.environment->ValFreq[v];
     }
 
     if ( Tries > 1 ) BestGain -= Log(Tries) / Cases;
@@ -180,17 +182,17 @@ void EvalOrderedAtt(Attribute Att, CaseCount Cases)
 
     if ( BestGain <= 0 )
     {
-	Verbosity(2, fprintf(Of, "\tno gain\n"))
+	Verbosity(2, fprintf(Context->io.output, "\tno gain\n"))
     }
     else
     {
-	Gain[Att] = BestGain;
-	Info[Att] = BestInfo;
-	Bar[Att]  = BestV;
+	Context->splits.gain[Att] = BestGain;
+	Context->splits.information[Att] = BestInfo;
+	Context->splits.thresholds[Att]  = BestV;
 
 	Verbosity(2,
-	    fprintf(Of, "\tcut=%g, inf %.3f, gain %.3f\n",
-		   Bar[Att], Info[Att], Gain[Att]))
+	    fprintf(Context->io.output, "\tcut=%g, inf %.3f, gain %.3f\n",
+		   Context->splits.thresholds[Att], Context->splits.information[Att], Context->splits.gain[Att]))
     }
 }
 
@@ -204,7 +206,7 @@ void EvalOrderedAtt(Attribute Att, CaseCount Cases)
 /*************************************************************************/
 
 
-void SetDiscrFreq(Attribute Att)
+void SetDiscrFreq(c50_context *Context, Attribute Att)
 /*   ------------  */
 {
     ClassNo	c;
@@ -214,14 +216,14 @@ void SetDiscrFreq(Attribute Att)
     /*  Determine the frequency of each possible value for the
 	given attribute  */
 
-    ForEach(v, 0, MaxAttVal[Att])
+    ForEach(v, 0, Context->schema.max_attribute_value[Att])
     {
-	GEnv.ValFreq[v] = 0;
+	Context->training.environment->ValFreq[v] = 0;
 
-	x = v * MaxClass;
-	ForEach(c, 1, MaxClass)
+	x = v * Context->schema.max_class;
+	ForEach(c, 1, Context->schema.max_class)
 	{
-	    GEnv.ValFreq[v] += (GEnv.Freq[v][c] = DFreq[Att][x + (c-1)]);
+	    Context->training.environment->ValFreq[v] += (Context->training.environment->Freq[v][c] = Context->splits.discrete_frequencies[Att][x + (c-1)]);
 	}
     }
 }
@@ -236,7 +238,8 @@ void SetDiscrFreq(Attribute Att)
 /*************************************************************************/
 
 
-double DiscrKnownBaseInfo(CaseCount KnownCases, DiscrValue MaxVal)
+double DiscrKnownBaseInfo(c50_context *Context, CaseCount KnownCases,
+			  DiscrValue MaxVal)
 /*     ------------------  */
 {
     ClassNo	c;
@@ -245,17 +248,17 @@ double DiscrKnownBaseInfo(CaseCount KnownCases, DiscrValue MaxVal)
 
     if ( KnownCases < 1E-5 ) return 0.0;
 
-    ForEach(c, 1, MaxClass)
+    ForEach(c, 1, Context->schema.max_class)
     {
 	ClassCount = 0;
 	ForEach(v, 1, MaxVal)
 	{
-	    ClassCount += GEnv.Freq[v][c];
+	    ClassCount += Context->training.environment->Freq[v][c];
 	}
-	GEnv.ClassFreq[c] = ClassCount;
+	Context->training.environment->ClassFreq[c] = ClassCount;
     }
 
-    return TotalInfo(GEnv.ClassFreq, 1, MaxClass) / KnownCases;
+    return TotalInfo(Context->training.environment->ClassFreq, 1, Context->schema.max_class) / KnownCases;
 }
 
 
@@ -267,7 +270,7 @@ double DiscrKnownBaseInfo(CaseCount KnownCases, DiscrValue MaxVal)
 /*************************************************************************/
 
 
-void DiscreteTest(Tree Node, Attribute Att)
+void DiscreteTest(c50_context *Context, Tree Node, Attribute Att)
 /*   ------------  */
 {
     int		S, Bytes;
@@ -275,12 +278,12 @@ void DiscreteTest(Tree Node, Attribute Att)
 
     if ( Ordered(Att) )
     {
-	Sprout(Node, 3);
+	Sprout(Context, Node, 3);
 
 	Node->NodeType	= BrSubset;
 	Node->Tested	= Att;
 
-	Bytes = (MaxAttVal[Att]>>3) + 1;
+	Bytes = (Context->schema.max_attribute_value[Att]>>3) + 1;
 	Node->Subset = AllocZero(4, Set);
 
 	ForEach(S, 1, 3)
@@ -288,10 +291,10 @@ void DiscreteTest(Tree Node, Attribute Att)
 	    Node->Subset[S] = AllocZero(Bytes, Byte);
 	}
 
-	Node->Cut = CutV = Bar[Att] + 0.1;
+	Node->Cut = CutV = Context->splits.thresholds[Att] + 0.1;
 
 	SetBit(1, Node->Subset[1]);
-	ForEach(v, 2, MaxAttVal[Att])
+	ForEach(v, 2, Context->schema.max_attribute_value[Att])
 	{
 	    S = ( v <= CutV ? 2 : 3 );
 	    SetBit(v, Node->Subset[S]);
@@ -299,7 +302,7 @@ void DiscreteTest(Tree Node, Attribute Att)
     }
     else
     {
-	Sprout(Node, MaxAttVal[Att]);
+	Sprout(Context, Node, Context->schema.max_attribute_value[Att]);
 
 	Node->NodeType = BrDiscr;
 	Node->Tested   = Att;

@@ -77,6 +77,18 @@ cmake --build build/sanitize
 ctest --test-dir build/sanitize --output-on-failure
 ```
 
+Independent contexts can run concurrently, and immutable loaded models can be
+shared across those operations. Access to an individual context must remain
+serialized. To exercise this contract under ThreadSanitizer, configure with:
+
+```sh
+cmake -S . -B build/tsan \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DC50_ENABLE_THREAD_SANITIZER=ON
+cmake --build build/tsan
+ctest --test-dir build/tsan --output-on-failure
+```
+
 ## License
 
 The imported C5.0 source is distributed under the GNU General Public License,

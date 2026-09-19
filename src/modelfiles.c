@@ -34,42 +34,12 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
-int	Entry;
-static c50_input ClassifierInput;
-
-char*	Prop[]={"null",
-		"att",
-		"class",
-		"cut",
-		"conds",
-		"elts",
-		"entries",
-		"forks",
-		"freq",
-		"id",
-		"type",
-		"low",
-		"mid",
-		"high",
-		"result",
-		"rules",
-		"val",
-		"lift",
-		"cover",
-		"ok",
-		"default",
-		"costs",
-		"sample",
-		"init"
-	       };
-
-char	PropName[20],
-	*PropVal=Nil,
-	*Unquoted;
-int	PropValSize=0;
-
-#define	PROPS 23
+static const char PropertyNames[] =
+    "null\0att\0class\0cut\0conds\0elts\0entries\0forks\0freq\0id\0"
+    "type\0low\0mid\0high\0result\0rules\0val\0lift\0cover\0ok\0"
+    "default\0costs\0sample\0init\0";
 
 #define ERRORP		0
 #define ATTP		1
@@ -97,6 +67,21 @@ int	PropValSize=0;
 #define INITP		23
 
 
+static int WhichProperty(const char *Name)
+{
+    const char *Property;
+    int Number;
+
+    for ( Number = 0, Property = PropertyNames ; *Property ; Number++ )
+    {
+	if ( ! strcmp(Name, Property) ) return Number;
+	Property += strlen(Property) + 1;
+    }
+
+    return 0;
+}
+
+
 /*************************************************************************/
 /*									 */
 /*	Check whether file is open.  If it is not, open it and		 */
@@ -105,28 +90,27 @@ int	PropValSize=0;
 /*************************************************************************/
 
 
-void CheckFile(String Extension, Boolean Write)
+void CheckFile(c50_context *Context, String Extension, Boolean Write)
 /*   ---------  */
 {
-    static char	*LastExt="";
-
-    if ( ! TRf || strcmp(LastExt, Extension) )
+    if ( ! Context->io.model_file || ! Context->last_model_extension ||
+	 strcmp(Context->last_model_extension, Extension) )
     {
-	LastExt = Extension;
+	Context->last_model_extension = Extension;
 
-	if ( TRf )
+	if ( Context->io.model_file )
 	{
-	    fprintf(TRf, "\n");
-	    fclose(TRf);
+	    fprintf(Context->io.model_file, "\n");
+	    fclose(Context->io.model_file);
 	}
 
 	if ( Write )
 	{
-	    WriteFilePrefix(Extension);
+	    WriteFilePrefix(Context, Extension);
 	}
 	else
 	{
-	    ReadFilePrefix(Extension);
+	    ReadFilePrefix(Context, Extension);
 	}
     }
 }
@@ -140,39 +124,39 @@ void CheckFile(String Extension, Boolean Write)
 /*************************************************************************/
 
 
-void WriteFilePrefix(String Extension)
+void WriteFilePrefix(c50_context *Context, String Extension)
 /*   ---------------  */
 {
     time_t	clock;
     struct tm	*now;
 
-    if ( ! (TRf = GetFile(Extension, "w")) )
+    if ( ! (Context->io.model_file = GetFile(Context, Extension, "w")) )
     {
-	Error(NOFILE, Fn, E_ForWrite);
+	Error(Context, NOFILE, Context->io.file_name, E_ForWrite);
     }
 
     clock = time(0);
     now = localtime(&clock);
     now->tm_mon++;
-    fprintf(TRf, "id=\"See5/C5.0 %s %d-%d%d-%d%d\"\n",
+    fprintf(Context->io.model_file, "id=\"See5/C5.0 %s %d-%d%d-%d%d\"\n",
 	    RELEASE,
 	    now->tm_year + 1900,
 	    now->tm_mon / 10, now->tm_mon % 10,
 	    now->tm_mday / 10, now->tm_mday % 10);
 
-    if ( MCost )
+    if ( Context->costs.matrix )
     {
-	fprintf(TRf, "costs=\"1\"\n");
+	fprintf(Context->io.model_file, "costs=\"1\"\n");
     }
 
-    if ( SAMPLE > 0 )
+    if ( Context->options.sample_fraction > 0 )
     {
-	fprintf(TRf, "sample=\"%g\" init=\"%d\"\n", SAMPLE, KRInit);
+	fprintf(Context->io.model_file, "sample=\"%g\" init=\"%d\"\n", Context->options.sample_fraction, Context->io.random_initial_seed);
     }
 
-    SaveDiscreteNames();
+    SaveDiscreteNames(Context);
 
-    fprintf(TRf, "entries=\"%d\"\n", TRIALS);
+    fprintf(Context->io.model_file, "entries=\"%d\"\n", Context->options.trials);
 }
 
 
@@ -184,22 +168,22 @@ void WriteFilePrefix(String Extension)
 /*************************************************************************/
 
 
-void ReadFilePrefix(String Extension)
+void ReadFilePrefix(c50_context *Context, String Extension)
 /*   --------------  */
 {
-    if ( ! (TRf = GetFile(Extension, "r")) ) Error(NOFILE, Fn, "");
+    if ( ! (Context->io.model_file = GetFile(Context, Extension, "r")) ) Error(Context, NOFILE, Context->io.file_name, "");
 
-    c50_input_init_file(&ClassifierInput, TRf);
-    StreamIn(&ClassifierInput, (char *) &TRIALS, sizeof(int));
-    if ( memcmp((char *) &TRIALS, "id=", 3) != 0 )
+    c50_input_init_file(&Context->classifier_input, Context->io.model_file);
+    StreamIn(&Context->classifier_input, (char *) &Context->options.trials, sizeof(int));
+    if ( memcmp((char *) &Context->options.trials, "id=", 3) != 0 )
     {
 	printf("\nCannot read old format classifiers\n");
-	C50Exit(1);
+	C50Exit(Context, 1);
     }
     else
     {
-	c50_input_rewind(&ClassifierInput);
-	ReadHeader(&ClassifierInput);
+	c50_input_rewind(&Context->classifier_input);
+	ReadHeader(Context, &Context->classifier_input);
     }
 }
 
@@ -212,24 +196,24 @@ void ReadFilePrefix(String Extension)
 /*************************************************************************/
 
 
-void SaveDiscreteNames()
+void SaveDiscreteNames(c50_context *Context)
 /*   -----------------  */
 {
     Attribute	Att;
     DiscrValue	v;
 
-    ForEach(Att, 1, MaxAtt)
+    ForEach(Att, 1, Context->schema.max_attribute)
     {
-	if ( ! StatBit(Att, DISCRETE) || MaxAttVal[Att] < 2 ) continue;
+	if ( ! StatBit(Att, DISCRETE) || Context->schema.max_attribute_value[Att] < 2 ) continue;
 
-	AsciiOut("att=", AttName[Att]);
-	AsciiOut(" elts=", AttValName[Att][2]); 	/* skip N/A */
+	AsciiOut(Context, "att=", Context->schema.attribute_names[Att]);
+	AsciiOut(Context, " elts=", Context->schema.attribute_value_names[Att][2]); 	/* skip N/A */
 
-	ForEach(v, 3, MaxAttVal[Att])
+	ForEach(v, 3, Context->schema.max_attribute_value[Att])
 	{
-	    AsciiOut(",", AttValName[Att][v]);
+	    AsciiOut(Context, ",", Context->schema.attribute_value_names[Att][v]);
 	}
-	fprintf(TRf, "\n");
+	fprintf(Context->io.model_file, "\n");
     }
 }
 
@@ -242,39 +226,39 @@ void SaveDiscreteNames()
 /*************************************************************************/
 
 
-void SaveTree(Tree T, String Extension)
+void SaveTree(c50_context *Context, Tree T, String Extension)
 /*   --------  */
 {
-    CheckFile(Extension, true);
+    CheckFile(Context, Extension, true);
 
-    OutTree(T);
+    OutTree(Context, T);
 }
 
 
 
-void OutTree(Tree T)
+void OutTree(c50_context *Context, Tree T)
 /*   -------  */
 {
     DiscrValue	v, vv;
     ClassNo	c;
     Boolean	First;
 
-    fprintf(TRf, "type=\"%d\"", T->NodeType);
-    AsciiOut(" class=", ClassName[T->Leaf]);
+    fprintf(Context->io.model_file, "type=\"%d\"", T->NodeType);
+    AsciiOut(Context, " class=", Context->schema.class_names[T->Leaf]);
     if ( T->Cases > 0 )
     {
-	fprintf(TRf, " freq=\"%g", T->ClassDist[1]);
-	ForEach(c, 2, MaxClass)
+	fprintf(Context->io.model_file, " freq=\"%g", T->ClassDist[1]);
+	ForEach(c, 2, Context->schema.max_class)
 	{
-	    fprintf(TRf, ",%g", T->ClassDist[c]);
+	    fprintf(Context->io.model_file, ",%g", T->ClassDist[c]);
 	}
-	fprintf(TRf, "\"");
+	fprintf(Context->io.model_file, "\"");
     }
 
     if ( T->NodeType )
     {
-	AsciiOut(" att=", AttName[T->Tested]);
-	fprintf(TRf, " forks=\"%d\"", T->Forks);
+	AsciiOut(Context, " att=", Context->schema.attribute_names[T->Tested]);
+	fprintf(Context->io.model_file, " forks=\"%d\"", T->Forks);
 
 	switch ( T->NodeType )
 	{
@@ -282,10 +266,10 @@ void OutTree(Tree T)
 		break;
 
 	    case BrThresh:
-		fprintf(TRf, " cut=\"%.*g\"", PREC+1, T->Cut);
+		fprintf(Context->io.model_file, " cut=\"%.*g\"", PREC+1, T->Cut);
 		if ( T->Upper > T->Cut )
 		{
-		    fprintf(TRf, " low=\"%.*g\" mid=\"%.*g\" high=\"%.*g\"",
+		    fprintf(Context->io.model_file, " low=\"%.*g\" mid=\"%.*g\" high=\"%.*g\"",
 				 PREC, T->Lower, PREC, T->Mid, PREC, T->Upper);
 		}
 		break;
@@ -294,37 +278,37 @@ void OutTree(Tree T)
 		ForEach(v, 1, T->Forks)
 		{
 		    First=true;
-		    ForEach(vv, 1, MaxAttVal[T->Tested])
+		    ForEach(vv, 1, Context->schema.max_attribute_value[T->Tested])
 		    {
 			if ( In(vv, T->Subset[v]) )
 			{
 			    if ( First )
 			    {
-				AsciiOut(" elts=", AttValName[T->Tested][vv]);
+				AsciiOut(Context, " elts=", Context->schema.attribute_value_names[T->Tested][vv]);
 				First = false;
 			    }
 			    else
 			    {
-				AsciiOut(",", AttValName[T->Tested][vv]);
+				AsciiOut(Context, ",", Context->schema.attribute_value_names[T->Tested][vv]);
 			    }
 			}
 		    }
 		    /*  Make sure have printed at least one element  */
 
-		    if ( First ) AsciiOut(" elts=", "N/A");
+		    if ( First ) AsciiOut(Context, " elts=", "N/A");
 		}
 		break;
 	}
-	fprintf(TRf, "\n");
+	fprintf(Context->io.model_file, "\n");
 
 	ForEach(v, 1, T->Forks)
 	{
-	    OutTree(T->Branch[v]);
+	    OutTree(Context, T->Branch[v]);
 	}
     }
     else
     {
-	fprintf(TRf, "\n");
+	fprintf(Context->io.model_file, "\n");
     }
 }
 
@@ -337,7 +321,7 @@ void OutTree(Tree T)
 /*************************************************************************/
 
 
-void SaveRules(CRuleSet RS, String Extension)
+void SaveRules(c50_context *Context, CRuleSet RS, String Extension)
 /*   ---------  */
 {
     int		ri, d;
@@ -346,42 +330,42 @@ void SaveRules(CRuleSet RS, String Extension)
     DiscrValue	v;
     Boolean	First;
 
-    CheckFile(Extension, true);
+    CheckFile(Context, Extension, true);
 
-    fprintf(TRf, "rules=\"%d\"", RS->SNRules);
-    AsciiOut(" default=", ClassName[RS->SDefault]);
-    fprintf(TRf, "\n");
+    fprintf(Context->io.model_file, "rules=\"%d\"", RS->SNRules);
+    AsciiOut(Context, " default=", Context->schema.class_names[RS->SDefault]);
+    fprintf(Context->io.model_file, "\n");
 
     ForEach(ri, 1, RS->SNRules)
     {
 	R = RS->SRule[ri];
-	fprintf(TRf, "conds=\"%d\" cover=\"%g\" ok=\"%g\" lift=\"%g\"",
+	fprintf(Context->io.model_file, "conds=\"%d\" cover=\"%g\" ok=\"%g\" lift=\"%g\"",
 		     R->Size, R->Cover, R->Correct,
 		     (R->Correct + 1) / ((R->Cover + 2) * R->Prior));
-	AsciiOut(" class=", ClassName[R->Rhs]);
-	fprintf(TRf, "\n");
+	AsciiOut(Context, " class=", Context->schema.class_names[R->Rhs]);
+	fprintf(Context->io.model_file, "\n");
 
 	ForEach(d, 1, R->Size)
 	{
 	    C = R->Lhs[d];
 
-	    fprintf(TRf, "type=\"%d\"", C->NodeType);
-	    AsciiOut(" att=", AttName[C->Tested]);
+	    fprintf(Context->io.model_file, "type=\"%d\"", C->NodeType);
+	    AsciiOut(Context, " att=", Context->schema.attribute_names[C->Tested]);
 
 	    switch ( C->NodeType )
 	    {
 		case BrDiscr:
-		    AsciiOut(" val=", AttValName[C->Tested][C->TestValue]);
+		    AsciiOut(Context, " val=", Context->schema.attribute_value_names[C->Tested][C->TestValue]);
 		    break;
 
 		case BrThresh:
 		    if ( C->TestValue == 1 )	/* N/A */
 		    {
-			fprintf(TRf, " val=\"N/A\"");
+			fprintf(Context->io.model_file, " val=\"N/A\"");
 		    }
 		    else
 		    {
-			fprintf(TRf, " cut=\"%.*g\" result=\"%c\"",
+			fprintf(Context->io.model_file, " cut=\"%.*g\" result=\"%c\"",
 				     PREC+1, C->Cut,
 				     ( C->TestValue == 2 ? '<' : '>' ));
 		    }
@@ -389,25 +373,25 @@ void SaveRules(CRuleSet RS, String Extension)
 
 		case BrSubset:
 		    First=true;
-		    ForEach(v, 1, MaxAttVal[C->Tested])
+		    ForEach(v, 1, Context->schema.max_attribute_value[C->Tested])
 		    {
 			if ( In(v, C->Subset) )
 			{
 			    if ( First )
 			    {
-				AsciiOut(" elts=", AttValName[C->Tested][v]);
+				AsciiOut(Context, " elts=", Context->schema.attribute_value_names[C->Tested][v]);
 				First = false;
 			    }
 			    else
 			    {
-				AsciiOut(",", AttValName[C->Tested][v]);
+				AsciiOut(Context, ",", Context->schema.attribute_value_names[C->Tested][v]);
 			    }
 			}
 		    }
 		    break;
 	    }
 
-	    fprintf(TRf, "\n");
+	    fprintf(Context->io.model_file, "\n");
 	}
     }
 }
@@ -421,16 +405,16 @@ void SaveRules(CRuleSet RS, String Extension)
 /*************************************************************************/
 
 
-void AsciiOut(String Pre, String S)
+void AsciiOut(c50_context *Context, String Pre, String S)
 /*   --------  */
 {
-    fprintf(TRf, "%s\"", Pre);
+    fprintf(Context->io.model_file, "%s\"", Pre);
     while ( *S )
     {
-	if ( *S == '"' || *S == '\\' ) fputc('\\', TRf);
-	fputc(*S++, TRf);
+	if ( *S == '"' || *S == '\\' ) fputc('\\', Context->io.model_file);
+	fputc(*S++, Context->io.model_file);
     }
-    fputc('"', TRf);
+    fputc('"', Context->io.model_file);
 }
 
 
@@ -442,19 +426,20 @@ void AsciiOut(String Pre, String S)
 /*************************************************************************/
 
 
-static void ReadHeaderFrom(c50_input *Input, c50_input *CostsInput,
+static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
+			   c50_input *CostsInput,
 			   Boolean AllowFileCosts)
 /*          --------------  */
 {
     Attribute	Att;
     DiscrValue	v;
-    char	*p, Dummy;
+    char	*p, *Unquoted, Dummy;
     int		Year, Month, Day;
     FILE	*F;
 
     while ( true )
     {
-	switch ( ReadProp(Input, &Dummy) )
+	switch ( ReadProp(Context, Input, &Dummy) )
 	{
 	    case ERRORP:
 		return;
@@ -462,10 +447,10 @@ static void ReadHeaderFrom(c50_input *Input, c50_input *CostsInput,
 	    case IDP:
 		/*  Recover year run and set base date for timestamps  */
 
-		if ( sscanf(PropVal + strlen(PropVal) - 11,
+		if ( sscanf(Context->property_value + strlen(Context->property_value) - 11,
 			    "%d-%d-%d\"", &Year, &Month, &Day) == 3 )
 		{
-		    SetTSBase(Year);
+		    SetTSBase(Context, Year);
 		}
 		break;
 
@@ -474,57 +459,57 @@ static void ReadHeaderFrom(c50_input *Input, c50_input *CostsInput,
 
 		if ( CostsInput )
 		{
-		    GetMCostsInput(CostsInput);
+		    GetMCostsInput(Context, CostsInput);
 		}
 		else
-		if ( AllowFileCosts && (F = GetFile(".costs", "r")) )
+		if ( AllowFileCosts && (F = GetFile(Context, ".costs", "r")) )
 		{
-		    GetMCosts(F);
+		    GetMCosts(Context, F);
 		}
 		else
 		{
-		    Error(NOFILE, Fn, "costs input required by model");
+		    Error(Context, NOFILE, Context->io.file_name, "costs input required by model");
 		}
 		break;
 	    case SAMPLEP:
-		sscanf(PropVal, "\"%f\"", &SAMPLE);
+		sscanf(Context->property_value, "\"%f\"", &Context->options.sample_fraction);
 		break;
 
 	    case INITP:
-		sscanf(PropVal, "\"%d\"", &KRInit);
+		sscanf(Context->property_value, "\"%d\"", &Context->io.random_initial_seed);
 		break;
 
 	    case ATTP:
-		Unquoted = RemoveQuotes(PropVal);
-		Att = Which(Unquoted, AttName, 1, MaxAtt);
+		Unquoted = RemoveQuotes(Context->property_value);
+		Att = Which(Unquoted, Context->schema.attribute_names, 1, Context->schema.max_attribute);
 		if ( ! Att || Exclude(Att) )
 		{
-		    Error(MODELFILE, E_MFATT, Unquoted);
+		    Error(Context, MODELFILE, E_MFATT, Unquoted);
 		}
 		break;
 
 	    case ELTSP:
-		MaxAttVal[Att] = 1;
-		AttValName[Att][1] = strdup("N/A");
+		Context->schema.max_attribute_value[Att] = 1;
+		Context->schema.attribute_value_names[Att][1] = strdup("N/A");
 
-		for ( p = PropVal ; *p ; )
+		for ( p = Context->property_value ; *p ; )
 		{
 		    p = RemoveQuotes(p);
-		    v = ++MaxAttVal[Att];
-		    AttValName[Att][v] = strdup(p);
+		    v = ++Context->schema.max_attribute_value[Att];
+		    Context->schema.attribute_value_names[Att][v] = strdup(p);
 
 		    for ( p += strlen(p) ; *p != '"' ; p++ )
 			;
 		    p++;
 		    if ( *p == ',' ) p++;
 		}
-		AttValName[Att][MaxAttVal[Att]+1] = "<other>";
-		MaxDiscrVal = Max(MaxDiscrVal, MaxAttVal[Att]+1);
+		Context->schema.attribute_value_names[Att][Context->schema.max_attribute_value[Att]+1] = "<other>";
+		Context->schema.max_discrete_value = Max(Context->schema.max_discrete_value, Context->schema.max_attribute_value[Att]+1);
 		break;
 
 	    case ENTRIESP:
-		sscanf(PropVal, "\"%d\"", &TRIALS);
-		Entry = 0;
+		sscanf(Context->property_value, "\"%d\"", &Context->options.trials);
+		Context->model_entry = 0;
 		return;
 	}
     }
@@ -532,18 +517,19 @@ static void ReadHeaderFrom(c50_input *Input, c50_input *CostsInput,
 
 
 
-void ReadHeader(c50_input *Input)
+void ReadHeader(c50_context *Context, c50_input *Input)
 /*   ----------  */
 {
-    ReadHeaderFrom(Input, Nil, true);
+    ReadHeaderFrom(Context, Input, Nil, true);
 }
 
 
 
-void ReadHeaderMemory(c50_input *Input, c50_input *CostsInput)
+void ReadHeaderMemory(c50_context *Context, c50_input *Input,
+		      c50_input *CostsInput)
 /*   ----------------  */
 {
-    ReadHeaderFrom(Input, CostsInput, false);
+    ReadHeaderFrom(Context, Input, CostsInput, false);
 }
 
 
@@ -555,32 +541,32 @@ void ReadHeaderMemory(c50_input *Input, c50_input *CostsInput)
 /*************************************************************************/
 
 
-Tree GetTree(String Extension)
+Tree GetTree(c50_context *Context, String Extension)
 /*   -------  */
 {
-    CheckFile(Extension, false);
+    CheckFile(Context, Extension, false);
 
-    return InTree(&ClassifierInput);
+    return InTree(Context, &Context->classifier_input);
 }
 
 
 
-Tree InTree(c50_input *Input)
+Tree InTree(c50_context *Context, c50_input *Input)
 /*   ------  */
 {
     Tree T=Nil;
 
-    return InTreeAt(Input, &T);
+    return InTreeAt(Context, Input, &T);
 }
 
 
 
-Tree InTreeAt(c50_input *Input, Tree *Slot)
+Tree InTreeAt(c50_context *Context, c50_input *Input, Tree *Slot)
 /*   --------  */
 {
     Tree	T;
     DiscrValue	v, Subset=0;
-    char	Delim, *p;
+    char	Delim, *p, *Unquoted;
     ClassNo	c;
     int		X;
     double	XD;
@@ -590,56 +576,56 @@ Tree InTreeAt(c50_input *Input, Tree *Slot)
 
     do
     {
-	switch ( ReadProp(Input, &Delim) )
+	switch ( ReadProp(Context, Input, &Delim) )
 	{
 	    case ERRORP:
 		return Nil;
 
 	    case TYPEP:
-		sscanf(PropVal, "\"%d\"", &X); T->NodeType = X;
+		sscanf(Context->property_value, "\"%d\"", &X); T->NodeType = X;
 		break;
 
 	    case CLASSP:
-		Unquoted = RemoveQuotes(PropVal);
-		T->Leaf = Which(Unquoted, ClassName, 1, MaxClass);
-		if ( ! T->Leaf ) Error(MODELFILE, E_MFCLASS, Unquoted);
+		Unquoted = RemoveQuotes(Context->property_value);
+		T->Leaf = Which(Unquoted, Context->schema.class_names, 1, Context->schema.max_class);
+		if ( ! T->Leaf ) Error(Context, MODELFILE, E_MFCLASS, Unquoted);
 		break;
 
 	    case ATTP:
-		Unquoted = RemoveQuotes(PropVal);
-		T->Tested = Which(Unquoted, AttName, 1, MaxAtt);
+		Unquoted = RemoveQuotes(Context->property_value);
+		T->Tested = Which(Unquoted, Context->schema.attribute_names, 1, Context->schema.max_attribute);
 		if ( ! T->Tested || Exclude(T->Tested) )
 		{
-		    Error(MODELFILE, E_MFATT, Unquoted);
+		    Error(Context, MODELFILE, E_MFATT, Unquoted);
 		}
 		break;
 
 	    case CUTP:
-		sscanf(PropVal, "\"%lf\"", &XD);	T->Cut = XD;
+		sscanf(Context->property_value, "\"%lf\"", &XD);	T->Cut = XD;
 		T->Lower = T->Mid = T->Upper = T->Cut;
 		break;
 
 	    case LOWP:
-		sscanf(PropVal, "\"%lf\"", &XD);	T->Lower = XD;
+		sscanf(Context->property_value, "\"%lf\"", &XD);	T->Lower = XD;
 		break;
 
 	    case MIDP:
-		sscanf(PropVal, "\"%lf\"", &XD);	T->Mid = XD;
+		sscanf(Context->property_value, "\"%lf\"", &XD);	T->Mid = XD;
 		break;
 
 	    case HIGHP:
-		sscanf(PropVal, "\"%lf\"", &XD);	T->Upper = XD;
+		sscanf(Context->property_value, "\"%lf\"", &XD);	T->Upper = XD;
 		break;
 
 	    case FORKSP:
-		sscanf(PropVal, "\"%d\"", &T->Forks);
+		sscanf(Context->property_value, "\"%d\"", &T->Forks);
 		break;
 
 	    case FREQP:
-		T->ClassDist = Alloc(MaxClass+1, CaseCount);
-		p = PropVal+1;
+		T->ClassDist = Alloc(Context->schema.max_class+1, CaseCount);
+		p = Context->property_value+1;
 
-		ForEach(c, 1, MaxClass)
+		ForEach(c, 1, Context->schema.max_class)
 		{
 		    T->ClassDist[c] = strtod(p, &p);
 		    T->Cases += T->ClassDist[c];
@@ -653,7 +639,7 @@ Tree InTreeAt(c50_input *Input, Tree *Slot)
 		    T->Subset = AllocZero(T->Forks+1, Set);
 		}
 
-		T->Subset[Subset] = MakeSubset(T->Tested);
+		T->Subset[Subset] = MakeSubset(Context, T->Tested);
 		break;
 	}
     }
@@ -673,7 +659,7 @@ Tree InTreeAt(c50_input *Input, Tree *Slot)
 	T->Branch = AllocZero(T->Forks+1, Tree);
 	ForEach(v, 1, T->Forks)
 	{
-	    InTreeAt(Input, &T->Branch[v]);
+	    InTreeAt(Context, Input, &T->Branch[v]);
 	}
     }
 
@@ -690,52 +676,52 @@ Tree InTreeAt(c50_input *Input, Tree *Slot)
 /*************************************************************************/
 
 
-CRuleSet GetRules(String Extension)
+CRuleSet GetRules(c50_context *Context, String Extension)
 /*	 --------  */
 {
-    CheckFile(Extension, false);
+    CheckFile(Context, Extension, false);
 
-    return InRules(&ClassifierInput);
+    return InRules(Context, &Context->classifier_input);
 }
 
 
 
-CRuleSet InRules(c50_input *Input)
+CRuleSet InRules(c50_context *Context, c50_input *Input)
 /*	 -------  */
 {
     CRuleSet RS=Nil;
 
-    return InRulesAt(Input, &RS);
+    return InRulesAt(Context, Input, &RS);
 }
 
 
 
-CRuleSet InRulesAt(c50_input *Input, CRuleSet *Slot)
+CRuleSet InRulesAt(c50_context *Context, c50_input *Input, CRuleSet *Slot)
 /*	 ---------  */
 {
     CRuleSet	RS;
     RuleNo	r;
-    char	Delim;
+    char	Delim, *Unquoted;
 
     RS = Alloc(1, RuleSetRec);
     *Slot = RS;
 
     do
     {
-	switch ( ReadProp(Input, &Delim) )
+	switch ( ReadProp(Context, Input, &Delim) )
 	{
 	    case ERRORP:
 		return Nil;
 
 	    case RULESP:
-		sscanf(PropVal, "\"%d\"", &RS->SNRules);
-		CheckActiveSpace(RS->SNRules);
+		sscanf(Context->property_value, "\"%d\"", &RS->SNRules);
+		CheckActiveSpace(Context, RS->SNRules);
 		break;
 
 	    case DEFAULTP:
-		Unquoted = RemoveQuotes(PropVal);
-		RS->SDefault = Which(Unquoted, ClassName, 1, MaxClass);
-		if ( ! RS->SDefault ) Error(MODELFILE, E_MFCLASS, Unquoted);
+		Unquoted = RemoveQuotes(Context->property_value);
+		RS->SDefault = Which(Unquoted, Context->schema.class_names, 1, Context->schema.max_class);
+		if ( ! RS->SDefault ) Error(Context, MODELFILE, E_MFCLASS, Unquoted);
 		break;
 	}
     }
@@ -746,35 +732,35 @@ CRuleSet InRulesAt(c50_input *Input, CRuleSet *Slot)
     RS->SRule = Alloc(RS->SNRules+1, CRule);
     ForEach(r, 1, RS->SNRules)
     {
-	if ( InRuleAt(Input, &RS->SRule[r]) )
+	if ( InRuleAt(Context, Input, &RS->SRule[r]) )
 	{
 	    RS->SRule[r]->RNo = r;
-	    RS->SRule[r]->TNo = Entry;
+	    RS->SRule[r]->TNo = Context->model_entry;
 	}
     }
-    ConstructRuleTree(RS);
-    Entry++;
+    ConstructRuleTree(Context, RS);
+    Context->model_entry++;
     return RS;
 }
 
 
 
-CRule InRule(c50_input *Input)
+CRule InRule(c50_context *Context, c50_input *Input)
 /*    ------  */
 {
     CRule R=Nil;
 
-    return InRuleAt(Input, &R);
+    return InRuleAt(Context, Input, &R);
 }
 
 
 
-CRule InRuleAt(c50_input *Input, CRule *Slot)
+CRule InRuleAt(c50_context *Context, c50_input *Input, CRule *Slot)
 /*    --------  */
 {
     CRule	R;
     int		d;
-    char	Delim;
+    char	Delim, *Unquoted;
     float	Lift;
 
     R = Alloc(1, RuleRec);
@@ -782,32 +768,32 @@ CRule InRuleAt(c50_input *Input, CRule *Slot)
 
     do
     {
-	switch ( ReadProp(Input, &Delim) )
+	switch ( ReadProp(Context, Input, &Delim) )
 	{
 	    case ERRORP:
 		return Nil;
 
 	    case CONDSP:
-		sscanf(PropVal, "\"%d\"", &R->Size);
+		sscanf(Context->property_value, "\"%d\"", &R->Size);
 		break;
 
 	    case COVERP:
-		sscanf(PropVal, "\"%f\"", &R->Cover);
+		sscanf(Context->property_value, "\"%f\"", &R->Cover);
 		break;
 
 	    case OKP:
-		sscanf(PropVal, "\"%f\"", &R->Correct);
+		sscanf(Context->property_value, "\"%f\"", &R->Correct);
 		break;
 
 	    case LIFTP:
-		sscanf(PropVal, "\"%f\"", &Lift);
+		sscanf(Context->property_value, "\"%f\"", &Lift);
 		R->Prior = (R->Correct + 1) / ((R->Cover + 2) * Lift);
 		break;
 
 	    case CLASSP:
-		Unquoted = RemoveQuotes(PropVal);
-		R->Rhs = Which(Unquoted, ClassName, 1, MaxClass);
-		if ( ! R->Rhs ) Error(MODELFILE, E_MFCLASS, Unquoted);
+		Unquoted = RemoveQuotes(Context->property_value);
+		R->Rhs = Which(Unquoted, Context->schema.class_names, 1, Context->schema.max_class);
+		if ( ! R->Rhs ) Error(Context, MODELFILE, E_MFCLASS, Unquoted);
 		break;
 	}
     }
@@ -816,7 +802,7 @@ CRule InRuleAt(c50_input *Input, CRule *Slot)
     R->Lhs = Alloc(R->Size+1, Condition);
     ForEach(d, 1, R->Size)
     {
-	InConditionAt(Input, &R->Lhs[d]);
+	InConditionAt(Context, Input, &R->Lhs[d]);
     }
 
     R->Vote = 1000 * (R->Correct + 1.0) / (R->Cover + 2.0) + 0.5;
@@ -826,21 +812,22 @@ CRule InRuleAt(c50_input *Input, CRule *Slot)
 
 
 
-Condition InCondition(c50_input *Input)
+Condition InCondition(c50_context *Context, c50_input *Input)
 /*        -----------  */
 {
     Condition C=Nil;
 
-    return InConditionAt(Input, &C);
+    return InConditionAt(Context, Input, &C);
 }
 
 
 
-Condition InConditionAt(c50_input *Input, Condition *Slot)
+Condition InConditionAt(c50_context *Context, c50_input *Input,
+			Condition *Slot)
 /*        -------------  */
 {
     Condition	C;
-    char	Delim;
+    char	Delim, *Unquoted;
     int		X;
     double	XD;
 
@@ -849,30 +836,30 @@ Condition InConditionAt(c50_input *Input, Condition *Slot)
 
     do
     {
-	switch ( ReadProp(Input, &Delim) )
+	switch ( ReadProp(Context, Input, &Delim) )
 	{
 	    case ERRORP:
 		return Nil;
 
 	    case TYPEP:
-		sscanf(PropVal, "\"%d\"", &X); C->NodeType = X;
+		sscanf(Context->property_value, "\"%d\"", &X); C->NodeType = X;
 		break;
 
 	    case ATTP:
-		Unquoted = RemoveQuotes(PropVal);
-		C->Tested = Which(Unquoted, AttName, 1, MaxAtt);
+		Unquoted = RemoveQuotes(Context->property_value);
+		C->Tested = Which(Unquoted, Context->schema.attribute_names, 1, Context->schema.max_attribute);
 		if ( ! C->Tested || Exclude(C->Tested) )
 		{
-		    Error(MODELFILE, E_MFATT, Unquoted);
+		    Error(Context, MODELFILE, E_MFATT, Unquoted);
 		}
 		break;
 
 	    case CUTP:
-		sscanf(PropVal, "\"%lf\"", &XD);	C->Cut = XD;
+		sscanf(Context->property_value, "\"%lf\"", &XD);	C->Cut = XD;
 		break;
 
 	    case RESULTP:
-		C->TestValue = ( PropVal[1] == '<' ? 2 : 3 );
+		C->TestValue = ( Context->property_value[1] == '<' ? 2 : 3 );
 		break;
 
 	    case VALP:
@@ -882,16 +869,16 @@ Condition InConditionAt(c50_input *Input, Condition *Slot)
 		}
 		else
 		{
-		    Unquoted = RemoveQuotes(PropVal);
+		    Unquoted = RemoveQuotes(Context->property_value);
 		    C->TestValue = Which(Unquoted,
-					 AttValName[C->Tested],
-					 1, MaxAttVal[C->Tested]);
-		    if ( ! C->TestValue ) Error(MODELFILE, E_MFATTVAL, Unquoted);
+					 Context->schema.attribute_value_names[C->Tested],
+					 1, Context->schema.max_attribute_value[C->Tested]);
+		    if ( ! C->TestValue ) Error(Context, MODELFILE, E_MFATTVAL, Unquoted);
 		}
 		break;
 
 	    case ELTSP:
-		C->Subset = MakeSubset(C->Tested);
+		C->Subset = MakeSubset(Context, C->Tested);
 		C->TestValue = 1;
 		break;
 	}
@@ -910,39 +897,46 @@ Condition InConditionAt(c50_input *Input, Condition *Slot)
 /*************************************************************************/
 
 
-int ReadProp(c50_input *Input, char *Delim)
+int ReadProp(c50_context *Context, c50_input *Input, char *Delim)
 /*  --------  */
 {
     int		c, i;
     char	*p;
     Boolean	Quote=false;
 
-    for ( p = PropName ; (c = c50_input_getc(Input)) != '=' ;  )
+    if ( ! Context->property_value )
     {
-	if ( p - PropName >= 19 || c == EOF )
+	Context->property_value_size = 10000;
+	Context->property_value =
+	    Alloc(Context->property_value_size + 3, char);
+    }
+
+    for ( p = Context->property_name ; (c = c50_input_getc(Input)) != '=' ;  )
+    {
+	if ( p - Context->property_name >= 19 || c == EOF )
 	{
-	    Error(MODELFILE, E_MFEOF, "");
-	    PropName[0] = PropVal[0] = *Delim = '\00';
+	    Error(Context, MODELFILE, E_MFEOF, "");
+	    Context->property_name[0] = Context->property_value[0] = *Delim = '\00';
 	    return 0;
 	}
 	*p++ = c;
     }
     *p = '\00';
 
-    for ( p = PropVal ;
+    for ( p = Context->property_value ;
 	  ((c = c50_input_getc(Input)) != ' ' && c != '\n') || Quote ; )
     {
 	if ( c == EOF )
 	{
-	    Error(MODELFILE, E_MFEOF, "");
-	    PropName[0] = PropVal[0] = '\00';
+	    Error(Context, MODELFILE, E_MFEOF, "");
+	    Context->property_name[0] = Context->property_value[0] = '\00';
 	    return 0;
 	}
 
-	if ( (i = p - PropVal) >= PropValSize )
+	if ( (i = p - Context->property_value) >= Context->property_value_size )
 	{
-	    Realloc(PropVal, (PropValSize += 10000) + 3, char);
-	    p = PropVal + i;
+	    Realloc(Context->property_value, (Context->property_value_size += 10000) + 3, char);
+	    p = Context->property_value + i;
 	}
 
 	*p++ = c;
@@ -959,7 +953,7 @@ int ReadProp(c50_input *Input, char *Delim)
     *p = '\00';
     *Delim = c;
 
-    return Which(PropName, Prop, 1, PROPS);
+    return WhichProperty(Context->property_name);
 }
 
 
@@ -983,21 +977,21 @@ String RemoveQuotes(String S)
 
 
 
-Set MakeSubset(Attribute Att)
+Set MakeSubset(c50_context *Context, Attribute Att)
 /*  ----------  */
 {
     int		Bytes, b;
     char	*p;
     Set		S;
 
-    Bytes = (MaxAttVal[Att]>>3) + 1;
+    Bytes = (Context->schema.max_attribute_value[Att]>>3) + 1;
     S = AllocZero(Bytes, Byte);
 
-    for ( p = PropVal ; *p ; )
+    for ( p = Context->property_value ; *p ; )
     {
 	p = RemoveQuotes(p);
-	b = Which(p, AttValName[Att], 1, MaxAttVal[Att]);
-	if ( ! b ) Error(MODELFILE, E_MFATTVAL, p);
+	b = Which(p, Context->schema.attribute_value_names[Att], 1, Context->schema.max_attribute_value[Att]);
+	if ( ! b ) Error(Context, MODELFILE, E_MFATTVAL, p);
 	SetBit(b, S);
 
 	for ( p += strlen(p) ; *p != '"' ; p++ )

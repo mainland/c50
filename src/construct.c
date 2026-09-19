@@ -52,6 +52,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 /*************************************************************************/
 /*									 */
@@ -60,171 +61,175 @@
 /*************************************************************************/
 
 
-void ConstructClassifiers()
+void ConstructClassifiers(c50_context *Context)
 /*   --------------------  */
 {
     CaseNo	i, Errs, Cases, Bp, Excl=0;
     double	ErrWt, ExclWt=0, OKWt, ExtraErrWt, NFact, MinWt=1.0, a, b;
     ClassNo	c, Pred, Real, Best;
-    static	ClassNo	*Wrong=Nil;
     int		BaseLeaves;
     Boolean	NoStructure, CheckExcl;
     float	*BVote;
 
     /*  Clean up after possible interrupt  */
 
-    FreeUnlessNil(Wrong);
+    FreeUnlessNil(Context->training.wrong_predictions);
 
-    Wrong = Alloc(MaxCase+1, ClassNo);
+    Context->training.wrong_predictions = Alloc(Context->cases.max_case+1, ClassNo);
 
-    if ( TRIALS > 1 )
+    if ( Context->options.trials > 1 )
     {
-	/*  BVoteBlock contains each case's class votes  */
+	/*  Context->training.boost_vote_block contains each case's class votes  */
 
-	BVoteBlock = AllocZero((MaxCase+1) * (MaxClass+1), float);
+	Context->training.boost_vote_block = AllocZero((Context->cases.max_case+1) * (Context->schema.max_class+1), float);
     }
 
     /*  Preserve original case order  */
 
-    SaveCase = Alloc(MaxCase+1, DataRec);
-    memcpy(SaveCase, Case, (MaxCase+1) * sizeof(DataRec));
+    Context->cases.saved_records = Alloc(Context->cases.max_case+1, DataRec);
+    memcpy(Context->cases.saved_records, Context->cases.records,
+	   (Context->cases.max_case+1) * sizeof(DataRec));
 
     /*  If using case weighting, find average  */
 
-    if ( CWtAtt )
+    if ( Context->schema.case_weight_attribute )
     {
-	SetAvCWt();
+	SetAvCWt(Context);
     }
 
-    InitialiseWeights();
+    InitialiseWeights(Context);
 
     /*  Adjust minimum weight if using cost weighting  */
 
-    if ( CostWeights )
+    if ( Context->costs.weighted )
     {
-	ForEach(c, 1, MaxClass)
+	ForEach(c, 1, Context->schema.max_class)
 	{
-	    if ( WeightMul[c] < MinWt ) MinWt = WeightMul[c];
+	    if ( Context->costs.weight_multipliers[c] < MinWt ) MinWt = Context->costs.weight_multipliers[c];
 	}
     }
 
-    LEAFRATIO = Bp = 0;
-    SetMinGainThresh();
+    Context->options.leaf_ratio = Bp = 0;
+    SetMinGainThresh(Context);
 
     /*  Main loop for growing the sequence of boosted classifiers  */
 
-    ForEach(Trial, 0, TRIALS-1 )
+    ForEach(Context->trees.trial, 0, Context->options.trials-1 )
     {
-	if ( TRIALS > 1 )
+	if ( Context->options.trials > 1 )
 	{
-	    fprintf(Of, "\n-----  " F_Trial " %d:  -----\n", Trial);
+	    fprintf(Context->io.output, "\n-----  " F_Trial " %d:  -----\n", Context->trees.trial);
 	}
 
-	NotifyStage(FORMTREE);
-	Progress(-(MaxCase+1.0));
+	NotifyStage(Context, FORMTREE);
+	Progress(Context, -(Context->cases.max_case+1.0));
 
 	/*  Update count here in case tree construction is interrupted  */
 
-	MaxTree = Trial;
-	Raw[MaxTree] = Pruned[MaxTree] = Nil;
-	if ( RULES ) RuleSet[MaxTree] = Nil;
+	Context->trees.max_tree = Context->trees.trial;
+	Context->trees.raw[Context->trees.max_tree] = Context->trees.pruned[Context->trees.max_tree] = Nil;
+	if ( Context->options.rules ) Context->rules.sets[Context->trees.max_tree] = Nil;
 
-	memset(Tested, 0, MaxAtt+1);		/* reset tested attributes */
+	memset(Context->splits.tested_attributes, 0, Context->schema.max_attribute+1);		/* reset tested attributes */
 
-	FormTree(Bp, MaxCase, 0, &Raw[Trial]);
+	FormTree(Context, Bp, Context->cases.max_case, 0, &Context->trees.raw[Context->trees.trial]);
 
 	/*  Prune the raw tree to minimise expected misclassification cost  */
 
-	Verbosity(1, if ( ! RULES ) PrintTree(Raw[Trial], "Before pruning:"))
+	Verbosity(1, if ( ! Context->options.rules )
+	    PrintTree(Context, Context->trees.raw[Context->trees.trial], "Before pruning:"))
 
-	NotifyStage(SIMPLIFYTREE);
-	Progress(-(MaxCase+1));
+	NotifyStage(Context, SIMPLIFYTREE);
+	Progress(Context, -(Context->cases.max_case+1));
 
 	/*  If still need raw tree, copy it; otherwise set initial
 	    pruned tree to raw tree  */
 
-	if ( VERBOSITY && ! RULES )
+	if ( Context->options.verbosity && ! Context->options.rules )
 	{
-	    Pruned[Trial] = CopyTree(Raw[Trial]);
-	    if ( MCost )
+	    Context->trees.pruned[Context->trees.trial] = CopyTree(Context, Context->trees.raw[Context->trees.trial]);
+	    if ( Context->costs.matrix )
 	    {
-		RestoreDistribs(Raw[Trial]);
+		RestoreDistribs(Context, Context->trees.raw[Context->trees.trial]);
 	    }
 	}
 	else
 	{
-	    Pruned[Trial] = Raw[Trial];
-	    Raw[Trial] = Nil;
+	    Context->trees.pruned[Context->trees.trial] = Context->trees.raw[Context->trees.trial];
+	    Context->trees.raw[Context->trees.trial] = Nil;
 	}
 
-	memcpy(Case, SaveCase, (MaxCase+1) * sizeof(DataRec)); /* restore */
+	memcpy(Context->cases.records, Context->cases.saved_records,
+	       (Context->cases.max_case+1) * sizeof(DataRec)); /* restore */
 
-	Prune(Pruned[Trial]);
+	Prune(Context, Context->trees.pruned[Context->trees.trial]);
 
-	AdjustAllThresholds(Pruned[Trial]);
+	AdjustAllThresholds(Context, Context->trees.pruned[Context->trees.trial]);
 
 	/*  Record tree parameters for later  */
 
-	if ( ! Trial )
+	if ( ! Context->trees.trial )
 	{
-	    BaseLeaves = ( RULES || SUBSET ? TreeSize(Pruned[0]) :
-					     ExpandedLeafCount(Pruned[0]) );
+	    BaseLeaves = ( Context->options.rules || Context->options.subset_splits ? TreeSize(Context->trees.pruned[0]) :
+					     ExpandedLeafCount(Context,
+						       Context->trees.pruned[0]) );
 	}
-	NoStructure = ! Pruned[Trial]->NodeType;
+	NoStructure = ! Context->trees.pruned[Context->trees.trial]->NodeType;
 
-	if ( PROBTHRESH )
+	if ( Context->options.probabilistic_thresholds )
 	{
-	    SoftenThresh(Pruned[Trial]);
+	    SoftenThresh(Context, Context->trees.pruned[Context->trees.trial]);
 	}
 
-	memcpy(Case, SaveCase, (MaxCase+1) * sizeof(DataRec)); /* restore */
+	memcpy(Context->cases.records, Context->cases.saved_records,
+	       (Context->cases.max_case+1) * sizeof(DataRec)); /* restore */
 
-	if ( RULES )
+	if ( Context->options.rules )
 	{
-	    RuleSet[Trial] = FormRules(Pruned[Trial]);
-	    NoStructure |= ! RuleSet[Trial]->SNRules;
+	    Context->rules.sets[Context->trees.trial] = FormRules(Context, Context->trees.pruned[Context->trees.trial]);
+	    NoStructure |= ! Context->rules.sets[Context->trees.trial]->SNRules;
 
-	    PrintRules(RuleSet[Trial], T_Rules);
-	    fprintf(Of, "\n" T_Default_class ": %s\n",
-			ClassName[RuleSet[Trial]->SDefault]);
+	    PrintRules(Context, Context->rules.sets[Context->trees.trial], T_Rules);
+	    fprintf(Context->io.output, "\n" T_Default_class ": %s\n",
+			Context->schema.class_names[Context->rules.sets[Context->trees.trial]->SDefault]);
 
-	    FreeTree(Pruned[Trial]);			Pruned[Trial] = Nil;
+	    FreeTree(Context->trees.pruned[Context->trees.trial]);			Context->trees.pruned[Context->trees.trial] = Nil;
 	}
 	else
 	{
-	    PrintTree(Pruned[Trial], T_Tree);
+	    PrintTree(Context, Context->trees.pruned[Context->trees.trial], T_Tree);
 	}
 
-	if ( Trial == TRIALS-1 ) continue;
+	if ( Context->trees.trial == Context->options.trials-1 ) continue;
 
 	/*  Check errors, adjust boost voting, and shift dropped cases
 	    to the front  */
 
 	ErrWt = Errs = OKWt = Bp = 0;
-	CheckExcl = ( Trial+1 > TRIALS / 2.0 );
+	CheckExcl = ( Context->trees.trial+1 > Context->options.trials / 2.0 );
 
-	ForEach(i, 0, MaxCase)
+	ForEach(i, 0, Context->cases.max_case)
 	{
 	    /*  Has this case been dropped already?  */
 
-	    if ( Weight(Case[i]) <= 0 )
+	    if ( Weight(Context->cases.records[i]) <= 0 )
 	    {
-		Case[i]  = Case[Bp];
-		Wrong[i] = Wrong[Bp];
+		Context->cases.records[i]  = Context->cases.records[Bp];
+		Context->training.wrong_predictions[i] = Context->training.wrong_predictions[Bp];
 		Bp++;
 		continue;
 	    }
 
-	    Pred = ( RULES ? RuleClassify(Case[i], RuleSet[Trial]) :
-			     TreeClassify(Case[i], Pruned[Trial]) );
+	    Pred = ( Context->options.rules ? RuleClassify(Context, Context->cases.records[i], Context->rules.sets[Context->trees.trial]) :
+		     TreeClassify(Context, Context->cases.records[i], Context->trees.pruned[Context->trees.trial]) );
 
-	    Real = Class(Case[i]);
+	    Real = Class(Context->cases.records[i]);
 
 	    /*  Update boosting votes for this case.  (Note that cases
 		must have been reset to their original order.)  */
 
-	    BVote = BVoteBlock + i * (MaxClass+1);
-	    BVote[Pred] += Confidence;
+	    BVote = Context->training.boost_vote_block + i * (Context->schema.max_class+1);
+	    BVote[Pred] += Context->confidence;
 
 	    Best = BVote[0];
 	    if ( BVote[Pred] > BVote[Best] ) BVote[0] = Best = Pred;
@@ -235,14 +240,14 @@ void ConstructClassifiers()
 		    the vote for the correct class cannot be increased
 		    sufficiently in the remaining trials  */
 
-		if ( BVote[Best] > BVote[Real] + (TRIALS-1) - Trial )
+		if ( BVote[Best] > BVote[Real] + (Context->options.trials-1) - Context->trees.trial )
 		{
 		    Excl++;
-		    ExclWt += Weight(Case[i]);
+		    ExclWt += Weight(Context->cases.records[i]);
 
-		    Weight(Case[i]) = 0;
-		    Case[i]  = Case[Bp];
-		    Wrong[i] = Wrong[Bp];
+		    Weight(Context->cases.records[i]) = 0;
+		    Context->cases.records[i]  = Context->cases.records[Bp];
+		    Context->training.wrong_predictions[i] = Context->training.wrong_predictions[Bp];
 		    Bp++;
 
 		    continue;
@@ -251,31 +256,31 @@ void ConstructClassifiers()
 
 	    if ( Pred != Real )
 	    {
-		Wrong[i] = Pred;
-		ErrWt   += Weight(Case[i]);
+		Context->training.wrong_predictions[i] = Pred;
+		ErrWt   += Weight(Context->cases.records[i]);
 		Errs++;
 	    }
 	    else
 	    {
-		Wrong[i] = 0;
-		OKWt    += Weight(Case[i]);
+		Context->training.wrong_predictions[i] = 0;
+		OKWt    += Weight(Context->cases.records[i]);
 	    }
 	}
 
-	Cases  = (MaxCase+1) - Excl;
+	Cases  = (Context->cases.max_case+1) - Excl;
 
 	/*  Special termination conditions  */
 
 	if ( ErrWt < 0.1 )
 	{
-	    TRIALS = Trial + 1;
-	    fprintf(Of, TX_Reduced1(TRIALS), TRIALS);
+	    Context->options.trials = Context->trees.trial + 1;
+	    fprintf(Context->io.output, TX_Reduced1(Context->options.trials), Context->options.trials);
 	}
 	else
-	if ( ( Trial && NoStructure ) || ErrWt / Cases >= 0.49 )
+	if ( ( Context->trees.trial && NoStructure ) || ErrWt / Cases >= 0.49 )
 	{
-	    TRIALS = ( Trial ? Trial : 1 );
-	    fprintf(Of, TX_Reduced2(TRIALS), TRIALS);
+	    Context->options.trials = ( Context->trees.trial ? Context->trees.trial : 1 );
+	    fprintf(Context->io.output, TX_Reduced2(Context->options.trials), Context->options.trials);
 	}
 	else
 	{
@@ -293,19 +298,19 @@ void ConstructClassifiers()
 
 	    MinWt *= a * NFact;
 
-	    ForEach(i, Bp, MaxCase)
+	    ForEach(i, Bp, Context->cases.max_case)
 	    {
-		if ( Wrong[i] )
+		if ( Context->training.wrong_predictions[i] )
 		{
-		    Weight(Case[i]) = NFact * (Weight(Case[i]) + b);
+		    Weight(Context->cases.records[i]) = NFact * (Weight(Context->cases.records[i]) + b);
 		}
 		else
 		{
-		    Weight(Case[i]) *= NFact * a;
+		    Weight(Context->cases.records[i]) *= NFact * a;
 
 		    /*  Necessary for accumulated arithmetic errors  */
 
-		    if ( Weight(Case[i]) < 1E-3 ) Weight(Case[i]) = 1E-3;
+		    if ( Weight(Context->cases.records[i]) < 1E-3 ) Weight(Context->cases.records[i]) = 1E-3;
 		}
 	    }
 
@@ -315,21 +320,21 @@ void ConstructClassifiers()
 		per training case.  This limitation is not strict
 		since even a tiny number of cases can give a leaf  */
 
-	    if ( Trial == 0 )
+	    if ( Context->trees.trial == 0 )
 	    {
-		LEAFRATIO = 1.1 * BaseLeaves / (MaxCase + 1.0);
+		Context->options.leaf_ratio = 1.1 * BaseLeaves / (Context->cases.max_case + 1.0);
 	    }
 
 	    /*  Trim cases for larger datasets  */
 
-	    if ( MaxCase > 4000 && MinWt <= 0.2 )
+	    if ( Context->cases.max_case > 4000 && MinWt <= 0.2 )
 	    {
 		a = 0;
-		ForEach(i, Bp, MaxCase)
+		ForEach(i, Bp, Context->cases.max_case)
 		{
-		    if ( Weight(Case[i]) <= MinWt + 1E-3 )
+		    if ( Weight(Context->cases.records[i]) <= MinWt + 1E-3 )
 		    {
-			a += Weight(Case[i]);
+			a += Weight(Context->cases.records[i]);
 			Swap(i, Bp);
 			Bp++;
 		    }
@@ -337,44 +342,44 @@ void ConstructClassifiers()
 	    }
 	}
 
-	UnitWeights = false;
+	Context->costs.unit_weights = false;
     }
 
-    FreeUnlessNil(SaveCase);				SaveCase = Nil;
+    FreeUnlessNil(Context->cases.saved_records);				Context->cases.saved_records = Nil;
 
     /*  Decide whether boosting should be abandoned  */
 
-    if ( BOOST && TRIALS <= 2 )
+    if ( Context->options.boosting && Context->options.trials <= 2 )
     {
-	fprintf(Of, T_Abandoned);
-	TRIALS = 1;
+	fprintf(Context->io.output, T_Abandoned);
+	Context->options.trials = 1;
     }
 
     /*  Save trees or rulesets  */
 
-    if ( ! XVAL )
+    if ( ! Context->options.cross_validation )
     {
-	if ( ! RULES )
+	if ( ! Context->options.rules )
 	{
-	    ForEach(Trial, 0, TRIALS-1)
+	    ForEach(Context->trees.trial, 0, Context->options.trials-1)
 	    {
-		SaveTree(Pruned[Trial], ".tree");
+		SaveTree(Context, Context->trees.pruned[Context->trees.trial], ".tree");
 	    }
 	}
 	else
 	{
-	    ForEach(Trial, 0, TRIALS-1)
+	    ForEach(Context->trees.trial, 0, Context->options.trials-1)
 	    {
-		SaveRules(RuleSet[Trial], ".rules");
+		SaveRules(Context, Context->rules.sets[Context->trees.trial], ".rules");
 	    }
 	}
 
-	fclose(TRf);
+	fclose(Context->io.model_file);
     }
-    TRf = 0;
+    Context->io.model_file = 0;
 
-    Free(Wrong);					Wrong = Nil;
-    FreeUnlessNil(BVoteBlock);				BVoteBlock = Nil;
+    Free(Context->training.wrong_predictions);					Context->training.wrong_predictions = Nil;
+    FreeUnlessNil(Context->training.boost_vote_block);				Context->training.boost_vote_block = Nil;
 }
 
 
@@ -386,39 +391,39 @@ void ConstructClassifiers()
 /*************************************************************************/
 
 
-void InitialiseWeights()
+void InitialiseWeights(c50_context *Context)
 /*   -----------------  */
 {
     CaseNo	i;
 
-    if ( CostWeights )
+    if ( Context->costs.weighted )
     {
 	/*  Make weights proportional to average error cost  */
 
-	ForEach(i, 0, MaxCase)
+	ForEach(i, 0, Context->cases.max_case)
 	{
-	    Weight(Case[i]) = WeightMul[Class(Case[i])];
+	    Weight(Context->cases.records[i]) = Context->costs.weight_multipliers[Class(Context->cases.records[i])];
 	}
-	UnitWeights = false;
+	Context->costs.unit_weights = false;
     }
     else
     {
-	ForEach(i, 0, MaxCase)
+	ForEach(i, 0, Context->cases.max_case)
 	{
-	    Weight(Case[i]) = 1.0;
+	    Weight(Context->cases.records[i]) = 1.0;
 	}
-	UnitWeights = true;
+	Context->costs.unit_weights = true;
     }
 
     /*  Adjust when using case weights  */
 
-    if ( CWtAtt )
+    if ( Context->schema.case_weight_attribute )
     {
-	ForEach(i, 0, MaxCase)
+	ForEach(i, 0, Context->cases.max_case)
 	{
-	    Weight(Case[i]) *= RelCWt(Case[i]);
+	    Weight(Context->cases.records[i]) *= RelCWt(Context, Context->cases.records[i]);
 	}
-	UnitWeights = false;
+	Context->costs.unit_weights = false;
     }
 }
 
@@ -427,29 +432,29 @@ void InitialiseWeights()
 /*************************************************************************/
 /*								 	 */
 /*	Determine average case weight, ignoring cases with unknown,	 */
-/*	non-applicable, or negative values of CWtAtt.			 */
+/*	non-applicable, or negative values of Context->schema.case_weight_attribute.			 */
 /*								 	 */
 /*************************************************************************/
 
 
-void SetAvCWt()
+void SetAvCWt(c50_context *Context)
 /*   --------  */
 {
     CaseNo	i, NCWt=0;
     ContValue	CWt;
 
-    AvCWt = 0;
-    ForEach(i, 0, MaxCase)
+    Context->average_case_weight = 0;
+    ForEach(i, 0, Context->cases.max_case)
     {
-	if ( ! NotApplic(Case[i], CWtAtt) && ! Unknown(Case[i], CWtAtt) &&
-	     (CWt = CVal(Case[i], CWtAtt)) > 0 )
+	if ( ! NotApplic(Context, Context->cases.records[i], Context->schema.case_weight_attribute) && ! Unknown(Context->cases.records[i], Context->schema.case_weight_attribute) &&
+	     (CWt = CVal(Context->cases.records[i], Context->schema.case_weight_attribute)) > 0 )
 	{
 	    NCWt++;
-	    AvCWt += CWt;
+	    Context->average_case_weight += CWt;
 	}
     }
 
-    AvCWt = ( NCWt > 0 ? AvCWt / NCWt : 1 );
+    Context->average_case_weight = ( NCWt > 0 ? Context->average_case_weight / NCWt : 1 );
 }
 
 
@@ -460,47 +465,22 @@ void SetAvCWt()
 /*									 */
 /*************************************************************************/
 
-char *Multi[]  = {	F_Trial,
-			F_UTrial,
-			"" },
-
-     *StdR[]   = {	"   Before Pruning   ",
-			"  ----------------  ",
-			"  " F_SizeErrors "  " },
-
-     *StdP[]   = {	"  " F_DecisionTree16 "  ",
-			"  ----------------  ",
-			"  " F_SizeErrors "  " },
-
-     *StdPC[]  = {	"  " F_DecisionTree23 "  ",
-			"  -----------------------  ",
-			"  " F_SizeErrorsCost "  " },
-
-     *Extra[]  = {	"  " F_Rules16,
-			"  ----------------",
-			"  " F_NoErrors },
-
-     *ExtraC[] = {	"  " F_Rules23,
-			"  -----------------------",
-			"  " F_NoErrorsCost };
-
-
-void Evaluate(int Flags)
+void Evaluate(c50_context *Context, int Flags)
 /*   --------  */
 {
-    if ( TRIALS == 1 )
+    if ( Context->options.trials == 1 )
     {
-	EvaluateSingle(Flags);
+	EvaluateSingle(Context, Flags);
     }
     else
     {
-	EvaluateBoost(Flags);
+	EvaluateBoost(Context, Flags);
     }
 }
 
 
 
-void EvaluateSingle(int Flags)
+void EvaluateSingle(c50_context *Context, int Flags)
 /*   --------------  */
 {
     ClassNo	RealClass, PredClass;
@@ -508,6 +488,18 @@ void EvaluateSingle(int Flags)
     CaseNo	*ConfusionMat, *Usage, i, RawErrs=0, Errs=0;
     double	ECost=0, Tests;
     Boolean	CMInfo, UsageInfo;
+    const char	*StdR[] = { "   Before Pruning   ",
+			    "  ----------------  ", "  " F_SizeErrors "  " };
+    const char	*StdP[] = { "  " F_DecisionTree16 "  ",
+			    "  ----------------  ", "  " F_SizeErrors "  " };
+    const char	*StdPC[] = { "  " F_DecisionTree23 "  ",
+			     "  -----------------------  ",
+			     "  " F_SizeErrorsCost "  " };
+    const char	*Extra[] = { "  " F_Rules16, "  ----------------",
+			     "  " F_NoErrors };
+    const char	*ExtraC[] = { "  " F_Rules23,
+			      "  -----------------------",
+			      "  " F_NoErrorsCost };
 
     (void) RawErrs;  /* Used only when VerbOpt is enabled. */
 
@@ -516,99 +508,99 @@ void EvaluateSingle(int Flags)
 
     if ( CMInfo )
     {
-	ConfusionMat = AllocZero((MaxClass+1)*(MaxClass+1), CaseNo);
+	ConfusionMat = AllocZero((Context->schema.max_class+1)*(Context->schema.max_class+1), CaseNo);
     }
 
     if ( UsageInfo )
     {
-	Usage = AllocZero(MaxAtt+1, CaseNo);
+	Usage = AllocZero(Context->schema.max_attribute+1, CaseNo);
     }
 
-    Tests = Max(MaxCase+1, 1);	/* in case no useful test data! */
+    Tests = Max(Context->cases.max_case+1, 1);	/* in case no useful test data! */
 
-    if ( UTILITY && RULES )
+    if ( Context->options.utility_bands && Context->options.rules )
     {
-	SaveUtility = UTILITY;
+	SaveUtility = Context->options.utility_bands;
 
-	UTILITY = Min(UTILITY, RuleSet[0]->SNRules);
+	Context->options.utility_bands = Min(Context->options.utility_bands, Context->rules.sets[0]->SNRules);
 
-	UtilErr  = AllocZero(UTILITY, int);
-	UtilBand = Alloc(UTILITY, int);
-	if ( MCost )
+	Context->evaluation.utility_errors  = AllocZero(Context->options.utility_bands, int);
+	Context->evaluation.utility_bands = Alloc(Context->options.utility_bands, int);
+	if ( Context->costs.matrix )
 	{
-	    UtilCost = AllocZero(UTILITY, double);
+	    Context->evaluation.utility_costs = AllocZero(Context->options.utility_bands, double);
 	}
 
-	ForEach(u, 1, UTILITY-1)
+	ForEach(u, 1, Context->options.utility_bands-1)
 	{
-	    UtilBand[u] = rint(RuleSet[0]->SNRules * u / (float) UTILITY);
+	    Context->evaluation.utility_bands[u] = rint(Context->rules.sets[0]->SNRules * u / (float) Context->options.utility_bands);
 	}
     }
 	    
-    fprintf(Of, "\n");
+    fprintf(Context->io.output, "\n");
     ForEach(x, 0, 2)
     {
-	putc('\t', Of);
-	if ( RULES )
+	putc('\t', Context->io.output);
+	if ( Context->options.rules )
 	{
-	    fprintf(Of, "%s", ( MCost ? ExtraC[x] : Extra[x] ));
+	    fprintf(Context->io.output, "%s", ( Context->costs.matrix ? ExtraC[x] : Extra[x] ));
 	}
 	else
 	{
-	    Verbosity(1, fprintf(Of, "%s", StdR[x]))
-	    fprintf(Of, "%s", ( MCost ? StdPC[x] : StdP[x] ));
+	    Verbosity(1, fprintf(Context->io.output, "%s", StdR[x]))
+	    fprintf(Context->io.output, "%s", ( Context->costs.matrix ? StdPC[x] : StdP[x] ));
 	}
-	putc('\n', Of);
+	putc('\n', Context->io.output);
     }
-    putc('\n', Of);
+    putc('\n', Context->io.output);
 
-    ForEach(i, 0, MaxCase)
+    ForEach(i, 0, Context->cases.max_case)
     {
-	RealClass = Class(Case[i]);
-	assert(RealClass > 0 && RealClass <= MaxClass);
+	RealClass = Class(Context->cases.records[i]);
+	assert(RealClass > 0 && RealClass <= Context->schema.max_class);
 
-	memset(Tested, 0, MaxAtt+1);	/* for usage */
+	memset(Context->splits.tested_attributes, 0, Context->schema.max_attribute+1);	/* for usage */
 
-	if ( RULES )
+	if ( Context->options.rules )
 	{
-	    PredClass = RuleClassify(Case[i], RuleSet[0]);
+	    PredClass = RuleClassify(Context, Context->cases.records[i], Context->rules.sets[0]);
 	}
 	else
 	{
 	    Verbosity(1,
-		PredClass = TreeClassify(Case[i], Raw[0]);
+		PredClass = TreeClassify(Context, Context->cases.records[i], Context->trees.raw[0]);
 		if ( PredClass != RealClass )
 		{
 		    RawErrs++;
 		})
 
-	    PredClass = TreeClassify(Case[i], Pruned[0]);
+	    PredClass = TreeClassify(Context, Context->cases.records[i], Context->trees.pruned[0]);
 	}
-	assert(PredClass > 0 && PredClass <= MaxClass);
+	assert(PredClass > 0 && PredClass <= Context->schema.max_class);
 
 	if ( PredClass != RealClass )
 	{
 	    Errs++;
-	    if ( MCost ) ECost += MCost[PredClass][RealClass];
+	    if ( Context->costs.matrix ) ECost += Context->costs.matrix[PredClass][RealClass];
 	}
 
 	if ( CMInfo )
 	{
-	    ConfusionMat[RealClass*(MaxClass+1)+PredClass]++;
+	    ConfusionMat[RealClass*(Context->schema.max_class+1)+PredClass]++;
 	}
 
 	if ( UsageInfo )
 	{
-	    RecordAttUsage(Case[i], Usage);
+	    RecordAttUsage(Context, Context->cases.records[i], Usage);
 	}
     }
 
-    putc('\t', Of);
+    putc('\t', Context->io.output);
 
-    if ( RULES )
+    if ( Context->options.rules )
     {
-	fprintf(Of, "  %4d %4d(%4.1f%%)",
-	       RuleSet[0]->SNRules, Errs, 100 * Errs / Tests);
+	fprintf(Context->io.output, "  %4d %4d(%4.1f%%)",
+	       Context->rules.sets[0]->SNRules, Errs, 100 * Errs / Tests);
     }
     else
     {
@@ -616,69 +608,69 @@ void EvaluateSingle(int Flags)
 
 	Verbosity(1,
 	{
-	    fprintf(Of, "  %4d %4d(%4.1f%%)  ",
-		   TreeSize(Raw[0]), RawErrs, 100 * RawErrs / Tests);
+	    fprintf(Context->io.output, "  %4d %4d(%4.1f%%)  ",
+		   TreeSize(Context->trees.raw[0]), RawErrs, 100 * RawErrs / Tests);
 	})
 
 	/*  Results for pruned tree  */
 
-	fprintf(Of, "  %4d %4d(%4.1f%%)",
-	       TreeSize(Pruned[0]), Errs, 100 * Errs / Tests);
+	fprintf(Context->io.output, "  %4d %4d(%4.1f%%)",
+	       TreeSize(Context->trees.pruned[0]), Errs, 100 * Errs / Tests);
     }
 
-    if ( MCost )
+    if ( Context->costs.matrix )
     {
-	fprintf(Of, "%7.2f", ECost / Tests);
+	fprintf(Context->io.output, "%7.2f", ECost / Tests);
     }
 
-    fprintf(Of, "   <<\n");
+    fprintf(Context->io.output, "   <<\n");
 
     if ( CMInfo )
     {
-	PrintConfusionMatrix(ConfusionMat);
+	PrintConfusionMatrix(Context, ConfusionMat);
 	Free(ConfusionMat);
     }
 
     if ( UsageInfo )
     {
-	PrintUsageInfo(Usage);
+	PrintUsageInfo(Context, Usage);
 	Free(Usage);
     }
 
-    if ( UtilErr )
+    if ( Context->evaluation.utility_errors )
     {
-	if ( ! XVAL )
+	if ( ! Context->options.cross_validation )
 	{
-	    fprintf(Of, "\n" T_Rule_utility_summary ":\n\n"
+	    fprintf(Context->io.output, "\n" T_Rule_utility_summary ":\n\n"
 			"\t" F_Rules "\t      " F_Errors "%s\n"
 			"\t" F_URules "\t      " F_UErrors "%s\n",
-			    ( MCost ? "   " F_Cost : "" ),
-			    ( MCost ? "   " F_UCost : "" ));
+			    ( Context->costs.matrix ? "   " F_Cost : "" ),
+			    ( Context->costs.matrix ? "   " F_UCost : "" ));
 
-	    ForEach(u, 1, UTILITY-1)
+	    ForEach(u, 1, Context->options.utility_bands-1)
 	    {
-		fprintf(Of, "\t%s%d\t %4d(%4.1f%%)",
-			    ( UtilBand[u] == 1 ? "" : "1-" ), UtilBand[u],
-			    UtilErr[u], 100 * UtilErr[u] / Tests);
-		if ( MCost )
+		fprintf(Context->io.output, "\t%s%d\t %4d(%4.1f%%)",
+			    ( Context->evaluation.utility_bands[u] == 1 ? "" : "1-" ), Context->evaluation.utility_bands[u],
+			    Context->evaluation.utility_errors[u], 100 * Context->evaluation.utility_errors[u] / Tests);
+		if ( Context->costs.matrix )
 		{
-		    fprintf(Of, "%7.2f", UtilCost[u] / Tests);
+		    fprintf(Context->io.output, "%7.2f", Context->evaluation.utility_costs[u] / Tests);
 		}
-		fprintf(Of, "\n");
+		fprintf(Context->io.output, "\n");
 	    }
 	}
 
-	Free(UtilErr);					UtilErr = Nil;
-	FreeUnlessNil(UtilCost);			UtilCost = Nil;
-	Free(UtilBand);					UtilBand = Nil;
+	Free(Context->evaluation.utility_errors);					Context->evaluation.utility_errors = Nil;
+	FreeUnlessNil(Context->evaluation.utility_costs);			Context->evaluation.utility_costs = Nil;
+	Free(Context->evaluation.utility_bands);					Context->evaluation.utility_bands = Nil;
 
-	UTILITY = SaveUtility;
+	Context->options.utility_bands = SaveUtility;
     }
 }
 
 
 
-void EvaluateBoost(int Flags)
+void EvaluateBoost(c50_context *Context, int Flags)
 /*   -------------  */
 {
     ClassNo	RealClass, PredClass;
@@ -686,133 +678,145 @@ void EvaluateBoost(int Flags)
     CaseNo	*ConfusionMat, *Usage, i, *Errs, BoostErrs=0;
     double	*ECost, BoostECost=0, Tests;
     Boolean	CMInfo, UsageInfo;
+    const char	*Multi[] = { F_Trial, F_UTrial, "" };
+    const char	*StdP[] = { "  " F_DecisionTree16 "  ",
+			    "  ----------------  ", "  " F_SizeErrors "  " };
+    const char	*StdPC[] = { "  " F_DecisionTree23 "  ",
+			     "  -----------------------  ",
+			     "  " F_SizeErrorsCost "  " };
+    const char	*Extra[] = { "  " F_Rules16, "  ----------------",
+			     "  " F_NoErrors };
+    const char	*ExtraC[] = { "  " F_Rules23,
+			      "  -----------------------",
+			      "  " F_NoErrorsCost };
 
     CMInfo    = Flags & CMINFO;
     UsageInfo = Flags & USAGEINFO;
 
     if ( CMInfo )
     {
-	ConfusionMat = AllocZero((MaxClass+1)*(MaxClass+1), CaseNo);
+	ConfusionMat = AllocZero((Context->schema.max_class+1)*(Context->schema.max_class+1), CaseNo);
     }
 
     if ( UsageInfo )
     {
-	Usage = AllocZero(MaxAtt+1, CaseNo);
+	Usage = AllocZero(Context->schema.max_attribute+1, CaseNo);
     }
 
-    Tests = Max(MaxCase+1, 1);	/* in case no useful test data! */
-    Errs = AllocZero(TRIALS, CaseNo);
-    ECost = AllocZero(TRIALS, double);
+    Tests = Max(Context->cases.max_case+1, 1);	/* in case no useful test data! */
+    Errs = AllocZero(Context->options.trials, CaseNo);
+    ECost = AllocZero(Context->options.trials, double);
 
-    fprintf(Of, "\n");
+    fprintf(Context->io.output, "\n");
     ForEach(t, 0, 2)
     {
-	fprintf(Of, "%s\t", Multi[t]);
-	if ( RULES )
+	fprintf(Context->io.output, "%s\t", Multi[t]);
+	if ( Context->options.rules )
 	{
-	    fprintf(Of, "%s", ( MCost ? ExtraC[t] : Extra[t] ));
+	    fprintf(Context->io.output, "%s", ( Context->costs.matrix ? ExtraC[t] : Extra[t] ));
 	}
 	else
 	{
-	    fprintf(Of, "%s", ( MCost ? StdPC[t] : StdP[t] ));
+	    fprintf(Context->io.output, "%s", ( Context->costs.matrix ? StdPC[t] : StdP[t] ));
 	}
-	putc('\n', Of);
+	putc('\n', Context->io.output);
     }
-    putc('\n', Of);
+    putc('\n', Context->io.output);
 
     /*  Set global default class for boosting  */
 
-    Default = ( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
+    Context->default_class =
+	( Context->options.rules ? Context->rules.sets[0]->SDefault : Context->trees.pruned[0]->Leaf );
 
-    ForEach(i, 0, MaxCase)
+    ForEach(i, 0, Context->cases.max_case)
     {
-	RealClass = Class(Case[i]);
+	RealClass = Class(Context->cases.records[i]);
 
-	memset(Tested, 0, MaxAtt+1);	/* for usage */
+	memset(Context->splits.tested_attributes, 0, Context->schema.max_attribute+1);	/* for usage */
 
-	PredClass = BoostClassify(Case[i], TRIALS-1);
+	PredClass = BoostClassify(Context, Context->cases.records[i], Context->options.trials-1);
 	if ( PredClass != RealClass )
 	{
 	    BoostErrs++;
-	    if ( MCost ) BoostECost += MCost[PredClass][RealClass];
+	    if ( Context->costs.matrix ) BoostECost += Context->costs.matrix[PredClass][RealClass];
 	}
 
 	if ( CMInfo )
 	{
-	    ConfusionMat[RealClass*(MaxClass+1)+PredClass]++;
+	    ConfusionMat[RealClass*(Context->schema.max_class+1)+PredClass]++;
 	}
 
 	if ( UsageInfo )
 	{
-	    RecordAttUsage(Case[i], Usage);
+	    RecordAttUsage(Context, Context->cases.records[i], Usage);
 	}
 
 	/*  Keep track of results for each trial  */
 
-	ForEach(t, 0, TRIALS-1)
+	ForEach(t, 0, Context->options.trials-1)
 	{
-	    if ( TrialPred[t] != RealClass )
+	    if ( Context->trial_predictions[t] != RealClass )
 	    {
 		Errs[t]++;
-		if ( MCost ) ECost[t] += MCost[TrialPred[t]][RealClass];
+		if ( Context->costs.matrix ) ECost[t] += Context->costs.matrix[Context->trial_predictions[t]][RealClass];
 	    }
 	}
     }
 
     /*  Print results for individual trials  */
 
-    ForEach(t, 0, TRIALS-1)
+    ForEach(t, 0, Context->options.trials-1)
     {
-	fprintf(Of, "%4d\t", t);
+	fprintf(Context->io.output, "%4d\t", t);
 
-	if ( RULES )
+	if ( Context->options.rules )
 	{
-	    fprintf(Of, "  %4d %4d(%4.1f%%)",
-		   RuleSet[t]->SNRules, Errs[t], 100 * Errs[t] / Tests);
+	    fprintf(Context->io.output, "  %4d %4d(%4.1f%%)",
+		   Context->rules.sets[t]->SNRules, Errs[t], 100 * Errs[t] / Tests);
 	}
 	else
 	{
-	    fprintf(Of, "  %4d %4d(%4.1f%%)",
-		   TreeSize(Pruned[t]), Errs[t], 100 * Errs[t] / Tests);
+	    fprintf(Context->io.output, "  %4d %4d(%4.1f%%)",
+		   TreeSize(Context->trees.pruned[t]), Errs[t], 100 * Errs[t] / Tests);
 	}
 
-	if ( MCost )
+	if ( Context->costs.matrix )
 	{
-	    fprintf(Of, "%7.2f", ECost[t] / Tests);
+	    fprintf(Context->io.output, "%7.2f", ECost[t] / Tests);
 	}
 
-	putc('\n', Of);
+	putc('\n', Context->io.output);
     }
 
     /*  Print boosted results  */
 
-    if ( RULES )
+    if ( Context->options.rules )
     {
-	fprintf(Of, F_Boost "\t  %9d(%4.1f%%)",
+	fprintf(Context->io.output, F_Boost "\t  %9d(%4.1f%%)",
 	    BoostErrs, 100 * BoostErrs / Tests);
     }
     else
     {
-	fprintf(Of, F_Boost "\t       %4d(%4.1f%%)",
+	fprintf(Context->io.output, F_Boost "\t       %4d(%4.1f%%)",
 		BoostErrs, 100 * BoostErrs / Tests);
     }
 
-    if ( MCost )
+    if ( Context->costs.matrix )
     {
-	fprintf(Of, "%7.2f", BoostECost / Tests);
+	fprintf(Context->io.output, "%7.2f", BoostECost / Tests);
     }
 
-    fprintf(Of, "   <<\n");
+    fprintf(Context->io.output, "   <<\n");
 
     if ( CMInfo )
     {
-	PrintConfusionMatrix(ConfusionMat);
+	PrintConfusionMatrix(Context, ConfusionMat);
 	Free(ConfusionMat);
     }
 
     if ( UsageInfo )
     {
-	PrintUsageInfo(Usage);
+	PrintUsageInfo(Context, Usage);
 	Free(Usage);
     }
 
@@ -829,7 +833,7 @@ void EvaluateBoost(int Flags)
 /*************************************************************************/
 
 
-void RecordAttUsage(DataRec Case, int *Usage)
+void RecordAttUsage(c50_context *Context, DataRec Case, int *Usage)
 /*   --------------  */
 {
     Attribute	Att;
@@ -837,17 +841,17 @@ void RecordAttUsage(DataRec Case, int *Usage)
 
     /*  Scan backwards to allow for information from defined attributes  */
 
-    for ( Att = MaxAtt ; Att > 0 ; Att-- )
+    for ( Att = Context->schema.max_attribute ; Att > 0 ; Att-- )
     {
-	if ( Tested[Att] && ! Unknown(Case, Att) )
+	if ( Context->splits.tested_attributes[Att] && ! Unknown(Case, Att) )
 	{
 	    Usage[Att]++;
 
-	    if ( AttDef[Att] )
+	    if ( Context->schema.attribute_definitions[Att] )
 	    {
-		ForEach(i, 1, AttDefUses[Att][0])
+		ForEach(i, 1, Context->schema.attribute_definition_uses[Att][0])
 		{
-		    Tested[AttDefUses[Att][i]] = true;
+		    Context->splits.tested_attributes[Context->schema.attribute_definition_uses[Att][i]] = true;
 		}
 	    }
 	}

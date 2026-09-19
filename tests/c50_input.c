@@ -6,6 +6,7 @@
 #include "defns.i"
 #include "extern.i"
 #include "c50_input.h"
+#include "c50_api_internal.h"
 
 int main(int argc, char *argv[])
 {
@@ -23,9 +24,12 @@ int main(int argc, char *argv[])
     static const unsigned char costs[] = "low, high: 5\n";
     char line[16];
     c50_input costs_input, input;
+    c50_context *context = NULL;
 
     (void) argc;
     (void) argv;
+
+    if ( c50_context_create(&context) != C50_STATUS_OK ) return 1;
 
     c50_input_init_memory(&input, text, sizeof(text) - 1);
     if ( c50_input_getc(&input) != 'f' ) return 1;
@@ -42,34 +46,35 @@ int main(int argc, char *argv[])
     if ( c50_input_getc(&input) != EOF ) return 1;
     if ( c50_input_gets(line, 0, &input) ) return 1;
 
-    Of = stderr;
+    context->io.output = stderr;
     c50_input_init_memory(&input, names, sizeof(names) - 1);
-    GetNames(&input);
-    if ( MaxClass != 2 || MaxAtt != 2 ) return 1;
-    if ( strcmp(ClassName[1], "low") || strcmp(ClassName[2], "high") )
+    GetNames(context, &input);
+    if ( context->schema.max_class != 2 || context->schema.max_attribute != 2 ) return 1;
+    if ( strcmp(context->schema.class_names[1], "low") || strcmp(context->schema.class_names[2], "high") )
     {
         return 1;
     }
-    if ( strcmp(AttName[1], "signal") || strcmp(AttName[2], "group") )
+    if ( strcmp(context->schema.attribute_names[1], "signal") || strcmp(context->schema.attribute_names[2], "group") )
     {
         return 1;
     }
     c50_input_init_memory(&input, tree, sizeof(tree) - 1);
     c50_input_init_memory(&costs_input, costs, sizeof(costs) - 1);
-    ReadHeaderMemory(&input, &costs_input);
-    if ( TRIALS != 1 ) return 1;
-    if ( ! MCost || MCost[1][2] != 5 ) return 1;
+    ReadHeaderMemory(context, &input, &costs_input);
+    if ( context->options.trials != 1 ) return 1;
+    if ( ! context->costs.matrix || context->costs.matrix[1][2] != 5 ) return 1;
 
-    RULES = false;
-    MaxTree = 0;
-    Pruned = AllocZero(2, Tree);
-    Pruned[0] = InTree(&input);
-    if ( ! Pruned[0] || Pruned[0]->NodeType != 0 ||
-         Pruned[0]->Leaf != 1 )
+    context->options.rules = false;
+    context->trees.max_tree = 0;
+    context->trees.pruned = Pcalloc(context, 2, sizeof(Tree));
+    context->trees.pruned[0] = InTree(context, &input);
+    if ( ! context->trees.pruned[0] || context->trees.pruned[0]->NodeType != 0 ||
+         context->trees.pruned[0]->Leaf != 1 )
     {
         return 1;
     }
-    Cleanup();
+    Cleanup(context);
+    c50_context_destroy(context);
 
     return 0;
 }
