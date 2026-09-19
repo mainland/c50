@@ -191,52 +191,53 @@ typedef	struct _datablockrec
 	}
 	DataBlockRec;
 
-DataBlock	DataMem=Nil;
-int		DataBlockSize=0;
-
-
-
 DataRec NewCase(c50_context *Context)
 /*      -------  */
 {
     DataBlock	Prev;
 
-    if ( ! DataMem || DataMem->Allocated == DataBlockSize )
+    if ( ! Context->cases.memory_blocks ||
+	 Context->cases.memory_blocks->Allocated == Context->cases.block_size )
     {
-	DataBlockSize = Min(8192, 262144 / (Context->schema.max_attribute+2) + 1);
+	Context->cases.block_size =
+	    Min(8192, 262144 / (Context->schema.max_attribute+2) + 1);
 
-	Prev = DataMem;
-	DataMem = AllocZero(1, DataBlockRec);
-	DataMem->Head = Alloc(DataBlockSize * (Context->schema.max_attribute+2), AttValue);
-	DataMem->Prev = Prev;
+	Prev = Context->cases.memory_blocks;
+	Context->cases.memory_blocks = AllocZero(1, DataBlockRec);
+	Context->cases.memory_blocks->Head =
+	    Alloc(Context->cases.block_size *
+		  (Context->schema.max_attribute+2), AttValue);
+	Context->cases.memory_blocks->Prev = Prev;
     }
 
-    return DataMem->Head + (DataMem->Allocated++) * (Context->schema.max_attribute+2) + 1;
+    return Context->cases.memory_blocks->Head +
+	(Context->cases.memory_blocks->Allocated++) *
+	(Context->schema.max_attribute+2) + 1;
 }
 
 
 
-void FreeCases()
+void FreeCases(c50_context *Context)
 /*   ---------  */
 {
     DataBlock	Prev;
 
-    while ( DataMem )
+    while ( Context->cases.memory_blocks )
     {
-	Prev = DataMem->Prev;
-	Free(DataMem->Head);
-	Free(DataMem);
-	DataMem = Prev;
+	Prev = Context->cases.memory_blocks->Prev;
+	Free(Context->cases.memory_blocks->Head);
+	Free(Context->cases.memory_blocks);
+	Context->cases.memory_blocks = Prev;
     }
 }
 
 
 
-void FreeLastCase(DataRec Case)
+void FreeLastCase(c50_context *Context, DataRec Case)
 /*   ------------  */
 {
     (void) Case;
-    DataMem->Allocated--;
+    Context->cases.memory_blocks->Allocated--;
 }
 
 
@@ -498,7 +499,7 @@ void ErrorContext(c50_context *Context, int ErrNo, String S1, String S2)
     if ( ErrMsgs == 10 )
     {
 	if ( Of ) fprintf(Of,  T_ErrorLimit);
-	MaxCase--;
+	Context->cases.max_case--;
 	Quit = true;
     }
 
@@ -534,7 +535,7 @@ String CaseLabel(c50_context *Context, CaseNo N)
 
     if ( Context->schema.label_attribute &&
 	 (p = Context->ignored_values +
-	      SVal(Case[N], Context->schema.label_attribute)) )
+	      SVal(Context->cases.records[N], Context->schema.label_attribute)) )
 	;
     else
     {
@@ -902,7 +903,7 @@ void Cleanup(c50_context *Context)
 
     /*  Stuff from attribute winnowing  */
 
-    FreeUnlessNil(SaveCase);				SaveCase = Nil;
+    FreeUnlessNil(Context->cases.saved_records);				Context->cases.saved_records = Nil;
     FreeUnlessNil(AttImp);				AttImp = Nil;
     FreeUnlessNil(Split);				Split = Nil;
     FreeUnlessNil(Used);				Used = Nil;
@@ -959,14 +960,14 @@ void Cleanup(c50_context *Context)
     FreeUnlessNil(UtilBand);				UtilBand = Nil;
     FreeUnlessNil(UtilCost);				UtilCost = Nil;
 
-    FreeUnlessNil(SomeMiss);				SomeMiss = Nil;
-    FreeUnlessNil(SomeNA);				SomeNA = Nil;
+    FreeUnlessNil(Context->cases.some_missing);				Context->cases.some_missing = Nil;
+    FreeUnlessNil(Context->cases.some_not_applicable);				Context->cases.some_not_applicable = Nil;
 
     FreeNames(Context);
 
     FreeUnlessNil(SubDef);				SubDef = Nil;
 							SubSpace = 0;
-    MaxCase = -1;
+    Context->cases.max_case = -1;
 
     NotifyStage(0);
 }

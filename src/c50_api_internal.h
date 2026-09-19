@@ -15,6 +15,8 @@
 #define C50_LINE_BUFFER_CAPACITY 10000
 
 struct c50_implicit_state;
+struct _datablockrec;
+union _attribute_value;
 struct _def_elt;
 struct _rulerec;
 
@@ -42,6 +44,17 @@ typedef struct
     c50_continuous_value *class_thresholds;
 } c50_schema_state;
 
+typedef struct
+{
+    union _attribute_value **records;
+    union _attribute_value **saved_records;
+    int max_case;
+    struct _datablockrec *memory_blocks;
+    int block_size;
+    unsigned char *some_missing;
+    unsigned char *some_not_applicable;
+} c50_case_state;
+
 struct c50_context
 {
     c50_status status;
@@ -52,6 +65,7 @@ struct c50_context
     int delimiter;
     int max_label;
     c50_schema_state schema;
+    c50_case_state cases;
     double average_case_weight;
     char *ignored_values;
     int ignored_values_size;

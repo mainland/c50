@@ -222,22 +222,22 @@ int main(int Argc, char *Argv[])
     NotifyStage(READDATA);
     Progress(-1.0);
 
-    /*  Allocate space for SomeMiss[] and SomeNA[] */
+    /*  Allocate space for Context->cases.some_missing[] and Context->cases.some_not_applicable[] */
 
-    SomeMiss = AllocZero(Context->schema.max_attribute+1, Boolean);
-    SomeNA   = AllocZero(Context->schema.max_attribute+1, Boolean);
+    Context->cases.some_missing = AllocZero(Context->schema.max_attribute+1, Boolean);
+    Context->cases.some_not_applicable   = AllocZero(Context->schema.max_attribute+1, Boolean);
 
     /*  Read data file  */
 
     if ( ! (F = GetFile(".data", "r")) ) Error(NOFILE, "", "");
     GetData(Context, F, true, false);
-    fprintf(Of, TX_ReadData(MaxCase+1, Context->schema.max_attribute, FileStem));
+    fprintf(Of, TX_ReadData(Context->cases.max_case+1, Context->schema.max_attribute, FileStem));
 
     if ( XVAL && (F = GetFile(".test", "r")) )
     {
-	SaveMaxCase = MaxCase;
+	SaveMaxCase = Context->cases.max_case;
 	GetData(Context, F, false, false);
-	fprintf(Of, TX_ReadTest(MaxCase-SaveMaxCase, FileStem));
+	fprintf(Of, TX_ReadTest(Context->cases.max_case-SaveMaxCase, FileStem));
     }
 
     /*  Check whether case weight attribute appears  */
@@ -303,10 +303,10 @@ int main(int Argc, char *Argv[])
 
 	/*  Evaluation  */
 
-	fprintf(Of, T_EvalTrain, MaxCase+1);
+	fprintf(Of, T_EvalTrain, Context->cases.max_case+1);
 
 	NotifyStage(EVALTRAIN);
-	Progress(-TRIALS * (MaxCase+1.0));
+	Progress(-TRIALS * (Context->cases.max_case+1.0));
 
 	Evaluate(Context, CMINFO | USAGEINFO);
 
@@ -318,10 +318,10 @@ int main(int Argc, char *Argv[])
 	    FreeData(Context);
 	    GetData(Context, F, false, false);
 
-	    fprintf(Of, T_EvalTest, MaxCase+1);
+	    fprintf(Of, T_EvalTest, Context->cases.max_case+1);
 
 	    NotifyStage(EVALTEST);
-	    Progress(-TRIALS * (MaxCase+1.0));
+	    Progress(-TRIALS * (Context->cases.max_case+1.0));
 
 	    Evaluate(Context, CMINFO);
 	}

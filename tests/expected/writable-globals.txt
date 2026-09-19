@@ -47,7 +47,6 @@ global.c.o:Bell
 global.c.o:BranchBits
 global.c.o:CBuffer
 global.c.o:CF
-global.c.o:Case
 global.c.o:ClassFreq
 global.c.o:CostWeights
 global.c.o:CovBy
@@ -71,7 +70,6 @@ global.c.o:LogCaseNo
 global.c.o:LogFact
 global.c.o:MCost
 global.c.o:MINITEMS
-global.c.o:MaxCase
 global.c.o:MaxTree
 global.c.o:NCost
 global.c.o:NOCOSTS
@@ -89,9 +87,6 @@ global.c.o:RuleSpace
 global.c.o:SAMPLE
 global.c.o:SUBSET
 global.c.o:SampleFrac
-global.c.o:SaveCase
-global.c.o:SomeMiss
-global.c.o:SomeNA
 global.c.o:Subset
 global.c.o:Subsets
 global.c.o:TRIALS
@@ -150,8 +145,6 @@ update.c.o:ToDo
 update.c.o:Total
 update.c.o:Twentieth
 update.c.o:Uf
-utility.c.o:DataBlockSize
-utility.c.o:DataMem
 utility.c.o:LabelBuffer
 utility.c.o:OptArg
 utility.c.o:OptNo

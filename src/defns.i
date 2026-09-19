@@ -142,7 +142,8 @@
 
 #define	 ForEach(v,f,l)		for(v=f ; v<=l ; ++v)
 
-#define	 CountCases(f,l)	(UnitWeights ? (l-(f)+1.0) : SumWeights(f,l))
+#define	 CountCases(Context,f,l) \
+	(UnitWeights ? (l-(f)+1.0) : SumWeights(Context,f,l))
 
 #define	 StatBit(a,b)		(Context->schema.special_status[a]&(b))
 #define	 Exclude(a)		StatBit(a,EXCLUDE)
@@ -171,9 +172,11 @@
 			(n1->Tested == n2->Tested && n1->Cut < n2->Cut))
 
 #define	 Swap(a,b)	{DataRec xab;\
-			 assert(a >= 0 && a <= MaxCase &&\
-			        b >= 0 && b <= MaxCase);\
-			 xab = Case[a]; Case[a] = Case[b]; Case[b] = xab;}
+			 assert(a >= 0 && a <= Context->cases.max_case &&\
+			        b >= 0 && b <= Context->cases.max_case);\
+			 xab = Context->cases.records[a];\
+			 Context->cases.records[a] = Context->cases.records[b];\
+			 Context->cases.records[b] = xab;}
 
 
 #define	 NOFILE		 0
@@ -541,7 +544,7 @@ void	    SetMinGainThresh(c50_context *Context);
 void	    FormTree(c50_context *Context, CaseNo, CaseNo, int, Tree *);
 void	    SampleEstimate(c50_context *Context, CaseNo Fp, CaseNo Lp,
 			   CaseCount Cases);
-void	    Sample(CaseNo Fp, CaseNo Lp, CaseNo N);
+void	    Sample(c50_context *Context, CaseNo Fp, CaseNo Lp, CaseNo N);
 Attribute   ChooseSplit(c50_context *Context, CaseNo Fp, CaseNo Lp,
 			CaseCount Cases, Boolean Sampled);
 void	    ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
@@ -550,8 +553,8 @@ Attribute   FindBestAtt(c50_context *Context, CaseCount Cases);
 void	    EvalDiscrSplit(c50_context *Context, Attribute Att,
 			   CaseCount Cases);
 CaseNo	    Group(c50_context *Context, DiscrValue, CaseNo, CaseNo, Tree);
-CaseCount   SumWeights(CaseNo, CaseNo);
-CaseCount   SumNocostWeights(CaseNo, CaseNo);
+CaseCount   SumWeights(c50_context *Context, CaseNo, CaseNo);
+CaseCount   SumNocostWeights(c50_context *Context, CaseNo, CaseNo);
 void	    FindClassFreq(c50_context *Context, double [], CaseNo, CaseNo);
 void	    FindAllFreq(c50_context *Context, CaseNo, CaseNo);
 void	    Divide(c50_context *Context, Tree Node, CaseNo Fp, CaseNo Lp,
@@ -614,7 +617,7 @@ void	    EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 			 int Sh, int Flags);
 void	    GlobalPrune(c50_context *Context, Tree T);
 void	    FindMinCC(Tree T);
-void	    InsertParents(Tree T, Tree P);
+void	    InsertParents(c50_context *Context, Tree T, Tree P);
 void	    CheckSubsets(c50_context *Context, Tree T, Boolean);
 void	    InitialiseExtraErrs(void);
 float	    ExtraErrs(CaseCount N, CaseCount E, ClassNo C);
@@ -659,7 +662,8 @@ Boolean	    Satisfies(c50_context *Context, DataRec Case,
 
 	/* sort.c */
 
-void	    Quicksort(CaseNo Fp, CaseNo Lp, Attribute Att);
+void	    Quicksort(c50_context *Context, CaseNo Fp, CaseNo Lp,
+		      Attribute Att);
 void	    Cachesort(CaseNo Fp, CaseNo Lp, SortRec *SRec);
 
 	/* trees.c */
@@ -692,8 +696,8 @@ void	    *Prealloc(void *Present, size_t Bytes);
 void	    *Pcalloc(size_t Number, unsigned int Size);
 void	    FreeVector(void **V, int First, int Last);
 DataRec	    NewCase(c50_context *Context);
-void	    FreeCases(void);
-void	    FreeLastCase(DataRec Case);
+void	    FreeCases(c50_context *Context);
+void	    FreeLastCase(c50_context *Context, DataRec Case);
 void	    Error(int ErrNo, String S1, String S2);
 void	    ErrorContext(c50_context *Context, int ErrNo, String S1,
 			 String S2);
@@ -732,14 +736,15 @@ CRuleSet    FormRules(c50_context *Context, Tree T);
 void	    Scan(c50_context *Context, Tree T);
 void	    SetupNCost(c50_context *Context);
 void	    PushCondition(c50_context *Context);
-void	    PopCondition(void);
+void	    PopCondition(c50_context *Context);
 void	    PruneRule(c50_context *Context, Condition Cond[],
 		      ClassNo TargetClass);
-void	    ProcessLists(void);
+void	    ProcessLists(c50_context *Context);
 void	    AddToList(CaseNo *List, CaseNo N);
 void	    DeleteFromList(CaseNo *Before, CaseNo N);
 int	    SingleFail(CaseNo i);
-void	    Increment(int d, CaseNo i, double *Total, double *Errors);
+void	    Increment(c50_context *Context, int d, CaseNo i,
+		      double *Total, double *Errors);
 void	    FreeFormRuleData(void);
 
 	/* rules.c */
@@ -762,18 +767,19 @@ void	    PrintCondition(c50_context *Context, Condition C);
 	/* siftrules.c */
 
 void	    SiftRules(c50_context *Context, float EstErrRate);
-void	    InvertFires(void);
+void	    InvertFires(c50_context *Context);
 void	    FindTestCodes(c50_context *Context);
 float	    CondBits(c50_context *Context, Condition C);
 void	    SetInitialTheory(c50_context *Context);
-void	    CoverClass(ClassNo Target);
+void	    CoverClass(c50_context *Context, ClassNo Target);
 double	    MessageLength(c50_context *Context, RuleNo NR, double RuleBits,
 			  float Errs);
 void	    HillClimb(c50_context *Context);
 void	    InitialiseVotes(c50_context *Context);
 void	    CountVotes(c50_context *Context, CaseNo i);
-void	    UpdateDeltaErrs(CaseNo i, double Delta, RuleNo Toggle);
-CaseCount   CalculateDeltaErrs(void);
+void	    UpdateDeltaErrs(c50_context *Context, CaseNo i, double Delta,
+			    RuleNo Toggle);
+CaseCount   CalculateDeltaErrs(c50_context *Context);
 void	    PruneSubsets(c50_context *Context);
 void	    SetDefaultClass(c50_context *Context);
 void	    SwapRule(RuleNo A, RuleNo B);

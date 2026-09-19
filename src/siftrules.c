@@ -82,7 +82,7 @@ void SiftRules(c50_context *Context, float EstErrRate)
 
     /*  Determine inverse of Fires in CovBy, CovByPtr, CovByBlock  */
 
-    InvertFires();
+    InvertFires(Context);
 
     /*  Clean up any subsets in conditions by removing values that do
 	not appear in the covered cases  */
@@ -92,7 +92,7 @@ void SiftRules(c50_context *Context, float EstErrRate)
 	PruneSubsets(Context);
     }
 
-    Covered = Alloc(MaxCase+1, Boolean);
+    Covered = Alloc(Context->cases.max_case+1, Boolean);
     RuleIn  = AllocZero(NRules+1, Boolean);
 
     /*  Set initial theory  */
@@ -104,9 +104,9 @@ void SiftRules(c50_context *Context, float EstErrRate)
     /*  Calculate the number of bits associated with attribute tests;
 	this is not repeated in boosting, composite rulesets etc  */
 
-    if ( ! BranchBits || NRules > MaxCase )
+    if ( ! BranchBits || NRules > Context->cases.max_case )
     {
-	GenerateLogs(Max(MaxCase+1, Max(Context->schema.max_attribute, Max(Context->schema.max_class,
+	GenerateLogs(Max(Context->cases.max_case+1, Max(Context->schema.max_attribute, Max(Context->schema.max_class,
 			 Max(Context->schema.max_discrete_value, NRules)))));
     }
 
@@ -117,7 +117,7 @@ void SiftRules(c50_context *Context, float EstErrRate)
 
     /*  Determine rule codelengths  */
 
-    if ( NRules >= MaxCase+1 )
+    if ( NRules >= Context->cases.max_case+1 )
     {
 	Realloc(List, NRules+1, CaseNo);
     }
@@ -146,13 +146,13 @@ void SiftRules(c50_context *Context, float EstErrRate)
     /*  Allocate tables used in hillclimbing  */
 
     DeltaErrs = Alloc(NRules+1, float);
-    TopClass = Alloc(MaxCase+1, ClassNo);
+    TopClass = Alloc(Context->cases.max_case+1, ClassNo);
 
-    AltClass = Alloc(MaxCase+1, ClassNo);
-    TotVote  = Alloc(MaxCase+1, int *);
+    AltClass = Alloc(Context->cases.max_case+1, ClassNo);
+    TotVote  = Alloc(Context->cases.max_case+1, int *);
 
-    bp = AllocZero((MaxCase+1) * (Context->schema.max_class+1), int);
-    ForEach(i, 0, MaxCase)
+    bp = AllocZero((Context->cases.max_case+1) * (Context->schema.max_class+1), int);
+    ForEach(i, 0, Context->cases.max_case)
     {
 	TotVote[i] = bp;
 	bp += Context->schema.max_class + 1;
@@ -186,7 +186,7 @@ void SiftRules(c50_context *Context, float EstErrRate)
 /*************************************************************************/
 
 
-void InvertFires()
+void InvertFires(c50_context *Context)
 /*   -----------  */
 {
     RuleNo	r, Entry;
@@ -195,21 +195,21 @@ void InvertFires()
     Byte	*p, *From, *To, *Next;
     size_t	CovByBlockSize=0;
 
-    CovByPtr = Alloc(MaxCase+2, Byte *);
+    CovByPtr = Alloc(Context->cases.max_case+2, Byte *);
     Extra = NRules / 128;		/* max number of filler entries */
-    ForEach(i, 1, MaxCase+1)
+    ForEach(i, 1, Context->cases.max_case+1)
     {
 	CovByBlockSize += CovBy[i-1] + Extra;
     }
 
     CovByBlock = Alloc(CovByBlockSize, Byte);
     CovByPtr[0] = CovByBlock;
-    ForEach(i, 1, MaxCase+1)
+    ForEach(i, 1, Context->cases.max_case+1)
     {
 	CovByPtr[i] = CovByPtr[i-1] + CovBy[i-1] + Extra;
     }
 
-    LastCovBy = AllocZero(MaxCase+1, RuleNo);
+    LastCovBy = AllocZero(Context->cases.max_case+1, RuleNo);
 
     /*  Add entries for each rule  */
 
@@ -246,7 +246,7 @@ void InvertFires()
     To   = CovByPtr[0];
     From = CovByPtr[0] = CovByBlock;
 
-    ForEach(i, 1, MaxCase)
+    ForEach(i, 1, Context->cases.max_case)
     {
 	From += CovBy[i-1] + Extra;
 	Next  = CovByPtr[i];
@@ -268,7 +268,7 @@ void InvertFires()
     {
 	/*  CovByBlock has been moved  */
 
-	ForEach(i, 0, MaxCase)
+	ForEach(i, 0, Context->cases.max_case)
 	{
 	    CovByPtr[i] += CovByBlock - From;
 	}
@@ -313,10 +313,10 @@ void FindTestCodes(c50_context *Context)
 
 	    ValFreq = AllocZero(V+1, CaseNo);
 
-	    ForEach(i, 0, MaxCase)
+	    ForEach(i, 0, Context->cases.max_case)
 	    {
-		assert(XDVal(Case[i],Att) >= 0 && XDVal(Case[i],Att) <= V);
-		ValFreq[ XDVal(Case[i],Att) ]++;
+		assert(XDVal(Context->cases.records[i],Att) >= 0 && XDVal(Context->cases.records[i],Att) <= V);
+		ValFreq[ XDVal(Context->cases.records[i],Att) ]++;
 	    }
 
 	    Sum = 0;
@@ -324,8 +324,8 @@ void FindTestCodes(c50_context *Context)
 	    {
 		if ( ValFreq[v] )
 		{
-		    Sum += (ValFreq[v] / (MaxCase+1.0)) *
-			   (LogCaseNo[MaxCase+1] - LogCaseNo[ValFreq[v]]);
+		    Sum += (ValFreq[v] / (Context->cases.max_case+1.0)) *
+			   (LogCaseNo[Context->cases.max_case+1] - LogCaseNo[ValFreq[v]]);
 		    AttValues[Att]++;
 		}
 	    }
@@ -420,7 +420,7 @@ void SetInitialTheory(c50_context *Context)
 
     ForEach(c, 1, Context->schema.max_class)
     {
-	CoverClass(c);
+	CoverClass(Context, c);
     }
 
     /*  Remove rules that don't help coverage  */
@@ -433,7 +433,7 @@ void SetInitialTheory(c50_context *Context)
 
 
 
-void CoverClass(ClassNo Target)
+void CoverClass(c50_context *Context, ClassNo Target)
 /*   ----------  */
 {
     CaseNo	i;
@@ -441,7 +441,7 @@ void CoverClass(ClassNo Target)
     RuleNo	r, Best;
     int		j;
 
-    memset(Covered, false, MaxCase+1);
+    memset(Covered, false, Context->cases.max_case+1);
 
     Remaining = ClassFreq[Target];
 
@@ -471,13 +471,13 @@ void CoverClass(ClassNo Target)
 	    i = List[j];
 	    if ( ! Covered[i] )
 	    {
-		if ( Class(Case[i]) == Target )
+		if ( Class(Context->cases.records[i]) == Target )
 		{
-		    NewTruePos += Weight(Case[i]);
+		    NewTruePos += Weight(Context->cases.records[i]);
 		}
 		else
 		{
-		    NewFalsePos += Weight(Case[i]);
+		    NewFalsePos += Weight(Context->cases.records[i]);
 		}
 	    }
 	}
@@ -530,7 +530,7 @@ double MessageLength(c50_context *Context, RuleNo NR, double RuleBits,
 {
     return
 	(THEORYFRAC * Max(0, RuleBits - LogFact[NR]) +
-	 Errs * BitsErr + (MaxCase+1 - Errs) * BitsOK +
+	 Errs * BitsErr + (Context->cases.max_case+1 - Errs) * BitsOK +
 	 Errs * LogCaseNo[Context->schema.max_class-1]);
 }
 
@@ -573,7 +573,7 @@ void HillClimb(c50_context *Context)
 
     /*  Initialise DeltaErrs[]  */
 
-    Errs = CalculateDeltaErrs();
+    Errs = CalculateDeltaErrs(Context);
 
     /*  Add or drop rule with greatest reduction in coding cost  */
 
@@ -652,7 +652,7 @@ void HillClimb(c50_context *Context)
 
 	    /*  Downdate DeltaErrs for all rules except Toggle that cover i  */
 
-	    UpdateDeltaErrs(i, -Weight(Case[i]), Toggle);
+	    UpdateDeltaErrs(Context, i, -Weight(Context->cases.records[i]), Toggle);
 
 	    if ( RuleIn[Toggle] )
 	    {
@@ -667,7 +667,7 @@ void HillClimb(c50_context *Context)
 
 	    /*  Update DeltaErrs for all rules except Toggle that cover i  */
 
-	    UpdateDeltaErrs(i, Weight(Case[i]), Toggle);
+	    UpdateDeltaErrs(Context, i, Weight(Context->cases.records[i]), Toggle);
 	}
 
 	/*  Update information about rules selected and current errors  */
@@ -731,7 +731,7 @@ void InitialiseVotes(c50_context *Context)
 
     /*  Find the best and alternate class for each case  */
 
-    ForEach(i, 0, MaxCase)
+    ForEach(i, 0, Context->cases.max_case)
     {
 	CountVotes(Context, i);
     }
@@ -785,7 +785,8 @@ void CountVotes(c50_context *Context, CaseNo i)
 
 #define Prefer(d,c1,c2) ((d) > 0 || ((d) == 0 && c1 < c2))
 
-void UpdateDeltaErrs(CaseNo i, double Delta, RuleNo Toggle)
+void UpdateDeltaErrs(c50_context *Context, CaseNo i, double Delta,
+		     RuleNo Toggle)
 /*   ---------------  */
 {
     ClassNo	RealClass, Top, Alt, Rhs;
@@ -793,7 +794,7 @@ void UpdateDeltaErrs(CaseNo i, double Delta, RuleNo Toggle)
     Byte	*p;
     int		k;
 
-    RealClass = Class(Case[i]);
+    RealClass = Class(Context->cases.records[i]);
     Top	= TopClass[i];
     Alt = AltClass[i];
 
@@ -848,16 +849,16 @@ void UpdateDeltaErrs(CaseNo i, double Delta, RuleNo Toggle)
 /*************************************************************************/
 
 
-CaseCount CalculateDeltaErrs()
+CaseCount CalculateDeltaErrs(c50_context *Context)
 /*        ------------------  */
 {
     RuleNo	r;
     CaseNo	i;
     double	Errs=0;
 
-    ForEach(i, 0, MaxCase)
+    ForEach(i, 0, Context->cases.max_case)
     {
-	Errs += Weight(Case[i]) * NCost[TopClass[i]][Class(Case[i])];
+	Errs += Weight(Context->cases.records[i]) * NCost[TopClass[i]][Class(Context->cases.records[i])];
     }
 
     ForEach(r, 1, NRules)
@@ -865,9 +866,9 @@ CaseCount CalculateDeltaErrs()
 	DeltaErrs[r] = 0;
     }
 
-    ForEach(i, 0, MaxCase)
+    ForEach(i, 0, Context->cases.max_case)
     {
-	UpdateDeltaErrs(i, Weight(Case[i]), 0);
+	UpdateDeltaErrs(Context, i, Weight(Context->cases.records[i]), 0);
     }
 
     return Errs;
@@ -938,7 +939,7 @@ void PruneSubsets(c50_context *Context)
 	    ForEach(d, 1, NAtts)
 	    {
 		Att = Atts[d];
-		SetBit(DVal(Case[i], Att), PossibleValues[Att]);
+		SetBit(DVal(Context->cases.records[i], Att), PossibleValues[Att]);
 	    }
 	}
 
@@ -986,7 +987,7 @@ void SetDefaultClass(c50_context *Context)
     double	*UncoveredWeight, TotUncovered=1E-3;
     CaseNo	i, j;
 
-    memset(Covered, false, MaxCase+1);
+    memset(Covered, false, Context->cases.max_case+1);
     UncoveredWeight = AllocZero(Context->schema.max_class+1, double);
 
     /*  Check which cases are covered by at least one rule  */
@@ -1004,12 +1005,12 @@ void SetDefaultClass(c50_context *Context)
 
     /*  Find weights by class of uncovered cases  */
 
-    ForEach(i, 0, MaxCase)
+    ForEach(i, 0, Context->cases.max_case)
     {
 	if ( ! Covered[i] )
 	{
-	    UncoveredWeight[ Class(Case[i]) ] += Weight(Case[i]);
-	    TotUncovered += Weight(Case[i]);
+	    UncoveredWeight[ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
+	    TotUncovered += Weight(Context->cases.records[i]);
 	}
     }
 
@@ -1020,11 +1021,11 @@ void SetDefaultClass(c50_context *Context)
     ForEach(c, 1, Context->schema.max_class)
     {
 	Verbosity(1, fprintf(Of, "\t%s (%.2f): %.1f\n",
-			    Context->schema.class_names[c], ClassFreq[c] / (MaxCase + 1.0),
+			    Context->schema.class_names[c], ClassFreq[c] / (Context->cases.max_case + 1.0),
 			    UncoveredWeight[c]));
 
 	Context->class_sum[c] = (UncoveredWeight[c] + 1) / (TotUncovered + 2.0) +
-		      ClassFreq[c] / (MaxCase + 1.0);
+		      ClassFreq[c] / (Context->cases.max_case + 1.0);
     }
 
     Context->default_class =
@@ -1119,7 +1120,7 @@ int OrderByUtility(c50_context *Context)
 
 	    /*  Downdate DeltaErrs for all rules except Toggle that cover i  */
 
-	    UpdateDeltaErrs(i, -Weight(Case[i]), Toggle);
+	    UpdateDeltaErrs(Context, i, -Weight(Context->cases.records[i]), Toggle);
 
 	    TotVote[i][Rule[Toggle]->Rhs] -= Rule[Toggle]->Vote;
 
@@ -1127,7 +1128,7 @@ int OrderByUtility(c50_context *Context)
 
 	    /*  Update DeltaErrs for all rules except Toggle that cover i  */
 
-	    UpdateDeltaErrs(i, Weight(Case[i]), Toggle);
+	    UpdateDeltaErrs(Context, i, Weight(Context->cases.records[i]), Toggle);
 	}
 
 	Drop[NDrop++]  = Toggle;

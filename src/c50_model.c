@@ -274,8 +274,8 @@ static void PredictModel(c50_context *context, void *user_data)
 
     ParseModel(context, state->model);
 
-    SomeMiss = AllocZero(context->schema.max_attribute + 1, Boolean);
-    SomeNA = AllocZero(context->schema.max_attribute + 1, Boolean);
+    context->cases.some_missing = AllocZero(context->schema.max_attribute + 1, Boolean);
+    context->cases.some_not_applicable = AllocZero(context->schema.max_attribute + 1, Boolean);
     if ( RULES ) context->most_specific_rules = Alloc(context->schema.max_class + 1, CRule);
     context->default_class =
         ( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
@@ -296,7 +296,7 @@ static void PredictModel(c50_context *context, void *user_data)
             CopyInput(context->schema.class_names[class_number], strlen(context->schema.class_names[class_number]) + 1);
     }
 
-    predictions->row_count = MaxCase + 1;
+    predictions->row_count = context->cases.max_case + 1;
     if ( predictions->row_count )
     {
         predictions->class_indices =
@@ -307,9 +307,9 @@ static void PredictModel(c50_context *context, void *user_data)
             AllocZero(predictions->row_count * predictions->class_count, double);
     }
 
-    ForEach(row, 0, MaxCase)
+    ForEach(row, 0, context->cases.max_case)
     {
-        predicted = Classify(context, Case[row]);
+        predicted = Classify(context, context->cases.records[row]);
         predictions->class_indices[row] = predicted - 1;
         predictions->confidences[row] = context->confidence;
         ForEach(class_number, 1, context->schema.max_class)

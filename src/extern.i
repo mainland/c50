@@ -50,15 +50,6 @@ extern	int		LineNo,
 			AttExIn,
 			TSBase;
 
-extern	Boolean		*SomeMiss,
-			*SomeNA;
-
-extern	CaseNo		MaxCase;
-
-extern	DataRec		*Case;
-
-extern	DataRec		*SaveCase;
-
 extern	String		FileStem;
 
 extern	Tree		*Raw,

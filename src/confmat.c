@@ -172,7 +172,7 @@ void PrintUsageInfo(c50_context *Context, CaseNo *Usage)
     float	Tests;
     Boolean	First=true;
 
-    Tests = Max(1, MaxCase+1);
+    Tests = Max(1, Context->cases.max_case+1);
 
     while ( true )
     {
