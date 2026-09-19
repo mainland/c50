@@ -67,6 +67,16 @@ Run the same regression tests through CTest with:
 ctest --test-dir build --output-on-failure
 ```
 
+Configure an AddressSanitizer and UndefinedBehaviorSanitizer build with:
+
+```sh
+cmake -S . -B build/sanitize \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DC50_ENABLE_SANITIZERS=ON
+cmake --build build/sanitize
+ctest --test-dir build/sanitize --output-on-failure
+```
+
 ## License
 
 The imported C5.0 source is distributed under the GNU General Public License,

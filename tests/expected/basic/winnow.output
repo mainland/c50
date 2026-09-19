@@ -1,0 +1,58 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `basic'
+	Winnow attributes
+
+Read 20 cases (3 attributes) from basic.data
+
+2 attributes winnowed
+Estimated importance of remaining attributes:
+
+    100%  signal
+
+Decision tree:
+
+signal = N/A: low (2.2/1.1)
+signal <= 4.5: low (8.9/2.4)
+signal > 4.5: high (8.9/0.4)
+
+
+Evaluation on training data (20 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     3    4(20.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     7     1    (a): class low
+	     3     9    (b): class high
+
+
+	Attribute usage:
+
+	     90%  signal
+
+
+Evaluation on test data (7 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     3    3(42.9%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     2     1    (a): class low
+	     2     2    (b): class high
+
+
+Time: <elapsed> secs
