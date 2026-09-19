@@ -34,6 +34,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 
 /*************************************************************************/
@@ -44,7 +45,8 @@
 /*************************************************************************/
 
 
-Boolean NewRule(Condition Cond[], int NCond, ClassNo TargetClass,
+Boolean NewRule(c50_context *Context, Condition Cond[], int NCond,
+		ClassNo TargetClass,
 		Boolean *Deleted, CRule Existing,
 		CaseCount Cover, CaseCount Correct, float Prior)
 /*      -------  */
@@ -84,7 +86,7 @@ Boolean NewRule(Condition Cond[], int NCond, ClassNo TargetClass,
 	    memcpy(Lhs[d], Cond[dd], sizeof(CondRec));
 	    if ( Lhs[d]->NodeType == BrSubset )
 	    {
-		Bytes = (MaxAttVal[Lhs[d]->Tested]>>3) + 1;
+		Bytes = (Context->schema.max_attribute_value[Lhs[d]->Tested]>>3) + 1;
 		Lhs[d]->Subset = Alloc(Bytes, Byte);
 		memcpy(Lhs[d]->Subset, Cond[dd]->Subset, Bytes);
 	    }
@@ -104,7 +106,7 @@ Boolean NewRule(Condition Cond[], int NCond, ClassNo TargetClass,
 
     for ( r = 1 ; ! Exclude && r <= NRules ; r++ )
     {
-	if ( SameRule(r, Lhs, Size, TargetClass) )
+	if ( SameRule(Context, r, Lhs, Size, TargetClass) )
 	{
 	    Verbosity(1, fprintf(Of, "\tduplicates rule %d\n", r))
 
@@ -179,7 +181,7 @@ Boolean NewRule(Condition Cond[], int NCond, ClassNo TargetClass,
 	CovBy[List[i]]++;
     }
 
-    Verbosity(1, if ( ! Existing ) PrintRule(R))
+    Verbosity(1, if ( ! Existing ) PrintRule(Context, R))
 
     return true;
 }
@@ -328,7 +330,8 @@ void ListSort(int *L, int Fp, int Lp)
 /*************************************************************************/
 
 
-Boolean SameRule(RuleNo r, Condition Cond[], int NConds, ClassNo TargetClass)
+Boolean SameRule(c50_context *Context, RuleNo r, Condition Cond[],
+		 int NConds, ClassNo TargetClass)
 /*      --------  */
 {
     int	d, i, Bytes;
@@ -364,7 +367,7 @@ Boolean SameRule(RuleNo r, Condition Cond[], int NConds, ClassNo TargetClass)
 		break;
 
 	    case BrSubset:
-		Bytes = (MaxAttVal[Cond[d]->Tested]>>3) + 1;
+		Bytes = (Context->schema.max_attribute_value[Cond[d]->Tested]>>3) + 1;
 		ForEach(i, 0, Bytes-1)
 		{
 		    if ( Rule[r]->Lhs[d]->Subset[i] != Cond[d]->Subset[i] )
@@ -433,7 +436,7 @@ void FreeRules(CRuleSet RS)
 /*************************************************************************/
 
 
-void PrintRules(CRuleSet RS, String Msg)
+void PrintRules(c50_context *Context, CRuleSet RS, String Msg)
 /*   ----------  */
 {
     int	r;
@@ -442,7 +445,7 @@ void PrintRules(CRuleSet RS, String Msg)
 
     ForEach(r, 1, RS->SNRules)
     {
-	PrintRule(RS->SRule[r]);
+	PrintRule(Context, RS->SRule[r]);
     }
 }
 
@@ -455,7 +458,7 @@ void PrintRules(CRuleSet RS, String Msg)
 /*************************************************************************/
 
 
-void PrintRule(CRule R)
+void PrintRule(c50_context *Context, CRule R)
 /*   ---------  */
 {
     int		d;
@@ -471,11 +474,11 @@ void PrintRule(CRule R)
 
     ForEach(d, 1, R->Size)
     {
-	PrintCondition(R->Lhs[d]);
+	PrintCondition(Context, R->Lhs[d]);
     }
 
     fprintf(Of, "\t->  " T_class " %s  [%.3f]\n",
-		ClassName[R->Rhs], R->Vote/1000.0);
+		Context->schema.class_names[R->Rhs], R->Vote/1000.0);
 }
 
 
@@ -487,7 +490,7 @@ void PrintRule(CRule R)
 /*************************************************************************/
 
 
-void PrintCondition(Condition C)
+void PrintCondition(c50_context *Context, Condition C)
 /*  --------------  */
 {
     DiscrValue	v, pv, Last, Values;
@@ -499,7 +502,7 @@ void PrintCondition(Condition C)
     v   = C->TestValue;
     Att = C->Tested;
 
-    fprintf(Of, "\t%s", AttName[Att]);
+    fprintf(Of, "\t%s", Context->schema.attribute_names[Att]);
 
     if ( v < 0 )
     {
@@ -510,7 +513,7 @@ void PrintCondition(Condition C)
     switch ( C->NodeType )
     {
 	case BrDiscr:
-	    fprintf(Of, " = %s\n", AttValName[Att][v]);
+	    fprintf(Of, " = %s\n", Context->schema.attribute_value_names[Att][v]);
 	    break;
 
 	case BrThresh:
@@ -520,7 +523,7 @@ void PrintCondition(Condition C)
 	    }
 	    else
 	    {
-		CValToStr(C->Cut, Att, CVS);
+		CValToStr(Context, C->Cut, Att, CVS);
 		fprintf(Of, " %s %s\n", ( v == 2 ? "<=" : ">" ), CVS);
 	    }
 	    break;
@@ -528,10 +531,10 @@ void PrintCondition(Condition C)
 	case BrSubset:
 	    /*  Count values at this branch  */
 
-	    Values = Elements(Att, C->Subset, &Last);
+	    Values = Elements(Context, Att, C->Subset, &Last);
 	    if ( Values == 1 )
 	    {
-		fprintf(Of, " = %s\n", AttValName[Att][Last]);
+		fprintf(Of, " = %s\n", Context->schema.attribute_value_names[Att][Last]);
 		break;
 	    }
 
@@ -543,20 +546,20 @@ void PrintCondition(Condition C)
 		    ;
 
 		fprintf(Of, " %s [%s-%s]\n", T_InRange,
-			AttValName[Att][pv], AttValName[Att][Last]);
+			Context->schema.attribute_value_names[Att][pv], Context->schema.attribute_value_names[Att][Last]);
 		break;
 	    }
 
 	    /*  Must keep track of position to break long lines  */
 
 	    fprintf(Of, " %s {", T_ElementOf);
-	    Col = Base = CharWidth(AttName[Att]) + CharWidth(T_ElementOf) + 11;
+	    Col = Base = CharWidth(Context->schema.attribute_names[Att]) + CharWidth(T_ElementOf) + 11;
 
-	    ForEach(pv, 1, MaxAttVal[Att])
+	    ForEach(pv, 1, Context->schema.max_attribute_value[Att])
 	    {
 		if ( In(pv, C->Subset) )
 		{
-		    Entry = CharWidth(AttValName[Att][pv]);
+		    Entry = CharWidth(Context->schema.attribute_value_names[Att][pv]);
 
 		    if ( First )
 		    {
@@ -574,7 +577,7 @@ void PrintCondition(Condition C)
 			Col += 2;
 		    }
 
-		    fprintf(Of, "%s", AttValName[Att][pv]);
+		    fprintf(Of, "%s", Context->schema.attribute_value_names[Att][pv]);
 		    Col += Entry;
 		}
 	    }

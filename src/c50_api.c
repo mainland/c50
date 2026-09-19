@@ -41,6 +41,7 @@ c50_status c50_context_create(c50_context **out_context)
     }
 
     context->status = C50_STATUS_OK;
+    context->schema.max_discrete_value = 3;
     *out_context = context;
     return C50_STATUS_OK;
 }

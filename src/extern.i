@@ -45,29 +45,13 @@ extern	CaseCount	MINITEMS,
 extern	float		CF,
 			SAMPLE;
 
-extern	String		*ClassName,
-			*AttName,
-			**AttValName;
-
-extern	int		MaxAtt,
-			MaxClass,
-			MaxDiscrVal,
-			LineNo,
+extern	int		LineNo,
 			ErrMsgs,
 			AttExIn,
 			TSBase;
 
-extern	DiscrValue	*MaxAttVal;
-
-extern	char		*SpecialStatus;
-
-extern	Definition	*AttDef;
-extern	Attribute	**AttDefUses;
-
 extern	Boolean		*SomeMiss,
 			*SomeNA;
-
-extern	ContValue	*ClassThresh;
 
 extern	CaseNo		MaxCase;
 

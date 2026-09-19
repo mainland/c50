@@ -89,7 +89,7 @@ void SiftRules(c50_context *Context, float EstErrRate)
 
     if ( SUBSET )
     {
-	PruneSubsets();
+	PruneSubsets(Context);
     }
 
     Covered = Alloc(MaxCase+1, Boolean);
@@ -97,7 +97,7 @@ void SiftRules(c50_context *Context, float EstErrRate)
 
     /*  Set initial theory  */
 
-    SetInitialTheory();
+    SetInitialTheory(Context);
 
     Bits = Alloc(NRules+1, float);
 
@@ -106,8 +106,8 @@ void SiftRules(c50_context *Context, float EstErrRate)
 
     if ( ! BranchBits || NRules > MaxCase )
     {
-	GenerateLogs(Max(MaxCase+1, Max(MaxAtt, Max(MaxClass,
-			 Max(MaxDiscrVal, NRules)))));
+	GenerateLogs(Max(MaxCase+1, Max(Context->schema.max_attribute, Max(Context->schema.max_class,
+			 Max(Context->schema.max_discrete_value, NRules)))));
     }
 
     if ( ! BranchBits )
@@ -129,7 +129,7 @@ void SiftRules(c50_context *Context, float EstErrRate)
 	CodeLength = 0;
 	ForEach(d, 1, R->Size)
 	{
-	    CodeLength += CondBits(R->Lhs[d]);
+	    CodeLength += CondBits(Context, R->Lhs[d]);
 	}
 	Bits[r] = CodeLength + LogCaseNo[R->Size] - LogFact[R->Size];
     }
@@ -151,21 +151,21 @@ void SiftRules(c50_context *Context, float EstErrRate)
     AltClass = Alloc(MaxCase+1, ClassNo);
     TotVote  = Alloc(MaxCase+1, int *);
 
-    bp = AllocZero((MaxCase+1) * (MaxClass+1), int);
+    bp = AllocZero((MaxCase+1) * (Context->schema.max_class+1), int);
     ForEach(i, 0, MaxCase)
     {
 	TotVote[i] = bp;
-	bp += MaxClass + 1;
+	bp += Context->schema.max_class + 1;
     }
 
     /*  Now find best subset of rules  */
 
-    HillClimb();
+    HillClimb(Context);
 
     /*  Determine default class and reorder rules  */
 
     SetDefaultClass(Context);
-    OrderRules();
+    OrderRules(Context);
 
     /*  Deallocate storage  */
 
@@ -293,21 +293,21 @@ void FindTestCodes(c50_context *Context)
     int		PossibleAtts=0;
     float	Sum;
 
-    BranchBits = AllocZero(MaxAtt+1, float);
-    AttValues  = AllocZero(MaxAtt+1, int);
+    BranchBits = AllocZero(Context->schema.max_attribute+1, float);
+    AttValues  = AllocZero(Context->schema.max_attribute+1, int);
 
-    ForEach(Att, 1, MaxAtt)
+    ForEach(Att, 1, Context->schema.max_attribute)
     {
-	if ( Skip(Att) || Att == Context->class_attribute ) continue;
+	if ( Skip(Att) || Att == Context->schema.class_attribute ) continue;
 
 	PossibleAtts++;
 
 	if ( Ordered(Att) )
 	{
-	    BranchBits[Att] = 1 + 0.5 * LogCaseNo[MaxAttVal[Att] - 1];
+	    BranchBits[Att] = 1 + 0.5 * LogCaseNo[Context->schema.max_attribute_value[Att] - 1];
 	}
 	else
-	if ( (V = MaxAttVal[Att]) )
+	if ( (V = Context->schema.max_attribute_value[Att]) )
 	{
 	    /*  Discrete attribute  */
 
@@ -354,7 +354,7 @@ void FindTestCodes(c50_context *Context)
 /*************************************************************************/
 
 
-float CondBits(Condition C)
+float CondBits(c50_context *Context, Condition C)
 /*    --------  */
 {
     Attribute	Att;
@@ -379,7 +379,7 @@ float CondBits(Condition C)
 		return AttTestBits + BranchBits[Att];
 	    }
 
-	    ForEach(v, 1, MaxAttVal[Att])
+	    ForEach(v, 1, Context->schema.max_attribute_value[Att])
 	    {
 		if ( In(v, C->Subset) )
 		{
@@ -412,13 +412,13 @@ float CondBits(Condition C)
 /*************************************************************************/
 
 
-void SetInitialTheory()
+void SetInitialTheory(c50_context *Context)
 /*   ----------------  */
 {
     ClassNo	c;
     RuleNo	r, Active=0;
 
-    ForEach(c, 1, MaxClass)
+    ForEach(c, 1, Context->schema.max_class)
     {
 	CoverClass(c);
     }
@@ -524,13 +524,14 @@ void CoverClass(ClassNo Target)
 /*************************************************************************/
 
 
-double MessageLength(RuleNo NR, double RuleBits, float Errs)
+double MessageLength(c50_context *Context, RuleNo NR, double RuleBits,
+		     float Errs)
 /*  -------------  */
 {
     return
 	(THEORYFRAC * Max(0, RuleBits - LogFact[NR]) +
 	 Errs * BitsErr + (MaxCase+1 - Errs) * BitsOK +
-	 Errs * LogCaseNo[MaxClass-1]);
+	 Errs * LogCaseNo[Context->schema.max_class-1]);
 }
 
 
@@ -543,7 +544,7 @@ double MessageLength(RuleNo NR, double RuleBits, float Errs)
 /*************************************************************************/
 
 
-void HillClimb()
+void HillClimb(c50_context *Context)
 /*   ---------  */
 {
     RuleNo	r, RuleCount=0, OriginalCount, Toggle, LastToggle=0;
@@ -567,7 +568,7 @@ void HillClimb()
     }
     OriginalCount = RuleCount;
 
-    InitialiseVotes();
+    InitialiseVotes(Context);
     Verbosity(1, fprintf(Of, "\n"))
 
     /*  Initialise DeltaErrs[]  */
@@ -578,7 +579,8 @@ void HillClimb()
 
     while ( true )
     {
-	CurrentCost = NewCost = MessageLength(RuleCount, RuleBits, Errs);
+	CurrentCost = NewCost =
+	    MessageLength(Context, RuleCount, RuleBits, Errs);
 
 	Verbosity(1,
 	    fprintf(Of, "\t%d rules, %.1f errs, cost=%.1f bits\n",
@@ -599,7 +601,7 @@ void HillClimb()
 
 	    if ( RuleIn[r] )
 	    {
-		AltCost = MessageLength(RuleCount - 1,
+		AltCost = MessageLength(Context, RuleCount - 1,
 					RuleBits - Bits[r],
 					Errs + DeltaErrs[r]);
 	    }
@@ -607,7 +609,7 @@ void HillClimb()
 	    {
 		if ( Errs < 1E-3 || DeleteOnly ) continue;
 
-		AltCost = MessageLength(RuleCount + 1,
+		AltCost = MessageLength(Context, RuleCount + 1,
 					RuleBits + Bits[r],
 					Errs + DeltaErrs[r]);
 	    }
@@ -661,7 +663,7 @@ void HillClimb()
 		TotVote[i][Rule[Toggle]->Rhs] += Rule[Toggle]->Vote;
 	    }
 
-	    CountVotes(i);
+	    CountVotes(Context, i);
 
 	    /*  Update DeltaErrs for all rules except Toggle that cover i  */
 
@@ -703,7 +705,7 @@ void HillClimb()
 /*************************************************************************/
 
 
-void InitialiseVotes()
+void InitialiseVotes(c50_context *Context)
 /*   ---------------  */
 {
     CaseNo	i;
@@ -731,7 +733,7 @@ void InitialiseVotes()
 
     ForEach(i, 0, MaxCase)
     {
-	CountVotes(i);
+	CountVotes(Context, i);
     }
 }
 
@@ -745,13 +747,13 @@ void InitialiseVotes()
 /*************************************************************************/
 
 
-void CountVotes(CaseNo i)
+void CountVotes(c50_context *Context, CaseNo i)
 /*   ----------  */
 {
     ClassNo	c, First=0, Second=0;
     int		V;
 
-    ForEach(c, 1, MaxClass)
+    ForEach(c, 1, Context->schema.max_class)
     {
 	if ( (V = TotVote[i][c]) )
 	{
@@ -880,7 +882,7 @@ CaseCount CalculateDeltaErrs()
 /*************************************************************************/
 
 
-void PruneSubsets()
+void PruneSubsets(c50_context *Context)
 /*   ------------  */
 {
     Set		*PossibleValues;
@@ -892,15 +894,15 @@ void PruneSubsets()
 
     /*  Allocate subsets for possible values  */
 
-    Atts  = Alloc(MaxAtt+1, Attribute);
-    Bytes = Alloc(MaxAtt+1, int);
+    Atts  = Alloc(Context->schema.max_attribute+1, Attribute);
+    Bytes = Alloc(Context->schema.max_attribute+1, int);
 
-    PossibleValues = AllocZero(MaxAtt+1, Set);
-    ForEach(Att, 1, MaxAtt)
+    PossibleValues = AllocZero(Context->schema.max_attribute+1, Set);
+    ForEach(Att, 1, Context->schema.max_attribute)
     {
-	if ( MaxAttVal[Att] > 3 )
+	if ( Context->schema.max_attribute_value[Att] > 3 )
 	{
-	    Bytes[Att] = (MaxAttVal[Att]>>3)+1;
+	    Bytes[Att] = (Context->schema.max_attribute_value[Att]>>3)+1;
 	    PossibleValues[Att] = AllocZero(Bytes[Att], Byte);
 	}
     }
@@ -952,7 +954,7 @@ void PruneSubsets()
 		R->Lhs[d]->Subset[b] &= PossibleValues[Att][b];
 	    }
 
-	    if ( Elements(Att, R->Lhs[d]->Subset, &Last) == 1 )
+	    if ( Elements(Context, Att, R->Lhs[d]->Subset, &Last) == 1 )
 	    {
 		R->Lhs[d]->NodeType  = BrDiscr;
 		R->Lhs[d]->TestValue = Last;
@@ -961,7 +963,7 @@ void PruneSubsets()
 	}
     }
 
-    FreeVector((void **) PossibleValues, 1, MaxAtt);
+    FreeVector((void **) PossibleValues, 1, Context->schema.max_attribute);
     Free(Bytes);
     Free(Atts);
 }
@@ -985,7 +987,7 @@ void SetDefaultClass(c50_context *Context)
     CaseNo	i, j;
 
     memset(Covered, false, MaxCase+1);
-    UncoveredWeight = AllocZero(MaxClass+1, double);
+    UncoveredWeight = AllocZero(Context->schema.max_class+1, double);
 
     /*  Check which cases are covered by at least one rule  */
 
@@ -1015,10 +1017,10 @@ void SetDefaultClass(c50_context *Context)
 
     Verbosity(1, fprintf(Of, "\n    Weights of uncovered cases:\n"));
 
-    ForEach(c, 1, MaxClass)
+    ForEach(c, 1, Context->schema.max_class)
     {
 	Verbosity(1, fprintf(Of, "\t%s (%.2f): %.1f\n",
-			    ClassName[c], ClassFreq[c] / (MaxCase + 1.0),
+			    Context->schema.class_names[c], ClassFreq[c] / (MaxCase + 1.0),
 			    UncoveredWeight[c]));
 
 	Context->class_sum[c] = (UncoveredWeight[c] + 1) / (TotUncovered + 2.0) +
@@ -1065,7 +1067,7 @@ void SwapRule(RuleNo A, RuleNo B)
 /*************************************************************************/
 
 
-int OrderByUtility()
+int OrderByUtility(c50_context *Context)
 /*  --------------  */
 {
     RuleNo	r, *Drop, NDrop=0, NewNRules=0, Toggle;
@@ -1121,7 +1123,7 @@ int OrderByUtility()
 
 	    TotVote[i][Rule[Toggle]->Rhs] -= Rule[Toggle]->Vote;
 
-	    CountVotes(i);
+	    CountVotes(Context, i);
 
 	    /*  Update DeltaErrs for all rules except Toggle that cover i  */
 
@@ -1163,13 +1165,13 @@ int OrderByUtility()
 /*************************************************************************/
 
 
-int OrderByClass()
+int OrderByClass(c50_context *Context)
 /*  ------------  */
 {
     RuleNo	r, nr, NewNRules=0;
     ClassNo	c;
 
-    ForEach(c, 1, MaxClass)
+    ForEach(c, 1, Context->schema.max_class)
     {
 	while ( true )
 	{
@@ -1206,12 +1208,12 @@ int OrderByClass()
 /*************************************************************************/
 
 
-void OrderRules()
+void OrderRules(c50_context *Context)
 /*   ----------  */
 {
     RuleNo	r, NewNRules;
 
-    NewNRules = ( UTILITY ? OrderByUtility() : OrderByClass() );
+    NewNRules = ( UTILITY ? OrderByUtility(Context) : OrderByClass(Context) );
 
     ForEach(r, 1, NewNRules)
     {

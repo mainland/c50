@@ -82,7 +82,7 @@ void ConstructClassifiers(c50_context *Context)
     {
 	/*  BVoteBlock contains each case's class votes  */
 
-	BVoteBlock = AllocZero((MaxCase+1) * (MaxClass+1), float);
+	BVoteBlock = AllocZero((MaxCase+1) * (Context->schema.max_class+1), float);
     }
 
     /*  Preserve original case order  */
@@ -92,7 +92,7 @@ void ConstructClassifiers(c50_context *Context)
 
     /*  If using case weighting, find average  */
 
-    if ( Context->case_weight_attribute )
+    if ( Context->schema.case_weight_attribute )
     {
 	SetAvCWt(Context);
     }
@@ -103,14 +103,14 @@ void ConstructClassifiers(c50_context *Context)
 
     if ( CostWeights )
     {
-	ForEach(c, 1, MaxClass)
+	ForEach(c, 1, Context->schema.max_class)
 	{
 	    if ( WeightMul[c] < MinWt ) MinWt = WeightMul[c];
 	}
     }
 
     LEAFRATIO = Bp = 0;
-    SetMinGainThresh();
+    SetMinGainThresh(Context);
 
     /*  Main loop for growing the sequence of boosted classifiers  */
 
@@ -130,13 +130,14 @@ void ConstructClassifiers(c50_context *Context)
 	Raw[MaxTree] = Pruned[MaxTree] = Nil;
 	if ( RULES ) RuleSet[MaxTree] = Nil;
 
-	memset(Tested, 0, MaxAtt+1);		/* reset tested attributes */
+	memset(Tested, 0, Context->schema.max_attribute+1);		/* reset tested attributes */
 
 	FormTree(Context, Bp, MaxCase, 0, &Raw[Trial]);
 
 	/*  Prune the raw tree to minimise expected misclassification cost  */
 
-	Verbosity(1, if ( ! RULES ) PrintTree(Raw[Trial], "Before pruning:"))
+	Verbosity(1, if ( ! RULES )
+	    PrintTree(Context, Raw[Trial], "Before pruning:"))
 
 	NotifyStage(SIMPLIFYTREE);
 	Progress(-(MaxCase+1));
@@ -146,7 +147,7 @@ void ConstructClassifiers(c50_context *Context)
 
 	if ( VERBOSITY && ! RULES )
 	{
-	    Pruned[Trial] = CopyTree(Raw[Trial]);
+	    Pruned[Trial] = CopyTree(Context, Raw[Trial]);
 	    if ( MCost )
 	    {
 		RestoreDistribs(Context, Raw[Trial]);
@@ -169,7 +170,8 @@ void ConstructClassifiers(c50_context *Context)
 	if ( ! Trial )
 	{
 	    BaseLeaves = ( RULES || SUBSET ? TreeSize(Pruned[0]) :
-					     ExpandedLeafCount(Pruned[0]) );
+					     ExpandedLeafCount(Context,
+						       Pruned[0]) );
 	}
 	NoStructure = ! Pruned[Trial]->NodeType;
 
@@ -185,15 +187,15 @@ void ConstructClassifiers(c50_context *Context)
 	    RuleSet[Trial] = FormRules(Context, Pruned[Trial]);
 	    NoStructure |= ! RuleSet[Trial]->SNRules;
 
-	    PrintRules(RuleSet[Trial], T_Rules);
+	    PrintRules(Context, RuleSet[Trial], T_Rules);
 	    fprintf(Of, "\n" T_Default_class ": %s\n",
-			ClassName[RuleSet[Trial]->SDefault]);
+			Context->schema.class_names[RuleSet[Trial]->SDefault]);
 
 	    FreeTree(Pruned[Trial]);			Pruned[Trial] = Nil;
 	}
 	else
 	{
-	    PrintTree(Pruned[Trial], T_Tree);
+	    PrintTree(Context, Pruned[Trial], T_Tree);
 	}
 
 	if ( Trial == TRIALS-1 ) continue;
@@ -224,7 +226,7 @@ void ConstructClassifiers(c50_context *Context)
 	    /*  Update boosting votes for this case.  (Note that cases
 		must have been reset to their original order.)  */
 
-	    BVote = BVoteBlock + i * (MaxClass+1);
+	    BVote = BVoteBlock + i * (Context->schema.max_class+1);
 	    BVote[Pred] += Context->confidence;
 
 	    Best = BVote[0];
@@ -413,7 +415,7 @@ void InitialiseWeights(c50_context *Context)
 
     /*  Adjust when using case weights  */
 
-    if ( Context->case_weight_attribute )
+    if ( Context->schema.case_weight_attribute )
     {
 	ForEach(i, 0, MaxCase)
 	{
@@ -428,7 +430,7 @@ void InitialiseWeights(c50_context *Context)
 /*************************************************************************/
 /*								 	 */
 /*	Determine average case weight, ignoring cases with unknown,	 */
-/*	non-applicable, or negative values of Context->case_weight_attribute.			 */
+/*	non-applicable, or negative values of Context->schema.case_weight_attribute.			 */
 /*								 	 */
 /*************************************************************************/
 
@@ -442,8 +444,8 @@ void SetAvCWt(c50_context *Context)
     Context->average_case_weight = 0;
     ForEach(i, 0, MaxCase)
     {
-	if ( ! NotApplic(Context, Case[i], Context->case_weight_attribute) && ! Unknown(Case[i], Context->case_weight_attribute) &&
-	     (CWt = CVal(Case[i], Context->case_weight_attribute)) > 0 )
+	if ( ! NotApplic(Context, Case[i], Context->schema.case_weight_attribute) && ! Unknown(Case[i], Context->schema.case_weight_attribute) &&
+	     (CWt = CVal(Case[i], Context->schema.case_weight_attribute)) > 0 )
 	{
 	    NCWt++;
 	    Context->average_case_weight += CWt;
@@ -517,12 +519,12 @@ void EvaluateSingle(c50_context *Context, int Flags)
 
     if ( CMInfo )
     {
-	ConfusionMat = AllocZero((MaxClass+1)*(MaxClass+1), CaseNo);
+	ConfusionMat = AllocZero((Context->schema.max_class+1)*(Context->schema.max_class+1), CaseNo);
     }
 
     if ( UsageInfo )
     {
-	Usage = AllocZero(MaxAtt+1, CaseNo);
+	Usage = AllocZero(Context->schema.max_attribute+1, CaseNo);
     }
 
     Tests = Max(MaxCase+1, 1);	/* in case no useful test data! */
@@ -566,9 +568,9 @@ void EvaluateSingle(c50_context *Context, int Flags)
     ForEach(i, 0, MaxCase)
     {
 	RealClass = Class(Case[i]);
-	assert(RealClass > 0 && RealClass <= MaxClass);
+	assert(RealClass > 0 && RealClass <= Context->schema.max_class);
 
-	memset(Tested, 0, MaxAtt+1);	/* for usage */
+	memset(Tested, 0, Context->schema.max_attribute+1);	/* for usage */
 
 	if ( RULES )
 	{
@@ -585,7 +587,7 @@ void EvaluateSingle(c50_context *Context, int Flags)
 
 	    PredClass = TreeClassify(Context, Case[i], Pruned[0]);
 	}
-	assert(PredClass > 0 && PredClass <= MaxClass);
+	assert(PredClass > 0 && PredClass <= Context->schema.max_class);
 
 	if ( PredClass != RealClass )
 	{
@@ -595,12 +597,12 @@ void EvaluateSingle(c50_context *Context, int Flags)
 
 	if ( CMInfo )
 	{
-	    ConfusionMat[RealClass*(MaxClass+1)+PredClass]++;
+	    ConfusionMat[RealClass*(Context->schema.max_class+1)+PredClass]++;
 	}
 
 	if ( UsageInfo )
 	{
-	    RecordAttUsage(Case[i], Usage);
+	    RecordAttUsage(Context, Case[i], Usage);
 	}
     }
 
@@ -636,13 +638,13 @@ void EvaluateSingle(c50_context *Context, int Flags)
 
     if ( CMInfo )
     {
-	PrintConfusionMatrix(ConfusionMat);
+	PrintConfusionMatrix(Context, ConfusionMat);
 	Free(ConfusionMat);
     }
 
     if ( UsageInfo )
     {
-	PrintUsageInfo(Usage);
+	PrintUsageInfo(Context, Usage);
 	Free(Usage);
     }
 
@@ -693,12 +695,12 @@ void EvaluateBoost(c50_context *Context, int Flags)
 
     if ( CMInfo )
     {
-	ConfusionMat = AllocZero((MaxClass+1)*(MaxClass+1), CaseNo);
+	ConfusionMat = AllocZero((Context->schema.max_class+1)*(Context->schema.max_class+1), CaseNo);
     }
 
     if ( UsageInfo )
     {
-	Usage = AllocZero(MaxAtt+1, CaseNo);
+	Usage = AllocZero(Context->schema.max_attribute+1, CaseNo);
     }
 
     Tests = Max(MaxCase+1, 1);	/* in case no useful test data! */
@@ -730,7 +732,7 @@ void EvaluateBoost(c50_context *Context, int Flags)
     {
 	RealClass = Class(Case[i]);
 
-	memset(Tested, 0, MaxAtt+1);	/* for usage */
+	memset(Tested, 0, Context->schema.max_attribute+1);	/* for usage */
 
 	PredClass = BoostClassify(Context, Case[i], TRIALS-1);
 	if ( PredClass != RealClass )
@@ -741,12 +743,12 @@ void EvaluateBoost(c50_context *Context, int Flags)
 
 	if ( CMInfo )
 	{
-	    ConfusionMat[RealClass*(MaxClass+1)+PredClass]++;
+	    ConfusionMat[RealClass*(Context->schema.max_class+1)+PredClass]++;
 	}
 
 	if ( UsageInfo )
 	{
-	    RecordAttUsage(Case[i], Usage);
+	    RecordAttUsage(Context, Case[i], Usage);
 	}
 
 	/*  Keep track of results for each trial  */
@@ -808,13 +810,13 @@ void EvaluateBoost(c50_context *Context, int Flags)
 
     if ( CMInfo )
     {
-	PrintConfusionMatrix(ConfusionMat);
+	PrintConfusionMatrix(Context, ConfusionMat);
 	Free(ConfusionMat);
     }
 
     if ( UsageInfo )
     {
-	PrintUsageInfo(Usage);
+	PrintUsageInfo(Context, Usage);
 	Free(Usage);
     }
 
@@ -831,7 +833,7 @@ void EvaluateBoost(c50_context *Context, int Flags)
 /*************************************************************************/
 
 
-void RecordAttUsage(DataRec Case, int *Usage)
+void RecordAttUsage(c50_context *Context, DataRec Case, int *Usage)
 /*   --------------  */
 {
     Attribute	Att;
@@ -839,17 +841,17 @@ void RecordAttUsage(DataRec Case, int *Usage)
 
     /*  Scan backwards to allow for information from defined attributes  */
 
-    for ( Att = MaxAtt ; Att > 0 ; Att-- )
+    for ( Att = Context->schema.max_attribute ; Att > 0 ; Att-- )
     {
 	if ( Tested[Att] && ! Unknown(Case, Att) )
 	{
 	    Usage[Att]++;
 
-	    if ( AttDef[Att] )
+	    if ( Context->schema.attribute_definitions[Att] )
 	    {
-		ForEach(i, 1, AttDefUses[Att][0])
+		ForEach(i, 1, Context->schema.attribute_definition_uses[Att][0])
 		{
-		    Tested[AttDefUses[Att][i]] = true;
+		    Tested[Context->schema.attribute_definition_uses[Att][i]] = true;
 		}
 	    }
 	}

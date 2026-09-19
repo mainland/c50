@@ -15,7 +15,32 @@
 #define C50_LINE_BUFFER_CAPACITY 10000
 
 struct c50_implicit_state;
+struct _def_elt;
 struct _rulerec;
+
+#ifdef USEDOUBLE
+typedef double c50_continuous_value;
+#else
+typedef float c50_continuous_value;
+#endif
+
+typedef struct
+{
+    int class_attribute;
+    int label_attribute;
+    int case_weight_attribute;
+    int max_attribute;
+    int max_class;
+    int max_discrete_value;
+    char **class_names;
+    char **attribute_names;
+    char ***attribute_value_names;
+    int *max_attribute_value;
+    char *special_status;
+    struct _def_elt **attribute_definitions;
+    int **attribute_definition_uses;
+    c50_continuous_value *class_thresholds;
+} c50_schema_state;
 
 struct c50_context
 {
@@ -26,9 +51,7 @@ struct c50_context
     int suppress_error_messages;
     int delimiter;
     int max_label;
-    int class_attribute;
-    int label_attribute;
-    int case_weight_attribute;
+    c50_schema_state schema;
     double average_case_weight;
     char *ignored_values;
     int ignored_values_size;

@@ -28,8 +28,8 @@ int main(int argc, char *argv[])
 
     c50_input_init_memory(&names_input, names, sizeof(names) - 1);
     GetNames(context, &names_input);
-    if ( context->class_attribute != 0 ||
-         context->case_weight_attribute != 3 ) return 1;
+    if ( context->schema.class_attribute != 0 ||
+         context->schema.case_weight_attribute != 3 ) return 1;
 
     c50_input_init_memory(&data_input, data, sizeof(data) - 1);
     if ( CountDataInput(&data_input) != 2 ) return 1;

@@ -37,12 +37,8 @@ formtree.c.o:Sampled
 formtree.c.o:Subsample
 formtree.c.o:ValThresh
 formtree.c.o:Waiting
-global.c.o:AttDef
-global.c.o:AttDefUses
 global.c.o:AttExIn
-global.c.o:AttName
 global.c.o:AttTestBits
-global.c.o:AttValName
 global.c.o:AttValues
 global.c.o:BOOST
 global.c.o:BVoteBlock
@@ -53,8 +49,6 @@ global.c.o:CBuffer
 global.c.o:CF
 global.c.o:Case
 global.c.o:ClassFreq
-global.c.o:ClassName
-global.c.o:ClassThresh
 global.c.o:CostWeights
 global.c.o:CovBy
 global.c.o:DFreq
@@ -77,11 +71,7 @@ global.c.o:LogCaseNo
 global.c.o:LogFact
 global.c.o:MCost
 global.c.o:MINITEMS
-global.c.o:MaxAtt
-global.c.o:MaxAttVal
 global.c.o:MaxCase
-global.c.o:MaxClass
-global.c.o:MaxDiscrVal
 global.c.o:MaxTree
 global.c.o:NCost
 global.c.o:NOCOSTS
@@ -102,7 +92,6 @@ global.c.o:SampleFrac
 global.c.o:SaveCase
 global.c.o:SomeMiss
 global.c.o:SomeNA
-global.c.o:SpecialStatus
 global.c.o:Subset
 global.c.o:Subsets
 global.c.o:TRIALS

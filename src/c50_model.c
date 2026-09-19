@@ -274,13 +274,13 @@ static void PredictModel(c50_context *context, void *user_data)
 
     ParseModel(context, state->model);
 
-    SomeMiss = AllocZero(MaxAtt + 1, Boolean);
-    SomeNA = AllocZero(MaxAtt + 1, Boolean);
-    if ( RULES ) context->most_specific_rules = Alloc(MaxClass + 1, CRule);
+    SomeMiss = AllocZero(context->schema.max_attribute + 1, Boolean);
+    SomeNA = AllocZero(context->schema.max_attribute + 1, Boolean);
+    if ( RULES ) context->most_specific_rules = Alloc(context->schema.max_class + 1, CRule);
     context->default_class =
         ( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
-    context->class_sum = AllocZero(MaxClass + 1, float);
-    context->votes = AllocZero(MaxClass + 1, float);
+    context->class_sum = AllocZero(context->schema.max_class + 1, float);
+    context->votes = AllocZero(context->schema.max_class + 1, float);
     context->trial_predictions = AllocZero(TRIALS, ClassNo);
 
     c50_input_init_memory(&cases_input, state->cases_data, state->cases_size);
@@ -288,12 +288,12 @@ static void PredictModel(c50_context *context, void *user_data)
 
     predictions = AllocZero(1, c50_predictions);
     state->predictions = predictions;
-    predictions->class_count = MaxClass;
-    predictions->class_names = AllocZero(MaxClass, char *);
-    ForEach(class_number, 1, MaxClass)
+    predictions->class_count = context->schema.max_class;
+    predictions->class_names = AllocZero(context->schema.max_class, char *);
+    ForEach(class_number, 1, context->schema.max_class)
     {
         predictions->class_names[class_number - 1] =
-            CopyInput(ClassName[class_number], strlen(ClassName[class_number]) + 1);
+            CopyInput(context->schema.class_names[class_number], strlen(context->schema.class_names[class_number]) + 1);
     }
 
     predictions->row_count = MaxCase + 1;
@@ -312,7 +312,7 @@ static void PredictModel(c50_context *context, void *user_data)
         predicted = Classify(context, Case[row]);
         predictions->class_indices[row] = predicted - 1;
         predictions->confidences[row] = context->confidence;
-        ForEach(class_number, 1, MaxClass)
+        ForEach(class_number, 1, context->schema.max_class)
         {
             predictions->scores[
                 row * predictions->class_count + class_number - 1] =

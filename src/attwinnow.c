@@ -74,7 +74,7 @@ void WinnowAtts(c50_context *Context)
 
     /*  Split data into two halves with equal class frequencies  */
 
-    Upper = AllocZero(MaxClass+1, Boolean);
+    Upper = AllocZero(Context->schema.max_class+1, Boolean);
 
     Bp = 0;
     Ep = MaxCase;
@@ -99,19 +99,19 @@ void WinnowAtts(c50_context *Context)
     /*  Use first 50% of the cases for building a winnowing tree
 	and remaining 50% for measuring attribute importance  */
 
-    AttImp = AllocZero(MaxAtt+1, float);
-    Split  = AllocZero(MaxAtt+1, Boolean);
-    Used   = AllocZero(MaxAtt+1, Boolean);
+    AttImp = AllocZero(Context->schema.max_attribute+1, float);
+    Split  = AllocZero(Context->schema.max_attribute+1, Boolean);
+    Used   = AllocZero(Context->schema.max_attribute+1, Boolean);
 
     Base = TrialTreeCost(Context, true);
 
     /*  Remove attributes when doing so would reduce error cost  */
 
-    ForEach(Att, 1, MaxAtt)
+    ForEach(Att, 1, Context->schema.max_attribute)
     {
 	if ( AttImp[Att] < 0 )
 	{
-	    SpecialStatus[Att] ^= SKIP;
+	    Context->schema.special_status[Att] ^= SKIP;
 	    Removed++;
 	}
     }
@@ -120,13 +120,13 @@ void WinnowAtts(c50_context *Context)
 
     if ( Removed && TrialTreeCost(Context, false) > Base )
     {
-	ForEach(Att, 1, MaxAtt)
+	ForEach(Att, 1, Context->schema.max_attribute)
 	{
 	    if ( AttImp[Att] < 0 )
 	    {
 		AttImp[Att] = 1;
-		SpecialStatus[Att] ^= SKIP;
-		Verbosity(1, fprintf(Of, "  re-including %s\n", AttName[Att]))
+		Context->schema.special_status[Att] ^= SKIP;
+		Verbosity(1, fprintf(Of, "  re-including %s\n", Context->schema.attribute_names[Att]))
 	    }
 	}
 
@@ -135,11 +135,11 @@ void WinnowAtts(c50_context *Context)
 
     /*  Discard unused attributes  */
 
-    ForEach(Att, 1, MaxAtt)
+    ForEach(Att, 1, Context->schema.max_attribute)
     {
-	if ( Att != Context->class_attribute && ! Skip(Att) && ! Split[Att] )
+	if ( Att != Context->schema.class_attribute && ! Skip(Att) && ! Split[Att] )
 	{
-	    SpecialStatus[Att] ^= SKIP;
+	    Context->schema.special_status[Att] ^= SKIP;
 	    Removed++;
 	}
     }
@@ -159,7 +159,7 @@ void WinnowAtts(c50_context *Context)
 	while ( true )
 	{
 	    Best = 0;
-	    ForEach(Att, 1, MaxAtt)
+	    ForEach(Att, 1, Context->schema.max_attribute)
 	    {
 		if ( AttImp[Att] >= 1 &&
 		     ( ! Best || AttImp[Att] > AttImp[Best] ) )
@@ -178,11 +178,11 @@ void WinnowAtts(c50_context *Context)
 	    {
 		fprintf(Of, "%7d%%  %s\n",
 			    (int) ((AttImp[Best] - 1) * 100 + 0.5),
-			    AttName[Best]);
+			    Context->schema.attribute_names[Best]);
 	    }
 	    else
 	    {
-		fprintf(Of, "     <1%%  %s\n", AttName[Best]);
+		fprintf(Of, "     <1%%  %s\n", Context->schema.attribute_names[Best]);
 	    }
 	    AttImp[Best] = 0;
 	}
@@ -195,7 +195,7 @@ void WinnowAtts(c50_context *Context)
 	/*  Reset DList  */
 
 	NDList = 0;
-	ForEach(Att, 1, MaxAtt)
+	ForEach(Att, 1, Context->schema.max_attribute)
 	{
 	    if ( DFreq[Att] && ! Skip(Att) )
 	    {
@@ -255,9 +255,9 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
     VERBOSITY = 0;
     MaxCase   = Cut;
 
-    memset(Tested, 0, MaxAtt+1);		/* reset tested attributes */
+    memset(Tested, 0, Context->schema.max_attribute+1);		/* reset tested attributes */
 
-    SetMinGainThresh();
+    SetMinGainThresh(Context);
     FormTree(Context, 0, Cut, 0, &WTree);
 
     if ( FirstTime )
@@ -274,7 +274,7 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
     MINITEMS  = SaveMINITEMS;
 
     Verbosity(2,
-	PrintTree(WTree, "Winnowing tree:");
+	PrintTree(Context, WTree, "Winnowing tree:");
 	fprintf(Of, "\n  training error cost %g\n",
 		ErrCost(Context, WTree, 0, Cut)))
 
@@ -289,15 +289,15 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 
 	ScanTree(WTree, Used);
 
-	ForEach(Att, 1, MaxAtt)
+	ForEach(Att, 1, Context->schema.max_attribute)
 	{
 
 	    if ( ! Used[Att] )
 	    {
 		Verbosity(1,
-		    if ( Att != Context->class_attribute && ! Skip(Att) )
+		    if ( Att != Context->schema.class_attribute && ! Skip(Att) )
 		    {
-			fprintf(Of, "  %s not used\n", AttName[Att]);
+			fprintf(Of, "  %s not used\n", Context->schema.attribute_names[Att]);
 		    })
 
 		if ( Split[Att] )
@@ -310,17 +310,17 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 
 	    /*  Determine error cost if this attribute omitted  */
 
-	    SpecialStatus[Att] ^= SKIP;
+	    Context->schema.special_status[Att] ^= SKIP;
 
 	    Cost = ErrCost(Context, WTree, Cut+1, MaxCase);
 
 	    AttImp[Att] = ( Cost < Base ? -1 : Cost / Base );
 	    Verbosity(1,
 		fprintf(Of, "  error cost without %s = %g%s\n",
-			    AttName[Att], Cost,
+			    Context->schema.attribute_names[Att], Cost,
 			    ( Cost < Base ? " - excluded" : "" )))
 
-	    SpecialStatus[Att] ^= SKIP;
+	    Context->schema.special_status[Att] ^= SKIP;
 	}
     }
 

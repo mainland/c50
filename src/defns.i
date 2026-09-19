@@ -144,11 +144,11 @@
 
 #define	 CountCases(f,l)	(UnitWeights ? (l-(f)+1.0) : SumWeights(f,l))
 
-#define	 StatBit(a,b)		(SpecialStatus[a]&(b))
+#define	 StatBit(a,b)		(Context->schema.special_status[a]&(b))
 #define	 Exclude(a)		StatBit(a,EXCLUDE)
 #define	 Skip(a)		StatBit(a,EXCLUDE|SKIP)
-#define  Discrete(a)		(MaxAttVal[a] || StatBit(a,DISCRETE))
-#define  Continuous(a)		(! MaxAttVal[a] && ! StatBit(a,DISCRETE))
+#define  Discrete(a)		(Context->schema.max_attribute_value[a] || StatBit(a,DISCRETE))
+#define  Continuous(a)		(! Context->schema.max_attribute_value[a] && ! StatBit(a,DISCRETE))
 #define	 Ordered(a)		StatBit(a,ORDERED)
 #define	 DateVal(a)		StatBit(a,DATEVAL)
 #define	 TimeVal(a)		StatBit(a,STIMEVAL)
@@ -237,9 +237,9 @@ typedef	 char		*String;
 typedef  int	CaseNo;		/* data case number */
 typedef  float	CaseCount;	/* count of (partial) cases */
 
-typedef  int	ClassNo,	/* class number, 1..MaxClass */
+typedef  int	ClassNo,	/* class number, 1..Context->schema.max_class */
 		DiscrValue,	/* discrete attribute value */
-		Attribute;	/* attribute number, 1..MaxAtt */
+		Attribute;	/* attribute number, 1..Context->schema.max_attribute */
 
 #ifdef USEDOUBLE
 typedef	 double	ContValue;	/* continuous attribute value */
@@ -331,14 +331,14 @@ typedef	 struct _sort_rec
 #define	 Unknown(Case,Att)	(DVal(Case,Att)==UNKNOWN)
 #define	 UnknownVal(AV)		(AV._discr_val==UNKNOWN)
 #define	 NotApplic(Context,Case,Att) \
-	(Att != (Context)->class_attribute && DVal(Case,Att)==NA)
+	(Att != (Context)->schema.class_attribute && DVal(Case,Att)==NA)
 #define	 NotApplicVal(AV)	(AV._discr_val==NA)
 
 #define	 RelCWt(Context,Case) \
-	( Unknown(Case,(Context)->case_weight_attribute) || \
-	  NotApplic(Context,Case,(Context)->case_weight_attribute) || \
-	  CVal(Case,(Context)->case_weight_attribute) <= 0 ? 1 : \
-	  CVal(Case,(Context)->case_weight_attribute) / \
+	( Unknown(Case,(Context)->schema.case_weight_attribute) || \
+	  NotApplic(Context,Case,(Context)->schema.case_weight_attribute) || \
+	  CVal(Case,(Context)->schema.case_weight_attribute) <= 0 ? 1 : \
+	  CVal(Case,(Context)->schema.case_weight_attribute) / \
 	      (Context)->average_case_weight )
 
 typedef  struct _treerec	*Tree;
@@ -465,7 +465,7 @@ void	    SetAvCWt(c50_context *Context);
 void	    Evaluate(c50_context *Context, int Flags);
 void	    EvaluateSingle(c50_context *Context, int Flags);
 void	    EvaluateBoost(c50_context *Context, int Flags);
-void	    RecordAttUsage(DataRec Case, int *Usage);
+void	    RecordAttUsage(c50_context *Context, DataRec Case, int *Usage);
 
 	/* getnames.c */
 
@@ -476,8 +476,8 @@ Boolean	    ReadNameInput(c50_context *Context, c50_input *f, String s,
 void	    GetNames(c50_context *Context, c50_input *Nf);
 void	    ExplicitAtt(c50_context *Context, c50_input *Nf);
 int	    Which(String Val, String *List, int First, int Last);
-void	    ListAttsUsed(void);
-void	    FreeNames(void);
+void	    ListAttsUsed(c50_context *Context);
+void	    FreeNames(c50_context *Context);
 int	    InChar(c50_context *Context, c50_input *f);
 
 	/* implicitatt.c */
@@ -519,7 +519,7 @@ CaseNo	    CountData(FILE *Df);
 CaseNo	    CountDataInput(c50_input *Input);
 int	    StoreIVal(c50_context *Context, String s);
 void	    FreeData(c50_context *Context);
-void	    CheckValue(DataRec Case, Attribute Att);
+void	    CheckValue(c50_context *Context, DataRec Case, Attribute Att);
 
 	/* mcost.c */
 
@@ -536,8 +536,8 @@ void	    ScanTree(Tree T, Boolean *Used);
 	/* formtree.c */
 
 void	    InitialiseTreeData(c50_context *Context);
-void	    FreeTreeData(void);
-void	    SetMinGainThresh(void);
+void	    FreeTreeData(c50_context *Context);
+void	    SetMinGainThresh(c50_context *Context);
 void	    FormTree(c50_context *Context, CaseNo, CaseNo, int, Tree *);
 void	    SampleEstimate(c50_context *Context, CaseNo Fp, CaseNo Lp,
 			   CaseCount Cases);
@@ -546,24 +546,27 @@ Attribute   ChooseSplit(c50_context *Context, CaseNo Fp, CaseNo Lp,
 			CaseCount Cases, Boolean Sampled);
 void	    ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
 			 CaseCount WCases);
-Attribute   FindBestAtt(CaseCount Cases);
+Attribute   FindBestAtt(c50_context *Context, CaseCount Cases);
 void	    EvalDiscrSplit(c50_context *Context, Attribute Att,
 			   CaseCount Cases);
 CaseNo	    Group(c50_context *Context, DiscrValue, CaseNo, CaseNo, Tree);
 CaseCount   SumWeights(CaseNo, CaseNo);
 CaseCount   SumNocostWeights(CaseNo, CaseNo);
-void	    FindClassFreq(double [], CaseNo, CaseNo);
-void	    FindAllFreq(CaseNo, CaseNo);
+void	    FindClassFreq(c50_context *Context, double [], CaseNo, CaseNo);
+void	    FindAllFreq(c50_context *Context, CaseNo, CaseNo);
 void	    Divide(c50_context *Context, Tree Node, CaseNo Fp, CaseNo Lp,
 		   int Level);
 
 	/* discr.c */
 
-void	    EvalDiscreteAtt(Attribute Att, CaseCount Cases);
-void	    EvalOrderedAtt(Attribute Att, CaseCount Cases);
-void	    SetDiscrFreq(Attribute Att);
-double	    DiscrKnownBaseInfo(CaseCount KnownCases, DiscrValue MaxVal);
-void	    DiscreteTest(Tree Node, Attribute Att);
+void	    EvalDiscreteAtt(c50_context *Context, Attribute Att,
+			    CaseCount Cases);
+void	    EvalOrderedAtt(c50_context *Context, Attribute Att,
+			   CaseCount Cases);
+void	    SetDiscrFreq(c50_context *Context, Attribute Att);
+double	    DiscrKnownBaseInfo(c50_context *Context, CaseCount KnownCases,
+			       DiscrValue MaxVal);
+void	    DiscreteTest(c50_context *Context, Tree Node, Attribute Att);
 
 	/* contin.c */
 
@@ -582,25 +585,27 @@ ContValue   GreatestValueBelow(ContValue Th, CaseNo *Ep);
 
 	/* info.c */
 
-double	    ComputeGain(double BaseInfo, float UnknFrac, DiscrValue MaxVal,
-			CaseCount TotalCases);
+double	    ComputeGain(c50_context *Context, double BaseInfo, float UnknFrac,
+			DiscrValue MaxVal, CaseCount TotalCases);
 double	    TotalInfo(double V[], DiscrValue MinVal, DiscrValue MaxVal);
-void	    PrintDistribution(Attribute Att, DiscrValue MinVal,
-			DiscrValue MaxVal, double **Freq, double *ValFreq,
-			Boolean ShowNames);
+void	    PrintDistribution(c50_context *Context, Attribute Att,
+			DiscrValue MinVal, DiscrValue MaxVal, double **Freq,
+			double *ValFreq, Boolean ShowNames);
 
 	/* subset.c */
 
-void	    InitialiseBellNumbers(void);
-void	    EvalSubset(Attribute Att, CaseCount Cases);
-void	    Merge(DiscrValue x, DiscrValue y, CaseCount Cases);
-void	    EvaluatePair(DiscrValue x, DiscrValue y, CaseCount Cases);
-void	    PrintSubset(Attribute Att, Set Ss);
-void	    SubsetTest(Tree Node, Attribute Att);
-Boolean	    SameDistribution(DiscrValue V1, DiscrValue V2);
-void	    AddBlock(DiscrValue V1, DiscrValue V2);
-void	    AddBlock(DiscrValue V1, DiscrValue V2);
-void	    MoveBlock(DiscrValue V1, DiscrValue V2);
+void	    InitialiseBellNumbers(c50_context *Context);
+void	    EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases);
+void	    Merge(c50_context *Context, DiscrValue x, DiscrValue y,
+		  CaseCount Cases);
+void	    EvaluatePair(c50_context *Context, DiscrValue x, DiscrValue y,
+			 CaseCount Cases);
+void	    PrintSubset(c50_context *Context, Attribute Att, Set Ss);
+void	    SubsetTest(c50_context *Context, Tree Node, Attribute Att);
+Boolean	    SameDistribution(c50_context *Context, DiscrValue V1,
+			     DiscrValue V2);
+void	    AddBlock(c50_context *Context, DiscrValue V1, DiscrValue V2);
+void	    MoveBlock(c50_context *Context, DiscrValue V1, DiscrValue V2);
 
 	/* prune.c */
 
@@ -610,12 +615,12 @@ void	    EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 void	    GlobalPrune(c50_context *Context, Tree T);
 void	    FindMinCC(Tree T);
 void	    InsertParents(Tree T, Tree P);
-void	    CheckSubsets(Tree T, Boolean);
+void	    CheckSubsets(c50_context *Context, Tree T, Boolean);
 void	    InitialiseExtraErrs(void);
 float	    ExtraErrs(CaseCount N, CaseCount E, ClassNo C);
 float	    RawExtraErrs(CaseCount N, CaseCount E);
 void	    RestoreDistribs(c50_context *Context, Tree T);
-void	    CompressBranches(Tree T);
+void	    CompressBranches(c50_context *Context, Tree T);
 void	    SetGlobalUnitWeights(int LocalFlag);
 
 	/* p-thresh.c */
@@ -660,21 +665,23 @@ void	    Cachesort(CaseNo Fp, CaseNo Lp, SortRec *SRec);
 	/* trees.c */
 
 void	    FindDepth(Tree T);
-void	    PrintTree(Tree T, String Title);
-void	    Show(Tree T, int Sh);
-void	    ShowBranch(int Sh, Tree T, DiscrValue v, DiscrValue BrNo);
-DiscrValue  Elements(Attribute Att, Set S, DiscrValue *Last);
-int	    MaxLine(Tree SubTree);
+void	    PrintTree(c50_context *Context, Tree T, String Title);
+void	    Show(c50_context *Context, Tree T, int Sh);
+void	    ShowBranch(c50_context *Context, int Sh, Tree T, DiscrValue v,
+		       DiscrValue BrNo);
+DiscrValue  Elements(c50_context *Context, Attribute Att, Set S,
+		     DiscrValue *Last);
+int	    MaxLine(c50_context *Context, Tree SubTree);
 void	    Indent(int Sh, int BrNo);
 void	    FreeTree(Tree T);
-Tree	    Leaf(double *Freq, ClassNo NodeClass, CaseCount Cases,
-		 CaseCount Errors);
+Tree	    Leaf(c50_context *Context, double *Freq, ClassNo NodeClass,
+		 CaseCount Cases, CaseCount Errors);
 void	    Sprout(Tree T, DiscrValue Branches);
 void	    UnSprout(Tree T);
 int	    TreeSize(Tree T);
-int	    ExpandedLeafCount(Tree T);
+int	    ExpandedLeafCount(c50_context *Context, Tree T);
 int	    TreeDepth(Tree T);
-Tree	    CopyTree(Tree T);
+Tree	    CopyTree(c50_context *Context, Tree T);
 
 	/* utility.c */
 
@@ -684,10 +691,12 @@ void	    *Pmalloc(size_t Bytes);
 void	    *Prealloc(void *Present, size_t Bytes);
 void	    *Pcalloc(size_t Number, unsigned int Size);
 void	    FreeVector(void **V, int First, int Last);
-DataRec	    NewCase(void);
+DataRec	    NewCase(c50_context *Context);
 void	    FreeCases(void);
 void	    FreeLastCase(DataRec Case);
 void	    Error(int ErrNo, String S1, String S2);
+void	    ErrorContext(c50_context *Context, int ErrNo, String S1,
+			 String S2);
 void	    C50Exit(int Status);
 String	    CaseLabel(c50_context *Context, CaseNo N);
 FILE *	    GetFile(String Extension, String RW);
@@ -701,7 +710,8 @@ void	    SecsToTime(int Secs, String Time);
 void	    SetTSBase(int y);
 int	    TStampToMins(String TS);
 void	    Check(float Val, float Low, float High);
-void	    CValToStr(ContValue CV, Attribute Att, String DS);
+void	    CValToStr(c50_context *Context, ContValue CV, Attribute Att,
+		      String DS);
 double	    rint(double v);
 void	    Cleanup(c50_context *Context);
 #ifdef UTF8
@@ -712,18 +722,19 @@ int	    wcswidth(const wchar_t *pwcs, size_t n);
 
 	/* confmat.c */
 
-void	    PrintConfusionMatrix(CaseNo *ConfusionMat);
-void	    PrintErrorBreakdown(CaseNo *ConfusionMat);
-void	    PrintUsageInfo(CaseNo *Usage);
+void	    PrintConfusionMatrix(c50_context *Context, CaseNo *ConfusionMat);
+void	    PrintErrorBreakdown(c50_context *Context, CaseNo *ConfusionMat);
+void	    PrintUsageInfo(c50_context *Context, CaseNo *Usage);
 
 	/* formrules.c */
 
 CRuleSet    FormRules(c50_context *Context, Tree T);
 void	    Scan(c50_context *Context, Tree T);
-void	    SetupNCost(void);
+void	    SetupNCost(c50_context *Context);
 void	    PushCondition(c50_context *Context);
 void	    PopCondition(void);
-void	    PruneRule(Condition Cond[], ClassNo TargetClass);
+void	    PruneRule(c50_context *Context, Condition Cond[],
+		      ClassNo TargetClass);
 void	    ProcessLists(void);
 void	    AddToList(CaseNo *List, CaseNo N);
 void	    DeleteFromList(CaseNo *Before, CaseNo N);
@@ -733,60 +744,62 @@ void	    FreeFormRuleData(void);
 
 	/* rules.c */
 
-Boolean	    NewRule(Condition Cond[], int NConds, ClassNo TargetClass,
+Boolean	    NewRule(c50_context *Context, Condition Cond[], int NConds,
+		    ClassNo TargetClass,
 		    Boolean *Deleted, CRule Existing,
 		    CaseCount Cover, CaseCount Correct, float Prior);
 void	    ListSort(int *L, int Fp, int Lp);
 Byte	    *Compress(int *L);
 void	    Uncompress(Byte *CL, int *UCL);
-Boolean	    SameRule(RuleNo r, Condition Cond[], int NConds,
-		     ClassNo TargetClass);
+Boolean	    SameRule(c50_context *Context, RuleNo r, Condition Cond[],
+		     int NConds, ClassNo TargetClass);
 void	    FreeRule(CRule R);
 void	    FreeRules(CRuleSet RS);
-void	    PrintRules(CRuleSet, String);
-void	    PrintRule(CRule R);
-void	    PrintCondition(Condition C);
+void	    PrintRules(c50_context *Context, CRuleSet, String);
+void	    PrintRule(c50_context *Context, CRule R);
+void	    PrintCondition(c50_context *Context, Condition C);
 
 	/* siftrules.c */
 
 void	    SiftRules(c50_context *Context, float EstErrRate);
 void	    InvertFires(void);
 void	    FindTestCodes(c50_context *Context);
-float	    CondBits(Condition C);
-void	    SetInitialTheory(void);
+float	    CondBits(c50_context *Context, Condition C);
+void	    SetInitialTheory(c50_context *Context);
 void	    CoverClass(ClassNo Target);
-double	    MessageLength(RuleNo NR, double RuleBits, float Errs);
-void	    HillClimb(void);
-void	    InitialiseVotes(void);
-void	    CountVotes(CaseNo i);
+double	    MessageLength(c50_context *Context, RuleNo NR, double RuleBits,
+			  float Errs);
+void	    HillClimb(c50_context *Context);
+void	    InitialiseVotes(c50_context *Context);
+void	    CountVotes(c50_context *Context, CaseNo i);
 void	    UpdateDeltaErrs(CaseNo i, double Delta, RuleNo Toggle);
 CaseCount   CalculateDeltaErrs(void);
-void	    PruneSubsets(void);
+void	    PruneSubsets(c50_context *Context);
 void	    SetDefaultClass(c50_context *Context);
 void	    SwapRule(RuleNo A, RuleNo B);
-int	    OrderByUtility(void);
-int	    OrderByClass(void);
-void	    OrderRules(void);
+int	    OrderByUtility(c50_context *Context);
+int	    OrderByClass(c50_context *Context);
+void	    OrderRules(c50_context *Context);
 void	    GenerateLogs(int MaxN);
 void	    FreeSiftRuleData(void);
 
 	/* ruletree.c */
 
-void	    ConstructRuleTree(CRuleSet RS);
-void	    SetTestIndex(Condition C);
-RuleTree    GrowRT(RuleNo *RR, int RRN, CRule *Rule);
-int	    DesiredOutcome(CRule R, int TI);
+void	    ConstructRuleTree(c50_context *Context, CRuleSet RS);
+void	    SetTestIndex(c50_context *Context, Condition C);
+RuleTree    GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule);
+int	    DesiredOutcome(c50_context *Context, CRule R, int TI);
 int	    SelectTest(RuleNo *RR, int RRN, CRule *Rule);
 void	    FreeRuleTree(RuleTree RT);
 
 	/* modelfiles.c */
 
 void	    CheckFile(c50_context *Context, String Extension, Boolean Write);
-void	    WriteFilePrefix(String Extension);
+void	    WriteFilePrefix(c50_context *Context, String Extension);
 void	    ReadFilePrefix(c50_context *Context, String Extension);
-void	    SaveDiscreteNames(void);
+void	    SaveDiscreteNames(c50_context *Context);
 void	    SaveTree(c50_context *Context, Tree T, String Extension);
-void	    OutTree(Tree T);
+void	    OutTree(c50_context *Context, Tree T);
 void	    SaveRules(c50_context *Context, CRuleSet RS, String Extension);
 void	    AsciiOut(String Pre, String S);
 void	    ReadHeader(c50_context *Context, c50_input *Input);

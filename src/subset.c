@@ -34,6 +34,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 
 
@@ -44,15 +45,15 @@
 /*************************************************************************/
 
 
-void InitialiseBellNumbers()
+void InitialiseBellNumbers(c50_context *Context)
 /*   ---------------------  */
 {
     DiscrValue	 n, k;
 
     /*  Table of Bell numbers (used for subset test penalties)  */
 
-    Bell = AllocZero(MaxDiscrVal+1, double *);
-    ForEach(n, 1, MaxDiscrVal)
+    Bell = AllocZero(Context->schema.max_discrete_value+1, double *);
+    ForEach(n, 1, Context->schema.max_discrete_value)
     {
 	Bell[n] = AllocZero(n+1, double);
 	ForEach(k, 1, n)
@@ -74,7 +75,7 @@ void InitialiseBellNumbers()
 /*************************************************************************/
 
 
-void EvalSubset(Attribute Att, CaseCount Cases)
+void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 /*   ----------  */
 {
     DiscrValue	V1, V2, V3, BestV1, BestV2, InitialBlocks, First=1, Prelim=0;
@@ -88,10 +89,10 @@ void EvalSubset(Attribute Att, CaseCount Cases)
     /*  First compute Freq[][], ValFreq[], base info, and the gain
 	and total info of a split on discrete attribute Att  */
 
-    SetDiscrFreq(Att);
+    SetDiscrFreq(Context, Att);
 
     GEnv.ReasonableSubsets = 0;
-    ForEach(c, 1, MaxAttVal[Att])
+    ForEach(c, 1, Context->schema.max_attribute_value[Att])
     {
 	if ( GEnv.ValFreq[c] >= MINITEMS ) GEnv.ReasonableSubsets++;
     }
@@ -99,7 +100,7 @@ void EvalSubset(Attribute Att, CaseCount Cases)
     if ( ! GEnv.ReasonableSubsets )
     {
 	Verbosity(2,
-	    fprintf(Of, "\tAtt %s: poor initial split\n", AttName[Att]))
+	    fprintf(Of, "\tAtt %s: poor initial split\n", Context->schema.attribute_names[Att]))
 
 	return;
     }
@@ -108,14 +109,14 @@ void EvalSubset(Attribute Att, CaseCount Cases)
     UnknownRate = GEnv.ValFreq[0] / Cases;
 
     BaseInfo = ( ! GEnv.ValFreq[0] ? GlobalBaseInfo :
-		     DiscrKnownBaseInfo(KnownCases, MaxAttVal[Att]) );
+		     DiscrKnownBaseInfo(Context, KnownCases, Context->schema.max_attribute_value[Att]) );
 
-    PrevGain = ComputeGain(BaseInfo, UnknownRate, MaxAttVal[Att], KnownCases);
-    PrevInfo = TotalInfo(GEnv.ValFreq, 0, MaxAttVal[Att]) / Cases;
+    PrevGain = ComputeGain(Context, BaseInfo, UnknownRate, Context->schema.max_attribute_value[Att], KnownCases);
+    PrevInfo = TotalInfo(GEnv.ValFreq, 0, Context->schema.max_attribute_value[Att]) / Cases;
     BestVal  = PrevGain / PrevInfo;
 
-    Verbosity(2, fprintf(Of, "\tAtt %s", AttName[Att]))
-    Verbosity(3, PrintDistribution(Att, 0, MaxAttVal[Att], GEnv.Freq,
+    Verbosity(2, fprintf(Of, "\tAtt %s", Context->schema.attribute_names[Att]))
+    Verbosity(3, PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], GEnv.Freq,
 				   GEnv.ValFreq, true))
     Verbosity(2,
 	fprintf(Of, "\tinitial inf %.3f, gain %.3f, val=%.3f\n",
@@ -125,11 +126,11 @@ void EvalSubset(Attribute Att, CaseCount Cases)
 	and form a separate subset for each represented attribute value.
 	Unrepresented N/A values are ignored  */
 
-    GEnv.Bytes = (MaxAttVal[Att]>>3) + 1;
+    GEnv.Bytes = (Context->schema.max_attribute_value[Att]>>3) + 1;
     ClearBits(GEnv.Bytes, Subset[Att][0]);
 
     GEnv.Blocks = 0;
-    ForEach(V1, 1, MaxAttVal[Att])
+    ForEach(V1, 1, Context->schema.max_attribute_value[Att])
     {
 	if ( GEnv.ValFreq[V1] > Epsilon ||
 	     ( V1 == 1 && SomeNA[Att] ) )
@@ -137,7 +138,7 @@ void EvalSubset(Attribute Att, CaseCount Cases)
 	    if ( ++GEnv.Blocks < V1 )
 	    {
 		GEnv.ValFreq[GEnv.Blocks] = GEnv.ValFreq[V1];
-		ForEach(c, 1, MaxClass)
+		ForEach(c, 1, Context->schema.max_class)
 		{
 		    GEnv.Freq[GEnv.Blocks][c] = GEnv.Freq[V1][c];
 		}
@@ -171,10 +172,10 @@ void EvalSubset(Attribute Att, CaseCount Cases)
     {
 	ForEach(V2, V1+1, GEnv.Blocks)
 	{
-	    if ( SameDistribution(V1, V2) )
+	    if ( SameDistribution(Context, V1, V2) )
 	    {
 		Prelim = V1;
-		AddBlock(V1, V2);
+		AddBlock(Context, V1, V2);
 	    }
 	}
 
@@ -188,7 +189,7 @@ void EvalSubset(Attribute Att, CaseCount Cases)
 	    {
 		if ( GEnv.ValFreq[V2] && ++V3 != V2 )
 		{
-		    MoveBlock(V3, V2);
+		    MoveBlock(Context, V3, V2);
 		}
 	    }
 
@@ -214,7 +215,7 @@ void EvalSubset(Attribute Att, CaseCount Cases)
 			PrevInfo, PrevGain, Val,
 		        ( Better ? " **" : "" ),
 			(VERBOSITY > 2 ? "" : "\n" ));
-	    Verbosity(3, PrintDistribution(Att, 0, GEnv.Blocks, GEnv.Freq,
+	    Verbosity(3, PrintDistribution(Context, Att, 0, GEnv.Blocks, GEnv.Freq,
 					   GEnv.ValFreq, false))
 	})
 
@@ -238,14 +239,14 @@ void EvalSubset(Attribute Att, CaseCount Cases)
     ForEach(V1, 1, GEnv.Blocks)
     {
 	GEnv.SubsetInfo[V1] = -GEnv.ValFreq[V1] * Log(GEnv.ValFreq[V1] / Cases);
-	GEnv.SubsetEntr[V1] = TotalInfo(GEnv.Freq[V1], 1, MaxClass);
+	GEnv.SubsetEntr[V1] = TotalInfo(GEnv.Freq[V1], 1, Context->schema.max_class);
     }
 
     ForEach(V1, First, GEnv.Blocks-1)
     {
 	ForEach(V2, V1+1, GEnv.Blocks)
 	{
-	    EvaluatePair(V1, V2, Cases);
+	    EvaluatePair(Context, V1, V2, Cases);
 	}
     }
 
@@ -307,16 +308,16 @@ void EvalSubset(Attribute Att, CaseCount Cases)
 
 	Val = (BestGain - Penalty / Cases) / BestInfo;
 
-	Merge(BestV1, BestV2, Cases);
+	Merge(Context, BestV1, BestV2, Cases);
 
 	Verbosity(2,
 	    fprintf(Of, "\tform subset ");
-	    PrintSubset(Att, GEnv.WSubset[BestV1]);
+	    PrintSubset(Context, Att, GEnv.WSubset[BestV1]);
 	    fprintf(Of, ": %d subsets, inf %.3f, gain %.3f, val %.3f%s\n",
 		   GEnv.Blocks, BestInfo, BestGain, Val,
 		   ( Val > BestVal ? " **" : "" ));
 	    Verbosity(3,
-		PrintDistribution(Att, 0, GEnv.Blocks, GEnv.Freq, GEnv.ValFreq,
+		PrintDistribution(Context, Att, 0, GEnv.Blocks, GEnv.Freq, GEnv.ValFreq,
 				  false))
 	    )
 
@@ -359,7 +360,8 @@ void EvalSubset(Attribute Att, CaseCount Cases)
 /*************************************************************************/
 
 
-void Merge(DiscrValue x, DiscrValue y, CaseCount Cases)
+void Merge(c50_context *Context, DiscrValue x, DiscrValue y,
+	   CaseCount Cases)
 /*   -----  */
 {
     ClassNo	c;
@@ -367,9 +369,9 @@ void Merge(DiscrValue x, DiscrValue y, CaseCount Cases)
     CaseCount	KnownCases=0;
     int		R, C;
 
-    AddBlock(x, y);
+    AddBlock(Context, x, y);
 
-    ForEach(c, 1, MaxClass)
+    ForEach(c, 1, Context->schema.max_class)
     {
 	Entr -= GEnv.Freq[x][c] * Log(GEnv.Freq[x][c]);
 	KnownCases += GEnv.Freq[x][c];
@@ -382,7 +384,7 @@ void Merge(DiscrValue x, DiscrValue y, CaseCount Cases)
 
     ForEach(R, y, GEnv.Blocks-1)
     {
-	MoveBlock(R, R+1);
+	MoveBlock(Context, R, R+1);
 
 	GEnv.SubsetInfo[R] = GEnv.SubsetInfo[R+1];
 	GEnv.SubsetEntr[R] = GEnv.SubsetEntr[R+1];
@@ -408,7 +410,7 @@ void Merge(DiscrValue x, DiscrValue y, CaseCount Cases)
 
     ForEach(C, 1, GEnv.Blocks)
     {
-	if ( C != x ) EvaluatePair(x, C, Cases);
+	if ( C != x ) EvaluatePair(Context, x, C, Cases);
     }
 }
 
@@ -421,7 +423,8 @@ void Merge(DiscrValue x, DiscrValue y, CaseCount Cases)
 /*************************************************************************/
 
 
-void EvaluatePair(DiscrValue x, DiscrValue y, CaseCount Cases)
+void EvaluatePair(c50_context *Context, DiscrValue x, DiscrValue y,
+		  CaseCount Cases)
 /*   ------------  */
 {
     ClassNo	c;
@@ -438,7 +441,7 @@ void EvaluatePair(DiscrValue x, DiscrValue y, CaseCount Cases)
     F = GEnv.ValFreq[x] + GEnv.ValFreq[y];
     GEnv.MergeInfo[x][y] = - F * Log(F / Cases);
 
-    ForEach(c, 1, MaxClass)
+    ForEach(c, 1, Context->schema.max_class)
     {
 	F = GEnv.Freq[x][c] + GEnv.Freq[y][c];
 	Entr -= F * Log(F);
@@ -456,7 +459,8 @@ void EvaluatePair(DiscrValue x, DiscrValue y, CaseCount Cases)
 /*************************************************************************/
 
 
-Boolean SameDistribution(DiscrValue V1, DiscrValue V2)
+Boolean SameDistribution(c50_context *Context, DiscrValue V1,
+			 DiscrValue V2)
 /*	----------------  */
 {
     ClassNo	c;
@@ -465,7 +469,7 @@ Boolean SameDistribution(DiscrValue V1, DiscrValue V2)
     D1 = GEnv.ValFreq[V1];
     D2 = GEnv.ValFreq[V2];
 
-    ForEach(c, 1, MaxClass)
+    ForEach(c, 1, Context->schema.max_class)
     {
 	if ( fabs(GEnv.Freq[V1][c] / D1 - GEnv.Freq[V2][c] / D2) > 0.001 )
 	{
@@ -485,7 +489,7 @@ Boolean SameDistribution(DiscrValue V1, DiscrValue V2)
 /*************************************************************************/
 
 
-void AddBlock(DiscrValue V1, DiscrValue V2)
+void AddBlock(c50_context *Context, DiscrValue V1, DiscrValue V2)
 /*   --------  */
 {
     ClassNo	c;
@@ -504,7 +508,7 @@ void AddBlock(DiscrValue V1, DiscrValue V2)
 	GEnv.ReasonableSubsets++;
     }
 
-    ForEach(c, 1, MaxClass)
+    ForEach(c, 1, Context->schema.max_class)
     {
 	GEnv.Freq[V1][c] += GEnv.Freq[V2][c];
     }
@@ -525,12 +529,12 @@ void AddBlock(DiscrValue V1, DiscrValue V2)
 /*************************************************************************/
 
 
-void MoveBlock(DiscrValue V1, DiscrValue V2)
+void MoveBlock(c50_context *Context, DiscrValue V1, DiscrValue V2)
 /*   ---------  */
 {
     ClassNo	c;
 
-    ForEach(c, 1, MaxClass)
+    ForEach(c, 1, Context->schema.max_class)
     {
 	GEnv.Freq[V1][c] = GEnv.Freq[V2][c];
     }
@@ -547,13 +551,13 @@ void MoveBlock(DiscrValue V1, DiscrValue V2)
 /*************************************************************************/
 
 
-void PrintSubset(Attribute Att, Set Ss)
+void PrintSubset(c50_context *Context, Attribute Att, Set Ss)
 /*   -----------  */
 {
     DiscrValue	V1;
     Boolean	First=true;
 
-    ForEach(V1, 1, MaxAttVal[Att])
+    ForEach(V1, 1, Context->schema.max_attribute_value[Att])
     {
 	if ( In(V1, Ss) )
 	{
@@ -566,7 +570,7 @@ void PrintSubset(Attribute Att, Set Ss)
 		fprintf(Of, ", ");
 	    }
 
-	    fprintf(Of, "%s", AttValName[Att][V1]);
+	    fprintf(Of, "%s", Context->schema.attribute_value_names[Att][V1]);
 	}
     }
 }
@@ -580,7 +584,7 @@ void PrintSubset(Attribute Att, Set Ss)
 /*************************************************************************/
 
 
-void SubsetTest(Tree Node, Attribute Att)
+void SubsetTest(c50_context *Context, Tree Node, Attribute Att)
 /*   -----------  */
 {
     int	S, Bytes;
@@ -590,7 +594,7 @@ void SubsetTest(Tree Node, Attribute Att)
     Node->NodeType = BrSubset;
     Node->Tested   = Att;
 
-    Bytes = (MaxAttVal[Att]>>3) + 1;
+    Bytes = (Context->schema.max_attribute_value[Att]>>3) + 1;
     Node->Subset = AllocZero(Subsets[Att]+1, Set);
     ForEach(S, 1, Node->Forks)
     {

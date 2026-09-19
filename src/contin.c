@@ -59,7 +59,7 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
     ClassNo	c;
     ContValue	Interval;
 
-    Verbosity(3, fprintf(Of, "\tAtt %s\n", AttName[Att]))
+    Verbosity(3, fprintf(Of, "\tAtt %s\n", Context->schema.attribute_names[Att]))
 
     Gain[Att] = None;
     PrepareForContin(Context, Att, Fp, Lp);
@@ -70,7 +70,7 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
     {
 	Verbosity(2,
 	    fprintf(Of, "\tAtt %s\tinsufficient cases with known values\n",
-			AttName[Att]))
+			Context->schema.attribute_names[Att]))
 	return;
     }
 
@@ -82,7 +82,7 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
 	the maximum of MINITEMS or (the minimum of 25 and 10% of the cases
 	per class)  */
 
-    GEnv.MinSplit = 0.10 * GEnv.KnownCases / MaxClass;
+    GEnv.MinSplit = 0.10 * GEnv.KnownCases / Context->schema.max_class;
     if ( GEnv.MinSplit > 25 ) GEnv.MinSplit = 25;
     if ( GEnv.MinSplit < MINITEMS ) GEnv.MinSplit = MINITEMS;
 
@@ -96,7 +96,7 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
     {
 	c = GEnv.SRec[i].C;
 	w = GEnv.SRec[i].W;
-	assert(c >= 1 && c <= MaxClass);
+	assert(c >= 1 && c <= Context->schema.max_class);
 
 	GEnv.LowCases   += w;
 	GEnv.Freq[2][c] += w;
@@ -118,7 +118,7 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
 
 	    if ( ! GEnv.LowClass || GEnv.LowClass != GEnv.HighClass || j > GEnv.Ep )
 	    {
-		LowInfo = TotalInfo(GEnv.Freq[2], 1, MaxClass);
+		LowInfo = TotalInfo(GEnv.Freq[2], 1, Context->schema.max_class);
 
 		/*  If cannot improve on best so far, count remaining
 		    possible cuts and break  */
@@ -135,7 +135,7 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
 		    break;
 		}
 
-		LHInfo = LowInfo + TotalInfo(GEnv.Freq[3], 1, MaxClass);
+		LHInfo = LowInfo + TotalInfo(GEnv.Freq[3], 1, Context->schema.max_class);
 		if ( LHInfo < LeastInfo )
 		{
 		    LeastInfo = LHInfo;
@@ -153,7 +153,7 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
 			   (GEnv.LowVal + GEnv.HighVal) / 2,
 			   (1 - GEnv.UnknownRate) *
 			   (GEnv.BaseInfo - (GEnv.NAInfo + LHInfo) / GEnv.KnownCases));
-		    PrintDistribution(Att, 2, 3, GEnv.Freq, GEnv.ValFreq, true);
+		    PrintDistribution(Context, Att, 2, 3, GEnv.Freq, GEnv.ValFreq, true);
 		})
 	    }
 
@@ -182,7 +182,7 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
 
     if ( BestGain <= 0 )
     {
-	Verbosity(2, fprintf(Of, "\tAtt %s\tno gain\n", AttName[Att]))
+	Verbosity(2, fprintf(Of, "\tAtt %s\tno gain\n", Context->schema.attribute_names[Att]))
     }
     else
     {
@@ -203,7 +203,7 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
 
 	Verbosity(2,
 	    fprintf(Of, "\tAtt %s\tcut=%.3f, inf %.3f, gain %.3f\n",
-		   AttName[Att], Bar[Att], Info[Att], Gain[Att]))
+		   Context->schema.attribute_names[Att], Bar[Att], Info[Att], Gain[Att]))
     }
 }
 
@@ -226,7 +226,7 @@ void EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp, CaseNo Lp)
 
     EstMaxGR[Att] = 0;
 
-    if ( Skip(Att) || Att == Context->class_attribute ) return;
+    if ( Skip(Att) || Att == Context->schema.class_attribute ) return;
 
     PrepareForContin(Context, Att, Fp, Lp);
 
@@ -240,7 +240,7 @@ void EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp, CaseNo Lp)
     /*  Try possible cuts between cases i and i+1.  Use conservative
 	value of GEnv.MinSplit to allow for sampling  */
 
-    GEnv.MinSplit = 0.10 * GEnv.KnownCases / MaxClass;
+    GEnv.MinSplit = 0.10 * GEnv.KnownCases / Context->schema.max_class;
     if ( GEnv.MinSplit > 25 ) GEnv.MinSplit = 25;
     if ( GEnv.MinSplit < MINITEMS ) GEnv.MinSplit = MINITEMS;
 
@@ -254,7 +254,7 @@ void EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp, CaseNo Lp)
     {
 	c = GEnv.SRec[i].C;
 	w = GEnv.SRec[i].W;
-	assert(c >= 1 && c <= MaxClass);
+	assert(c >= 1 && c <= Context->schema.max_class);
 
 	GEnv.LowCases   += w;
 	GEnv.Freq[2][c] += w;
@@ -274,8 +274,8 @@ void EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp, CaseNo Lp)
 
 	    if ( ! GEnv.LowClass || GEnv.LowClass != GEnv.HighClass || j > GEnv.Ep )
 	    {
-		LHInfo = TotalInfo(GEnv.Freq[2], 1, MaxClass)
-			 + TotalInfo(GEnv.Freq[3], 1, MaxClass);
+		LHInfo = TotalInfo(GEnv.Freq[2], 1, Context->schema.max_class)
+			 + TotalInfo(GEnv.Freq[3], 1, Context->schema.max_class);
 
 		SplitInfo = (GEnv.FixedSplitInfo
 			    + PartInfo(GEnv.LowCases)
@@ -297,7 +297,7 @@ void EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp, CaseNo Lp)
 		{
 		    fprintf(Of, "\t\tCut at %.3f  (gain %.3f):",
 			   (GEnv.LowVal + GEnv.HighVal) / 2, ThisGain);
-		    PrintDistribution(Att, 2, 3, GEnv.Freq, GEnv.ValFreq, true);
+		    PrintDistribution(Context, Att, 2, 3, GEnv.Freq, GEnv.ValFreq, true);
 		})
 	    }
 
@@ -307,7 +307,7 @@ void EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp, CaseNo Lp)
 
     Verbosity(2,
 	fprintf(Of, "\tAtt %s: max GR estimate %.3f\n",
-		    AttName[Att], EstMaxGR[Att]))
+		    Context->schema.attribute_names[Att], EstMaxGR[Att]))
 }
 
 
@@ -332,7 +332,7 @@ void PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
 
     ForEach(v, 0, 3)
     {
-	ForEach(c, 1, MaxClass)
+	ForEach(c, 1, Context->schema.max_class)
 	{
 	    GEnv.Freq[v][c] = 0;
 	}
@@ -349,7 +349,7 @@ void PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
 
 	ForEach(i, Fp, Lp)
 	{
-	    assert(Class(Case[i]) >= 1 && Class(Case[i]) <= MaxClass);
+	    assert(Class(Case[i]) >= 1 && Class(Case[i]) <= Context->schema.max_class);
 
 	    GEnv.Cases += Weight(Case[i]);
 
@@ -372,16 +372,16 @@ void PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
 	    }
 	}
 
-	ForEach(c, 1, MaxClass)
+	ForEach(c, 1, Context->schema.max_class)
 	{
 	    GEnv.ValFreq[0] += GEnv.Freq[0][c];
 	    GEnv.ValFreq[1] += GEnv.Freq[1][c];
 	}
 
-	GEnv.NAInfo = TotalInfo(GEnv.Freq[1], 1, MaxClass);
+	GEnv.NAInfo = TotalInfo(GEnv.Freq[1], 1, Context->schema.max_class);
 	GEnv.FixedSplitInfo = PartInfo(GEnv.ValFreq[0]) + PartInfo(GEnv.ValFreq[1]);
 
-	Verbosity(3, PrintDistribution(Att, 0, 1, GEnv.Freq, GEnv.ValFreq, true))
+	Verbosity(3, PrintDistribution(Context, Att, 0, 1, GEnv.Freq, GEnv.ValFreq, true))
     }
     else
     {
@@ -396,7 +396,7 @@ void PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
 	    GEnv.Freq[3][Class(Case[i])] += Weight(Case[i]);
 	}
 
-	ForEach(c, 1, MaxClass)
+	ForEach(c, 1, Context->schema.max_class)
 	{
 	    GEnv.Cases += GEnv.Freq[3][c];
 	}
@@ -417,12 +417,12 @@ void PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
     {
 	/*  Determine base information using GEnv.Freq[0] as temp buffer  */
 
-	ForEach(c, 1, MaxClass)
+	ForEach(c, 1, Context->schema.max_class)
 	{
 	    GEnv.Freq[0][c] = GEnv.Freq[1][c] + GEnv.Freq[3][c];
 	}
 
-	GEnv.BaseInfo = TotalInfo(GEnv.Freq[0], 1, MaxClass) / GEnv.KnownCases;
+	GEnv.BaseInfo = TotalInfo(GEnv.Freq[0], 1, Context->schema.max_class) / GEnv.KnownCases;
     }
     else
     {
@@ -466,7 +466,7 @@ CaseNo PrepareForScan(CaseNo Lp)
     {
 	c = GEnv.SRec[i].C;
 	w = GEnv.SRec[i].W;
-	assert(c >= 1 && c <= MaxClass);
+	assert(c >= 1 && c <= Context->schema.max_class);
 
 	GEnv.LowCases   += w;
 	GEnv.Freq[2][c] += w;
@@ -480,7 +480,7 @@ CaseNo PrepareForScan(CaseNo Lp)
     {
 	if ( GEnv.SRec[j].C != GEnv.HighClass ) GEnv.HighClass = 0;
     }
-    assert(GEnv.HighClass <= MaxClass);
+    assert(GEnv.HighClass <= Context->schema.max_class);
     assert(j+1 >= GEnv.Xp);
 
     GEnv.LowVal = GEnv.SRec[i].V;
@@ -525,7 +525,7 @@ void AdjustAllThresholds(c50_context *Context, Tree T)
     Attribute	Att;
     CaseNo	Ep;
 
-    ForEach(Att, 1, MaxAtt)
+    ForEach(Att, 1, Context->schema.max_attribute)
     {
 	if ( Continuous(Att) )
 	{

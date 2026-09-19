@@ -106,7 +106,7 @@ void CheckFile(c50_context *Context, String Extension, Boolean Write)
 
 	if ( Write )
 	{
-	    WriteFilePrefix(Extension);
+	    WriteFilePrefix(Context, Extension);
 	}
 	else
 	{
@@ -124,7 +124,7 @@ void CheckFile(c50_context *Context, String Extension, Boolean Write)
 /*************************************************************************/
 
 
-void WriteFilePrefix(String Extension)
+void WriteFilePrefix(c50_context *Context, String Extension)
 /*   ---------------  */
 {
     time_t	clock;
@@ -154,7 +154,7 @@ void WriteFilePrefix(String Extension)
 	fprintf(TRf, "sample=\"%g\" init=\"%d\"\n", SAMPLE, KRInit);
     }
 
-    SaveDiscreteNames();
+    SaveDiscreteNames(Context);
 
     fprintf(TRf, "entries=\"%d\"\n", TRIALS);
 }
@@ -196,22 +196,22 @@ void ReadFilePrefix(c50_context *Context, String Extension)
 /*************************************************************************/
 
 
-void SaveDiscreteNames()
+void SaveDiscreteNames(c50_context *Context)
 /*   -----------------  */
 {
     Attribute	Att;
     DiscrValue	v;
 
-    ForEach(Att, 1, MaxAtt)
+    ForEach(Att, 1, Context->schema.max_attribute)
     {
-	if ( ! StatBit(Att, DISCRETE) || MaxAttVal[Att] < 2 ) continue;
+	if ( ! StatBit(Att, DISCRETE) || Context->schema.max_attribute_value[Att] < 2 ) continue;
 
-	AsciiOut("att=", AttName[Att]);
-	AsciiOut(" elts=", AttValName[Att][2]); 	/* skip N/A */
+	AsciiOut("att=", Context->schema.attribute_names[Att]);
+	AsciiOut(" elts=", Context->schema.attribute_value_names[Att][2]); 	/* skip N/A */
 
-	ForEach(v, 3, MaxAttVal[Att])
+	ForEach(v, 3, Context->schema.max_attribute_value[Att])
 	{
-	    AsciiOut(",", AttValName[Att][v]);
+	    AsciiOut(",", Context->schema.attribute_value_names[Att][v]);
 	}
 	fprintf(TRf, "\n");
     }
@@ -231,12 +231,12 @@ void SaveTree(c50_context *Context, Tree T, String Extension)
 {
     CheckFile(Context, Extension, true);
 
-    OutTree(T);
+    OutTree(Context, T);
 }
 
 
 
-void OutTree(Tree T)
+void OutTree(c50_context *Context, Tree T)
 /*   -------  */
 {
     DiscrValue	v, vv;
@@ -244,11 +244,11 @@ void OutTree(Tree T)
     Boolean	First;
 
     fprintf(TRf, "type=\"%d\"", T->NodeType);
-    AsciiOut(" class=", ClassName[T->Leaf]);
+    AsciiOut(" class=", Context->schema.class_names[T->Leaf]);
     if ( T->Cases > 0 )
     {
 	fprintf(TRf, " freq=\"%g", T->ClassDist[1]);
-	ForEach(c, 2, MaxClass)
+	ForEach(c, 2, Context->schema.max_class)
 	{
 	    fprintf(TRf, ",%g", T->ClassDist[c]);
 	}
@@ -257,7 +257,7 @@ void OutTree(Tree T)
 
     if ( T->NodeType )
     {
-	AsciiOut(" att=", AttName[T->Tested]);
+	AsciiOut(" att=", Context->schema.attribute_names[T->Tested]);
 	fprintf(TRf, " forks=\"%d\"", T->Forks);
 
 	switch ( T->NodeType )
@@ -278,18 +278,18 @@ void OutTree(Tree T)
 		ForEach(v, 1, T->Forks)
 		{
 		    First=true;
-		    ForEach(vv, 1, MaxAttVal[T->Tested])
+		    ForEach(vv, 1, Context->schema.max_attribute_value[T->Tested])
 		    {
 			if ( In(vv, T->Subset[v]) )
 			{
 			    if ( First )
 			    {
-				AsciiOut(" elts=", AttValName[T->Tested][vv]);
+				AsciiOut(" elts=", Context->schema.attribute_value_names[T->Tested][vv]);
 				First = false;
 			    }
 			    else
 			    {
-				AsciiOut(",", AttValName[T->Tested][vv]);
+				AsciiOut(",", Context->schema.attribute_value_names[T->Tested][vv]);
 			    }
 			}
 		    }
@@ -303,7 +303,7 @@ void OutTree(Tree T)
 
 	ForEach(v, 1, T->Forks)
 	{
-	    OutTree(T->Branch[v]);
+	    OutTree(Context, T->Branch[v]);
 	}
     }
     else
@@ -333,7 +333,7 @@ void SaveRules(c50_context *Context, CRuleSet RS, String Extension)
     CheckFile(Context, Extension, true);
 
     fprintf(TRf, "rules=\"%d\"", RS->SNRules);
-    AsciiOut(" default=", ClassName[RS->SDefault]);
+    AsciiOut(" default=", Context->schema.class_names[RS->SDefault]);
     fprintf(TRf, "\n");
 
     ForEach(ri, 1, RS->SNRules)
@@ -342,7 +342,7 @@ void SaveRules(c50_context *Context, CRuleSet RS, String Extension)
 	fprintf(TRf, "conds=\"%d\" cover=\"%g\" ok=\"%g\" lift=\"%g\"",
 		     R->Size, R->Cover, R->Correct,
 		     (R->Correct + 1) / ((R->Cover + 2) * R->Prior));
-	AsciiOut(" class=", ClassName[R->Rhs]);
+	AsciiOut(" class=", Context->schema.class_names[R->Rhs]);
 	fprintf(TRf, "\n");
 
 	ForEach(d, 1, R->Size)
@@ -350,12 +350,12 @@ void SaveRules(c50_context *Context, CRuleSet RS, String Extension)
 	    C = R->Lhs[d];
 
 	    fprintf(TRf, "type=\"%d\"", C->NodeType);
-	    AsciiOut(" att=", AttName[C->Tested]);
+	    AsciiOut(" att=", Context->schema.attribute_names[C->Tested]);
 
 	    switch ( C->NodeType )
 	    {
 		case BrDiscr:
-		    AsciiOut(" val=", AttValName[C->Tested][C->TestValue]);
+		    AsciiOut(" val=", Context->schema.attribute_value_names[C->Tested][C->TestValue]);
 		    break;
 
 		case BrThresh:
@@ -373,18 +373,18 @@ void SaveRules(c50_context *Context, CRuleSet RS, String Extension)
 
 		case BrSubset:
 		    First=true;
-		    ForEach(v, 1, MaxAttVal[C->Tested])
+		    ForEach(v, 1, Context->schema.max_attribute_value[C->Tested])
 		    {
 			if ( In(v, C->Subset) )
 			{
 			    if ( First )
 			    {
-				AsciiOut(" elts=", AttValName[C->Tested][v]);
+				AsciiOut(" elts=", Context->schema.attribute_value_names[C->Tested][v]);
 				First = false;
 			    }
 			    else
 			    {
-				AsciiOut(",", AttValName[C->Tested][v]);
+				AsciiOut(",", Context->schema.attribute_value_names[C->Tested][v]);
 			    }
 			}
 		    }
@@ -481,7 +481,7 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 
 	    case ATTP:
 		Unquoted = RemoveQuotes(Context->property_value);
-		Att = Which(Unquoted, AttName, 1, MaxAtt);
+		Att = Which(Unquoted, Context->schema.attribute_names, 1, Context->schema.max_attribute);
 		if ( ! Att || Exclude(Att) )
 		{
 		    Error(MODELFILE, E_MFATT, Unquoted);
@@ -489,22 +489,22 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 		break;
 
 	    case ELTSP:
-		MaxAttVal[Att] = 1;
-		AttValName[Att][1] = strdup("N/A");
+		Context->schema.max_attribute_value[Att] = 1;
+		Context->schema.attribute_value_names[Att][1] = strdup("N/A");
 
 		for ( p = Context->property_value ; *p ; )
 		{
 		    p = RemoveQuotes(p);
-		    v = ++MaxAttVal[Att];
-		    AttValName[Att][v] = strdup(p);
+		    v = ++Context->schema.max_attribute_value[Att];
+		    Context->schema.attribute_value_names[Att][v] = strdup(p);
 
 		    for ( p += strlen(p) ; *p != '"' ; p++ )
 			;
 		    p++;
 		    if ( *p == ',' ) p++;
 		}
-		AttValName[Att][MaxAttVal[Att]+1] = "<other>";
-		MaxDiscrVal = Max(MaxDiscrVal, MaxAttVal[Att]+1);
+		Context->schema.attribute_value_names[Att][Context->schema.max_attribute_value[Att]+1] = "<other>";
+		Context->schema.max_discrete_value = Max(Context->schema.max_discrete_value, Context->schema.max_attribute_value[Att]+1);
 		break;
 
 	    case ENTRIESP:
@@ -587,13 +587,13 @@ Tree InTreeAt(c50_context *Context, c50_input *Input, Tree *Slot)
 
 	    case CLASSP:
 		Unquoted = RemoveQuotes(Context->property_value);
-		T->Leaf = Which(Unquoted, ClassName, 1, MaxClass);
+		T->Leaf = Which(Unquoted, Context->schema.class_names, 1, Context->schema.max_class);
 		if ( ! T->Leaf ) Error(MODELFILE, E_MFCLASS, Unquoted);
 		break;
 
 	    case ATTP:
 		Unquoted = RemoveQuotes(Context->property_value);
-		T->Tested = Which(Unquoted, AttName, 1, MaxAtt);
+		T->Tested = Which(Unquoted, Context->schema.attribute_names, 1, Context->schema.max_attribute);
 		if ( ! T->Tested || Exclude(T->Tested) )
 		{
 		    Error(MODELFILE, E_MFATT, Unquoted);
@@ -622,10 +622,10 @@ Tree InTreeAt(c50_context *Context, c50_input *Input, Tree *Slot)
 		break;
 
 	    case FREQP:
-		T->ClassDist = Alloc(MaxClass+1, CaseCount);
+		T->ClassDist = Alloc(Context->schema.max_class+1, CaseCount);
 		p = Context->property_value+1;
 
-		ForEach(c, 1, MaxClass)
+		ForEach(c, 1, Context->schema.max_class)
 		{
 		    T->ClassDist[c] = strtod(p, &p);
 		    T->Cases += T->ClassDist[c];
@@ -720,7 +720,7 @@ CRuleSet InRulesAt(c50_context *Context, c50_input *Input, CRuleSet *Slot)
 
 	    case DEFAULTP:
 		Unquoted = RemoveQuotes(Context->property_value);
-		RS->SDefault = Which(Unquoted, ClassName, 1, MaxClass);
+		RS->SDefault = Which(Unquoted, Context->schema.class_names, 1, Context->schema.max_class);
 		if ( ! RS->SDefault ) Error(MODELFILE, E_MFCLASS, Unquoted);
 		break;
 	}
@@ -738,7 +738,7 @@ CRuleSet InRulesAt(c50_context *Context, c50_input *Input, CRuleSet *Slot)
 	    RS->SRule[r]->TNo = Context->model_entry;
 	}
     }
-    ConstructRuleTree(RS);
+    ConstructRuleTree(Context, RS);
     Context->model_entry++;
     return RS;
 }
@@ -792,7 +792,7 @@ CRule InRuleAt(c50_context *Context, c50_input *Input, CRule *Slot)
 
 	    case CLASSP:
 		Unquoted = RemoveQuotes(Context->property_value);
-		R->Rhs = Which(Unquoted, ClassName, 1, MaxClass);
+		R->Rhs = Which(Unquoted, Context->schema.class_names, 1, Context->schema.max_class);
 		if ( ! R->Rhs ) Error(MODELFILE, E_MFCLASS, Unquoted);
 		break;
 	}
@@ -847,7 +847,7 @@ Condition InConditionAt(c50_context *Context, c50_input *Input,
 
 	    case ATTP:
 		Unquoted = RemoveQuotes(Context->property_value);
-		C->Tested = Which(Unquoted, AttName, 1, MaxAtt);
+		C->Tested = Which(Unquoted, Context->schema.attribute_names, 1, Context->schema.max_attribute);
 		if ( ! C->Tested || Exclude(C->Tested) )
 		{
 		    Error(MODELFILE, E_MFATT, Unquoted);
@@ -871,8 +871,8 @@ Condition InConditionAt(c50_context *Context, c50_input *Input,
 		{
 		    Unquoted = RemoveQuotes(Context->property_value);
 		    C->TestValue = Which(Unquoted,
-					 AttValName[C->Tested],
-					 1, MaxAttVal[C->Tested]);
+					 Context->schema.attribute_value_names[C->Tested],
+					 1, Context->schema.max_attribute_value[C->Tested]);
 		    if ( ! C->TestValue ) Error(MODELFILE, E_MFATTVAL, Unquoted);
 		}
 		break;
@@ -984,13 +984,13 @@ Set MakeSubset(c50_context *Context, Attribute Att)
     char	*p;
     Set		S;
 
-    Bytes = (MaxAttVal[Att]>>3) + 1;
+    Bytes = (Context->schema.max_attribute_value[Att]>>3) + 1;
     S = AllocZero(Bytes, Byte);
 
     for ( p = Context->property_value ; *p ; )
     {
 	p = RemoveQuotes(p);
-	b = Which(p, AttValName[Att], 1, MaxAttVal[Att]);
+	b = Which(p, Context->schema.attribute_value_names[Att], 1, Context->schema.max_attribute_value[Att]);
 	if ( ! b ) Error(MODELFILE, E_MFATTVAL, p);
 	SetBit(b, S);
 

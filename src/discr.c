@@ -33,6 +33,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 
 /*************************************************************************/
@@ -42,7 +43,7 @@
 /*************************************************************************/
 
 
-void EvalDiscreteAtt(Attribute Att, CaseCount Cases)
+void EvalDiscreteAtt(c50_context *Context, Attribute Att, CaseCount Cases)
 /*   ---------------  */
 {
     CaseCount	KnownCases;
@@ -50,34 +51,34 @@ void EvalDiscreteAtt(Attribute Att, CaseCount Cases)
     DiscrValue	v;
     double	BaseInfo;
 
-    SetDiscrFreq(Att);
+    SetDiscrFreq(Context, Att);
     KnownCases = Cases - GEnv.ValFreq[0];
 
     /*  Check reasonable subsets  */
 
-    ForEach(v, 1, MaxAttVal[Att])
+    ForEach(v, 1, Context->schema.max_attribute_value[Att])
     {
 	if ( GEnv.ValFreq[v] >= MINITEMS ) ReasonableSubsets++;
     }
 
     if ( ReasonableSubsets < 2 )
     {
-	Verbosity(2, fprintf(Of, "\tAtt %s: poor split\n", AttName[Att]))
+	Verbosity(2, fprintf(Of, "\tAtt %s: poor split\n", Context->schema.attribute_names[Att]))
 	return;
     }
 
     BaseInfo = ( ! GEnv.ValFreq[0] ? GlobalBaseInfo :
-		     DiscrKnownBaseInfo(KnownCases, MaxAttVal[Att]) );
+		     DiscrKnownBaseInfo(Context, KnownCases, Context->schema.max_attribute_value[Att]) );
 
-    Gain[Att] = ComputeGain(BaseInfo, GEnv.ValFreq[0] / Cases, MaxAttVal[Att],
+    Gain[Att] = ComputeGain(Context, BaseInfo, GEnv.ValFreq[0] / Cases, Context->schema.max_attribute_value[Att],
 			    KnownCases);
-    Info[Att] = TotalInfo(GEnv.ValFreq, 0, MaxAttVal[Att]) / Cases;
+    Info[Att] = TotalInfo(GEnv.ValFreq, 0, Context->schema.max_attribute_value[Att]) / Cases;
 
     Verbosity(2,
     {
-    	fprintf(Of, "\tAtt %s", AttName[Att]);
+	fprintf(Of, "\tAtt %s", Context->schema.attribute_names[Att]);
     	Verbosity(3,
-	    PrintDistribution(Att, 0, MaxAttVal[Att], GEnv.Freq, GEnv.ValFreq,
+	    PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], GEnv.Freq, GEnv.ValFreq,
 			      true))
     	fprintf(Of, "\tinf %.3f, gain %.3f\n", Info[Att], Gain[Att]);
     })
@@ -92,7 +93,7 @@ void EvalDiscreteAtt(Attribute Att, CaseCount Cases)
 /*************************************************************************/
 
 
-void EvalOrderedAtt(Attribute Att, CaseCount Cases)
+void EvalOrderedAtt(c50_context *Context, Attribute Att, CaseCount Cases)
 /*   --------------  */
 {
     CaseCount	KnownCases;
@@ -102,21 +103,21 @@ void EvalOrderedAtt(Attribute Att, CaseCount Cases)
     DiscrValue	v, BestV;
     double	BaseInfo, ThisGain, BestInfo, BestGain=None;
 
-    SetDiscrFreq(Att);
+    SetDiscrFreq(Context, Att);
     KnownCases = Cases - GEnv.ValFreq[0];
 
     BaseInfo = ( ! GEnv.ValFreq[0] ? GlobalBaseInfo :
-		     DiscrKnownBaseInfo(KnownCases, MaxAttVal[Att]) );
+		     DiscrKnownBaseInfo(Context, KnownCases, Context->schema.max_attribute_value[Att]) );
 
-    Verbosity(2, fprintf(Of, "\tAtt %s", AttName[Att]))
-    Verbosity(3, PrintDistribution(Att, 0, MaxAttVal[Att], GEnv.Freq,
+    Verbosity(2, fprintf(Of, "\tAtt %s", Context->schema.attribute_names[Att]))
+    Verbosity(3, PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], GEnv.Freq,
 				   GEnv.ValFreq, true))
 
     /*  Move elts of Freq[] starting with the third up one place
 	and aggregate class frequencies  */
 
-    HoldFreqRow = GEnv.Freq[MaxAttVal[Att]+1];
-    ForEach(c, 1, MaxClass)
+    HoldFreqRow = GEnv.Freq[Context->schema.max_attribute_value[Att]+1];
+    ForEach(c, 1, Context->schema.max_class)
     {
 	HoldFreqRow[c] = 0;
     }
@@ -125,10 +126,10 @@ void EvalOrderedAtt(Attribute Att, CaseCount Cases)
     SplitFreq[2] = GEnv.ValFreq[2];
     SplitFreq[3] = 0;
 
-    for ( v = MaxAttVal[Att] ; v > 2 ; v-- )
+    for ( v = Context->schema.max_attribute_value[Att] ; v > 2 ; v-- )
     {
 	GEnv.Freq[v+1] = GEnv.Freq[v];
-	ForEach(c, 1, MaxClass)
+	ForEach(c, 1, Context->schema.max_class)
 	{
 	    HoldFreqRow[c] += GEnv.Freq[v][c];
 	}
@@ -139,14 +140,14 @@ void EvalOrderedAtt(Attribute Att, CaseCount Cases)
 
     /*  Try various cuts, saving the one with maximum gain  */
 
-    ForEach(v, 3, MaxAttVal[Att])
+    ForEach(v, 3, Context->schema.max_attribute_value[Att])
     {
 	if ( GEnv.ValFreq[v] > 0 &&
 	     SplitFreq[2] >= MINITEMS && SplitFreq[3] >= MINITEMS )
 	{
 	    Tries++;
 	    ThisGain =
-		ComputeGain(BaseInfo, GEnv.ValFreq[0] / Cases, 3, KnownCases);
+		ComputeGain(Context, BaseInfo, GEnv.ValFreq[0] / Cases, 3, KnownCases);
 
 	    if ( ThisGain > BestGain )
 	    {
@@ -157,14 +158,14 @@ void EvalOrderedAtt(Attribute Att, CaseCount Cases)
 
 	    Verbosity(3,
 	    {   fprintf(Of, "\t\tFrom %s (gain %.3f)",
-			AttValName[Att][v], ThisGain);
-		PrintDistribution(Att, 0, 3, GEnv.Freq, GEnv.ValFreq, false);
+			Context->schema.attribute_value_names[Att][v], ThisGain);
+		PrintDistribution(Context, Att, 0, 3, GEnv.Freq, GEnv.ValFreq, false);
 	    })
 	}
 
 	/*  Move val v from right branch to left branch  */
 
-	ForEach(c, 1, MaxClass)
+	ForEach(c, 1, Context->schema.max_class)
 	{
 	    GEnv.Freq[2][c] += GEnv.Freq[v+1][c];
 	    GEnv.Freq[3][c] -= GEnv.Freq[v+1][c];
@@ -204,7 +205,7 @@ void EvalOrderedAtt(Attribute Att, CaseCount Cases)
 /*************************************************************************/
 
 
-void SetDiscrFreq(Attribute Att)
+void SetDiscrFreq(c50_context *Context, Attribute Att)
 /*   ------------  */
 {
     ClassNo	c;
@@ -214,12 +215,12 @@ void SetDiscrFreq(Attribute Att)
     /*  Determine the frequency of each possible value for the
 	given attribute  */
 
-    ForEach(v, 0, MaxAttVal[Att])
+    ForEach(v, 0, Context->schema.max_attribute_value[Att])
     {
 	GEnv.ValFreq[v] = 0;
 
-	x = v * MaxClass;
-	ForEach(c, 1, MaxClass)
+	x = v * Context->schema.max_class;
+	ForEach(c, 1, Context->schema.max_class)
 	{
 	    GEnv.ValFreq[v] += (GEnv.Freq[v][c] = DFreq[Att][x + (c-1)]);
 	}
@@ -236,7 +237,8 @@ void SetDiscrFreq(Attribute Att)
 /*************************************************************************/
 
 
-double DiscrKnownBaseInfo(CaseCount KnownCases, DiscrValue MaxVal)
+double DiscrKnownBaseInfo(c50_context *Context, CaseCount KnownCases,
+			  DiscrValue MaxVal)
 /*     ------------------  */
 {
     ClassNo	c;
@@ -245,7 +247,7 @@ double DiscrKnownBaseInfo(CaseCount KnownCases, DiscrValue MaxVal)
 
     if ( KnownCases < 1E-5 ) return 0.0;
 
-    ForEach(c, 1, MaxClass)
+    ForEach(c, 1, Context->schema.max_class)
     {
 	ClassCount = 0;
 	ForEach(v, 1, MaxVal)
@@ -255,7 +257,7 @@ double DiscrKnownBaseInfo(CaseCount KnownCases, DiscrValue MaxVal)
 	GEnv.ClassFreq[c] = ClassCount;
     }
 
-    return TotalInfo(GEnv.ClassFreq, 1, MaxClass) / KnownCases;
+    return TotalInfo(GEnv.ClassFreq, 1, Context->schema.max_class) / KnownCases;
 }
 
 
@@ -267,7 +269,7 @@ double DiscrKnownBaseInfo(CaseCount KnownCases, DiscrValue MaxVal)
 /*************************************************************************/
 
 
-void DiscreteTest(Tree Node, Attribute Att)
+void DiscreteTest(c50_context *Context, Tree Node, Attribute Att)
 /*   ------------  */
 {
     int		S, Bytes;
@@ -280,7 +282,7 @@ void DiscreteTest(Tree Node, Attribute Att)
 	Node->NodeType	= BrSubset;
 	Node->Tested	= Att;
 
-	Bytes = (MaxAttVal[Att]>>3) + 1;
+	Bytes = (Context->schema.max_attribute_value[Att]>>3) + 1;
 	Node->Subset = AllocZero(4, Set);
 
 	ForEach(S, 1, 3)
@@ -291,7 +293,7 @@ void DiscreteTest(Tree Node, Attribute Att)
 	Node->Cut = CutV = Bar[Att] + 0.1;
 
 	SetBit(1, Node->Subset[1]);
-	ForEach(v, 2, MaxAttVal[Att])
+	ForEach(v, 2, Context->schema.max_attribute_value[Att])
 	{
 	    S = ( v <= CutV ? 2 : 3 );
 	    SetBit(v, Node->Subset[S]);
@@ -299,7 +301,7 @@ void DiscreteTest(Tree Node, Attribute Att)
     }
     else
     {
-	Sprout(Node, MaxAttVal[Att]);
+	Sprout(Node, Context->schema.max_attribute_value[Att]);
 
 	Node->NodeType = BrDiscr;
 	Node->Tested   = Att;

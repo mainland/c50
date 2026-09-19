@@ -196,22 +196,22 @@ int		DataBlockSize=0;
 
 
 
-DataRec NewCase()
+DataRec NewCase(c50_context *Context)
 /*      -------  */
 {
     DataBlock	Prev;
 
     if ( ! DataMem || DataMem->Allocated == DataBlockSize )
     {
-	DataBlockSize = Min(8192, 262144 / (MaxAtt+2) + 1);
+	DataBlockSize = Min(8192, 262144 / (Context->schema.max_attribute+2) + 1);
 
 	Prev = DataMem;
 	DataMem = AllocZero(1, DataBlockRec);
-	DataMem->Head = Alloc(DataBlockSize * (MaxAtt+2), AttValue);
+	DataMem->Head = Alloc(DataBlockSize * (Context->schema.max_attribute+2), AttValue);
 	DataMem->Prev = Prev;
     }
 
-    return DataMem->Head + (DataMem->Allocated++) * (MaxAtt+2) + 1;
+    return DataMem->Head + (DataMem->Allocated++) * (Context->schema.max_attribute+2) + 1;
 }
 
 
@@ -322,7 +322,7 @@ void C50Exit(int Status)
 
 
 
-void Error(int ErrNo, String S1, String S2)
+void ErrorContext(c50_context *Context, int ErrNo, String S1, String S2)
 /*   -----  */
 {
     Boolean	Quit=false, WarningOnly=false;
@@ -456,24 +456,24 @@ void Error(int ErrNo, String S1, String S2)
 	    break;
 
 	case BADDEF1:
-	    sprintf(Msg, E_BADDEF1(AttName[MaxAtt], S1, S2));
+	    sprintf(Msg, E_BADDEF1(Context->schema.attribute_names[Context->schema.max_attribute], S1, S2));
 	    break;
 
 	case BADDEF2:
-	    sprintf(Msg, E_BADDEF2(AttName[MaxAtt], S1, S2));
+	    sprintf(Msg, E_BADDEF2(Context->schema.attribute_names[Context->schema.max_attribute], S1, S2));
 	    break;
 
 	case SAMEATT:
-	    sprintf(Msg, E_SAMEATT(AttName[MaxAtt], S1));
+	    sprintf(Msg, E_SAMEATT(Context->schema.attribute_names[Context->schema.max_attribute], S1));
 	    WarningOnly = true;
 	    break;
 
 	case BADDEF3:
-	    sprintf(Msg, E_BADDEF3, AttName[MaxAtt]);
+	    sprintf(Msg, E_BADDEF3, Context->schema.attribute_names[Context->schema.max_attribute]);
 	    break;
 
 	case BADDEF4:
-	    sprintf(Msg, E_BADDEF4, AttName[MaxAtt]);
+	    sprintf(Msg, E_BADDEF4, Context->schema.attribute_names[Context->schema.max_attribute]);
 	    WarningOnly = true;
 	    break;
 
@@ -510,6 +510,14 @@ void Error(int ErrNo, String S1, String S2)
 
 
 
+void Error(int ErrNo, String S1, String S2)
+/*   -----  */
+{
+    ErrorContext(Nil, ErrNo, S1, S2);
+}
+
+
+
 /*************************************************************************/
 /*                                                                       */
 /*      Generate the label for a case                                    */
@@ -524,9 +532,9 @@ String CaseLabel(c50_context *Context, CaseNo N)
 {
     String      p;
 
-    if ( Context->label_attribute &&
+    if ( Context->schema.label_attribute &&
 	 (p = Context->ignored_values +
-	      SVal(Case[N], Context->label_attribute)) )
+	      SVal(Case[N], Context->schema.label_attribute)) )
 	;
     else
     {
@@ -813,7 +821,7 @@ int TStampToMins(String TS)
 /*************************************************************************/
 
 
-void CValToStr(ContValue CV, Attribute Att, String DS)
+void CValToStr(c50_context *Context, ContValue CV, Attribute Att, String DS)
 /*   ---------  */
 {
     int		Mins;
@@ -918,7 +926,7 @@ void Cleanup(c50_context *Context)
 
     if ( MCost )
     {
-	FreeVector((void **) MCost, 1, MaxClass);	MCost = Nil;
+	FreeVector((void **) MCost, 1, Context->schema.max_class);	MCost = Nil;
 	FreeUnlessNil(WeightMul);			WeightMul = Nil;
     }
 
@@ -945,7 +953,7 @@ void Cleanup(c50_context *Context)
 	FreeUnlessNil(LogFact);				LogFact = Nil;
     }
 
-    FreeTreeData();
+    FreeTreeData(Context);
 
     FreeUnlessNil(UtilErr);				UtilErr = Nil;
     FreeUnlessNil(UtilBand);				UtilBand = Nil;
@@ -954,7 +962,7 @@ void Cleanup(c50_context *Context)
     FreeUnlessNil(SomeMiss);				SomeMiss = Nil;
     FreeUnlessNil(SomeNA);				SomeNA = Nil;
 
-    FreeNames();
+    FreeNames(Context);
 
     FreeUnlessNil(SubDef);				SubDef = Nil;
 							SubSpace = 0;

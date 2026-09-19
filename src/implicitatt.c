@@ -101,7 +101,7 @@ void ImplicitAtt(c50_context *Context, c50_input *Nf)
     Context->implicit_state->type_stack = Alloc(Context->implicit_state->type_stack_size=50, EltRec);
     Context->implicit_state->type_stack_position = 0;
 
-    AttDef[MaxAtt] = Alloc(Context->implicit_state->definition_size = 100, DefElt);
+    Context->schema.attribute_definitions[Context->schema.max_attribute] = Alloc(Context->implicit_state->definition_size = 100, DefElt);
     Context->implicit_state->definition_position = 0;
 
     /*  Parse Context->implicit_state->buffer as an expression terminated by a period  */
@@ -116,11 +116,11 @@ void ImplicitAtt(c50_context *Context, c50_input *Nf)
 
     if ( ! Context->implicit_state->previous_error )
     {
-	if ( Context->implicit_state->definition_position == 1 && DefOp(AttDef[MaxAtt][0]) == OP_ATT &&
-	     strcmp(AttName[MaxAtt], "case weight") )
+	if ( Context->implicit_state->definition_position == 1 && DefOp(Context->schema.attribute_definitions[Context->schema.max_attribute][0]) == OP_ATT &&
+	     strcmp(Context->schema.attribute_names[Context->schema.max_attribute], "case weight") )
 	{
-	    Error(SAMEATT,
-		  AttName[ (Attribute) (intptr_t) DefSVal(AttDef[MaxAtt][0]) ],
+	    ErrorContext(Context, SAMEATT,
+		  Context->schema.attribute_names[ (Attribute) (intptr_t) DefSVal(Context->schema.attribute_definitions[Context->schema.max_attribute][0]) ],
 		  Nil);
 	}
 
@@ -128,27 +128,27 @@ void ImplicitAtt(c50_context *Context, c50_input *Nf)
 	{
 	    /*  Defined attributes should never have a value N/A  */
 
-	    MaxAttVal[MaxAtt] = 3;
-	    AttValName[MaxAtt] = AllocZero(4, String);
-	    AttValName[MaxAtt][1] = strdup("??");
-	    AttValName[MaxAtt][2] = strdup("t");
-	    AttValName[MaxAtt][3] = strdup("f");
+	    Context->schema.max_attribute_value[Context->schema.max_attribute] = 3;
+	    Context->schema.attribute_value_names[Context->schema.max_attribute] = AllocZero(4, String);
+	    Context->schema.attribute_value_names[Context->schema.max_attribute][1] = strdup("??");
+	    Context->schema.attribute_value_names[Context->schema.max_attribute][2] = strdup("t");
+	    Context->schema.attribute_value_names[Context->schema.max_attribute][3] = strdup("f");
 	}
 	else
 	{
-	    MaxAttVal[MaxAtt] = 0;
+	    Context->schema.max_attribute_value[Context->schema.max_attribute] = 0;
 	}
     }
 
     if ( Context->implicit_state->previous_error )
     {
 	Context->implicit_state->definition_position = 0;
-	SpecialStatus[MaxAtt] = EXCLUDE;
+	Context->schema.special_status[Context->schema.max_attribute] = EXCLUDE;
     }
 
     /*  Write a terminating marker  */
 
-    DefOp(AttDef[MaxAtt][Context->implicit_state->definition_position]) = OP_END;
+    DefOp(Context->schema.attribute_definitions[Context->schema.max_attribute][Context->implicit_state->definition_position]) = OP_END;
 
     Free(Context->implicit_state->buffer);
     Free(Context->implicit_state->type_stack);
@@ -455,7 +455,7 @@ Boolean Atom(c50_context *Context)
     else
     if ( (Att = FindAttName(Context)) )
     {
-	Context->implicit_state->buffer_position += strlen(AttName[Att]);
+	Context->implicit_state->buffer_position += strlen(Context->schema.attribute_names[Att]);
 
 	Dump(Context, OP_ATT, 0, (String) (intptr_t) Att, Fi);
     }
@@ -475,7 +475,7 @@ Boolean Atom(c50_context *Context)
 	    Date[10] = '\00';
 	    if ( (F = DateToDay(Date)) == 0 )
 	    {
-		Error(BADDEF1, Date, "date");
+		ErrorContext(Context, BADDEF1, Date, "date");
 	    }
 
 	    Context->implicit_state->buffer_position += 10;
@@ -490,7 +490,7 @@ Boolean Atom(c50_context *Context)
 	    Time[8] = '\00';
 	    if ( (F = TimeToSecs(Time)) == 0 )
 	    {
-		Error(BADDEF1, Time, "time");
+		ErrorContext(Context, BADDEF1, Time, "time");
 	    }
 
 	    Context->implicit_state->buffer_position += 8;
@@ -614,22 +614,22 @@ Attribute FindAttName(c50_context *Context)
 {
     Attribute	Att, LongestAtt=0;
 
-    ForEach(Att, 1, MaxAtt-1)
+    ForEach(Att, 1, Context->schema.max_attribute-1)
     {
-	if ( ! Exclude(Att) && Find(Context, AttName[Att]) )
+	if ( ! Exclude(Att) && Find(Context, Context->schema.attribute_names[Att]) )
 	{
 	    if ( ! LongestAtt ||
-		 strlen(AttName[Att]) > strlen(AttName[LongestAtt]) )
+		 strlen(Context->schema.attribute_names[Att]) > strlen(Context->schema.attribute_names[LongestAtt]) )
 	    {
 		LongestAtt = Att;
 	    }
 	}
     }
 
-    if ( LongestAtt && ( MaxClass == 1 || ClassThresh ) &&
-	 ! strcmp(ClassName[1], AttName[LongestAtt]) )
+    if ( LongestAtt && ( Context->schema.max_class == 1 || Context->schema.class_thresholds ) &&
+	 ! strcmp(Context->schema.class_names[1], Context->schema.attribute_names[LongestAtt]) )
     {
-	Error(BADDEF4, Nil, Nil);
+	ErrorContext(Context, BADDEF4, Nil, Nil);
     }
 
     return LongestAtt;
@@ -669,7 +669,7 @@ void DefSyntaxError(c50_context *Context, String Msg)
 	    RestOfText[i] = RestOfText[i+1] = '.';
 	}
 
-	Error(BADDEF1, RestOfText, Msg);
+	ErrorContext(Context, BADDEF1, RestOfText, Msg);
 	Context->implicit_state->previous_error = true;
     }
 }
@@ -723,7 +723,7 @@ void DefSemanticsError(c50_context *Context, int Fi, String Msg, int OpCode)
 	}
 
 	snprintf(XMsg, sizeof(XMsg), "%s with '%s'", Msg, Op);
-	Error(BADDEF2, Exp, XMsg);
+	ErrorContext(Context, BADDEF2, Exp, XMsg);
 	Context->implicit_state->previous_error = true;
     }
 }
@@ -750,17 +750,17 @@ void Dump(c50_context *Context, char OpCode, ContValue F, String S, int Fi)
 
     if ( Context->implicit_state->definition_position >= Context->implicit_state->definition_size-1 )
     {
-	Realloc(AttDef[MaxAtt], Context->implicit_state->definition_size += 100, DefElt);
+	Realloc(Context->schema.attribute_definitions[Context->schema.max_attribute], Context->implicit_state->definition_size += 100, DefElt);
     }
 
-    DefOp(AttDef[MaxAtt][Context->implicit_state->definition_position]) = OpCode;
+    DefOp(Context->schema.attribute_definitions[Context->schema.max_attribute][Context->implicit_state->definition_position]) = OpCode;
     if ( OpCode == OP_ATT || OpCode == OP_STR )
     {
-	DefSVal(AttDef[MaxAtt][Context->implicit_state->definition_position]) = S;
+	DefSVal(Context->schema.attribute_definitions[Context->schema.max_attribute][Context->implicit_state->definition_position]) = S;
     }
     else
     {
-	DefNVal(AttDef[MaxAtt][Context->implicit_state->definition_position]) = F;
+	DefNVal(Context->schema.attribute_definitions[Context->schema.max_attribute][Context->implicit_state->definition_position]) = F;
     }
 
     Context->implicit_state->definition_position++;
@@ -928,7 +928,7 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 		    {
 			XStack[XSN++].sval =
 			    ( Unknown(Case, Att) && ! NotApplic(Context, Case, Att) ? 0 :
-			      AttValName[Att][XDVal(Case, Att)] );
+			      Context->schema.attribute_value_names[Att][XDVal(Case, Att)] );
 		    }
 		    break;
 
