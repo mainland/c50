@@ -16,25 +16,28 @@ typedef struct operation_state
     int cleanup_calls;
 } operation_state;
 
-static void FailWithModelError(void *user_data)
+static void FailWithModelError(c50_context *context, void *user_data)
 {
     operation_state *state = user_data;
 
+    (void) context;
     state->operation_calls++;
     Error(MODELFILE, E_MFATT, "unknown");
 }
 
-static void Succeed(void *user_data)
+static void Succeed(c50_context *context, void *user_data)
 {
     operation_state *state = user_data;
 
+    (void) context;
     state->operation_calls++;
 }
 
-static void CleanupOperation(void *user_data)
+static void CleanupOperation(c50_context *context, void *user_data)
 {
     operation_state *state = user_data;
 
+    (void) context;
     state->cleanup_calls++;
     if ( Of )
     {

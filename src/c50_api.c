@@ -1,7 +1,6 @@
 /* Copyright 2026 Geoffrey Mainland. */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
-#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,15 +8,6 @@
 #include <c50/c50.h>
 
 #include "c50_api_internal.h"
-
-#define C50_ERROR_MESSAGE_CAPACITY 1024
-
-struct c50_context
-{
-    c50_status status;
-    char error_message[C50_ERROR_MESSAGE_CAPACITY];
-    jmp_buf exit_target;
-};
 
 static c50_context *ActiveContext;
 
@@ -114,11 +104,11 @@ c50_status c50_run_operation(c50_context *context,
     if ( ! setjmp(context->exit_target) )
     {
         ActiveContext = context;
-        operation(user_data);
+        operation(context, user_data);
     }
 
     ActiveContext = NULL;
-    if ( cleanup ) cleanup(user_data);
+    if ( cleanup ) cleanup(context, user_data);
     return context->status;
 }
 

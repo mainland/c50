@@ -33,7 +33,6 @@ struct c50_predictions
 
 typedef struct c50_model_load_state
 {
-    c50_context *context;
     c50_model_kind kind;
     const char *names_data;
     size_t names_size;
@@ -46,7 +45,6 @@ typedef struct c50_model_load_state
 
 typedef struct c50_predict_state
 {
-    c50_context *context;
     const c50_model *model;
     const char *cases_data;
     size_t cases_size;
@@ -186,9 +184,11 @@ static void ParseModel(const c50_model *model)
     }
 }
 
-static void LoadModel(void *user_data)
+static void LoadModel(c50_context *context, void *user_data)
 {
     c50_model_load_state *state = user_data;
+
+    (void) context;
 
     state->model = AllocZero(1, c50_model);
     state->model->kind = state->kind;
@@ -202,13 +202,13 @@ static void LoadModel(void *user_data)
     ParseModel(state->model);
 }
 
-static void CleanupModelLoad(void *user_data)
+static void CleanupModelLoad(c50_context *context, void *user_data)
 {
     c50_model_load_state *state = user_data;
 
     Cleanup();
     Of = NULL;
-    if ( c50_context_last_status(state->context) != C50_STATUS_OK )
+    if ( c50_context_last_status(context) != C50_STATUS_OK )
     {
         c50_model_destroy(state->model);
         state->model = NULL;
@@ -253,7 +253,6 @@ c50_status c50_model_load(c50_context *context, c50_model_kind kind,
     }
 
     memset(&state, 0, sizeof(state));
-    state.context = context;
     state.kind = kind;
     state.names_data = names_data;
     state.names_size = names_size;
@@ -267,13 +266,15 @@ c50_status c50_model_load(c50_context *context, c50_model_kind kind,
     return status;
 }
 
-static void PredictModel(void *user_data)
+static void PredictModel(c50_context *context, void *user_data)
 {
     c50_predict_state *state = user_data;
     c50_input cases_input;
     c50_predictions *predictions;
     CaseNo row;
     ClassNo class_number, predicted;
+
+    (void) context;
 
     ParseModel(state->model);
 
@@ -323,13 +324,13 @@ static void PredictModel(void *user_data)
     }
 }
 
-static void CleanupPrediction(void *user_data)
+static void CleanupPrediction(c50_context *context, void *user_data)
 {
     c50_predict_state *state = user_data;
 
     Cleanup();
     Of = NULL;
-    if ( c50_context_last_status(state->context) != C50_STATUS_OK )
+    if ( c50_context_last_status(context) != C50_STATUS_OK )
     {
         c50_predictions_destroy(state->predictions);
         state->predictions = NULL;
@@ -360,7 +361,6 @@ c50_status c50_model_predict(c50_context *context, const c50_model *model,
     }
 
     memset(&state, 0, sizeof(state));
-    state.context = context;
     state.model = model;
     state.cases_data = cases_data;
     state.cases_size = cases_size;
