@@ -47,6 +47,8 @@ c50_status c50_context_create(c50_context **out_context)
 
 void c50_context_destroy(c50_context *context)
 {
+    if ( ! context ) return;
+    free(context->property_value);
     free(context);
 }
 

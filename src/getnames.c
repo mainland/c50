@@ -35,20 +35,15 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 #include <stdint.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#define	MAXLINEBUFFER	10000
-int	Delimiter;
-char	LineBuffer[MAXLINEBUFFER], *LBp=LineBuffer;
-
-
-
 /*************************************************************************/
 /*									 */
-/*	Read a name from file f into string s, setting Delimiter.	 */
+/*	Read a name from file f into string s, setting the delimiter.	 */
 /*									 */
 /*	- Embedded periods are permitted, but periods followed by space	 */
 /*	  characters act as delimiters.					 */
@@ -62,7 +57,8 @@ char	LineBuffer[MAXLINEBUFFER], *LBp=LineBuffer;
 /*************************************************************************/
 
 
-Boolean ReadNameInput(c50_input *f, String s, int n, char ColonOpt)
+Boolean ReadNameInput(c50_context *Context, c50_input *f, String s, int n,
+		      char ColonOpt)
 /*      -------------  */
 {
     register char *Sp=s;
@@ -71,16 +67,20 @@ Boolean ReadNameInput(c50_input *f, String s, int n, char ColonOpt)
 
     /*  Skip to first non-space character  */
 
-    while ( (c = InChar(f)) == '|' || Space(c) )
+    while ( (c = InChar(Context, f)) == '|' || Space(c) )
     {
-	if ( c == '|' ) SkipComment;
+	if ( c == '|' )
+	{
+	    while ( ( c = InChar(Context, f) ) != '\n' && c != EOF )
+		;
+	}
     }
 
     /*  Return false if no names to read  */
 
     if ( c == EOF )
     {
-	Delimiter = EOF;
+	Context->delimiter = EOF;
 	return false;
     }
 
@@ -95,41 +95,45 @@ Boolean ReadNameInput(c50_input *f, String s, int n, char ColonOpt)
 
 	if ( c == '.' )
 	{
-	    if ( (c = InChar(f)) == '|' || Space(c) || c == EOF ) break;
+	    if ( (c = InChar(Context, f)) == '|' || Space(c) || c == EOF ) break;
 	    *Sp++ = '.';
 	    continue;
 	}
 
 	if ( c == '\\' )
 	{
-	    c = InChar(f);
+	    c = InChar(Context, f);
 	}
 
 	if ( Space(c) )
 	{
 	    *Sp++ = ' ';
 
-	    while ( ( c = InChar(f) ) == ' ' || c == '\t' )
+	    while ( ( c = InChar(Context, f) ) == ' ' || c == '\t' )
 		;
 	}
 	else
 	{
 	    *Sp++ = c;
-	    c = InChar(f);
+	    c = InChar(Context, f);
 	}
     }
 
-    if ( c == '|' ) SkipComment;
-    Delimiter = c;
+    if ( c == '|' )
+    {
+	while ( ( c = InChar(Context, f) ) != '\n' && c != EOF )
+	    ;
+    }
+    Context->delimiter = c;
 
     /*  Special case for ':='  */
 
-    if ( Delimiter == ':' )
+    if ( Context->delimiter == ':' )
     {
-	if ( *LBp == '=' )
+	if ( *Context->line_buffer_position == '=' )
 	{
-	    Delimiter = '=';
-	    LBp++;
+	    Context->delimiter = '=';
+	    Context->line_buffer_position++;
 	}
     }
 
@@ -150,13 +154,14 @@ Boolean ReadNameInput(c50_input *f, String s, int n, char ColonOpt)
 
 
 
-Boolean ReadName(FILE *f, String s, int n, char ColonOpt)
+Boolean ReadName(c50_context *Context, FILE *f, String s, int n,
+		 char ColonOpt)
 /*      --------  */
 {
     c50_input Input;
 
     c50_input_init_file(&Input, f);
-    return ReadNameInput(&Input, s, n, ColonOpt);
+    return ReadNameInput(Context, &Input, s, n, ColonOpt);
 }
 
 
@@ -181,7 +186,7 @@ Boolean ReadName(FILE *f, String s, int n, char ColonOpt)
 /*************************************************************************/
 
 
-void GetNames(c50_input *Nf)
+void GetNames(c50_context *Context, c50_input *Nf)
 /*   --------  */
 {
     char	Buffer[1000]="", *EndBuff;
@@ -191,8 +196,8 @@ void GetNames(c50_input *Nf)
 
     ErrMsgs = AttExIn = 0;
     LineNo  = 0;
-    LBp     = LineBuffer;
-    *LBp    = 0;
+    Context->line_buffer_position     = Context->line_buffer;
+    *Context->line_buffer_position    = 0;
 
     MaxClass = ClassAtt = LabelAtt = CWtAtt = 0;
 
@@ -205,7 +210,7 @@ void GetNames(c50_input *Nf)
     ClassName = AllocZero(ClassCeiling, String);
     do
     {
-	ReadNameInput(Nf, Buffer, 1000, ':');
+	ReadNameInput(Context, Nf, Buffer, 1000, ':');
 
 	if ( ++MaxClass >= ClassCeiling)
 	{
@@ -214,9 +219,9 @@ void GetNames(c50_input *Nf)
 	}
 	ClassName[MaxClass] = strdup(Buffer);
     }
-    while ( Delimiter == ',' );
+    while ( Context->delimiter == ',' );
 
-    if ( Delimiter == ':' )
+    if ( Context->delimiter == ':' )
     {
 	/*  Thresholds for continuous class attribute  */
 
@@ -225,7 +230,7 @@ void GetNames(c50_input *Nf)
 
 	do
 	{
-	    ReadNameInput(Nf, Buffer, 1000, ':');
+	    ReadNameInput(Context, Nf, Buffer, 1000, ':');
 
 	    if ( ++MaxClass >= ClassCeiling)
 	    {
@@ -245,7 +250,7 @@ void GetNames(c50_input *Nf)
 		Error(LEQCLASSTHRESH, Buffer, Nil);
 	    }
 	}
-	while ( Delimiter == ',' );
+	while ( Context->delimiter == ',' );
     }
 
     /*  Get attribute and attribute value names from names file  */
@@ -258,9 +263,9 @@ void GetNames(c50_input *Nf)
     AttDefUses	  = AllocZero(AttCeiling, Attribute *);
 
     MaxAtt = 0;
-    while ( ReadNameInput(Nf, Buffer, 1000, ':') )
+    while ( ReadNameInput(Context, Nf, Buffer, 1000, ':') )
     {
-	if ( Delimiter != ':' && Delimiter != '=' )
+	if ( Context->delimiter != ':' && Context->delimiter != '=' )
 	{
 	    Error(BADATTNAME, Buffer, "");
 	}
@@ -280,7 +285,7 @@ void GetNames(c50_input *Nf)
 		}
 	    }
 
-	    while ( ReadNameInput(Nf, Buffer, 1000, ':') )
+	    while ( ReadNameInput(Context, Nf, Buffer, 1000, ':') )
 	    {
 		Att = Which(Buffer, AttName, 1, MaxAtt);
 		if ( ! Att )
@@ -323,19 +328,19 @@ void GetNames(c50_input *Nf)
 	MaxAttVal[MaxAtt]     = 0;
 	AttDefUses[MaxAtt]    = Nil;
 
-	if ( Delimiter == '=' )
+	if ( Context->delimiter == '=' )
 	{
 	    if ( MaxClass == 1 && ! strcmp(ClassName[1], AttName[MaxAtt]) )
 	    {
 		Error(BADDEF3, Nil, Nil);
 	    }
 
-	    ImplicitAtt(Nf);
+	    ImplicitAtt(Context, Nf);
 	    ListAttsUsed();
 	}
 	else
 	{
-	    ExplicitAtt(Nf);
+	    ExplicitAtt(Context, Nf);
 	}
 
 	/*  Check for case weight attribute, which must be type continuous  */
@@ -438,7 +443,7 @@ void GetNames(c50_input *Nf)
 /*************************************************************************/
 
 
-void ExplicitAtt(c50_input *Nf)
+void ExplicitAtt(c50_context *Context, c50_input *Nf)
 /*   -----------  */
 {
     char	Buffer[1000]="", *p;
@@ -448,14 +453,14 @@ void ExplicitAtt(c50_input *Nf)
 
     /*  Read attribute type or first discrete value  */
 
-    if ( ! ( ReadNameInput(Nf, Buffer, 1000, ':') ) )
+    if ( ! ( ReadNameInput(Context, Nf, Buffer, 1000, ':') ) )
     {
 	Error(EOFINATT, AttName[MaxAtt], "");
     }
 
     MaxAttVal[MaxAtt] = 0;
 
-    if ( Delimiter != ',' )
+    if ( Context->delimiter != ',' )
     {
 	/*  Typed attribute  */
 
@@ -558,7 +563,7 @@ void ExplicitAtt(c50_input *Nf)
 
 	do
 	{
-	    if ( ! ( ReadNameInput(Nf, Buffer, 1000, ':') ) )
+	    if ( ! ( ReadNameInput(Context, Nf, Buffer, 1000, ':') ) )
 	    {
 		Error(EOFINATT, AttName[MaxAtt], "");
 	    }
@@ -571,7 +576,7 @@ void ExplicitAtt(c50_input *Nf)
 
 	    AttValName[MaxAtt][MaxAttVal[MaxAtt]] = strdup(Buffer);
 	}
-	while ( Delimiter == ',' );
+	while ( Context->delimiter == ',' );
 
 	/*  Cancel ordered status if <3 real values  */
 
@@ -726,21 +731,21 @@ void FreeNames()
 /*************************************************************************/
 
 
-int InChar(c50_input *f)
+int InChar(c50_context *Context, c50_input *f)
 /*  ------  */
 {
-    if ( ! *LBp )
+    if ( ! *Context->line_buffer_position )
     {
-	LBp = LineBuffer;
+	Context->line_buffer_position = Context->line_buffer;
 
-	if ( ! c50_input_gets(LineBuffer, MAXLINEBUFFER, f) )
+	if ( ! c50_input_gets(Context->line_buffer, C50_LINE_BUFFER_CAPACITY, f) )
 	{
-	    LineBuffer[0] = '\00';
+	    Context->line_buffer[0] = '\00';
 	    return EOF;
 	}
 
 	LineNo++;
     }
 	
-    return (int) *LBp++;
+    return (int) *Context->line_buffer_position++;
 }

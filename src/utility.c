@@ -879,10 +879,9 @@ void Cleanup()
 
     extern DataRec	*Blocked;
     extern Tree		*SubDef;
-    extern int		SubSpace, ActiveSpace, PropValSize;
+    extern int		SubSpace, ActiveSpace;
     extern RuleNo	*Active;
     extern float	*AttImp;
-    extern char		*PropVal;
     extern Boolean	*Split, *Used;
     extern FILE		*Uf;
 
@@ -901,9 +900,6 @@ void Cleanup()
     FreeUnlessNil(AttImp);				AttImp = Nil;
     FreeUnlessNil(Split);				Split = Nil;
     FreeUnlessNil(Used);				Used = Nil;
-
-    FreeUnlessNil(PropVal);				PropVal = Nil;
-							PropValSize = 0;
 
     if ( RULES )
     {

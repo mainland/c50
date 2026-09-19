@@ -16,6 +16,9 @@ int main(int argc, char **argv)
     ClassNo Actual, Predicted, c;
     CaseNo i;
     String Extension;
+    c50_context *Context = NULL;
+
+    if ( c50_context_create(&Context) != C50_STATUS_OK ) return 1;
 
     if ( argc != 3 ||
          ( strcmp(argv[2], "tree") && strcmp(argv[2], "rules") ) )
@@ -31,13 +34,13 @@ int main(int argc, char **argv)
 
     if ( ! (F = GetFile(".names", "r")) ) Error(NOFILE, "", "");
     c50_input_init_file(&NamesInput, F);
-    GetNames(&NamesInput);
+    GetNames(Context, &NamesInput);
     fclose(F);
 
     SomeMiss = AllocZero(MaxAtt+1, Boolean);
     SomeNA = AllocZero(MaxAtt+1, Boolean);
 
-    CheckFile(Extension, false);
+    CheckFile(Context, Extension, false);
     MaxTree = TRIALS-1;
 
     if ( RULES )
@@ -45,7 +48,7 @@ int main(int argc, char **argv)
         RuleSet = AllocZero(TRIALS+1, CRuleSet);
         ForEach(Trial, 0, TRIALS-1)
         {
-            RuleSet[Trial] = GetRules(Extension);
+            RuleSet[Trial] = GetRules(Context, Extension);
         }
         MostSpec = Alloc(MaxClass+1, CRule);
     }
@@ -54,7 +57,7 @@ int main(int argc, char **argv)
         Pruned = AllocZero(TRIALS+1, Tree);
         ForEach(Trial, 0, TRIALS-1)
         {
-            Pruned[Trial] = GetTree(Extension);
+            Pruned[Trial] = GetTree(Context, Extension);
         }
     }
 
@@ -64,7 +67,7 @@ int main(int argc, char **argv)
     TrialPred = AllocZero(TRIALS, ClassNo);
 
     if ( ! (F = GetFile(".test", "r")) ) Error(NOFILE, "", "");
-    GetData(F, false, false);
+    GetData(Context, F, false, false);
 
     printf("case,actual,predicted,confidence");
     ForEach(c, 1, MaxClass)
@@ -87,5 +90,6 @@ int main(int argc, char **argv)
     }
 
     Cleanup();
+    c50_context_destroy(Context);
     return 0;
 }

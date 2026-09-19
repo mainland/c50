@@ -50,6 +50,8 @@
 #include <limits.h>
 #include <float.h>
 
+#include <c50/c50.h>
+
 #include "c50_input.h"
 #include "text.i"
 
@@ -162,8 +164,6 @@
 #define	 Int(x)			((int)(x+0.5))
 
 #define  Space(s)	(s == ' ' || s == '\n' || s == '\r' || s == '\t')
-#define  SkipComment	while ( ( c = InChar(f) ) != '\n' && c != EOF )
-
 #define	 P1(x)		(rint((x)*10) / 10)
 
 #define	 No(f,l)	((l)-(f)+1)
@@ -459,7 +459,7 @@ void	    FreeClassifier(int Trial);
 
 	/* construct.c */
 
-void	    ConstructClassifiers(void);
+void	    ConstructClassifiers(c50_context *Context);
 void	    InitialiseWeights(void);
 void	    SetAvCWt(void);
 void	    Evaluate(int Flags);
@@ -469,45 +469,52 @@ void	    RecordAttUsage(DataRec Case, int *Usage);
 
 	/* getnames.c */
 
-Boolean	    ReadName(FILE *f, String s, int n, char ColonOpt);
-Boolean	    ReadNameInput(c50_input *f, String s, int n, char ColonOpt);
-void	    GetNames(c50_input *Nf);
-void	    ExplicitAtt(c50_input *Nf);
+Boolean	    ReadName(c50_context *Context, FILE *f, String s, int n,
+		     char ColonOpt);
+Boolean	    ReadNameInput(c50_context *Context, c50_input *f, String s,
+			  int n, char ColonOpt);
+void	    GetNames(c50_context *Context, c50_input *Nf);
+void	    ExplicitAtt(c50_context *Context, c50_input *Nf);
 int	    Which(String Val, String *List, int First, int Last);
 void	    ListAttsUsed(void);
 void	    FreeNames(void);
-int	    InChar(c50_input *f);
+int	    InChar(c50_context *Context, c50_input *f);
 
 	/* implicitatt.c */
 
-void	    ImplicitAtt(c50_input *Nf);
-void	    ReadDefinition(c50_input *f);
-void	    Append(char c);
-Boolean	    Expression(void);
-Boolean	    Conjunct(void);
-Boolean	    SExpression(void);
-Boolean	    AExpression(void);
-Boolean	    Term(void);
-Boolean	    Factor(void);
-Boolean	    Primary(void);
-Boolean	    Atom(void);
-Boolean	    Find(String S);
-int	    FindOne(String *Alt);
-Attribute   FindAttName(void);
-void	    DefSyntaxError(String Msg);
-void	    DefSemanticsError(int Fi, String Msg, int OpCode);
-void	    Dump(char OpCode, ContValue F, String S, int Fi);
-void	    DumpOp(char OpCode, int Fi);
-Boolean	    UpdateTStack(char OpCode, ContValue F, String S, int Fi);
+void	    ImplicitAtt(c50_context *Context, c50_input *Nf);
+void	    ReadDefinition(c50_context *Context, c50_input *f);
+void	    Append(c50_context *Context, char c);
+Boolean	    Expression(c50_context *Context);
+Boolean	    Conjunct(c50_context *Context);
+Boolean	    SExpression(c50_context *Context);
+Boolean	    AExpression(c50_context *Context);
+Boolean	    Term(c50_context *Context);
+Boolean	    Factor(c50_context *Context);
+Boolean	    Primary(c50_context *Context);
+Boolean	    Atom(c50_context *Context);
+Boolean	    Find(c50_context *Context, const char *S);
+int	    FindOne(c50_context *Context, const char *Alt);
+Attribute   FindAttName(c50_context *Context);
+void	    DefSyntaxError(c50_context *Context, String Msg);
+void	    DefSemanticsError(c50_context *Context, int Fi, String Msg,
+			      int OpCode);
+void	    Dump(c50_context *Context, char OpCode, ContValue F, String S,
+		     int Fi);
+void	    DumpOp(c50_context *Context, char OpCode, int Fi);
+Boolean	    UpdateTStack(c50_context *Context, char OpCode, ContValue F,
+			 String S, int Fi);
 AttValue    EvaluateDef(Definition D, DataRec Case);
 
 	/* getdata.c */
 
-void	    GetData(FILE *Df, Boolean Train, Boolean AllowUnknownClass);
-void	    GetDataInput(c50_input *Input, Boolean Train,
+void	    GetData(c50_context *Context, FILE *Df, Boolean Train,
+		    Boolean AllowUnknownClass);
+void	    GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 			 Boolean AllowUnknownClass);
-DataRec	    GetDataRec(FILE *Df, Boolean Train);
-DataRec	    GetDataRecInput(c50_input *Input, Boolean Train);
+DataRec	    GetDataRec(c50_context *Context, FILE *Df, Boolean Train);
+DataRec	    GetDataRecInput(c50_context *Context, c50_input *Input,
+			    Boolean Train);
 CaseNo	    CountData(FILE *Df);
 CaseNo	    CountDataInput(c50_input *Input);
 int	    StoreIVal(String s);
@@ -516,8 +523,8 @@ void	    CheckValue(DataRec Case, Attribute Att);
 
 	/* mcost.c */
 
-void	    GetMCosts(FILE *f);
-void	    GetMCostsInput(c50_input *Input);
+void	    GetMCosts(c50_context *Context, FILE *f);
+void	    GetMCostsInput(c50_context *Context, c50_input *Input);
 
 	/* attwinnow.c */
 
@@ -759,29 +766,32 @@ void	    FreeRuleTree(RuleTree RT);
 
 	/* modelfiles.c */
 
-void	    CheckFile(String Extension, Boolean Write);
+void	    CheckFile(c50_context *Context, String Extension, Boolean Write);
 void	    WriteFilePrefix(String Extension);
-void	    ReadFilePrefix(String Extension);
+void	    ReadFilePrefix(c50_context *Context, String Extension);
 void	    SaveDiscreteNames(void);
-void	    SaveTree(Tree T, String Extension);
+void	    SaveTree(c50_context *Context, Tree T, String Extension);
 void	    OutTree(Tree T);
-void	    SaveRules(CRuleSet RS, String Extension);
+void	    SaveRules(c50_context *Context, CRuleSet RS, String Extension);
 void	    AsciiOut(String Pre, String S);
-void	    ReadHeader(c50_input *Input);
-void	    ReadHeaderMemory(c50_input *Input, c50_input *CostsInput);
-Tree	    GetTree(String Extension);
-Tree	    InTree(c50_input *Input);
-Tree	    InTreeAt(c50_input *Input, Tree *Slot);
-CRuleSet    GetRules(String Extension);
-CRuleSet    InRules(c50_input *Input);
-CRuleSet    InRulesAt(c50_input *Input, CRuleSet *Slot);
-CRule	    InRule(c50_input *Input);
-CRule	    InRuleAt(c50_input *Input, CRule *Slot);
-Condition   InCondition(c50_input *Input);
-Condition   InConditionAt(c50_input *Input, Condition *Slot);
-int	    ReadProp(c50_input *Input, char *Delim);
+void	    ReadHeader(c50_context *Context, c50_input *Input);
+void	    ReadHeaderMemory(c50_context *Context, c50_input *Input,
+			     c50_input *CostsInput);
+Tree	    GetTree(c50_context *Context, String Extension);
+Tree	    InTree(c50_context *Context, c50_input *Input);
+Tree	    InTreeAt(c50_context *Context, c50_input *Input, Tree *Slot);
+CRuleSet    GetRules(c50_context *Context, String Extension);
+CRuleSet    InRules(c50_context *Context, c50_input *Input);
+CRuleSet    InRulesAt(c50_context *Context, c50_input *Input,
+		      CRuleSet *Slot);
+CRule	    InRule(c50_context *Context, c50_input *Input);
+CRule	    InRuleAt(c50_context *Context, c50_input *Input, CRule *Slot);
+Condition   InCondition(c50_context *Context, c50_input *Input);
+Condition   InConditionAt(c50_context *Context, c50_input *Input,
+			  Condition *Slot);
+int	    ReadProp(c50_context *Context, c50_input *Input, char *Delim);
 String	    RemoveQuotes(String S);
-Set	    MakeSubset(Attribute Att);
+Set	    MakeSubset(c50_context *Context, Attribute Att);
 void	    StreamIn(c50_input *Input, String S, int n);
 
 	/* update.c (Unix) or winmain.c (WIN32) */
@@ -791,7 +801,7 @@ void	    Progress(float);
 
 	/* xval.c */
 
-void	    CrossVal(void);
+void	    CrossVal(c50_context *Context);
 void	    Prepare(void);
 void	    Shuffle(int *Vec);
 void	    Summary(void);

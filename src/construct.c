@@ -60,7 +60,7 @@
 /*************************************************************************/
 
 
-void ConstructClassifiers()
+void ConstructClassifiers(c50_context *Context)
 /*   --------------------  */
 {
     CaseNo	i, Errs, Cases, Bp, Excl=0;
@@ -358,14 +358,14 @@ void ConstructClassifiers()
 	{
 	    ForEach(Trial, 0, TRIALS-1)
 	    {
-		SaveTree(Pruned[Trial], ".tree");
+		SaveTree(Context, Pruned[Trial], ".tree");
 	    }
 	}
 	else
 	{
 	    ForEach(Trial, 0, TRIALS-1)
 	    {
-		SaveRules(RuleSet[Trial], ".rules");
+		SaveRules(Context, RuleSet[Trial], ".rules");
 	    }
 	}
 

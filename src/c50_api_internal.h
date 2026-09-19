@@ -8,13 +8,30 @@
 
 #include <c50/c50.h>
 
+#include "c50_input.h"
+
 #define C50_ERROR_MESSAGE_CAPACITY 1024
+#define C50_LINE_BUFFER_CAPACITY 10000
+
+struct c50_implicit_state;
 
 struct c50_context
 {
     c50_status status;
     char error_message[C50_ERROR_MESSAGE_CAPACITY];
     jmp_buf exit_target;
+    int sample_from;
+    int suppress_error_messages;
+    int delimiter;
+    char line_buffer[C50_LINE_BUFFER_CAPACITY];
+    char *line_buffer_position;
+    struct c50_implicit_state *implicit_state;
+    c50_input classifier_input;
+    const char *last_model_extension;
+    int model_entry;
+    char property_name[20];
+    char *property_value;
+    int property_value_size;
 };
 
 typedef void (*c50_operation_fn)(c50_context *context, void *user_data);

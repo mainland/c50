@@ -135,7 +135,7 @@ double c50_predictions_score(const c50_predictions *predictions,
     return predictions->scores[row * predictions->class_count + class_index];
 }
 
-static void ParseModel(const c50_model *model)
+static void ParseModel(c50_context *context, const c50_model *model)
 {
     c50_input names_input, model_input, costs_input, *costs = NULL;
 
@@ -148,7 +148,7 @@ static void ParseModel(const c50_model *model)
     SAMPLE = 0;
 
     c50_input_init_memory(&names_input, model->names_data, model->names_size);
-    GetNames(&names_input);
+    GetNames(context, &names_input);
 
     c50_input_init_memory(&model_input, model->model_data, model->model_size);
     if ( model->costs_size )
@@ -157,7 +157,7 @@ static void ParseModel(const c50_model *model)
                               model->costs_size);
         costs = &costs_input;
     }
-    ReadHeaderMemory(&model_input, costs);
+    ReadHeaderMemory(context, &model_input, costs);
     if ( TRIALS < 1 )
     {
         c50_record_error(C50_STATUS_PARSE_ERROR,
@@ -171,7 +171,7 @@ static void ParseModel(const c50_model *model)
         RuleSet = AllocZero(TRIALS + 1, CRuleSet);
         ForEach(Trial, 0, TRIALS - 1)
         {
-            InRulesAt(&model_input, &RuleSet[Trial]);
+            InRulesAt(context, &model_input, &RuleSet[Trial]);
         }
     }
     else
@@ -179,7 +179,7 @@ static void ParseModel(const c50_model *model)
         Pruned = AllocZero(TRIALS + 1, Tree);
         ForEach(Trial, 0, TRIALS - 1)
         {
-            InTreeAt(&model_input, &Pruned[Trial]);
+            InTreeAt(context, &model_input, &Pruned[Trial]);
         }
     }
 }
@@ -187,8 +187,6 @@ static void ParseModel(const c50_model *model)
 static void LoadModel(c50_context *context, void *user_data)
 {
     c50_model_load_state *state = user_data;
-
-    (void) context;
 
     state->model = AllocZero(1, c50_model);
     state->model->kind = state->kind;
@@ -199,7 +197,7 @@ static void LoadModel(c50_context *context, void *user_data)
     state->model->costs_size = state->costs_size;
     state->model->costs_data = CopyInput(state->costs_data, state->costs_size);
 
-    ParseModel(state->model);
+    ParseModel(context, state->model);
 }
 
 static void CleanupModelLoad(c50_context *context, void *user_data)
@@ -274,9 +272,7 @@ static void PredictModel(c50_context *context, void *user_data)
     CaseNo row;
     ClassNo class_number, predicted;
 
-    (void) context;
-
-    ParseModel(state->model);
+    ParseModel(context, state->model);
 
     SomeMiss = AllocZero(MaxAtt + 1, Boolean);
     SomeNA = AllocZero(MaxAtt + 1, Boolean);
@@ -287,7 +283,7 @@ static void PredictModel(c50_context *context, void *user_data)
     TrialPred = AllocZero(TRIALS, ClassNo);
 
     c50_input_init_memory(&cases_input, state->cases_data, state->cases_size);
-    GetDataInput(&cases_input, false, true);
+    GetDataInput(context, &cases_input, false, true);
 
     predictions = AllocZero(1, c50_predictions);
     state->predictions = predictions;
