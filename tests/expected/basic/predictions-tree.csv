@@ -1,0 +1,8 @@
+case,actual,predicted,confidence,score(low),score(high)
+1,low,low,1,1,0
+2,high,high,1,0,1
+3,low,low,1,1,0
+4,high,high,0.8750001,0.1249999,0.8750001
+5,high,high,1,0,1
+6,low,low,0.6,0.6,0.4
+7,high,high,1,0,1
