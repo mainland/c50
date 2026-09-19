@@ -49,6 +49,29 @@ typedef enum c50_model_kind
 } c50_model_kind;
 
 /*
+ * Options that control classifier construction. Initialize this structure
+ * with c50_options_init() before changing individual fields.
+ */
+typedef struct c50_options
+{
+    size_t struct_size;
+    unsigned int trials;
+    int subset_splits;
+    int winnow;
+    int global_pruning;
+    int probabilistic_thresholds;
+    int ignore_costs;
+    double minimum_cases;
+    double confidence_factor;
+    double sample_fraction;
+    unsigned int random_seed;
+    unsigned int reserved[8];
+} c50_options;
+
+/* Initialize options to the deterministic single-tree defaults. */
+void c50_options_init(c50_options *options);
+
+/*
  * Allocate a context and store it in *out_context. On success, the caller
  * owns the context and must release it with c50_context_destroy(). If
  * out_context is not NULL, this function sets *out_context to NULL before
@@ -88,11 +111,34 @@ c50_status c50_model_load(c50_context *context, c50_model_kind kind,
                           const char *costs_data, size_t costs_size,
                           c50_model **out_model);
 
+/*
+ * Train a classifier from C5.0 names- and data-file contents. Passing NULL
+ * for options selects the defaults returned by c50_options_init(). Options
+ * express confidence_factor and sample_fraction as fractions in [0, 1]. The
+ * random seed must be in [0, 4095]. Inputs are copied into the returned model.
+ * On failure, *out_model is NULL and context contains the diagnostic.
+ */
+c50_status c50_model_train(c50_context *context, c50_model_kind kind,
+                           const c50_options *options,
+                           const char *names_data, size_t names_size,
+                           const char *training_data, size_t training_size,
+                           const char *costs_data, size_t costs_size,
+                           c50_model **out_model);
+
 /* Release a model. A NULL model is allowed and has no effect. */
 void c50_model_destroy(c50_model *model);
 
 /* Return the serialized representation kind. model must not be NULL. */
 c50_model_kind c50_model_get_kind(const c50_model *model);
+
+/*
+ * Return borrowed serialized inputs owned by model. Each function stores the
+ * byte count in *size when size is not NULL. The pointer remains valid until
+ * model is destroyed. A missing optional costs input returns NULL and size 0.
+ */
+const char *c50_model_names_data(const c50_model *model, size_t *size);
+const char *c50_model_serialized_data(const c50_model *model, size_t *size);
+const char *c50_model_costs_data(const c50_model *model, size_t *size);
 
 /*
  * Predict cases encoded in the C5.0 data-file syntax. Each row must contain

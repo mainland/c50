@@ -122,6 +122,8 @@ if(BUILD_TESTING)
     target_link_libraries(c50_c_api_model PRIVATE C50::core)
     add_executable(c50_c_api_prediction tests/c_api_prediction.c)
     target_link_libraries(c50_c_api_prediction PRIVATE C50::core)
+    add_executable(c50_c_api_training tests/c_api_training.c)
+    target_link_libraries(c50_c_api_training PRIVATE C50::core)
     add_executable(
         c50_c_api_context_isolation
         tests/c_api_context_isolation.c
@@ -144,6 +146,7 @@ if(BUILD_TESTING)
         c50_c_api_failure
         c50_c_api_model
         c50_c_api_prediction
+        c50_c_api_training
         c50_c_api_context_isolation
         c50_c_api_concurrency
         c50_cpp_api_compile
@@ -157,6 +160,7 @@ if(BUILD_TESTING)
         c50_c_api_failure
         c50_c_api_model
         c50_c_api_prediction
+        c50_c_api_training
         c50_c_api_context_isolation
         c50_c_api_concurrency
         c50_cpp_api_compile
@@ -223,6 +227,7 @@ if(BUILD_TESTING)
     add_test(NAME c-api-failure COMMAND c50_c_api_failure)
     add_test(NAME c-api-model COMMAND c50_c_api_model)
     add_test(NAME c-api-prediction COMMAND c50_c_api_prediction)
+    add_test(NAME c-api-training COMMAND c50_c_api_training)
     add_test(NAME c-api-context-isolation COMMAND c50_c_api_context_isolation)
     add_test(NAME c-api-concurrency COMMAND c50_c_api_concurrency)
     add_test(NAME cpp-api-compile COMMAND c50_cpp_api_compile)

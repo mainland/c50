@@ -1,6 +1,7 @@
 /* Copyright 2026 Geoffrey Mainland. */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -43,6 +44,20 @@ typedef struct c50_model_load_state
     c50_model *model;
 } c50_model_load_state;
 
+typedef struct c50_train_state
+{
+    c50_model_kind kind;
+    c50_options options;
+    const char *names_data;
+    size_t names_size;
+    const char *training_data;
+    size_t training_size;
+    const char *costs_data;
+    size_t costs_size;
+    FILE *diagnostics;
+    c50_model *model;
+} c50_train_state;
+
 typedef struct c50_predict_state
 {
     const c50_model *model;
@@ -61,6 +76,17 @@ static char *CopyInput(c50_context *Context, const char *data, size_t size)
     return copy;
 }
 
+void c50_options_init(c50_options *options)
+{
+    if ( ! options ) return;
+    memset(options, 0, sizeof(*options));
+    options->struct_size = sizeof(*options);
+    options->trials = 1;
+    options->global_pruning = 1;
+    options->minimum_cases = 2;
+    options->confidence_factor = 0.25;
+}
+
 void c50_model_destroy(c50_model *model)
 {
     if ( ! model ) return;
@@ -74,6 +100,24 @@ void c50_model_destroy(c50_model *model)
 c50_model_kind c50_model_get_kind(const c50_model *model)
 {
     return model ? model->kind : C50_MODEL_TREE;
+}
+
+const char *c50_model_names_data(const c50_model *model, size_t *size)
+{
+    if ( size ) *size = model ? model->names_size : 0;
+    return model ? model->names_data : NULL;
+}
+
+const char *c50_model_serialized_data(const c50_model *model, size_t *size)
+{
+    if ( size ) *size = model ? model->model_size : 0;
+    return model ? model->model_data : NULL;
+}
+
+const char *c50_model_costs_data(const c50_model *model, size_t *size)
+{
+    if ( size ) *size = model ? model->costs_size : 0;
+    return model ? model->costs_data : NULL;
 }
 
 void c50_predictions_destroy(c50_predictions *predictions)
@@ -220,6 +264,245 @@ static c50_status InvalidArgument(c50_context *Context, const char *message)
 {
     return c50_set_context_error(Context, C50_STATUS_INVALID_ARGUMENT,
                                  message);
+}
+
+static int IsBoolean(int value)
+{
+    return value == 0 || value == 1;
+}
+
+static const char *ValidateOptions(const c50_options *options)
+{
+    if ( options->struct_size != sizeof(*options) )
+    {
+        return "options has an incompatible struct_size";
+    }
+    if ( options->trials < 1 || options->trials > 1000 )
+    {
+        return "options.trials must be between 1 and 1000";
+    }
+    if ( ! IsBoolean(options->subset_splits) ||
+         ! IsBoolean(options->winnow) ||
+         ! IsBoolean(options->global_pruning) ||
+         ! IsBoolean(options->probabilistic_thresholds) ||
+         ! IsBoolean(options->ignore_costs) )
+    {
+        return "boolean options must be zero or one";
+    }
+    if ( ! isfinite(options->minimum_cases) ||
+         options->minimum_cases < 1 || options->minimum_cases > 1000000 )
+    {
+        return "options.minimum_cases must be between 1 and 1000000";
+    }
+    if ( ! isfinite(options->confidence_factor) ||
+         options->confidence_factor < 0 || options->confidence_factor > 1 )
+    {
+        return "options.confidence_factor must be between 0 and 1";
+    }
+    if ( ! isfinite(options->sample_fraction) ||
+         options->sample_fraction < 0 || options->sample_fraction > 0.999 )
+    {
+        return "options.sample_fraction must be between 0 and 0.999";
+    }
+    if ( options->random_seed > 4095 )
+    {
+        return "options.random_seed must be between 0 and 4095";
+    }
+    return NULL;
+}
+
+static void TrainModel(c50_context *Context, void *user_data)
+{
+    c50_train_state *state = user_data;
+    c50_input names_input, training_input, costs_input;
+    unsigned char *serialized;
+    size_t serialized_size;
+
+    state->diagnostics = tmpfile();
+    if ( ! state->diagnostics )
+    {
+        c50_record_error(Context, C50_STATUS_IO_ERROR,
+                         "could not create training diagnostics stream");
+        C50Exit(Context, 1);
+    }
+
+    Context->io.output = state->diagnostics;
+    Context->progress.update_file = state->diagnostics;
+    Context->io.file_stem = "memory";
+    Context->io.attribute_exclusions = 0;
+    Context->io.random_initial_seed = (int) state->options.random_seed;
+    Context->schema.max_discrete_value = 3;
+    Context->cases.max_case = -1;
+    Context->trees.max_tree = -1;
+    Context->attributes_winnowed = false;
+    Context->costs.unit_weights = true;
+    Context->costs.weighted = false;
+    Context->options.verbosity = 0;
+    Context->options.trials = (int) state->options.trials;
+    Context->options.folds = 10;
+    Context->options.utility_bands = 0;
+    Context->options.subset_splits = state->options.subset_splits;
+    Context->options.boosting = state->options.trials > 1;
+    Context->options.probabilistic_thresholds =
+        state->options.probabilistic_thresholds;
+    Context->options.rules = state->kind == C50_MODEL_RULES;
+    Context->options.cross_validation = false;
+    Context->options.ignore_costs = state->options.ignore_costs;
+    Context->options.winnow = state->options.winnow;
+    Context->options.global_pruning = state->options.global_pruning;
+    Context->options.minimum_cases = (float) state->options.minimum_cases;
+    Context->options.leaf_ratio = 0;
+    Context->options.confidence_factor =
+        (float) state->options.confidence_factor;
+    Context->options.sample_fraction =
+        (float) state->options.sample_fraction;
+    Context->splits.sample_fraction = 1;
+    Context->last_model_extension = NULL;
+
+    c50_output_init_memory(&Context->classifier_output);
+    Context->classifier_output_active = true;
+
+    c50_input_init_memory(&names_input, state->names_data, state->names_size);
+    GetNames(Context, &names_input);
+
+    Context->cases.some_missing =
+        AllocZero(Context->schema.max_attribute + 1, Boolean);
+    Context->cases.some_not_applicable =
+        AllocZero(Context->schema.max_attribute + 1, Boolean);
+
+    c50_input_init_memory(&training_input, state->training_data,
+                          state->training_size);
+    GetDataInput(Context, &training_input, true, false);
+    if ( Context->cases.max_case < 0 )
+    {
+        c50_record_error(Context, C50_STATUS_PARSE_ERROR,
+                         "training data contains no cases");
+        C50Exit(Context, 1);
+    }
+
+    if ( ! Context->options.ignore_costs && state->costs_size )
+    {
+        c50_input_init_memory(&costs_input, state->costs_data,
+                              state->costs_size);
+        GetMCostsInput(Context, &costs_input);
+    }
+
+    InitialiseTreeData(Context);
+    if ( Context->options.rules )
+    {
+        Context->rules.sets =
+            AllocZero(Context->options.trials + 1, CRuleSet);
+    }
+    if ( Context->options.winnow )
+    {
+        NotifyStage(Context, WINNOWATTS);
+        Progress(Context, -Context->schema.max_attribute);
+        WinnowAtts(Context);
+    }
+    ConstructClassifiers(Context);
+
+    state->model = AllocZero(1, c50_model);
+    serialized = c50_output_take_memory(&Context->classifier_output,
+                                        &serialized_size);
+    Context->classifier_output_active = false;
+    if ( ! serialized )
+    {
+        c50_record_error(Context, C50_STATUS_OUT_OF_MEMORY,
+                         "could not finalize serialized classifier");
+        C50Exit(Context, 1);
+    }
+
+    state->model->kind = state->kind;
+    state->model->names_size = state->names_size;
+    state->model->names_data =
+        CopyInput(Context, state->names_data, state->names_size);
+    state->model->model_size = serialized_size;
+    state->model->model_data = (char *) serialized;
+    if ( ! state->options.ignore_costs )
+    {
+        state->model->costs_size = state->costs_size;
+        state->model->costs_data =
+            CopyInput(Context, state->costs_data, state->costs_size);
+    }
+}
+
+static void CleanupTraining(c50_context *Context, void *user_data)
+{
+    c50_train_state *state = user_data;
+
+    Context->progress.update_file = NULL;
+    Cleanup(Context);
+    c50_clear_prediction_state(Context);
+    Context->io.output = NULL;
+    if ( state->diagnostics ) fclose(state->diagnostics);
+    state->diagnostics = NULL;
+    if ( c50_context_last_status(Context) != C50_STATUS_OK )
+    {
+        c50_model_destroy(state->model);
+        state->model = NULL;
+    }
+}
+
+c50_status c50_model_train(c50_context *Context, c50_model_kind kind,
+                           const c50_options *options,
+                           const char *names_data, size_t names_size,
+                           const char *training_data, size_t training_size,
+                           const char *costs_data, size_t costs_size,
+                           c50_model **out_model)
+{
+    c50_train_state state;
+    const char *error;
+    c50_status status;
+
+    if ( out_model ) *out_model = NULL;
+    if ( ! Context ) return C50_STATUS_INVALID_ARGUMENT;
+    if ( ! out_model ) return InvalidArgument(Context, "out_model is NULL");
+    if ( kind != C50_MODEL_TREE && kind != C50_MODEL_RULES )
+    {
+        return InvalidArgument(Context, "invalid model kind");
+    }
+    if ( ! names_data || ! names_size || ! training_data || ! training_size )
+    {
+        return InvalidArgument(Context,
+                               "names and training inputs are required");
+    }
+    if ( ! costs_data && costs_size )
+    {
+        return InvalidArgument(Context, "costs_data is NULL");
+    }
+    if ( memchr(names_data, '\0', names_size) ||
+         memchr(training_data, '\0', training_size) ||
+         (costs_size && memchr(costs_data, '\0', costs_size)) )
+    {
+        return InvalidArgument(Context, "text inputs contain a NUL byte");
+    }
+
+    memset(&state, 0, sizeof(state));
+    state.kind = kind;
+    c50_options_init(&state.options);
+    if ( options )
+    {
+        if ( options->struct_size != sizeof(*options) )
+        {
+            return InvalidArgument(Context,
+                                   "options has an incompatible struct_size");
+        }
+        state.options = *options;
+    }
+    if ( (error = ValidateOptions(&state.options)) )
+    {
+        return InvalidArgument(Context, error);
+    }
+    state.names_data = names_data;
+    state.names_size = names_size;
+    state.training_data = training_data;
+    state.training_size = training_size;
+    state.costs_data = costs_data;
+    state.costs_size = costs_size;
+
+    status = c50_run_operation(Context, TrainModel, CleanupTraining, &state);
+    if ( status == C50_STATUS_OK ) *out_model = state.model;
+    return status;
 }
 
 c50_status c50_model_load(c50_context *Context, c50_model_kind kind,
