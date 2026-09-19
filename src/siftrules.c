@@ -112,7 +112,7 @@ void SiftRules(c50_context *Context, float EstErrRate)
 
     if ( ! BranchBits )
     {
-	FindTestCodes();
+	FindTestCodes(Context);
     }
 
     /*  Determine rule codelengths  */
@@ -284,7 +284,7 @@ void InvertFires()
 /*************************************************************************/
 
 
-void FindTestCodes()
+void FindTestCodes(c50_context *Context)
 /*   -------------  */
 {
     Attribute	Att;
@@ -298,7 +298,7 @@ void FindTestCodes()
 
     ForEach(Att, 1, MaxAtt)
     {
-	if ( Skip(Att) || Att == ClassAtt ) continue;
+	if ( Skip(Att) || Att == Context->class_attribute ) continue;
 
 	PossibleAtts++;
 
@@ -1025,8 +1025,8 @@ void SetDefaultClass(c50_context *Context)
 		      ClassFreq[c] / (MaxCase + 1.0);
     }
 
-    Default = SelectClass(Context, 1,
-			  (Boolean) (MCost && ! CostWeights));
+    Context->default_class =
+	SelectClass(Context, 1, (Boolean) (MCost && ! CostWeights));
 
     Free(UncoveredWeight);
 }

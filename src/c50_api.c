@@ -50,6 +50,7 @@ void c50_context_destroy(c50_context *context)
     if ( ! context ) return;
     c50_clear_prediction_state(context);
     free(context->active_rules);
+    free(context->ignored_values);
     free(context->property_value);
     free(context);
 }

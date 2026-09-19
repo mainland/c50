@@ -92,12 +92,12 @@ void ConstructClassifiers(c50_context *Context)
 
     /*  If using case weighting, find average  */
 
-    if ( CWtAtt )
+    if ( Context->case_weight_attribute )
     {
-	SetAvCWt();
+	SetAvCWt(Context);
     }
 
-    InitialiseWeights();
+    InitialiseWeights(Context);
 
     /*  Adjust minimum weight if using cost weighting  */
 
@@ -132,7 +132,7 @@ void ConstructClassifiers(c50_context *Context)
 
 	memset(Tested, 0, MaxAtt+1);		/* reset tested attributes */
 
-	FormTree(Bp, MaxCase, 0, &Raw[Trial]);
+	FormTree(Context, Bp, MaxCase, 0, &Raw[Trial]);
 
 	/*  Prune the raw tree to minimise expected misclassification cost  */
 
@@ -162,7 +162,7 @@ void ConstructClassifiers(c50_context *Context)
 
 	Prune(Context, Pruned[Trial]);
 
-	AdjustAllThresholds(Pruned[Trial]);
+	AdjustAllThresholds(Context, Pruned[Trial]);
 
 	/*  Record tree parameters for later  */
 
@@ -387,7 +387,7 @@ void ConstructClassifiers(c50_context *Context)
 /*************************************************************************/
 
 
-void InitialiseWeights()
+void InitialiseWeights(c50_context *Context)
 /*   -----------------  */
 {
     CaseNo	i;
@@ -413,11 +413,11 @@ void InitialiseWeights()
 
     /*  Adjust when using case weights  */
 
-    if ( CWtAtt )
+    if ( Context->case_weight_attribute )
     {
 	ForEach(i, 0, MaxCase)
 	{
-	    Weight(Case[i]) *= RelCWt(Case[i]);
+	    Weight(Case[i]) *= RelCWt(Context, Case[i]);
 	}
 	UnitWeights = false;
     }
@@ -428,29 +428,29 @@ void InitialiseWeights()
 /*************************************************************************/
 /*								 	 */
 /*	Determine average case weight, ignoring cases with unknown,	 */
-/*	non-applicable, or negative values of CWtAtt.			 */
+/*	non-applicable, or negative values of Context->case_weight_attribute.			 */
 /*								 	 */
 /*************************************************************************/
 
 
-void SetAvCWt()
+void SetAvCWt(c50_context *Context)
 /*   --------  */
 {
     CaseNo	i, NCWt=0;
     ContValue	CWt;
 
-    AvCWt = 0;
+    Context->average_case_weight = 0;
     ForEach(i, 0, MaxCase)
     {
-	if ( ! NotApplic(Case[i], CWtAtt) && ! Unknown(Case[i], CWtAtt) &&
-	     (CWt = CVal(Case[i], CWtAtt)) > 0 )
+	if ( ! NotApplic(Context, Case[i], Context->case_weight_attribute) && ! Unknown(Case[i], Context->case_weight_attribute) &&
+	     (CWt = CVal(Case[i], Context->case_weight_attribute)) > 0 )
 	{
 	    NCWt++;
-	    AvCWt += CWt;
+	    Context->average_case_weight += CWt;
 	}
     }
 
-    AvCWt = ( NCWt > 0 ? AvCWt / NCWt : 1 );
+    Context->average_case_weight = ( NCWt > 0 ? Context->average_case_weight / NCWt : 1 );
 }
 
 
@@ -723,7 +723,8 @@ void EvaluateBoost(c50_context *Context, int Flags)
 
     /*  Set global default class for boosting  */
 
-    Default = ( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
+    Context->default_class =
+	( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
 
     ForEach(i, 0, MaxCase)
     {

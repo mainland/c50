@@ -26,6 +26,13 @@ struct c50_context
     int suppress_error_messages;
     int delimiter;
     int max_label;
+    int class_attribute;
+    int label_attribute;
+    int case_weight_attribute;
+    double average_case_weight;
+    char *ignored_values;
+    int ignored_values_size;
+    int ignored_values_offset;
     int attributes_winnowed;
     char line_buffer[C50_LINE_BUFFER_CAPACITY];
     char *line_buffer_position;
@@ -44,6 +51,7 @@ struct c50_context
     float *votes;
     int *trial_predictions;
     struct _rulerec **most_specific_rules;
+    int default_class;
     KRState random;
 };
 

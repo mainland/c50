@@ -65,11 +65,7 @@
 /*************************************************************************/
 
 
-#ifdef	VerbOpt
-#define Goodbye(x)		{Cleanup(); C50Exit(x);}
-#else
 #define Goodbye(x)		C50Exit(x)
-#endif
 
 #ifdef	VerbOpt
 #include <assert.h>
@@ -334,13 +330,16 @@ typedef	 struct _sort_rec
 
 #define	 Unknown(Case,Att)	(DVal(Case,Att)==UNKNOWN)
 #define	 UnknownVal(AV)		(AV._discr_val==UNKNOWN)
-#define	 NotApplic(Case,Att)	(Att != ClassAtt && DVal(Case,Att)==NA)
+#define	 NotApplic(Context,Case,Att) \
+	(Att != (Context)->class_attribute && DVal(Case,Att)==NA)
 #define	 NotApplicVal(AV)	(AV._discr_val==NA)
 
-#define	 RelCWt(Case)		( Unknown(Case,CWtAtt)||\
-				  NotApplic(Case,CWtAtt)||\
-			  	  CVal(Case,CWtAtt)<=0 ? 1 :\
-				  CVal(Case,CWtAtt)/AvCWt )
+#define	 RelCWt(Context,Case) \
+	( Unknown(Case,(Context)->case_weight_attribute) || \
+	  NotApplic(Context,Case,(Context)->case_weight_attribute) || \
+	  CVal(Case,(Context)->case_weight_attribute) <= 0 ? 1 : \
+	  CVal(Case,(Context)->case_weight_attribute) / \
+	      (Context)->average_case_weight )
 
 typedef  struct _treerec	*Tree;
 typedef  struct _treerec
@@ -461,8 +460,8 @@ void	    FreeClassifier(int Trial);
 	/* construct.c */
 
 void	    ConstructClassifiers(c50_context *Context);
-void	    InitialiseWeights(void);
-void	    SetAvCWt(void);
+void	    InitialiseWeights(c50_context *Context);
+void	    SetAvCWt(c50_context *Context);
 void	    Evaluate(c50_context *Context, int Flags);
 void	    EvaluateSingle(c50_context *Context, int Flags);
 void	    EvaluateBoost(c50_context *Context, int Flags);
@@ -505,7 +504,7 @@ void	    Dump(c50_context *Context, char OpCode, ContValue F, String S,
 void	    DumpOp(c50_context *Context, char OpCode, int Fi);
 Boolean	    UpdateTStack(c50_context *Context, char OpCode, ContValue F,
 			 String S, int Fi);
-AttValue    EvaluateDef(Definition D, DataRec Case);
+AttValue    EvaluateDef(c50_context *Context, Definition D, DataRec Case);
 
 	/* getdata.c */
 
@@ -518,8 +517,8 @@ DataRec	    GetDataRecInput(c50_context *Context, c50_input *Input,
 			    Boolean Train);
 CaseNo	    CountData(FILE *Df);
 CaseNo	    CountDataInput(c50_input *Input);
-int	    StoreIVal(String s);
-void	    FreeData(void);
+int	    StoreIVal(c50_context *Context, String s);
+void	    FreeData(c50_context *Context);
 void	    CheckValue(DataRec Case, Attribute Att);
 
 	/* mcost.c */
@@ -539,19 +538,24 @@ void	    ScanTree(Tree T, Boolean *Used);
 void	    InitialiseTreeData(c50_context *Context);
 void	    FreeTreeData(void);
 void	    SetMinGainThresh(void);
-void	    FormTree(CaseNo, CaseNo, int, Tree *);
-void	    SampleEstimate(CaseNo Fp, CaseNo Lp, CaseCount Cases);
+void	    FormTree(c50_context *Context, CaseNo, CaseNo, int, Tree *);
+void	    SampleEstimate(c50_context *Context, CaseNo Fp, CaseNo Lp,
+			   CaseCount Cases);
 void	    Sample(CaseNo Fp, CaseNo Lp, CaseNo N);
-Attribute   ChooseSplit(CaseNo Fp, CaseNo Lp, CaseCount Cases, Boolean Sampled);
-void	    ProcessQueue(CaseNo WFp, CaseNo WLp, CaseCount WCases);
+Attribute   ChooseSplit(c50_context *Context, CaseNo Fp, CaseNo Lp,
+			CaseCount Cases, Boolean Sampled);
+void	    ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
+			 CaseCount WCases);
 Attribute   FindBestAtt(CaseCount Cases);
-void	    EvalDiscrSplit(Attribute Att, CaseCount Cases);
-CaseNo	    Group(DiscrValue, CaseNo, CaseNo, Tree);
+void	    EvalDiscrSplit(c50_context *Context, Attribute Att,
+			   CaseCount Cases);
+CaseNo	    Group(c50_context *Context, DiscrValue, CaseNo, CaseNo, Tree);
 CaseCount   SumWeights(CaseNo, CaseNo);
 CaseCount   SumNocostWeights(CaseNo, CaseNo);
 void	    FindClassFreq(double [], CaseNo, CaseNo);
 void	    FindAllFreq(CaseNo, CaseNo);
-void	    Divide(Tree Node, CaseNo Fp, CaseNo Lp, int Level);
+void	    Divide(c50_context *Context, Tree Node, CaseNo Fp, CaseNo Lp,
+		   int Level);
 
 	/* discr.c */
 
@@ -563,13 +567,17 @@ void	    DiscreteTest(Tree Node, Attribute Att);
 
 	/* contin.c */
 
-void	    EvalContinuousAtt(Attribute Att, CaseNo Fp, CaseNo Lp);
-void	    EstimateMaxGR(Attribute Att, CaseNo Fp, CaseNo Lp);
-void	    PrepareForContin(Attribute Att, CaseNo Fp, CaseNo Lp);
+void	    EvalContinuousAtt(c50_context *Context, Attribute Att,
+			      CaseNo Fp, CaseNo Lp);
+void	    EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp,
+			  CaseNo Lp);
+void	    PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
+			     CaseNo Lp);
 CaseNo	    PrepareForScan(CaseNo Lp);
 void	    ContinTest(Tree Node, Attribute Att);
-void	    AdjustAllThresholds(Tree T);
-void	    AdjustThresholds(Tree T, Attribute Att, CaseNo *Ep);
+void	    AdjustAllThresholds(c50_context *Context, Tree T);
+void	    AdjustThresholds(c50_context *Context, Tree T, Attribute Att,
+			     CaseNo *Ep);
 ContValue   GreatestValueBelow(ContValue Th, CaseNo *Ep);
 
 	/* info.c */
@@ -597,7 +605,8 @@ void	    MoveBlock(DiscrValue V1, DiscrValue V2);
 	/* prune.c */
 
 void	    Prune(c50_context *Context, Tree T);
-void	    EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags);
+void	    EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
+			 int Sh, int Flags);
 void	    GlobalPrune(c50_context *Context, Tree T);
 void	    FindMinCC(Tree T);
 void	    InsertParents(Tree T, Tree P);
@@ -612,7 +621,7 @@ void	    SetGlobalUnitWeights(int LocalFlag);
 	/* p-thresh.c */
 
 void	    SoftenThresh(c50_context *Context, Tree T);
-void	    ResubErrs(Tree T, CaseNo Fp, CaseNo Lp);
+void	    ResubErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp);
 void	    FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp);
 
 	/* classify.c */
@@ -622,8 +631,9 @@ ClassNo	    TreeClassify(c50_context *Context, DataRec Case,
 void	    FollowAllBranches(c50_context *Context, DataRec Case, Tree T,
 			      float Fraction);
 ClassNo	    RuleClassify(c50_context *Context, DataRec Case, CRuleSet RS);
-int	    FindOutcome(DataRec Case, Condition OneCond);
-Boolean	    Matches(CRule R, DataRec Case);
+int	    FindOutcome(c50_context *Context, DataRec Case,
+			Condition OneCond);
+Boolean	    Matches(c50_context *Context, CRule R, DataRec Case);
 void	    CheckActiveSpace(c50_context *Context, int N);
 void	    MarkActive(c50_context *Context, RuleTree RT, DataRec Case);
 void	    SortActive(c50_context *Context);
@@ -639,7 +649,8 @@ float	    Interpolate(Tree T, ContValue Val);
 
 void	    FindLeaf(c50_context *Context, DataRec Case, Tree T, Tree PT,
 		     float Wt);
-Boolean	    Satisfies(DataRec Case, Condition OneCond);
+Boolean	    Satisfies(c50_context *Context, DataRec Case,
+		      Condition OneCond);
 
 	/* sort.c */
 
@@ -678,7 +689,7 @@ void	    FreeCases(void);
 void	    FreeLastCase(DataRec Case);
 void	    Error(int ErrNo, String S1, String S2);
 void	    C50Exit(int Status);
-String	    CaseLabel(CaseNo N);
+String	    CaseLabel(c50_context *Context, CaseNo N);
 FILE *	    GetFile(String Extension, String RW);
 double	    ExecTime(void);
 int	    Denominator(ContValue Val);
@@ -692,7 +703,7 @@ int	    TStampToMins(String TS);
 void	    Check(float Val, float Low, float High);
 void	    CValToStr(ContValue CV, Attribute Att, String DS);
 double	    rint(double v);
-void	    Cleanup(void);
+void	    Cleanup(c50_context *Context);
 #ifdef UTF8
 int	    UTF8CharWidth(unsigned char *U);
 int	    wcwidth(wchar_t ucs);
@@ -708,9 +719,9 @@ void	    PrintUsageInfo(CaseNo *Usage);
 	/* formrules.c */
 
 CRuleSet    FormRules(c50_context *Context, Tree T);
-void	    Scan(Tree T);
+void	    Scan(c50_context *Context, Tree T);
 void	    SetupNCost(void);
-void	    PushCondition(void);
+void	    PushCondition(c50_context *Context);
 void	    PopCondition(void);
 void	    PruneRule(Condition Cond[], ClassNo TargetClass);
 void	    ProcessLists(void);
@@ -740,7 +751,7 @@ void	    PrintCondition(Condition C);
 
 void	    SiftRules(c50_context *Context, float EstErrRate);
 void	    InvertFires(void);
-void	    FindTestCodes(void);
+void	    FindTestCodes(c50_context *Context);
 float	    CondBits(Condition C);
 void	    SetInitialTheory(void);
 void	    CoverClass(ClassNo Target);

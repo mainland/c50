@@ -65,19 +65,9 @@ float		CF=0.25,	/* confidence limit for tree pruning */
 /*									 */
 /*************************************************************************/
 
-Attribute	ClassAtt=0,	/* attribute to use as class */
-		LabelAtt=0,	/* attribute to use as case ID */
-		CWtAtt=0;	/* attribute to use for case weight */
-
-double		AvCWt;		/* average case weight */
-
 String		*ClassName=0,	/* class names */
 		*AttName=0,	/* att names */
 		**AttValName=0;	/* att value names */
-
-char		*IgnoredVals=0;	/* values of labels and atts marked ignore */
-int		IValsSize=0,	/* size of above */
-		IValsOffset=0;	/* index of first free char */
 
 int		MaxAtt,		/* max att number */
 		MaxClass,	/* max class number */
@@ -160,9 +150,6 @@ RuleNo		NRules,		/* number of rules */
 		RuleSpace;	/* space currently allocated for rules */
 
 CRuleSet	*RuleSet=0;	/* rulesets */
-
-ClassNo		Default;	/* default class associated with ruleset or
-				   boosted classifier */
 
 Byte		**Fires=Nil,	/* Fires[r][*] = cases covered by rule r */
 		*CBuffer=Nil;	/* buffer for compressing lists */

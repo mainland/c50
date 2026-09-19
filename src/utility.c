@@ -519,12 +519,14 @@ void Error(int ErrNo, String S1, String S2)
 char	LabelBuffer[1000];
 
 
-String CaseLabel(CaseNo N)
+String CaseLabel(c50_context *Context, CaseNo N)
 /*     ---------  */
 {
     String      p;
 
-    if ( LabelAtt && (p = IgnoredVals + SVal(Case[N], LabelAtt)) )
+    if ( Context->label_attribute &&
+	 (p = Context->ignored_values +
+	      SVal(Case[N], Context->label_attribute)) )
 	;
     else
     {
@@ -869,7 +871,7 @@ void Check(float Val, float Low, float High)
 /*************************************************************************/
 
 
-void Cleanup()
+void Cleanup(c50_context *Context)
 /*   -------  */
 {
     int		t, r;
@@ -912,7 +914,7 @@ void Cleanup()
 
     FreeUnlessNil(Blocked);				Blocked = Nil;
 
-    FreeData();
+    FreeData(Context);
 
     if ( MCost )
     {

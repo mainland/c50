@@ -33,6 +33,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 #define	PartInfo(n) (-(n)*Log((n)/GEnv.Cases))
 
@@ -48,7 +49,8 @@
 /*************************************************************************/
 
 
-void EvalContinuousAtt(Attribute Att, CaseNo Fp, CaseNo Lp)
+void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
+		       CaseNo Lp)
 /*   -----------------  */
 {
     CaseNo	i, j, BestI, Tries=0;
@@ -60,7 +62,7 @@ void EvalContinuousAtt(Attribute Att, CaseNo Fp, CaseNo Lp)
     Verbosity(3, fprintf(Of, "\tAtt %s\n", AttName[Att]))
 
     Gain[Att] = None;
-    PrepareForContin(Att, Fp, Lp);
+    PrepareForContin(Context, Att, Fp, Lp);
 
     /*  Special case when very few known values  */
 
@@ -215,7 +217,7 @@ void EvalContinuousAtt(Attribute Att, CaseNo Fp, CaseNo Lp)
 /*************************************************************************/
 
 
-void EstimateMaxGR(Attribute Att, CaseNo Fp, CaseNo Lp)
+void EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp, CaseNo Lp)
 /*   -------------  */
 {
     CaseNo	i, j;
@@ -224,9 +226,9 @@ void EstimateMaxGR(Attribute Att, CaseNo Fp, CaseNo Lp)
 
     EstMaxGR[Att] = 0;
 
-    if ( Skip(Att) || Att == ClassAtt ) return;
+    if ( Skip(Att) || Att == Context->class_attribute ) return;
 
-    PrepareForContin(Att, Fp, Lp);
+    PrepareForContin(Context, Att, Fp, Lp);
 
     /*  Special case when very few known values  */
 
@@ -318,7 +320,8 @@ void EstimateMaxGR(Attribute Att, CaseNo Fp, CaseNo Lp)
 /*************************************************************************/
 
 
-void PrepareForContin(Attribute Att, CaseNo Fp, CaseNo Lp)
+void PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
+		      CaseNo Lp)
 /*   ----------------  */
 {
     CaseNo	i;
@@ -355,7 +358,7 @@ void PrepareForContin(Attribute Att, CaseNo Fp, CaseNo Lp)
 		GEnv.Freq[ 0 ][ Class(Case[i]) ] += Weight(Case[i]);
 	    }
 	    else
-	    if ( NotApplic(Case[i], Att) )
+	    if ( NotApplic(Context, Case[i], Att) )
 	    {
 		GEnv.Freq[ 1 ][ Class(Case[i]) ] += Weight(Case[i]);
 	    }
@@ -516,7 +519,7 @@ void ContinTest(Tree Node, Attribute Att)
 /*************************************************************************/
 
 
-void AdjustAllThresholds(Tree T)
+void AdjustAllThresholds(c50_context *Context, Tree T)
 /*   -------------------  */
 {
     Attribute	Att;
@@ -527,14 +530,14 @@ void AdjustAllThresholds(Tree T)
 	if ( Continuous(Att) )
 	{
 	    Ep = -1;
-	    AdjustThresholds(T, Att, &Ep);
+	    AdjustThresholds(Context, T, Att, &Ep);
 	}
     }
 }
 
 
 
-void AdjustThresholds(Tree T, Attribute Att, CaseNo *Ep)
+void AdjustThresholds(c50_context *Context, Tree T, Attribute Att, CaseNo *Ep)
 /*   ----------------  */
 {
     DiscrValue	v;
@@ -546,7 +549,7 @@ void AdjustThresholds(Tree T, Attribute Att, CaseNo *Ep)
 	{
 	    ForEach(i, 0, MaxCase)
 	    {
-		if ( ! Unknown(Case[i], Att) && ! NotApplic(Case[i], Att) )
+		if ( ! Unknown(Case[i], Att) && ! NotApplic(Context, Case[i], Att) )
 		{
 		    (&GEnv)->SRec[++(*Ep)].V = CVal(Case[i], Att);
 		}
@@ -572,7 +575,7 @@ void AdjustThresholds(Tree T, Attribute Att, CaseNo *Ep)
     {
 	ForEach(v, 1, T->Forks)
 	{
-	    AdjustThresholds(T->Branch[v], Att, Ep);
+	    AdjustThresholds(Context, T->Branch[v], Att, Ep);
 	}
     }
 }

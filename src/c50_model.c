@@ -204,7 +204,7 @@ static void CleanupModelLoad(c50_context *context, void *user_data)
 {
     c50_model_load_state *state = user_data;
 
-    Cleanup();
+    Cleanup(context);
     Of = NULL;
     if ( c50_context_last_status(context) != C50_STATUS_OK )
     {
@@ -277,7 +277,8 @@ static void PredictModel(c50_context *context, void *user_data)
     SomeMiss = AllocZero(MaxAtt + 1, Boolean);
     SomeNA = AllocZero(MaxAtt + 1, Boolean);
     if ( RULES ) context->most_specific_rules = Alloc(MaxClass + 1, CRule);
-    Default = ( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
+    context->default_class =
+        ( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
     context->class_sum = AllocZero(MaxClass + 1, float);
     context->votes = AllocZero(MaxClass + 1, float);
     context->trial_predictions = AllocZero(TRIALS, ClassNo);
@@ -324,7 +325,7 @@ static void CleanupPrediction(c50_context *context, void *user_data)
 {
     c50_predict_state *state = user_data;
 
-    Cleanup();
+    Cleanup(context);
     c50_clear_prediction_state(context);
     Of = NULL;
     if ( c50_context_last_status(context) != C50_STATUS_OK )

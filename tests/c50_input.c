@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
     {
         return 1;
     }
-    Cleanup();
+    Cleanup(context);
     c50_context_destroy(context);
 
     return 0;
