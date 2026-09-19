@@ -76,11 +76,27 @@ if(BUILD_TESTING)
 
     add_executable(c50_c_api_compile tests/c_api_compile.c)
     target_link_libraries(c50_c_api_compile PRIVATE C50::core)
+    add_executable(c50_c_api_failure tests/c_api_failure.c)
+    target_include_directories(
+        c50_c_api_failure
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(c50_c_api_failure PRIVATE C50::core)
     add_executable(c50_cpp_api_compile tests/c_api_compile.cpp)
     target_compile_features(c50_cpp_api_compile PRIVATE cxx_std_11)
     target_link_libraries(c50_cpp_api_compile PRIVATE C50::core)
-    list(APPEND C50_COMPILE_TARGETS c50_c_api_compile c50_cpp_api_compile)
-    list(APPEND C50_EXECUTABLE_TARGETS c50_c_api_compile c50_cpp_api_compile)
+    list(
+        APPEND C50_COMPILE_TARGETS
+        c50_c_api_compile
+        c50_c_api_failure
+        c50_cpp_api_compile
+    )
+    list(
+        APPEND C50_EXECUTABLE_TARGETS
+        c50_c_api_compile
+        c50_c_api_failure
+        c50_cpp_api_compile
+    )
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
@@ -121,6 +137,7 @@ endif()
 
 if(BUILD_TESTING)
     add_test(NAME c-api-compile COMMAND c50_c_api_compile)
+    add_test(NAME c-api-failure COMMAND c50_c_api_failure)
     add_test(NAME cpp-api-compile COMMAND c50_cpp_api_compile)
     add_test(
         NAME cli-regression

@@ -62,9 +62,9 @@
 
 
 #ifdef	VerbOpt
-#define Goodbye(x)		{Cleanup(); exit(x);}
+#define Goodbye(x)		{Cleanup(); C50Exit(x);}
 #else
-#define Goodbye(x)		exit(x)
+#define Goodbye(x)		C50Exit(x)
 #endif
 
 #ifdef	VerbOpt
@@ -659,6 +659,7 @@ void	    FreeLastCase(DataRec Case);
 double	    KRandom(void);
 void	    ResetKR(int KRInit);
 void	    Error(int ErrNo, String S1, String S2);
+void	    C50Exit(int Status);
 String	    CaseLabel(CaseNo N);
 FILE *	    GetFile(String Extension, String RW);
 double	    ExecTime(void);

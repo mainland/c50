@@ -1,9 +1,14 @@
 /* Copyright 2026 Geoffrey Mainland. */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
+#include <setjmp.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <c50/c50.h>
+
+#include "c50_api_internal.h"
 
 #define C50_ERROR_MESSAGE_CAPACITY 1024
 
@@ -11,7 +16,23 @@ struct c50_context
 {
     c50_status status;
     char error_message[C50_ERROR_MESSAGE_CAPACITY];
+    jmp_buf exit_target;
 };
+
+static c50_context *ActiveContext;
+
+static void SetError(c50_context *context, c50_status status,
+                     const char *message)
+{
+    if ( ! context || context->status != C50_STATUS_OK ) return;
+
+    context->status = status;
+    if ( message )
+    {
+        snprintf(context->error_message, sizeof(context->error_message),
+                 "%s", message);
+    }
+}
 
 c50_status c50_context_create(c50_context **out_context)
 {
@@ -71,4 +92,50 @@ const char *c50_status_message(c50_status status)
         default:
             return "unknown C5.0 status";
     }
+}
+
+c50_status c50_run_operation(c50_context *context,
+                             c50_operation_fn operation,
+                             c50_operation_cleanup_fn cleanup,
+                             void *user_data)
+{
+    if ( ! context || ! operation ) return C50_STATUS_INVALID_ARGUMENT;
+
+    if ( ActiveContext )
+    {
+        SetError(context, C50_STATUS_INTERNAL_ERROR,
+                 "a C5.0 operation is already active");
+        return context->status;
+    }
+
+    context->status = C50_STATUS_OK;
+    context->error_message[0] = '\0';
+
+    if ( ! setjmp(context->exit_target) )
+    {
+        ActiveContext = context;
+        operation(user_data);
+    }
+
+    ActiveContext = NULL;
+    if ( cleanup ) cleanup(user_data);
+    return context->status;
+}
+
+void c50_record_error(c50_status status, const char *message)
+{
+    SetError(ActiveContext, status, message);
+}
+
+int c50_abort_active_operation(int exit_status)
+{
+    if ( ! ActiveContext ) return 0;
+
+    if ( ActiveContext->status == C50_STATUS_OK )
+    {
+        SetError(ActiveContext, C50_STATUS_INTERNAL_ERROR,
+                 exit_status ? "C5.0 operation failed" :
+                               "C5.0 operation terminated");
+    }
+    longjmp(ActiveContext->exit_target, exit_status ? exit_status : 1);
 }

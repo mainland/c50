@@ -66,6 +66,7 @@ objects =\
 	 $(SRC_DIR)/attwinnow.o
 
 headers =\
+	$(SRC_DIR)/c50_api_internal.h\
 	$(SRC_DIR)/defns.i\
 	$(SRC_DIR)/extern.i\
 	$(SRC_DIR)/text.i
