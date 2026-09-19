@@ -1,0 +1,9 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `invalid'
+
+*** line 4 of `invalid.names': in definition of attribute `bad':
+	`x and 1': non-logical value with 'and'

@@ -1,6 +1,7 @@
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
+/*  Modifications Copyright 2026 Geoffrey Mainland.			 */
 /*									 */
 /*  This file is part of C5.0 GPL Edition, a single-threaded version	 */
 /*  of C5.0 release 2.07.						 */
@@ -31,9 +32,11 @@
 /*									 */
 /*************************************************************************/
 
+#include <ctype.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 void	PrintSummary(float **Val, int No, char *Title);
 float	SE(float sum, float sumsq, int no);
@@ -53,10 +56,18 @@ int main(int argc, char *argv[])
 		Size=0, Errs=0, Form, OK;
     float	***Raw, **Average=0, FX, Tests, Cost=0;
 
-    sscanf(argv[1], "%d", &Cases);
-    sscanf(argv[2], "%d", &Folds);
-    sscanf(argv[3], "%d", &Repeats);
-    sscanf(argv[4], "%d", &Rules);
+    if ( argc != 5 ||
+	 sscanf(argv[1], "%d", &Cases) != 1 ||
+	 sscanf(argv[2], "%d", &Folds) != 1 ||
+	 sscanf(argv[3], "%d", &Repeats) != 1 ||
+	 sscanf(argv[4], "%d", &Rules) != 1 ||
+	 Cases < 1 || Folds < 2 || Folds > Cases || Repeats < 1 ||
+	 ( Rules != 0 && Rules != 1 ) )
+    {
+	fprintf(stderr,
+		"Usage: report <cases> <folds> <repeats> <rules>\n");
+	return 1;
+    }
 
     /*  Assemble all data  */
 
@@ -68,7 +79,11 @@ int main(int argc, char *argv[])
 
     /*  Determine input type from the first line  */
 
-    fgets(Line, 100, stdin);
+    if ( ! fgets(Line, 100, stdin) )
+    {
+	fprintf(stderr, "Expecting %d lines\n", Folds * Repeats);
+	return 1;
+    }
 
     /*  Count the numbers on the line  */
 

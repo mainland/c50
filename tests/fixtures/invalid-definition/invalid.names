@@ -1,0 +1,4 @@
+low, high.
+
+x: continuous.
+bad := x and 1.

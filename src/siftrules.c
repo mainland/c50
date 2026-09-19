@@ -2,6 +2,7 @@
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
 /*  Author: Ross Quinlan (quinlan@rulequest.com) [Rev Jan 2016]		 */
+/*  Modifications Copyright 2026 Geoffrey Mainland.			 */
 /*									 */
 /*  This file is part of C5.0 GPL Edition, a single-threaded version	 */
 /*  of C5.0 release 2.07.						 */
@@ -191,19 +192,20 @@ void InvertFires()
     int		j, Blocks, Extra;
     CaseNo	i;
     Byte	*p, *From, *To, *Next;
+    size_t	CovByBlockSize=0;
 
     CovByPtr = Alloc(MaxCase+2, Byte *);
     Extra = NRules / 128;		/* max number of filler entries */
-    CovByPtr[0] = 0;
+    ForEach(i, 1, MaxCase+1)
+    {
+	CovByBlockSize += CovBy[i-1] + Extra;
+    }
+
+    CovByBlock = Alloc(CovByBlockSize, Byte);
+    CovByPtr[0] = CovByBlock;
     ForEach(i, 1, MaxCase+1)
     {
 	CovByPtr[i] = CovByPtr[i-1] + CovBy[i-1] + Extra;
-    }
-
-    CovByBlock = Alloc((size_t) CovByPtr[MaxCase+1], Byte);
-    ForEach(i, 0, MaxCase)
-    {
-	CovByPtr[i] += (size_t) CovByBlock;
     }
 
     LastCovBy = AllocZero(MaxCase+1, RuleNo);
