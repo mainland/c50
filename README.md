@@ -61,6 +61,46 @@ C5.0 names, training data, optional costs, and prediction cases from memory.
 Trained models retain their serialized C5.0 representation for storage or
 interchange with compatible tools.
 
+## Python
+
+The Python bindings require Python 3.12 or later. They are implemented with
+pybind11 and call the C++ facade, which in turn links to the C core. Build and
+install them from the repository root with:
+
+```sh
+python -m pip install .
+```
+
+Training data and prediction cases use the same in-memory C5.0 text formats as
+the C and C++ APIs:
+
+```python
+import c50
+
+names = """no, yes.
+
+value: continuous.
+"""
+training_data = """0, no
+1, no
+2, yes
+3, yes
+"""
+
+model = c50.train(names, training_data)
+labels = model.predict("0, ?\n3, ?\n")
+scores = model.predict_proba("0, ?\n3, ?\n")
+
+serialized = model.serialized_data
+restored = c50.load(model.names_data, serialized, model.kind)
+```
+
+`ModelKind.RULES` selects a rules model, and `Options` exposes the native
+training controls. Models are pickleable. Independent training and prediction
+operations release the Python GIL and use separate native contexts, so they can
+execute concurrently; callers should still serialize mutation of each Python
+object.
+
 Run `./c5.0 -h` to see the available command-line options. C5.0 uses a file stem
 to locate inputs such as `<stem>.names`, `<stem>.data`, and optional
 `<stem>.test` and `<stem>.costs` files:
