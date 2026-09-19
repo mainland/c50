@@ -84,6 +84,12 @@ if(BUILD_TESTING)
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
     target_link_libraries(c50_input_test PRIVATE C50::core)
+    add_executable(c50_data_input_test tests/c50_data_input.c)
+    target_include_directories(
+        c50_data_input_test
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(c50_data_input_test PRIVATE C50::core)
     add_executable(c50_c_api_failure tests/c_api_failure.c)
     target_include_directories(
         c50_c_api_failure
@@ -99,6 +105,7 @@ if(BUILD_TESTING)
         APPEND C50_COMPILE_TARGETS
         c50_c_api_compile
         c50_input_test
+        c50_data_input_test
         c50_c_api_failure
         c50_c_api_model
         c50_cpp_api_compile
@@ -107,6 +114,7 @@ if(BUILD_TESTING)
         APPEND C50_EXECUTABLE_TARGETS
         c50_c_api_compile
         c50_input_test
+        c50_data_input_test
         c50_c_api_failure
         c50_c_api_model
         c50_cpp_api_compile
@@ -152,6 +160,7 @@ endif()
 if(BUILD_TESTING)
     add_test(NAME c-api-compile COMMAND c50_c_api_compile)
     add_test(NAME input-stream COMMAND c50_input_test)
+    add_test(NAME data-input-stream COMMAND c50_data_input_test)
     add_test(NAME c-api-failure COMMAND c50_c_api_failure)
     add_test(NAME c-api-model COMMAND c50_c_api_model)
     add_test(NAME cpp-api-compile COMMAND c50_cpp_api_compile)

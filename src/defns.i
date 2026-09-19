@@ -504,8 +504,12 @@ AttValue    EvaluateDef(Definition D, DataRec Case);
 	/* getdata.c */
 
 void	    GetData(FILE *Df, Boolean Train, Boolean AllowUnknownClass);
+void	    GetDataInput(c50_input *Input, Boolean Train,
+			 Boolean AllowUnknownClass);
 DataRec	    GetDataRec(FILE *Df, Boolean Train);
+DataRec	    GetDataRecInput(c50_input *Input, Boolean Train);
 CaseNo	    CountData(FILE *Df);
+CaseNo	    CountDataInput(c50_input *Input);
 int	    StoreIVal(String s);
 void	    FreeData(void);
 void	    CheckValue(DataRec Case, Attribute Att);
