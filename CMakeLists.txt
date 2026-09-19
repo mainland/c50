@@ -17,6 +17,7 @@ set(C50_CORE_SOURCES
     src/c50_api.c
     src/c50_input.c
     src/c50_model.c
+    src/c50_output.c
     src/classify.c
     src/confmat.c
     src/construct.c
@@ -99,6 +100,12 @@ if(BUILD_TESTING)
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
     target_link_libraries(c50_input_test PRIVATE C50::core)
+    add_executable(c50_output_test tests/c50_output.c)
+    target_include_directories(
+        c50_output_test
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(c50_output_test PRIVATE C50::core)
     add_executable(c50_data_input_test tests/c50_data_input.c)
     target_include_directories(
         c50_data_input_test
@@ -115,6 +122,8 @@ if(BUILD_TESTING)
     target_link_libraries(c50_c_api_model PRIVATE C50::core)
     add_executable(c50_c_api_prediction tests/c_api_prediction.c)
     target_link_libraries(c50_c_api_prediction PRIVATE C50::core)
+    add_executable(c50_c_api_training tests/c_api_training.c)
+    target_link_libraries(c50_c_api_training PRIVATE C50::core)
     add_executable(
         c50_c_api_context_isolation
         tests/c_api_context_isolation.c
@@ -125,6 +134,14 @@ if(BUILD_TESTING)
         c50_c_api_concurrency
         PRIVATE C50::core Threads::Threads
     )
+    add_executable(
+        c50_c_api_training_concurrency
+        tests/c_api_training_concurrency.c
+    )
+    target_link_libraries(
+        c50_c_api_training_concurrency
+        PRIVATE C50::core Threads::Threads
+    )
     add_executable(c50_cpp_api_compile tests/c_api_compile.cpp)
     target_compile_features(c50_cpp_api_compile PRIVATE cxx_std_11)
     target_link_libraries(c50_cpp_api_compile PRIVATE C50::core)
@@ -132,24 +149,30 @@ if(BUILD_TESTING)
         APPEND C50_COMPILE_TARGETS
         c50_c_api_compile
         c50_input_test
+        c50_output_test
         c50_data_input_test
         c50_c_api_failure
         c50_c_api_model
         c50_c_api_prediction
+        c50_c_api_training
         c50_c_api_context_isolation
         c50_c_api_concurrency
+        c50_c_api_training_concurrency
         c50_cpp_api_compile
     )
     list(
         APPEND C50_EXECUTABLE_TARGETS
         c50_c_api_compile
         c50_input_test
+        c50_output_test
         c50_data_input_test
         c50_c_api_failure
         c50_c_api_model
         c50_c_api_prediction
+        c50_c_api_training
         c50_c_api_context_isolation
         c50_c_api_concurrency
+        c50_c_api_training_concurrency
         c50_cpp_api_compile
     )
 endif()
@@ -209,12 +232,18 @@ endif()
 if(BUILD_TESTING)
     add_test(NAME c-api-compile COMMAND c50_c_api_compile)
     add_test(NAME input-stream COMMAND c50_input_test)
+    add_test(NAME output-stream COMMAND c50_output_test)
     add_test(NAME data-input-stream COMMAND c50_data_input_test)
     add_test(NAME c-api-failure COMMAND c50_c_api_failure)
     add_test(NAME c-api-model COMMAND c50_c_api_model)
     add_test(NAME c-api-prediction COMMAND c50_c_api_prediction)
+    add_test(NAME c-api-training COMMAND c50_c_api_training)
     add_test(NAME c-api-context-isolation COMMAND c50_c_api_context_isolation)
     add_test(NAME c-api-concurrency COMMAND c50_c_api_concurrency)
+    add_test(
+        NAME c-api-training-concurrency
+        COMMAND c50_c_api_training_concurrency
+    )
     add_test(NAME cpp-api-compile COMMAND c50_cpp_api_compile)
     if(CMAKE_NM AND UNIX)
         add_test(

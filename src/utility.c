@@ -886,6 +886,11 @@ void Cleanup(c50_context *Context)
 
     CheckClose(Context->progress.update_file);					Context->progress.update_file = Nil;
     CheckClose(Context->io.model_file);					Context->io.model_file = Nil;
+    if ( Context->classifier_output_active )
+    {
+	c50_output_close(&Context->classifier_output);
+	Context->classifier_output_active = false;
+    }
 
     /*  Boost voting (construct.c)  */
 
