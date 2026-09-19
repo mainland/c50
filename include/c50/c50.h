@@ -23,9 +23,10 @@ typedef struct c50_model c50_model;
 typedef struct c50_predictions c50_predictions;
 
 /*
- * The imported core uses process-global mutable state. C5.0 operations must be
- * serialized across all contexts. Callers must also prevent concurrent access
- * to the same context or model handle.
+ * Independent contexts may be used concurrently. A context may have only one
+ * operation active at a time, so callers must serialize access to the same
+ * context. Loaded models are immutable and may be shared by concurrent
+ * operations, provided they are not destroyed until those operations finish.
  */
 
 /* Status values returned by public API operations. */
