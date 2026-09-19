@@ -17,6 +17,7 @@ set(C50_CORE_SOURCES
     src/c50_api.c
     src/c50_input.c
     src/c50_model.c
+    src/c50_output.c
     src/classify.c
     src/confmat.c
     src/construct.c
@@ -99,6 +100,12 @@ if(BUILD_TESTING)
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
     target_link_libraries(c50_input_test PRIVATE C50::core)
+    add_executable(c50_output_test tests/c50_output.c)
+    target_include_directories(
+        c50_output_test
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(c50_output_test PRIVATE C50::core)
     add_executable(c50_data_input_test tests/c50_data_input.c)
     target_include_directories(
         c50_data_input_test
@@ -132,6 +139,7 @@ if(BUILD_TESTING)
         APPEND C50_COMPILE_TARGETS
         c50_c_api_compile
         c50_input_test
+        c50_output_test
         c50_data_input_test
         c50_c_api_failure
         c50_c_api_model
@@ -144,6 +152,7 @@ if(BUILD_TESTING)
         APPEND C50_EXECUTABLE_TARGETS
         c50_c_api_compile
         c50_input_test
+        c50_output_test
         c50_data_input_test
         c50_c_api_failure
         c50_c_api_model
@@ -209,6 +218,7 @@ endif()
 if(BUILD_TESTING)
     add_test(NAME c-api-compile COMMAND c50_c_api_compile)
     add_test(NAME input-stream COMMAND c50_input_test)
+    add_test(NAME output-stream COMMAND c50_output_test)
     add_test(NAME data-input-stream COMMAND c50_data_input_test)
     add_test(NAME c-api-failure COMMAND c50_c_api_failure)
     add_test(NAME c-api-model COMMAND c50_c_api_model)
