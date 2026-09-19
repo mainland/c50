@@ -23,6 +23,7 @@ sources =\
 	$(SRC_DIR)/global.c\
 	$(SRC_DIR)/c50_api.c\
 	$(SRC_DIR)/c50_input.c\
+	$(SRC_DIR)/c50_model.c\
 	$(SRC_DIR)/c50.c\
 	$(SRC_DIR)/construct.c\
 	$(SRC_DIR)/formtree.c\

@@ -4,6 +4,8 @@
 #ifndef C50_C50_H
 #define C50_C50_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -63,6 +65,24 @@ const char *c50_context_error_message(const c50_context *context);
 
 /* Return a static, non-NULL description of status. */
 const char *c50_status_message(c50_status status);
+
+/*
+ * Load and validate a serialized classifier. Inputs are copied, so they need
+ * not remain valid after this function returns. costs_data may be NULL only
+ * when costs_size is zero and the classifier does not require costs. On
+ * failure, *out_model is NULL and context contains the diagnostic.
+ */
+c50_status c50_model_load(c50_context *context, c50_model_kind kind,
+                          const char *names_data, size_t names_size,
+                          const char *model_data, size_t model_size,
+                          const char *costs_data, size_t costs_size,
+                          c50_model **out_model);
+
+/* Release a model. A NULL model is allowed and has no effect. */
+void c50_model_destroy(c50_model *model);
+
+/* Return the serialized representation kind. model must not be NULL. */
+c50_model_kind c50_model_get_kind(const c50_model *model);
 
 #ifdef __cplusplus
 }

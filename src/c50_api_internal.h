@@ -21,6 +21,10 @@ c50_status c50_run_operation(c50_context *context,
 /* Record the first error raised by the active operation. */
 void c50_record_error(c50_status status, const char *message);
 
+/* Replace the context result without starting an operation. */
+c50_status c50_set_context_error(c50_context *context, c50_status status,
+                                 const char *message);
+
 /* Unwind the active operation, or return zero when no operation is active. */
 int c50_abort_active_operation(int exit_status);
 

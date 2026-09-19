@@ -36,8 +36,8 @@
 #include "extern.i"
 
 
-void GetMCosts(FILE *Cf)
-/*   ---------  */
+void GetMCostsInput(c50_input *Cf)
+/*   --------------  */
 {
     ClassNo	Pred, Real, p, r;
     char	Name[1000];
@@ -48,20 +48,20 @@ void GetMCosts(FILE *Cf)
 
     /*  Read entries from cost file  */
 
-    while ( ReadName(Cf, Name, 1000, ':') )
+    while ( ReadNameInput(Cf, Name, 1000, ':') )
     {
 	if ( ! (Pred = Which(Name, ClassName, 1, MaxClass)) )
 	{
 	    Error(BADCOSTCLASS, Name, "");
 	}
 
-	if ( ! ReadName(Cf, Name, 1000, ':') ||
+	if ( ! ReadNameInput(Cf, Name, 1000, ':') ||
 	     ! (Real = Which(Name, ClassName, 1, MaxClass)) )
 	{
 	    Error(BADCOSTCLASS, Name, "");
 	}
 
-	if ( ! ReadName(Cf, Name, 1000, ':') ||
+	if ( ! ReadNameInput(Cf, Name, 1000, ':') ||
 	     sscanf(Name, "%f", &Val) != 1 || Val < 0 )
 	{
 	    Error(BADCOST, "", "");
@@ -90,8 +90,6 @@ void GetMCosts(FILE *Cf)
 	    MCost[Pred][Real] = Val;
 	}
     }
-    fclose(Cf);
-
     /*  Don't need weights etc. for predict or interpret, or
 	if not using cost weighting  */
 
@@ -135,4 +133,16 @@ void GetMCosts(FILE *Cf)
     MINITEMS *= Min(WeightMul[1], WeightMul[2]);
 
     Free(ClassFreq);					ClassFreq = Nil;
+}
+
+
+
+void GetMCosts(FILE *Cf)
+/*   ---------  */
+{
+    c50_input Input;
+
+    c50_input_init_file(&Input, Cf);
+    GetMCostsInput(&Input);
+    fclose(Cf);
 }

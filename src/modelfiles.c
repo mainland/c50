@@ -36,6 +36,7 @@
 #include "extern.i"
 
 int	Entry;
+static c50_input ClassifierInput;
 
 char*	Prop[]={"null",
 		"att",
@@ -188,7 +189,8 @@ void ReadFilePrefix(String Extension)
 {
     if ( ! (TRf = GetFile(Extension, "r")) ) Error(NOFILE, Fn, "");
 
-    StreamIn((char *) &TRIALS, sizeof(int));
+    c50_input_init_file(&ClassifierInput, TRf);
+    StreamIn(&ClassifierInput, (char *) &TRIALS, sizeof(int));
     if ( memcmp((char *) &TRIALS, "id=", 3) != 0 )
     {
 	printf("\nCannot read old format classifiers\n");
@@ -196,8 +198,8 @@ void ReadFilePrefix(String Extension)
     }
     else
     {
-	rewind(TRf);
-	ReadHeader();
+	c50_input_rewind(&ClassifierInput);
+	ReadHeader(&ClassifierInput);
     }
 }
 
@@ -440,8 +442,9 @@ void AsciiOut(String Pre, String S)
 /*************************************************************************/
 
 
-void ReadHeader()
-/*   ---------  */
+static void ReadHeaderFrom(c50_input *Input, c50_input *CostsInput,
+			   Boolean AllowFileCosts)
+/*          --------------  */
 {
     Attribute	Att;
     DiscrValue	v;
@@ -451,7 +454,7 @@ void ReadHeader()
 
     while ( true )
     {
-	switch ( ReadProp(&Dummy) )
+	switch ( ReadProp(Input, &Dummy) )
 	{
 	    case ERRORP:
 		return;
@@ -469,9 +472,18 @@ void ReadHeader()
 	    case COSTSP:
 		/*  Recover costs file used to generate model  */
 
-		if ( (F = GetFile(".costs", "r")) )
+		if ( CostsInput )
+		{
+		    GetMCostsInput(CostsInput);
+		}
+		else
+		if ( AllowFileCosts && (F = GetFile(".costs", "r")) )
 		{
 		    GetMCosts(F);
+		}
+		else
+		{
+		    Error(NOFILE, Fn, "costs input required by model");
 		}
 		break;
 	    case SAMPLEP:
@@ -520,6 +532,22 @@ void ReadHeader()
 
 
 
+void ReadHeader(c50_input *Input)
+/*   ----------  */
+{
+    ReadHeaderFrom(Input, Nil, true);
+}
+
+
+
+void ReadHeaderMemory(c50_input *Input, c50_input *CostsInput)
+/*   ----------------  */
+{
+    ReadHeaderFrom(Input, CostsInput, false);
+}
+
+
+
 /*************************************************************************/
 /*									 */
 /*	Retrieve decision tree with extension Extension			 */
@@ -532,13 +560,23 @@ Tree GetTree(String Extension)
 {
     CheckFile(Extension, false);
 
-    return InTree();
+    return InTree(&ClassifierInput);
 }
 
 
 
-Tree InTree()
+Tree InTree(c50_input *Input)
 /*   ------  */
+{
+    Tree T=Nil;
+
+    return InTreeAt(Input, &T);
+}
+
+
+
+Tree InTreeAt(c50_input *Input, Tree *Slot)
+/*   --------  */
 {
     Tree	T;
     DiscrValue	v, Subset=0;
@@ -548,10 +586,11 @@ Tree InTree()
     double	XD;
 
     T = (Tree) AllocZero(1, TreeRec);
+    *Slot = T;
 
     do
     {
-	switch ( ReadProp(&Delim) )
+	switch ( ReadProp(Input, &Delim) )
 	{
 	    case ERRORP:
 		return Nil;
@@ -634,7 +673,7 @@ Tree InTree()
 	T->Branch = AllocZero(T->Forks+1, Tree);
 	ForEach(v, 1, T->Forks)
 	{
-	    T->Branch[v] = InTree();
+	    InTreeAt(Input, &T->Branch[v]);
 	}
     }
 
@@ -656,23 +695,34 @@ CRuleSet GetRules(String Extension)
 {
     CheckFile(Extension, false);
 
-    return InRules();
+    return InRules(&ClassifierInput);
 }
 
 
 
-CRuleSet InRules()
+CRuleSet InRules(c50_input *Input)
 /*	 -------  */
+{
+    CRuleSet RS=Nil;
+
+    return InRulesAt(Input, &RS);
+}
+
+
+
+CRuleSet InRulesAt(c50_input *Input, CRuleSet *Slot)
+/*	 ---------  */
 {
     CRuleSet	RS;
     RuleNo	r;
     char	Delim;
 
     RS = Alloc(1, RuleSetRec);
+    *Slot = RS;
 
     do
     {
-	switch ( ReadProp(&Delim) )
+	switch ( ReadProp(Input, &Delim) )
 	{
 	    case ERRORP:
 		return Nil;
@@ -696,7 +746,7 @@ CRuleSet InRules()
     RS->SRule = Alloc(RS->SNRules+1, CRule);
     ForEach(r, 1, RS->SNRules)
     {
-	if ( (RS->SRule[r] = InRule()) )
+	if ( InRuleAt(Input, &RS->SRule[r]) )
 	{
 	    RS->SRule[r]->RNo = r;
 	    RS->SRule[r]->TNo = Entry;
@@ -709,8 +759,18 @@ CRuleSet InRules()
 
 
 
-CRule InRule()
+CRule InRule(c50_input *Input)
 /*    ------  */
+{
+    CRule R=Nil;
+
+    return InRuleAt(Input, &R);
+}
+
+
+
+CRule InRuleAt(c50_input *Input, CRule *Slot)
+/*    --------  */
 {
     CRule	R;
     int		d;
@@ -718,10 +778,11 @@ CRule InRule()
     float	Lift;
 
     R = Alloc(1, RuleRec);
+    *Slot = R;
 
     do
     {
-	switch ( ReadProp(&Delim) )
+	switch ( ReadProp(Input, &Delim) )
 	{
 	    case ERRORP:
 		return Nil;
@@ -755,7 +816,7 @@ CRule InRule()
     R->Lhs = Alloc(R->Size+1, Condition);
     ForEach(d, 1, R->Size)
     {
-	R->Lhs[d] = InCondition();
+	InConditionAt(Input, &R->Lhs[d]);
     }
 
     R->Vote = 1000 * (R->Correct + 1.0) / (R->Cover + 2.0) + 0.5;
@@ -765,8 +826,18 @@ CRule InRule()
 
 
 
-Condition InCondition()
+Condition InCondition(c50_input *Input)
 /*        -----------  */
+{
+    Condition C=Nil;
+
+    return InConditionAt(Input, &C);
+}
+
+
+
+Condition InConditionAt(c50_input *Input, Condition *Slot)
+/*        -------------  */
 {
     Condition	C;
     char	Delim;
@@ -774,10 +845,11 @@ Condition InCondition()
     double	XD;
 
     C = Alloc(1, CondRec);
+    *Slot = C;
 
     do
     {
-	switch ( ReadProp(&Delim) )
+	switch ( ReadProp(Input, &Delim) )
 	{
 	    case ERRORP:
 		return Nil;
@@ -838,14 +910,14 @@ Condition InCondition()
 /*************************************************************************/
 
 
-int ReadProp(char *Delim)
+int ReadProp(c50_input *Input, char *Delim)
 /*  --------  */
 {
     int		c, i;
     char	*p;
     Boolean	Quote=false;
 
-    for ( p = PropName ; (c = fgetc(TRf)) != '=' ;  )
+    for ( p = PropName ; (c = c50_input_getc(Input)) != '=' ;  )
     {
 	if ( p - PropName >= 19 || c == EOF )
 	{
@@ -857,7 +929,8 @@ int ReadProp(char *Delim)
     }
     *p = '\00';
 
-    for ( p = PropVal ; ((c = fgetc(TRf)) != ' ' && c != '\n') || Quote ; )
+    for ( p = PropVal ;
+	  ((c = c50_input_getc(Input)) != ' ' && c != '\n') || Quote ; )
     {
 	if ( c == EOF )
 	{
@@ -875,7 +948,7 @@ int ReadProp(char *Delim)
 	*p++ = c;
 	if ( c == '\\' )
 	{
-	    *p++ = fgetc(TRf);
+	    *p++ = c50_input_getc(Input);
 	}
 	else
 	if ( c == '"' )
@@ -945,8 +1018,8 @@ Set MakeSubset(Attribute Att)
 /*************************************************************************/
 
 
-void StreamIn(String S, int n)
+void StreamIn(c50_input *Input, String S, int n)
 /*   --------  */
 {
-    while ( n-- ) *S++ = getc(TRf);
+    while ( n-- ) *S++ = c50_input_getc(Input);
 }

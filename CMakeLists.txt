@@ -11,6 +11,7 @@ set(C50_CORE_SOURCES
     src/attwinnow.c
     src/c50_api.c
     src/c50_input.c
+    src/c50_model.c
     src/classify.c
     src/confmat.c
     src/construct.c
@@ -89,6 +90,8 @@ if(BUILD_TESTING)
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
     target_link_libraries(c50_c_api_failure PRIVATE C50::core)
+    add_executable(c50_c_api_model tests/c_api_model.c)
+    target_link_libraries(c50_c_api_model PRIVATE C50::core)
     add_executable(c50_cpp_api_compile tests/c_api_compile.cpp)
     target_compile_features(c50_cpp_api_compile PRIVATE cxx_std_11)
     target_link_libraries(c50_cpp_api_compile PRIVATE C50::core)
@@ -97,6 +100,7 @@ if(BUILD_TESTING)
         c50_c_api_compile
         c50_input_test
         c50_c_api_failure
+        c50_c_api_model
         c50_cpp_api_compile
     )
     list(
@@ -104,6 +108,7 @@ if(BUILD_TESTING)
         c50_c_api_compile
         c50_input_test
         c50_c_api_failure
+        c50_c_api_model
         c50_cpp_api_compile
     )
 endif()
@@ -148,6 +153,7 @@ if(BUILD_TESTING)
     add_test(NAME c-api-compile COMMAND c50_c_api_compile)
     add_test(NAME input-stream COMMAND c50_input_test)
     add_test(NAME c-api-failure COMMAND c50_c_api_failure)
+    add_test(NAME c-api-model COMMAND c50_c_api_model)
     add_test(NAME cpp-api-compile COMMAND c50_cpp_api_compile)
     add_test(
         NAME cli-regression

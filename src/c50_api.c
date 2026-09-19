@@ -127,6 +127,17 @@ void c50_record_error(c50_status status, const char *message)
     SetError(ActiveContext, status, message);
 }
 
+c50_status c50_set_context_error(c50_context *context, c50_status status,
+                                 const char *message)
+{
+    if ( ! context ) return C50_STATUS_INVALID_ARGUMENT;
+
+    context->status = C50_STATUS_OK;
+    context->error_message[0] = '\0';
+    SetError(context, status, message);
+    return status;
+}
+
 int c50_abort_active_operation(int exit_status)
 {
     if ( ! ActiveContext ) return 0;

@@ -487,7 +487,7 @@ void Error(int ErrNo, String S1, String S2)
 	    break;
     }
 
-    fputs(Buffer, Of);
+    if ( Of ) fputs(Buffer, Of);
 	
     if ( ! WarningOnly )
     {
@@ -500,12 +500,12 @@ void Error(int ErrNo, String S1, String S2)
 
     if ( ErrMsgs == 10 )
     {
-	fprintf(Of,  T_ErrorLimit);
+	if ( Of ) fprintf(Of,  T_ErrorLimit);
 	MaxCase--;
 	Quit = true;
     }
 
-    if ( Quit && Of )
+    if ( Quit )
     {
 	Goodbye(1);
     }

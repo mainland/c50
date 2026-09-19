@@ -392,9 +392,11 @@ void FreeRule(CRule R)
 {
     int	d;
 
-    ForEach(d, 1, R->Size)
+    if ( ! R ) return;
+
+    if ( R->Lhs ) ForEach(d, 1, R->Size)
     {
-	if ( R->Lhs[d]->NodeType == BrSubset )
+	if ( R->Lhs[d] && R->Lhs[d]->NodeType == BrSubset )
 	{
 	    FreeUnlessNil(R->Lhs[d]->Subset);
 	}
@@ -411,11 +413,13 @@ void FreeRules(CRuleSet RS)
 {
     int	ri;
 
-    ForEach(ri, 1, RS->SNRules)
+    if ( ! RS ) return;
+
+    if ( RS->SRule ) ForEach(ri, 1, RS->SNRules)
     {
 	FreeRule(RS->SRule[ri]);
     }
-    Free(RS->SRule);
+    FreeUnlessNil(RS->SRule);
     FreeRuleTree(RS->RT);
     Free(RS);
 }
