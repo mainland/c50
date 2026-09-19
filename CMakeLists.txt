@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(C50 VERSION 2.07 LANGUAGES C)
+project(C50 VERSION 2.07 LANGUAGES C CXX)
 
 option(C50_ENABLE_SANITIZERS
        "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
@@ -9,6 +9,7 @@ include(CTest)
 
 set(C50_CORE_SOURCES
     src/attwinnow.c
+    src/c50_api.c
     src/classify.c
     src/confmat.c
     src/construct.c
@@ -39,6 +40,12 @@ set(C50_CORE_SOURCES
 add_library(c50_core STATIC ${C50_CORE_SOURCES})
 add_library(C50::core ALIAS c50_core)
 set_target_properties(c50_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(
+    c50_core
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
 
 add_executable(c50_cli src/c50.c)
 target_link_libraries(c50_cli PRIVATE C50::core)
@@ -66,6 +73,14 @@ if(BUILD_TESTING)
     target_link_libraries(c50_prediction_probe PRIVATE C50::core)
     list(APPEND C50_COMPILE_TARGETS c50_prediction_probe)
     list(APPEND C50_EXECUTABLE_TARGETS c50_prediction_probe)
+
+    add_executable(c50_c_api_compile tests/c_api_compile.c)
+    target_link_libraries(c50_c_api_compile PRIVATE C50::core)
+    add_executable(c50_cpp_api_compile tests/c_api_compile.cpp)
+    target_compile_features(c50_cpp_api_compile PRIVATE cxx_std_11)
+    target_link_libraries(c50_cpp_api_compile PRIVATE C50::core)
+    list(APPEND C50_COMPILE_TARGETS c50_c_api_compile c50_cpp_api_compile)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_c_api_compile c50_cpp_api_compile)
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
@@ -105,6 +120,8 @@ if(C50_ENABLE_SANITIZERS)
 endif()
 
 if(BUILD_TESTING)
+    add_test(NAME c-api-compile COMMAND c50_c_api_compile)
+    add_test(NAME cpp-api-compile COMMAND c50_cpp_api_compile)
     add_test(
         NAME cli-regression
         COMMAND
