@@ -22,7 +22,7 @@ The archive used for the import has this SHA-256 digest:
 309db588eda420c06701bf8ae74c06a6c923e9a06e714a598ea761bcadfc5e2e  C50.tgz
 ```
 
-## Current build
+## Build
 
 The legacy programs require a C compiler and `make`:
 
@@ -41,6 +41,25 @@ CMake is also supported:
 cmake -S . -B build
 cmake --build build
 ```
+
+Install the C library, C header, header-only C++ facade, and CMake package with:
+
+```sh
+cmake --install build --prefix <prefix>
+```
+
+CMake consumers can use `C50::core` for the C API or `C50::cpp` for the C++11
+facade. The C++ target links the compiled C core transitively:
+
+```cmake
+find_package(C50 2.07 CONFIG REQUIRED)
+target_link_libraries(my_program PRIVATE C50::cpp)
+```
+
+The public headers are `<c50/c50.h>` and `<c50/c50.hpp>`. Both APIs accept
+C5.0 names, training data, optional costs, and prediction cases from memory.
+Trained models retain their serialized C5.0 representation for storage or
+interchange with compatible tools.
 
 Run `./c5.0 -h` to see the available command-line options. C5.0 uses a file stem
 to locate inputs such as `<stem>.names`, `<stem>.data`, and optional
