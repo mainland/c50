@@ -134,6 +134,14 @@ if(BUILD_TESTING)
         c50_c_api_concurrency
         PRIVATE C50::core Threads::Threads
     )
+    add_executable(
+        c50_c_api_training_concurrency
+        tests/c_api_training_concurrency.c
+    )
+    target_link_libraries(
+        c50_c_api_training_concurrency
+        PRIVATE C50::core Threads::Threads
+    )
     add_executable(c50_cpp_api_compile tests/c_api_compile.cpp)
     target_compile_features(c50_cpp_api_compile PRIVATE cxx_std_11)
     target_link_libraries(c50_cpp_api_compile PRIVATE C50::core)
@@ -149,6 +157,7 @@ if(BUILD_TESTING)
         c50_c_api_training
         c50_c_api_context_isolation
         c50_c_api_concurrency
+        c50_c_api_training_concurrency
         c50_cpp_api_compile
     )
     list(
@@ -163,6 +172,7 @@ if(BUILD_TESTING)
         c50_c_api_training
         c50_c_api_context_isolation
         c50_c_api_concurrency
+        c50_c_api_training_concurrency
         c50_cpp_api_compile
     )
 endif()
@@ -230,6 +240,10 @@ if(BUILD_TESTING)
     add_test(NAME c-api-training COMMAND c50_c_api_training)
     add_test(NAME c-api-context-isolation COMMAND c50_c_api_context_isolation)
     add_test(NAME c-api-concurrency COMMAND c50_c_api_concurrency)
+    add_test(
+        NAME c-api-training-concurrency
+        COMMAND c50_c_api_training_concurrency
+    )
     add_test(NAME cpp-api-compile COMMAND c50_cpp_api_compile)
     if(CMAKE_NM AND UNIX)
         add_test(
