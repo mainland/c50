@@ -16,6 +16,7 @@
 
 struct c50_implicit_state;
 struct _datablockrec;
+struct _environment;
 union _attribute_value;
 struct _def_elt;
 struct _rulerec;
@@ -87,6 +88,10 @@ typedef struct
 {
     double *class_frequencies;
     float *boost_vote_block;
+    struct _environment *environment;
+    float *attribute_importance;
+    unsigned char *split_attributes;
+    unsigned char *used_attributes;
 } c50_training_state;
 
 typedef struct
@@ -116,6 +121,29 @@ typedef struct
     float sample_fraction;
 } c50_options_state;
 
+typedef struct
+{
+    double **discrete_frequencies;
+    float *gain;
+    float *information;
+    float *estimated_max_gain_ratio;
+    c50_continuous_value *thresholds;
+    double base_information;
+    double **bell_numbers;
+    float sample_fraction;
+    int *possible_cuts;
+    unsigned char *tested_attributes;
+    unsigned char ***subsets;
+    int *subset_counts;
+} c50_split_state;
+
+typedef struct
+{
+    float attribute_test_bits;
+    float *branch_bits;
+    int *attribute_values;
+} c50_rule_build_state;
+
 struct c50_context
 {
     c50_status status;
@@ -133,6 +161,8 @@ struct c50_context
     c50_training_state training;
     c50_evaluation_state evaluation;
     c50_options_state options;
+    c50_split_state splits;
+    c50_rule_build_state rule_build;
     double average_case_weight;
     char *ignored_values;
     int ignored_values_size;

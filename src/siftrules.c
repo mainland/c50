@@ -104,13 +104,13 @@ void SiftRules(c50_context *Context, float EstErrRate)
     /*  Calculate the number of bits associated with attribute tests;
 	this is not repeated in boosting, composite rulesets etc  */
 
-    if ( ! BranchBits || Context->rules.count > Context->cases.max_case )
+    if ( ! Context->rule_build.branch_bits || Context->rules.count > Context->cases.max_case )
     {
 	GenerateLogs(Max(Context->cases.max_case+1, Max(Context->schema.max_attribute, Max(Context->schema.max_class,
 			 Max(Context->schema.max_discrete_value, Context->rules.count)))));
     }
 
-    if ( ! BranchBits )
+    if ( ! Context->rule_build.branch_bits )
     {
 	FindTestCodes(Context);
     }
@@ -293,8 +293,8 @@ void FindTestCodes(c50_context *Context)
     int		PossibleAtts=0;
     float	Sum;
 
-    BranchBits = AllocZero(Context->schema.max_attribute+1, float);
-    AttValues  = AllocZero(Context->schema.max_attribute+1, int);
+    Context->rule_build.branch_bits = AllocZero(Context->schema.max_attribute+1, float);
+    Context->rule_build.attribute_values  = AllocZero(Context->schema.max_attribute+1, int);
 
     ForEach(Att, 1, Context->schema.max_attribute)
     {
@@ -304,7 +304,7 @@ void FindTestCodes(c50_context *Context)
 
 	if ( Ordered(Att) )
 	{
-	    BranchBits[Att] = 1 + 0.5 * LogCaseNo[Context->schema.max_attribute_value[Att] - 1];
+	    Context->rule_build.branch_bits[Att] = 1 + 0.5 * LogCaseNo[Context->schema.max_attribute_value[Att] - 1];
 	}
 	else
 	if ( (V = Context->schema.max_attribute_value[Att]) )
@@ -326,23 +326,23 @@ void FindTestCodes(c50_context *Context)
 		{
 		    Sum += (ValFreq[v] / (Context->cases.max_case+1.0)) *
 			   (LogCaseNo[Context->cases.max_case+1] - LogCaseNo[ValFreq[v]]);
-		    AttValues[Att]++;
+		    Context->rule_build.attribute_values[Att]++;
 		}
 	    }
 	    Free(ValFreq);
 
-	    BranchBits[Att] = Sum;
+	    Context->rule_build.branch_bits[Att] = Sum;
 	}
 	else
 	{
 	    /*  Continuous attribute  */
 
-	    BranchBits[Att] = PossibleCuts[Att] > 1 ?
-			      1 + 0.5 * LogCaseNo[PossibleCuts[Att]] : 0 ;
+	    Context->rule_build.branch_bits[Att] = Context->splits.possible_cuts[Att] > 1 ?
+			      1 + 0.5 * LogCaseNo[Context->splits.possible_cuts[Att]] : 0 ;
 	}
     }
 
-    AttTestBits = LogCaseNo[PossibleAtts];
+    Context->rule_build.attribute_test_bits = LogCaseNo[PossibleAtts];
 }
 
 
@@ -368,7 +368,7 @@ float CondBits(c50_context *Context, Condition C)
 	case BrDiscr:		/* test of discrete attribute */
 	case BrThresh:		/* test of continuous attribute */
 
-	    return AttTestBits + BranchBits[Att];
+	    return Context->rule_build.attribute_test_bits + Context->rule_build.branch_bits[Att];
 
 	case BrSubset:		/* subset test on discrete attribute  */
 
@@ -376,7 +376,7 @@ float CondBits(c50_context *Context, Condition C)
 
 	    if ( Ordered(Att) )
 	    {
-		return AttTestBits + BranchBits[Att];
+		return Context->rule_build.attribute_test_bits + Context->rule_build.branch_bits[Att];
 	    }
 
 	    ForEach(v, 1, Context->schema.max_attribute_value[Att])
@@ -386,11 +386,11 @@ float CondBits(c50_context *Context, Condition C)
 		    Elts++;
 		}
 	    }
-	    Elts = Min(Elts, AttValues[Att] - 1);  /* if values not present */
-	    Code = LogFact[AttValues[Att]] -
-		   (LogFact[Elts] + LogFact[AttValues[Att] - Elts]);
+	    Elts = Min(Elts, Context->rule_build.attribute_values[Att] - 1);  /* if values not present */
+	    Code = LogFact[Context->rule_build.attribute_values[Att]] -
+		   (LogFact[Elts] + LogFact[Context->rule_build.attribute_values[Att] - Elts]);
 
-	    return AttTestBits + Code;
+	    return Context->rule_build.attribute_test_bits + Code;
     }
 
     return 0;
@@ -1280,8 +1280,8 @@ void FreeSiftRuleData(c50_context *Context)
     FreeUnlessNil(RuleIn);				RuleIn = Nil;
     FreeUnlessNil(CovBy);				CovBy = Nil;
     FreeUnlessNil(CovByPtr);				CovByPtr = Nil;
-    FreeUnlessNil(BranchBits);				BranchBits = Nil;
-    FreeUnlessNil(AttValues);				AttValues = Nil;
+    FreeUnlessNil(Context->rule_build.branch_bits);				Context->rule_build.branch_bits = Nil;
+    FreeUnlessNil(Context->rule_build.attribute_values);				Context->rule_build.attribute_values = Nil;
 
     FreeUnlessNil(DeltaErrs);				DeltaErrs = Nil;
     FreeUnlessNil(CovByBlock);				CovByBlock = Nil;

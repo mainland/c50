@@ -122,7 +122,7 @@ CRuleSet FormRules(c50_context *Context, Tree T)
     Context->rules.count = Context->rules.capacity = 0;
     FindClassFreq(Context, Context->training.class_frequencies, 0, Context->cases.max_case);
 
-    if ( ! BranchBits )
+    if ( ! Context->rule_build.branch_bits )
     {
 	GenerateLogs(Max(Context->cases.max_case+1, Max(Context->schema.max_attribute, Max(Context->schema.max_class, Context->schema.max_discrete_value))));
 	FindTestCodes(Context);

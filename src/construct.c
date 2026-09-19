@@ -131,7 +131,7 @@ void ConstructClassifiers(c50_context *Context)
 	Context->trees.raw[Context->trees.max_tree] = Context->trees.pruned[Context->trees.max_tree] = Nil;
 	if ( Context->options.rules ) Context->rules.sets[Context->trees.max_tree] = Nil;
 
-	memset(Tested, 0, Context->schema.max_attribute+1);		/* reset tested attributes */
+	memset(Context->splits.tested_attributes, 0, Context->schema.max_attribute+1);		/* reset tested attributes */
 
 	FormTree(Context, Bp, Context->cases.max_case, 0, &Context->trees.raw[Context->trees.trial]);
 
@@ -573,7 +573,7 @@ void EvaluateSingle(c50_context *Context, int Flags)
 	RealClass = Class(Context->cases.records[i]);
 	assert(RealClass > 0 && RealClass <= Context->schema.max_class);
 
-	memset(Tested, 0, Context->schema.max_attribute+1);	/* for usage */
+	memset(Context->splits.tested_attributes, 0, Context->schema.max_attribute+1);	/* for usage */
 
 	if ( Context->options.rules )
 	{
@@ -735,7 +735,7 @@ void EvaluateBoost(c50_context *Context, int Flags)
     {
 	RealClass = Class(Context->cases.records[i]);
 
-	memset(Tested, 0, Context->schema.max_attribute+1);	/* for usage */
+	memset(Context->splits.tested_attributes, 0, Context->schema.max_attribute+1);	/* for usage */
 
 	PredClass = BoostClassify(Context, Context->cases.records[i], Context->options.trials-1);
 	if ( PredClass != RealClass )
@@ -846,7 +846,7 @@ void RecordAttUsage(c50_context *Context, DataRec Case, int *Usage)
 
     for ( Att = Context->schema.max_attribute ; Att > 0 ; Att-- )
     {
-	if ( Tested[Att] && ! Unknown(Case, Att) )
+	if ( Context->splits.tested_attributes[Att] && ! Unknown(Case, Att) )
 	{
 	    Usage[Att]++;
 
@@ -854,7 +854,7 @@ void RecordAttUsage(c50_context *Context, DataRec Case, int *Usage)
 	    {
 		ForEach(i, 1, Context->schema.attribute_definition_uses[Att][0])
 		{
-		    Tested[Context->schema.attribute_definition_uses[Att][i]] = true;
+		    Context->splits.tested_attributes[Context->schema.attribute_definition_uses[Att][i]] = true;
 		}
 	    }
 	}

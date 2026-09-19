@@ -35,7 +35,7 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
-#define	PartInfo(n) (-(n)*Log((n)/GEnv.Cases))
+#define	PartInfo(n) (-(n)*Log((n)/Context->training.environment->Cases))
 
 
 /*************************************************************************/
@@ -44,7 +44,7 @@
 /*	values 0 (unknown), 1 (not applicable), 2 (less than cut) and	 */
 /*	3 (greater than cut).						 */
 /*	This routine finds the best cut for cases Fp through Lp and	 */
-/*	sets Info[], Gain[] and Bar[]					 */
+/*	sets Context->splits.information[], Context->splits.gain[] and Context->splits.thresholds[]					 */
 /*								  	 */
 /*************************************************************************/
 
@@ -61,12 +61,12 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
 
     Verbosity(3, fprintf(Of, "\tAtt %s\n", Context->schema.attribute_names[Att]))
 
-    Gain[Att] = None;
+    Context->splits.gain[Att] = None;
     PrepareForContin(Context, Att, Fp, Lp);
 
     /*  Special case when very few known values  */
 
-    if ( GEnv.ApplicCases < 2 * Context->options.minimum_cases )
+    if ( Context->training.environment->ApplicCases < 2 * Context->options.minimum_cases )
     {
 	Verbosity(2,
 	    fprintf(Of, "\tAtt %s\tinsufficient cases with known values\n",
@@ -78,56 +78,56 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
 	information and gain of the split in each case  */
 
     /*  We have to be wary of splitting a small number of cases off one end,
-	as this has little predictive power.  The minimum split GEnv.MinSplit is
+	as this has little predictive power.  The minimum split Context->training.environment->MinSplit is
 	the maximum of Context->options.minimum_cases or (the minimum of 25 and 10% of the cases
 	per class)  */
 
-    GEnv.MinSplit = 0.10 * GEnv.KnownCases / Context->schema.max_class;
-    if ( GEnv.MinSplit > 25 ) GEnv.MinSplit = 25;
-    if ( GEnv.MinSplit < Context->options.minimum_cases ) GEnv.MinSplit = Context->options.minimum_cases;
+    Context->training.environment->MinSplit = 0.10 * Context->training.environment->KnownCases / Context->schema.max_class;
+    if ( Context->training.environment->MinSplit > 25 ) Context->training.environment->MinSplit = 25;
+    if ( Context->training.environment->MinSplit < Context->options.minimum_cases ) Context->training.environment->MinSplit = Context->options.minimum_cases;
 
     /*	Find first possible cut point and initialise scan parameters  */
 
-    i = PrepareForScan(Lp);
+    i = PrepareForScan(Context, Lp);
 
     /*  Repeatedly check next possible cut  */
 
-    for ( ; i <= GEnv.Ep ; i++ )
+    for ( ; i <= Context->training.environment->Ep ; i++ )
     {
-	c = GEnv.SRec[i].C;
-	w = GEnv.SRec[i].W;
+	c = Context->training.environment->SRec[i].C;
+	w = Context->training.environment->SRec[i].W;
 	assert(c >= 1 && c <= Context->schema.max_class);
 
-	GEnv.LowCases   += w;
-	GEnv.Freq[2][c] += w;
-	GEnv.Freq[3][c] -= w;
+	Context->training.environment->LowCases   += w;
+	Context->training.environment->Freq[2][c] += w;
+	Context->training.environment->Freq[3][c] -= w;
 
-	GEnv.HighVal = GEnv.SRec[i+1].V;
-	if ( GEnv.HighVal > GEnv.LowVal )
+	Context->training.environment->HighVal = Context->training.environment->SRec[i+1].V;
+	if ( Context->training.environment->HighVal > Context->training.environment->LowVal )
 	{
 	    Tries++;
 
-	    GEnv.LowClass  = GEnv.HighClass;
-	    GEnv.HighClass = GEnv.SRec[i+1].C;
+	    Context->training.environment->LowClass  = Context->training.environment->HighClass;
+	    Context->training.environment->HighClass = Context->training.environment->SRec[i+1].C;
 	    for ( j = i+2 ;
-		  GEnv.HighClass && j <= GEnv.Ep && GEnv.SRec[j].V == GEnv.HighVal ;
+		  Context->training.environment->HighClass && j <= Context->training.environment->Ep && Context->training.environment->SRec[j].V == Context->training.environment->HighVal ;
 		  j++ )
 	    {
-		if ( GEnv.SRec[j].C != GEnv.HighClass ) GEnv.HighClass = 0;
+		if ( Context->training.environment->SRec[j].C != Context->training.environment->HighClass ) Context->training.environment->HighClass = 0;
 	    }
 
-	    if ( ! GEnv.LowClass || GEnv.LowClass != GEnv.HighClass || j > GEnv.Ep )
+	    if ( ! Context->training.environment->LowClass || Context->training.environment->LowClass != Context->training.environment->HighClass || j > Context->training.environment->Ep )
 	    {
-		LowInfo = TotalInfo(GEnv.Freq[2], 1, Context->schema.max_class);
+		LowInfo = TotalInfo(Context->training.environment->Freq[2], 1, Context->schema.max_class);
 
 		/*  If cannot improve on best so far, count remaining
 		    possible cuts and break  */
 
 		if ( LowInfo >= LeastInfo )
 		{
-		    for ( i++ ; i <= GEnv.Ep ; i++ )
+		    for ( i++ ; i <= Context->training.environment->Ep ; i++ )
 		    {
-			if ( GEnv.SRec[i+1].V > GEnv.SRec[i].V )
+			if ( Context->training.environment->SRec[i+1].V > Context->training.environment->SRec[i].V )
 			{
 			    Tries++;
 			}
@@ -135,44 +135,44 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
 		    break;
 		}
 
-		LHInfo = LowInfo + TotalInfo(GEnv.Freq[3], 1, Context->schema.max_class);
+		LHInfo = LowInfo + TotalInfo(Context->training.environment->Freq[3], 1, Context->schema.max_class);
 		if ( LHInfo < LeastInfo )
 		{
 		    LeastInfo = LHInfo;
 		    BestI     = i;
 
-		    BestInfo = (GEnv.FixedSplitInfo
-				+ PartInfo(GEnv.LowCases)
-				+ PartInfo(GEnv.ApplicCases - GEnv.LowCases))
-			       / GEnv.Cases;
+		    BestInfo = (Context->training.environment->FixedSplitInfo
+				+ PartInfo(Context->training.environment->LowCases)
+				+ PartInfo(Context->training.environment->ApplicCases - Context->training.environment->LowCases))
+			       / Context->training.environment->Cases;
 		}
 
 		Verbosity(3,
 		{
 		    fprintf(Of, "\t\tCut at %.3f  (gain %.3f):",
-			   (GEnv.LowVal + GEnv.HighVal) / 2,
-			   (1 - GEnv.UnknownRate) *
-			   (GEnv.BaseInfo - (GEnv.NAInfo + LHInfo) / GEnv.KnownCases));
-		    PrintDistribution(Context, Att, 2, 3, GEnv.Freq, GEnv.ValFreq, true);
+			   (Context->training.environment->LowVal + Context->training.environment->HighVal) / 2,
+			   (1 - Context->training.environment->UnknownRate) *
+			   (Context->training.environment->BaseInfo - (Context->training.environment->NAInfo + LHInfo) / Context->training.environment->KnownCases));
+		    PrintDistribution(Context, Att, 2, 3, Context->training.environment->Freq, Context->training.environment->ValFreq, true);
 		})
 	    }
 
-	    GEnv.LowVal = GEnv.HighVal;
+	    Context->training.environment->LowVal = Context->training.environment->HighVal;
 	}
     }
 
-    BestGain = (1 - GEnv.UnknownRate) *
-	       (GEnv.BaseInfo - (GEnv.NAInfo + LeastInfo) / GEnv.KnownCases);
+    BestGain = (1 - Context->training.environment->UnknownRate) *
+	       (Context->training.environment->BaseInfo - (Context->training.environment->NAInfo + LeastInfo) / Context->training.environment->KnownCases);
 
     /*  The threshold cost is the lesser of the cost of indicating the
 	cases to split between or the interval containing the split  */
 
     if ( BestGain > 0 )
     {
-	Interval = (GEnv.SRec[Lp].V - GEnv.SRec[GEnv.Xp].V) /
-		   (GEnv.SRec[BestI+1].V - GEnv.SRec[BestI].V);
+	Interval = (Context->training.environment->SRec[Lp].V - Context->training.environment->SRec[Context->training.environment->Xp].V) /
+		   (Context->training.environment->SRec[BestI+1].V - Context->training.environment->SRec[BestI].V);
 	ThreshCost = ( Interval < Tries ? Log(Interval) : Log(Tries) )
-		     / GEnv.Cases;
+		     / Context->training.environment->Cases;
     }
 
     BestGain -= ThreshCost;
@@ -186,24 +186,24 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
     }
     else
     {
-	Gain[Att] = BestGain;
-	Info[Att] = BestInfo;
+	Context->splits.gain[Att] = BestGain;
+	Context->splits.information[Att] = BestInfo;
 
-	GEnv.LowVal  = GEnv.SRec[BestI].V;
-	GEnv.HighVal = GEnv.SRec[BestI+1].V;
+	Context->training.environment->LowVal  = Context->training.environment->SRec[BestI].V;
+	Context->training.environment->HighVal = Context->training.environment->SRec[BestI+1].V;
 
 	/*  Set threshold, making sure that rounding problems do not
 	    cause it to reach upper value  */
 
-	if ( (Bar[Att] = (ContValue) (0.5 * (GEnv.LowVal + GEnv.HighVal)))
-	     >= GEnv.HighVal )
+	if ( (Context->splits.thresholds[Att] = (ContValue) (0.5 * (Context->training.environment->LowVal + Context->training.environment->HighVal)))
+	     >= Context->training.environment->HighVal )
 	{
-	    Bar[Att] = GEnv.LowVal;
+	    Context->splits.thresholds[Att] = Context->training.environment->LowVal;
 	}
 
 	Verbosity(2,
 	    fprintf(Of, "\tAtt %s\tcut=%.3f, inf %.3f, gain %.3f\n",
-		   Context->schema.attribute_names[Att], Bar[Att], Info[Att], Gain[Att]))
+		   Context->schema.attribute_names[Att], Context->splits.thresholds[Att], Context->splits.information[Att], Context->splits.gain[Att]))
     }
 }
 
@@ -212,7 +212,7 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
 /*************************************************************************/
 /*                                                                	 */
 /*	Estimate max gain ratio available from any cut, using sample	 */
-/*	of SampleFrac of all cases					 */
+/*	of Context->splits.sample_fraction of all cases					 */
 /*                                                                	 */
 /*************************************************************************/
 
@@ -224,7 +224,7 @@ void EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp, CaseNo Lp)
     double	LHInfo, w, SplitInfo, ThisGain, GR;
     ClassNo	c;
 
-    EstMaxGR[Att] = 0;
+    Context->splits.estimated_max_gain_ratio[Att] = 0;
 
     if ( Skip(Att) || Att == Context->schema.class_attribute ) return;
 
@@ -232,82 +232,82 @@ void EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp, CaseNo Lp)
 
     /*  Special case when very few known values  */
 
-    if ( GEnv.ApplicCases < 2 * Context->options.minimum_cases * SampleFrac )
+    if ( Context->training.environment->ApplicCases < 2 * Context->options.minimum_cases * Context->splits.sample_fraction )
     {
 	return;
     }
 
     /*  Try possible cuts between cases i and i+1.  Use conservative
-	value of GEnv.MinSplit to allow for sampling  */
+	value of Context->training.environment->MinSplit to allow for sampling  */
 
-    GEnv.MinSplit = 0.10 * GEnv.KnownCases / Context->schema.max_class;
-    if ( GEnv.MinSplit > 25 ) GEnv.MinSplit = 25;
-    if ( GEnv.MinSplit < Context->options.minimum_cases ) GEnv.MinSplit = Context->options.minimum_cases;
+    Context->training.environment->MinSplit = 0.10 * Context->training.environment->KnownCases / Context->schema.max_class;
+    if ( Context->training.environment->MinSplit > 25 ) Context->training.environment->MinSplit = 25;
+    if ( Context->training.environment->MinSplit < Context->options.minimum_cases ) Context->training.environment->MinSplit = Context->options.minimum_cases;
 
-    GEnv.MinSplit *= SampleFrac * 0.33;
+    Context->training.environment->MinSplit *= Context->splits.sample_fraction * 0.33;
 
-    i = PrepareForScan(Lp);
+    i = PrepareForScan(Context, Lp);
 
     /*  Repeatedly check next possible cut  */
 
-    for ( ; i <= GEnv.Ep ; i++ )
+    for ( ; i <= Context->training.environment->Ep ; i++ )
     {
-	c = GEnv.SRec[i].C;
-	w = GEnv.SRec[i].W;
+	c = Context->training.environment->SRec[i].C;
+	w = Context->training.environment->SRec[i].W;
 	assert(c >= 1 && c <= Context->schema.max_class);
 
-	GEnv.LowCases   += w;
-	GEnv.Freq[2][c] += w;
-	GEnv.Freq[3][c] -= w;
+	Context->training.environment->LowCases   += w;
+	Context->training.environment->Freq[2][c] += w;
+	Context->training.environment->Freq[3][c] -= w;
 
-	GEnv.HighVal = GEnv.SRec[i+1].V;
-	if ( GEnv.HighVal > GEnv.LowVal )
+	Context->training.environment->HighVal = Context->training.environment->SRec[i+1].V;
+	if ( Context->training.environment->HighVal > Context->training.environment->LowVal )
 	{
-	    GEnv.LowClass  = GEnv.HighClass;
-	    GEnv.HighClass = GEnv.SRec[i+1].C;
+	    Context->training.environment->LowClass  = Context->training.environment->HighClass;
+	    Context->training.environment->HighClass = Context->training.environment->SRec[i+1].C;
 	    for ( j = i+2 ;
-		  GEnv.HighClass && j <= GEnv.Ep && GEnv.SRec[j].V == GEnv.HighVal ;
+		  Context->training.environment->HighClass && j <= Context->training.environment->Ep && Context->training.environment->SRec[j].V == Context->training.environment->HighVal ;
 		  j++ )
 	    {
-		if ( GEnv.SRec[j].C != GEnv.HighClass ) GEnv.HighClass = 0;
+		if ( Context->training.environment->SRec[j].C != Context->training.environment->HighClass ) Context->training.environment->HighClass = 0;
 	    }
 
-	    if ( ! GEnv.LowClass || GEnv.LowClass != GEnv.HighClass || j > GEnv.Ep )
+	    if ( ! Context->training.environment->LowClass || Context->training.environment->LowClass != Context->training.environment->HighClass || j > Context->training.environment->Ep )
 	    {
-		LHInfo = TotalInfo(GEnv.Freq[2], 1, Context->schema.max_class)
-			 + TotalInfo(GEnv.Freq[3], 1, Context->schema.max_class);
+		LHInfo = TotalInfo(Context->training.environment->Freq[2], 1, Context->schema.max_class)
+			 + TotalInfo(Context->training.environment->Freq[3], 1, Context->schema.max_class);
 
-		SplitInfo = (GEnv.FixedSplitInfo
-			    + PartInfo(GEnv.LowCases)
-			    + PartInfo(GEnv.ApplicCases - GEnv.LowCases)) / GEnv.Cases;
+		SplitInfo = (Context->training.environment->FixedSplitInfo
+			    + PartInfo(Context->training.environment->LowCases)
+			    + PartInfo(Context->training.environment->ApplicCases - Context->training.environment->LowCases)) / Context->training.environment->Cases;
 
-		ThisGain = (1 - GEnv.UnknownRate) *
-			   (GEnv.BaseInfo - (GEnv.NAInfo + LHInfo) / GEnv.KnownCases);
-		if ( ThisGain > Gain[Att] ) Gain[Att] = ThisGain;
+		ThisGain = (1 - Context->training.environment->UnknownRate) *
+			   (Context->training.environment->BaseInfo - (Context->training.environment->NAInfo + LHInfo) / Context->training.environment->KnownCases);
+		if ( ThisGain > Context->splits.gain[Att] ) Context->splits.gain[Att] = ThisGain;
 
 		/*  Adjust GR to make it more conservative upper bound  */
 
 		GR = (ThisGain + 1E-5) / SplitInfo;
-		if ( GR > EstMaxGR[Att] )
+		if ( GR > Context->splits.estimated_max_gain_ratio[Att] )
 		{
-		    EstMaxGR[Att] = GR;
+		    Context->splits.estimated_max_gain_ratio[Att] = GR;
 		}
 
 		Verbosity(3,
 		{
 		    fprintf(Of, "\t\tCut at %.3f  (gain %.3f):",
-			   (GEnv.LowVal + GEnv.HighVal) / 2, ThisGain);
-		    PrintDistribution(Context, Att, 2, 3, GEnv.Freq, GEnv.ValFreq, true);
+			   (Context->training.environment->LowVal + Context->training.environment->HighVal) / 2, ThisGain);
+		    PrintDistribution(Context, Att, 2, 3, Context->training.environment->Freq, Context->training.environment->ValFreq, true);
 		})
 	    }
 
-	    GEnv.LowVal = GEnv.HighVal;
+	    Context->training.environment->LowVal = Context->training.environment->HighVal;
 	}
     }
 
     Verbosity(2,
 	fprintf(Of, "\tAtt %s: max GR estimate %.3f\n",
-		    Context->schema.attribute_names[Att], EstMaxGR[Att]))
+		    Context->schema.attribute_names[Att], Context->splits.estimated_max_gain_ratio[Att]))
 }
 
 
@@ -334,99 +334,99 @@ void PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
     {
 	ForEach(c, 1, Context->schema.max_class)
 	{
-	    GEnv.Freq[v][c] = 0;
+	    Context->training.environment->Freq[v][c] = 0;
 	}
-	GEnv.ValFreq[v] = 0;
+	Context->training.environment->ValFreq[v] = 0;
     }
 
     /*  Omit and count unknown and N/A values */
 
-    GEnv.Cases = 0;
+    Context->training.environment->Cases = 0;
 
     if ( Context->cases.some_missing[Att] || Context->cases.some_not_applicable[Att] )
     {
-	GEnv.Xp = Lp+1;
+	Context->training.environment->Xp = Lp+1;
 
 	ForEach(i, Fp, Lp)
 	{
 	    assert(Class(Context->cases.records[i]) >= 1 && Class(Context->cases.records[i]) <= Context->schema.max_class);
 
-	    GEnv.Cases += Weight(Context->cases.records[i]);
+	    Context->training.environment->Cases += Weight(Context->cases.records[i]);
 
 	    if ( Unknown(Context->cases.records[i], Att) )
 	    {
-		GEnv.Freq[ 0 ][ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
+		Context->training.environment->Freq[ 0 ][ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
 	    }
 	    else
 	    if ( NotApplic(Context, Context->cases.records[i], Att) )
 	    {
-		GEnv.Freq[ 1 ][ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
+		Context->training.environment->Freq[ 1 ][ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
 	    }
 	    else
 	    {
-		GEnv.Freq[ 3 ][ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
-		GEnv.Xp--;
-		GEnv.SRec[GEnv.Xp].V = CVal(Context->cases.records[i], Att);
-		GEnv.SRec[GEnv.Xp].W = Weight(Context->cases.records[i]);
-		GEnv.SRec[GEnv.Xp].C = Class(Context->cases.records[i]);
+		Context->training.environment->Freq[ 3 ][ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
+		Context->training.environment->Xp--;
+		Context->training.environment->SRec[Context->training.environment->Xp].V = CVal(Context->cases.records[i], Att);
+		Context->training.environment->SRec[Context->training.environment->Xp].W = Weight(Context->cases.records[i]);
+		Context->training.environment->SRec[Context->training.environment->Xp].C = Class(Context->cases.records[i]);
 	    }
 	}
 
 	ForEach(c, 1, Context->schema.max_class)
 	{
-	    GEnv.ValFreq[0] += GEnv.Freq[0][c];
-	    GEnv.ValFreq[1] += GEnv.Freq[1][c];
+	    Context->training.environment->ValFreq[0] += Context->training.environment->Freq[0][c];
+	    Context->training.environment->ValFreq[1] += Context->training.environment->Freq[1][c];
 	}
 
-	GEnv.NAInfo = TotalInfo(GEnv.Freq[1], 1, Context->schema.max_class);
-	GEnv.FixedSplitInfo = PartInfo(GEnv.ValFreq[0]) + PartInfo(GEnv.ValFreq[1]);
+	Context->training.environment->NAInfo = TotalInfo(Context->training.environment->Freq[1], 1, Context->schema.max_class);
+	Context->training.environment->FixedSplitInfo = PartInfo(Context->training.environment->ValFreq[0]) + PartInfo(Context->training.environment->ValFreq[1]);
 
-	Verbosity(3, PrintDistribution(Context, Att, 0, 1, GEnv.Freq, GEnv.ValFreq, true))
+	Verbosity(3, PrintDistribution(Context, Att, 0, 1, Context->training.environment->Freq, Context->training.environment->ValFreq, true))
     }
     else
     {
-	GEnv.Xp = Fp;
+	Context->training.environment->Xp = Fp;
 
 	ForEach(i, Fp, Lp)
 	{
-	    GEnv.SRec[i].V = CVal(Context->cases.records[i], Att);
-	    GEnv.SRec[i].W = Weight(Context->cases.records[i]);
-	    GEnv.SRec[i].C = Class(Context->cases.records[i]);
+	    Context->training.environment->SRec[i].V = CVal(Context->cases.records[i], Att);
+	    Context->training.environment->SRec[i].W = Weight(Context->cases.records[i]);
+	    Context->training.environment->SRec[i].C = Class(Context->cases.records[i]);
 
-	    GEnv.Freq[3][Class(Context->cases.records[i])] += Weight(Context->cases.records[i]);
+	    Context->training.environment->Freq[3][Class(Context->cases.records[i])] += Weight(Context->cases.records[i]);
 	}
 
 	ForEach(c, 1, Context->schema.max_class)
 	{
-	    GEnv.Cases += GEnv.Freq[3][c];
+	    Context->training.environment->Cases += Context->training.environment->Freq[3][c];
 	}
 
-	GEnv.NAInfo = GEnv.FixedSplitInfo = 0;
+	Context->training.environment->NAInfo = Context->training.environment->FixedSplitInfo = 0;
     }
 
-    GEnv.KnownCases  = GEnv.Cases - GEnv.ValFreq[0];
-    GEnv.ApplicCases = GEnv.KnownCases - GEnv.ValFreq[1];
+    Context->training.environment->KnownCases  = Context->training.environment->Cases - Context->training.environment->ValFreq[0];
+    Context->training.environment->ApplicCases = Context->training.environment->KnownCases - Context->training.environment->ValFreq[1];
 
-    GEnv.UnknownRate = 1.0 - GEnv.KnownCases / GEnv.Cases;
+    Context->training.environment->UnknownRate = 1.0 - Context->training.environment->KnownCases / Context->training.environment->Cases;
 
-    Cachesort(GEnv.Xp, Lp, GEnv.SRec);
+    Cachesort(Context->training.environment->Xp, Lp, Context->training.environment->SRec);
 
     /*  If unknowns or using sampling, must recompute base information  */
 
-    if ( GEnv.ValFreq[0] > 0 || SampleFrac < 1 )
+    if ( Context->training.environment->ValFreq[0] > 0 || Context->splits.sample_fraction < 1 )
     {
-	/*  Determine base information using GEnv.Freq[0] as temp buffer  */
+	/*  Determine base information using Context->training.environment->Freq[0] as temp buffer  */
 
 	ForEach(c, 1, Context->schema.max_class)
 	{
-	    GEnv.Freq[0][c] = GEnv.Freq[1][c] + GEnv.Freq[3][c];
+	    Context->training.environment->Freq[0][c] = Context->training.environment->Freq[1][c] + Context->training.environment->Freq[3][c];
 	}
 
-	GEnv.BaseInfo = TotalInfo(GEnv.Freq[0], 1, Context->schema.max_class) / GEnv.KnownCases;
+	Context->training.environment->BaseInfo = TotalInfo(Context->training.environment->Freq[0], 1, Context->schema.max_class) / Context->training.environment->KnownCases;
     }
     else
     {
-	GEnv.BaseInfo = GlobalBaseInfo;
+	Context->training.environment->BaseInfo = Context->splits.base_information;
     }
 }
 
@@ -440,7 +440,7 @@ void PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
 /*************************************************************************/
 
 
-CaseNo PrepareForScan(CaseNo Lp)
+CaseNo PrepareForScan(c50_context *Context, CaseNo Lp)
 /*     --------------  */
 {
     CaseNo	i, j;
@@ -449,41 +449,41 @@ CaseNo PrepareForScan(CaseNo Lp)
 
     /*  Find last possible split  */
 
-    GEnv.HighCases = GEnv.LowCases = 0;
+    Context->training.environment->HighCases = Context->training.environment->LowCases = 0;
 
-    for ( GEnv.Ep = Lp ; GEnv.Ep >= GEnv.Xp && GEnv.HighCases < GEnv.MinSplit ; GEnv.Ep-- )
+    for ( Context->training.environment->Ep = Lp ; Context->training.environment->Ep >= Context->training.environment->Xp && Context->training.environment->HighCases < Context->training.environment->MinSplit ; Context->training.environment->Ep-- )
     {
-	GEnv.HighCases += GEnv.SRec[GEnv.Ep].W;
+	Context->training.environment->HighCases += Context->training.environment->SRec[Context->training.environment->Ep].W;
     }
 
     /*  Skip cases before first possible cut  */
 
-    for ( i = GEnv.Xp ;
-	  i <= GEnv.Ep &&
-	  ( GEnv.LowCases + GEnv.SRec[i].W < GEnv.MinSplit - 1E-5 ||
-	    GEnv.SRec[i].V == GEnv.SRec[i+1].V ) ;
+    for ( i = Context->training.environment->Xp ;
+	  i <= Context->training.environment->Ep &&
+	  ( Context->training.environment->LowCases + Context->training.environment->SRec[i].W < Context->training.environment->MinSplit - 1E-5 ||
+	    Context->training.environment->SRec[i].V == Context->training.environment->SRec[i+1].V ) ;
 	  i++ )
     {
-	c = GEnv.SRec[i].C;
-	w = GEnv.SRec[i].W;
+	c = Context->training.environment->SRec[i].C;
+	w = Context->training.environment->SRec[i].W;
 	assert(c >= 1 && c <= Context->schema.max_class);
 
-	GEnv.LowCases   += w;
-	GEnv.Freq[2][c] += w;
-	GEnv.Freq[3][c] -= w;
+	Context->training.environment->LowCases   += w;
+	Context->training.environment->Freq[2][c] += w;
+	Context->training.environment->Freq[3][c] -= w;
     }
 
     /*  Find the class key for the first interval  */
 
-    GEnv.HighClass = GEnv.SRec[i].C;
-    for ( j = i-1; GEnv.HighClass && j >= GEnv.Xp ; j-- )
+    Context->training.environment->HighClass = Context->training.environment->SRec[i].C;
+    for ( j = i-1; Context->training.environment->HighClass && j >= Context->training.environment->Xp ; j-- )
     {
-	if ( GEnv.SRec[j].C != GEnv.HighClass ) GEnv.HighClass = 0;
+	if ( Context->training.environment->SRec[j].C != Context->training.environment->HighClass ) Context->training.environment->HighClass = 0;
     }
-    assert(GEnv.HighClass <= Context->schema.max_class);
-    assert(j+1 >= GEnv.Xp);
+    assert(Context->training.environment->HighClass <= Context->schema.max_class);
+    assert(j+1 >= Context->training.environment->Xp);
 
-    GEnv.LowVal = GEnv.SRec[i].V;
+    Context->training.environment->LowVal = Context->training.environment->SRec[i].V;
 
     return i;
 }
@@ -497,7 +497,7 @@ CaseNo PrepareForScan(CaseNo Lp)
 /*************************************************************************/
 
 
-void ContinTest(Tree Node, Attribute Att)
+void ContinTest(c50_context *Context, Tree Node, Attribute Att)
 /*   ----------  */
 {
     Sprout(Node, 3);
@@ -506,7 +506,7 @@ void ContinTest(Tree Node, Attribute Att)
     Node->Tested   = Att;
     Node->Cut 	   =
     Node->Lower	   =
-    Node->Upper    = Bar[Att];
+    Node->Upper    = Context->splits.thresholds[Att];
 }
 
 
@@ -551,24 +551,25 @@ void AdjustThresholds(c50_context *Context, Tree T, Attribute Att, CaseNo *Ep)
 	    {
 		if ( ! Unknown(Context->cases.records[i], Att) && ! NotApplic(Context, Context->cases.records[i], Att) )
 		{
-		    (&GEnv)->SRec[++(*Ep)].V = CVal(Context->cases.records[i], Att);
+		    Context->training.environment->SRec[++(*Ep)].V = CVal(Context->cases.records[i], Att);
 		}
 	    }
-	    Cachesort(0, *Ep, (&GEnv)->SRec);
+	    Cachesort(0, *Ep, Context->training.environment->SRec);
 
-	    if ( PossibleCuts && Context->trees.trial == 0 )
+	    if ( Context->splits.possible_cuts && Context->trees.trial == 0 )
 	    {
 		int Cuts=0;
 
 		ForEach(i, 1, *Ep)
 		{
-		    if ( (&GEnv)->SRec[i].V != (&GEnv)->SRec[i-1].V ) Cuts++;
+		    if ( Context->training.environment->SRec[i].V != Context->training.environment->SRec[i-1].V ) Cuts++;
 		}
-		PossibleCuts[Att] = Cuts;
+		Context->splits.possible_cuts[Att] = Cuts;
 	    }
 	}
 
-	T->Cut = T->Lower = T->Upper = GreatestValueBelow(T->Cut, Ep);
+	T->Cut = T->Lower = T->Upper =
+	    GreatestValueBelow(Context, T->Cut, Ep);
     }
 
     if ( T->NodeType )
@@ -590,7 +591,7 @@ void AdjustThresholds(c50_context *Context, Tree T, Attribute Att, CaseNo *Ep)
 /*************************************************************************/
 
 
-ContValue GreatestValueBelow(ContValue Th, CaseNo *Ep)
+ContValue GreatestValueBelow(c50_context *Context, ContValue Th, CaseNo *Ep)
 /*	  ------------------  */
 {
     CaseNo	Low, Mid, High;
@@ -602,7 +603,7 @@ ContValue GreatestValueBelow(ContValue Th, CaseNo *Ep)
     {
 	Mid = (Low + High + 1) / 2;
 
-	if ( (&GEnv)->SRec[Mid].V > Th )
+	if ( Context->training.environment->SRec[Mid].V > Th )
 	{
 	    High = Mid - 1;
 	}
@@ -612,5 +613,5 @@ ContValue GreatestValueBelow(ContValue Th, CaseNo *Ep)
 	}
     }
 
-    return (&GEnv)->SRec[Low].V;
+    return Context->training.environment->SRec[Low].V;
 }

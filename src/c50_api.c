@@ -49,6 +49,7 @@ c50_status c50_context_create(c50_context **out_context)
     context->options.global_pruning = 1;
     context->options.minimum_cases = 2;
     context->options.confidence_factor = 0.25f;
+    context->splits.sample_fraction = 1;
     *out_context = context;
     return C50_STATUS_OK;
 }

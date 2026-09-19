@@ -888,8 +888,6 @@ void Cleanup(c50_context *Context)
     extern DataRec	*Blocked;
     extern Tree		*SubDef;
     extern int		SubSpace;
-    extern float	*AttImp;
-    extern Boolean	*Split, *Used;
     extern FILE		*Uf;
 
     NotifyStage(CLEANUP);
@@ -904,9 +902,12 @@ void Cleanup(c50_context *Context)
     /*  Stuff from attribute winnowing  */
 
     FreeUnlessNil(Context->cases.saved_records);				Context->cases.saved_records = Nil;
-    FreeUnlessNil(AttImp);				AttImp = Nil;
-    FreeUnlessNil(Split);				Split = Nil;
-    FreeUnlessNil(Used);				Used = Nil;
+    FreeUnlessNil(Context->training.attribute_importance);
+    Context->training.attribute_importance = Nil;
+    FreeUnlessNil(Context->training.split_attributes);
+    Context->training.split_attributes = Nil;
+    FreeUnlessNil(Context->training.used_attributes);
+    Context->training.used_attributes = Nil;
 
     if ( Context->options.rules )
     {
