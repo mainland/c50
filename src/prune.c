@@ -34,6 +34,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 
 #define	  LocalVerbosity(x,s)	if (Sh >= 0) {Verbosity(x,s)}
@@ -63,7 +64,7 @@ Boolean		RecalculateErrs;	/* if missing values */
 /*************************************************************************/
 
 
-void Prune(Tree T)
+void Prune(c50_context *Context, Tree T)
 /*   -----  */
 {
     Attribute	Att;
@@ -88,7 +89,7 @@ void Prune(Tree T)
     {
 	/*  Remove any effects of WeightMul and reset leaf classes  */
 
-	RestoreDistribs(T);
+	RestoreDistribs(Context, T);
     }
     else
     {
@@ -102,7 +103,7 @@ void Prune(Tree T)
 
 	if ( GLOBAL && Now != WINNOWATTS )
 	{
-	    GlobalPrune(T);
+	    GlobalPrune(Context, T);
 	}
     }
 
@@ -450,7 +451,7 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
 /*************************************************************************/
 
 
-void GlobalPrune(Tree T)
+void GlobalPrune(c50_context *Context, Tree T)
 /*   -----------  */
 {
     int		DeltaLeaves, x;
@@ -466,7 +467,7 @@ void GlobalPrune(Tree T)
 	BaseErrs = 0;
 	ForEach(i, 0, MaxCase)
 	{
-	    if ( TreeClassify(Case[i], T) != Class(Case[i]) )
+	    if ( TreeClassify(Context, Case[i], T) != Class(Case[i]) )
 	    {
 		BaseErrs += Weight(Case[i]);
 	    }
@@ -901,7 +902,7 @@ float RawExtraErrs(CaseCount N, CaseCount E)
 /*************************************************************************/
 
 
-void RestoreDistribs(Tree T)
+void RestoreDistribs(c50_context *Context, Tree T)
 /*   ---------------  */
 {
     DiscrValue	v;
@@ -911,7 +912,7 @@ void RestoreDistribs(Tree T)
     {
 	ForEach(v, 1, T->Forks)
 	{
-	    RestoreDistribs(T->Branch[v]);
+	    RestoreDistribs(Context, T->Branch[v]);
 	}
     }
 
@@ -922,7 +923,7 @@ void RestoreDistribs(Tree T)
 	    T->Cases = 0;
 	    ForEach(c, 1, MaxClass)
 	    {
-		ClassSum[c] = (T->ClassDist[c] /= WeightMul[c]);
+		Context->class_sum[c] = (T->ClassDist[c] /= WeightMul[c]);
 		T->Cases += T->ClassDist[c];
 	    }
 	}
@@ -930,11 +931,11 @@ void RestoreDistribs(Tree T)
 	{
 	    ForEach(c, 1, MaxClass)
 	    {
-		ClassSum[c] = T->ClassDist[c];
+		Context->class_sum[c] = T->ClassDist[c];
 	    }
 	}
 
-	T->Leaf   = SelectClass(1, true);
+	T->Leaf   = SelectClass(Context, 1, true);
 	T->Errors = T->Cases - T->ClassDist[T->Leaf];
     }
 }

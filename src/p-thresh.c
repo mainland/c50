@@ -34,6 +34,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 
 /*************************************************************************/
@@ -43,12 +44,12 @@
 /*************************************************************************/
 
 
-void SoftenThresh(Tree T)
+void SoftenThresh(c50_context *Context, Tree T)
 /*   ------------  */
 {
     ResubErrs(T, 0, MaxCase);
 
-    FindBounds(T, 0, MaxCase);
+    FindBounds(Context, T, 0, MaxCase);
 }
 
 
@@ -161,7 +162,7 @@ void ResubErrs(Tree T, CaseNo Fp, CaseNo Lp)
 /*************************************************************************/
 
 
-void FindBounds(Tree T, CaseNo Fp, CaseNo Lp)
+void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 /*   --------  */
 {
     int		v;
@@ -222,8 +223,10 @@ void FindBounds(Tree T, CaseNo Fp, CaseNo Lp)
 	    RealClass = Class(Case[i]);
 
 	    w = Weight(Case[i]);
-	    GTErrs += w * ( TreeClassify(Case[i], T->Branch[3]) != RealClass );
-	    LEErrs += w * ( TreeClassify(Case[i], T->Branch[2]) != RealClass );
+	    GTErrs += w *
+		( TreeClassify(Context, Case[i], T->Branch[3]) != RealClass );
+	    LEErrs += w *
+		( TreeClassify(Context, Case[i], T->Branch[2]) != RealClass );
 
 	    if ( CVal(Case[i-1], Att) < CVal(Case[i], Att) )
 	    {
@@ -244,8 +247,10 @@ void FindBounds(Tree T, CaseNo Fp, CaseNo Lp)
 	    RealClass = Class(Case[i]);
 
 	    w = Weight(Case[i]);
-	    LEErrs += w * ( TreeClassify(Case[i], T->Branch[2]) != RealClass );
-	    GTErrs += w * ( TreeClassify(Case[i], T->Branch[3]) != RealClass );
+	    LEErrs += w *
+		( TreeClassify(Context, Case[i], T->Branch[2]) != RealClass );
+	    GTErrs += w *
+		( TreeClassify(Context, Case[i], T->Branch[3]) != RealClass );
 
 	    if ( CVal(Case[i], Att) < CVal(Case[i+1], Att) )
 	    {
@@ -288,7 +293,7 @@ void FindBounds(Tree T, CaseNo Fp, CaseNo Lp)
 		}
 	    }
 
-	    FindBounds(T->Branch[v], Bp, Kp);
+	    FindBounds(Context, T->Branch[v], Bp, Kp);
 
 	    /*  Restore weights if changed  */
 

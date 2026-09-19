@@ -276,11 +276,11 @@ static void PredictModel(c50_context *context, void *user_data)
 
     SomeMiss = AllocZero(MaxAtt + 1, Boolean);
     SomeNA = AllocZero(MaxAtt + 1, Boolean);
-    if ( RULES ) MostSpec = Alloc(MaxClass + 1, CRule);
+    if ( RULES ) context->most_specific_rules = Alloc(MaxClass + 1, CRule);
     Default = ( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
-    ClassSum = AllocZero(MaxClass + 1, float);
-    Vote = AllocZero(MaxClass + 1, float);
-    TrialPred = AllocZero(TRIALS, ClassNo);
+    context->class_sum = AllocZero(MaxClass + 1, float);
+    context->votes = AllocZero(MaxClass + 1, float);
+    context->trial_predictions = AllocZero(TRIALS, ClassNo);
 
     c50_input_init_memory(&cases_input, state->cases_data, state->cases_size);
     GetDataInput(context, &cases_input, false, true);
@@ -308,14 +308,14 @@ static void PredictModel(c50_context *context, void *user_data)
 
     ForEach(row, 0, MaxCase)
     {
-        predicted = Classify(Case[row]);
+        predicted = Classify(context, Case[row]);
         predictions->class_indices[row] = predicted - 1;
-        predictions->confidences[row] = Confidence;
+        predictions->confidences[row] = context->confidence;
         ForEach(class_number, 1, MaxClass)
         {
             predictions->scores[
                 row * predictions->class_count + class_number - 1] =
-                ClassSum[class_number];
+                context->class_sum[class_number];
         }
     }
 }
@@ -325,6 +325,7 @@ static void CleanupPrediction(c50_context *context, void *user_data)
     c50_predict_state *state = user_data;
 
     Cleanup();
+    c50_clear_prediction_state(context);
     Of = NULL;
     if ( c50_context_last_status(context) != C50_STATUS_OK )
     {

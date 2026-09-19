@@ -52,6 +52,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 /*************************************************************************/
 /*									 */
@@ -148,7 +149,7 @@ void ConstructClassifiers(c50_context *Context)
 	    Pruned[Trial] = CopyTree(Raw[Trial]);
 	    if ( MCost )
 	    {
-		RestoreDistribs(Raw[Trial]);
+		RestoreDistribs(Context, Raw[Trial]);
 	    }
 	}
 	else
@@ -159,7 +160,7 @@ void ConstructClassifiers(c50_context *Context)
 
 	memcpy(Case, SaveCase, (MaxCase+1) * sizeof(DataRec)); /* restore */
 
-	Prune(Pruned[Trial]);
+	Prune(Context, Pruned[Trial]);
 
 	AdjustAllThresholds(Pruned[Trial]);
 
@@ -174,14 +175,14 @@ void ConstructClassifiers(c50_context *Context)
 
 	if ( PROBTHRESH )
 	{
-	    SoftenThresh(Pruned[Trial]);
+	    SoftenThresh(Context, Pruned[Trial]);
 	}
 
 	memcpy(Case, SaveCase, (MaxCase+1) * sizeof(DataRec)); /* restore */
 
 	if ( RULES )
 	{
-	    RuleSet[Trial] = FormRules(Pruned[Trial]);
+	    RuleSet[Trial] = FormRules(Context, Pruned[Trial]);
 	    NoStructure |= ! RuleSet[Trial]->SNRules;
 
 	    PrintRules(RuleSet[Trial], T_Rules);
@@ -215,8 +216,8 @@ void ConstructClassifiers(c50_context *Context)
 		continue;
 	    }
 
-	    Pred = ( RULES ? RuleClassify(Case[i], RuleSet[Trial]) :
-			     TreeClassify(Case[i], Pruned[Trial]) );
+	    Pred = ( RULES ? RuleClassify(Context, Case[i], RuleSet[Trial]) :
+		     TreeClassify(Context, Case[i], Pruned[Trial]) );
 
 	    Real = Class(Case[i]);
 
@@ -224,7 +225,7 @@ void ConstructClassifiers(c50_context *Context)
 		must have been reset to their original order.)  */
 
 	    BVote = BVoteBlock + i * (MaxClass+1);
-	    BVote[Pred] += Confidence;
+	    BVote[Pred] += Context->confidence;
 
 	    Best = BVote[0];
 	    if ( BVote[Pred] > BVote[Best] ) BVote[0] = Best = Pred;
@@ -485,22 +486,22 @@ char *Multi[]  = {	F_Trial,
 			"  " F_NoErrorsCost };
 
 
-void Evaluate(int Flags)
+void Evaluate(c50_context *Context, int Flags)
 /*   --------  */
 {
     if ( TRIALS == 1 )
     {
-	EvaluateSingle(Flags);
+	EvaluateSingle(Context, Flags);
     }
     else
     {
-	EvaluateBoost(Flags);
+	EvaluateBoost(Context, Flags);
     }
 }
 
 
 
-void EvaluateSingle(int Flags)
+void EvaluateSingle(c50_context *Context, int Flags)
 /*   --------------  */
 {
     ClassNo	RealClass, PredClass;
@@ -571,18 +572,18 @@ void EvaluateSingle(int Flags)
 
 	if ( RULES )
 	{
-	    PredClass = RuleClassify(Case[i], RuleSet[0]);
+	    PredClass = RuleClassify(Context, Case[i], RuleSet[0]);
 	}
 	else
 	{
 	    Verbosity(1,
-		PredClass = TreeClassify(Case[i], Raw[0]);
+		PredClass = TreeClassify(Context, Case[i], Raw[0]);
 		if ( PredClass != RealClass )
 		{
 		    RawErrs++;
 		})
 
-	    PredClass = TreeClassify(Case[i], Pruned[0]);
+	    PredClass = TreeClassify(Context, Case[i], Pruned[0]);
 	}
 	assert(PredClass > 0 && PredClass <= MaxClass);
 
@@ -678,7 +679,7 @@ void EvaluateSingle(int Flags)
 
 
 
-void EvaluateBoost(int Flags)
+void EvaluateBoost(c50_context *Context, int Flags)
 /*   -------------  */
 {
     ClassNo	RealClass, PredClass;
@@ -730,7 +731,7 @@ void EvaluateBoost(int Flags)
 
 	memset(Tested, 0, MaxAtt+1);	/* for usage */
 
-	PredClass = BoostClassify(Case[i], TRIALS-1);
+	PredClass = BoostClassify(Context, Case[i], TRIALS-1);
 	if ( PredClass != RealClass )
 	{
 	    BoostErrs++;
@@ -751,10 +752,10 @@ void EvaluateBoost(int Flags)
 
 	ForEach(t, 0, TRIALS-1)
 	{
-	    if ( TrialPred[t] != RealClass )
+	    if ( Context->trial_predictions[t] != RealClass )
 	    {
 		Errs[t]++;
-		if ( MCost ) ECost[t] += MCost[TrialPred[t]][RealClass];
+		if ( MCost ) ECost[t] += MCost[Context->trial_predictions[t]][RealClass];
 	    }
 	}
     }

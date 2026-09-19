@@ -76,7 +76,7 @@ void CrossVal(c50_context *Context)
     Blocked	 = Alloc(MaxCase+1, DataRec);
     ConfusionMat = AllocZero((MaxClass+1)*(MaxClass+1), CaseNo);
 
-    Prepare();
+    Prepare(Context);
 
     SaveMaxCase = MaxCase;
     SaveTRIALS  = TRIALS;
@@ -112,8 +112,8 @@ void CrossVal(c50_context *Context)
 	    ForEach(i, 0, Size-1)
 	    {
 		Case[i] = Blocked[Next];
-		c = ( RULES ? RuleClassify(Blocked[Next], RuleSet[0]) :
-			      TreeClassify(Blocked[Next], Pruned[0]) );
+		c = ( RULES ? RuleClassify(Context, Blocked[Next], RuleSet[0]) :
+			      TreeClassify(Context, Blocked[Next], Pruned[0]) );
 		if ( c != Class(Blocked[Next]) )
 		{
 		    Result[f][1] += 1.0;
@@ -138,7 +138,7 @@ void CrossVal(c50_context *Context)
 	    ForEach(i, 0, Size-1)
 	    {
 		Case[i] = Blocked[Next];
-		c = BoostClassify(Blocked[Next], TRIALS-1);
+		c = BoostClassify(Context, Blocked[Next], TRIALS-1);
 		if ( c != Class(Blocked[Next]) )
 		{
 		    Result[f][1] += 1.0;
@@ -161,7 +161,7 @@ void CrossVal(c50_context *Context)
 
 	fprintf(Of, T_EvalHoldOut, Size);
 	MaxCase = Size-1;
-	Evaluate(0);
+	Evaluate(Context, 0);
 
 	/*  Free space used by classifiers  */
 
@@ -202,7 +202,7 @@ void CrossVal(c50_context *Context)
 /*************************************************************************/
 
 
-void Prepare()
+void Prepare(c50_context *Context)
 /*   -------  */
 {
     CaseNo	i, First=0, Last, *Temp, Hold, Next=0;
@@ -214,7 +214,7 @@ void Prepare()
 	Temp[i] = i;
     }
 
-    Shuffle(Temp);
+    Shuffle(Context, Temp);
 
     /*  Sort into class groups  */
 
@@ -259,16 +259,16 @@ void Prepare()
 /*************************************************************************/
 
 
-void Shuffle(int *Vec)
+void Shuffle(c50_context *Context, int *Vec)
 /*   -------  */
 {
     int	This=0, Alt, Left=MaxCase+1, Hold;
 
-    ResetKR(KRInit);
+    ResetKR(&Context->random, KRInit);
 
     while ( Left )
     {
-	Alt = This + (Left--) * KRandom();
+	Alt = This + (Left--) * KRandom(&Context->random);
 
 	Hold 	    = Vec[This];
 	Vec[This++] = Vec[Alt];

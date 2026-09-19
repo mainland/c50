@@ -715,7 +715,7 @@ CRuleSet InRulesAt(c50_context *Context, c50_input *Input, CRuleSet *Slot)
 
 	    case RULESP:
 		sscanf(Context->property_value, "\"%d\"", &RS->SNRules);
-		CheckActiveSpace(RS->SNRules);
+		CheckActiveSpace(Context, RS->SNRules);
 		break;
 
 	    case DEFAULTP:

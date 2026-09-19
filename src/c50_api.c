@@ -48,8 +48,23 @@ c50_status c50_context_create(c50_context **out_context)
 void c50_context_destroy(c50_context *context)
 {
     if ( ! context ) return;
+    c50_clear_prediction_state(context);
+    free(context->active_rules);
     free(context->property_value);
     free(context);
+}
+
+void c50_clear_prediction_state(c50_context *context)
+{
+    if ( ! context ) return;
+    free(context->class_sum);
+    free(context->votes);
+    free(context->trial_predictions);
+    free(context->most_specific_rules);
+    context->class_sum = NULL;
+    context->votes = NULL;
+    context->trial_predictions = NULL;
+    context->most_specific_rules = NULL;
 }
 
 c50_status c50_context_last_status(const c50_context *context)

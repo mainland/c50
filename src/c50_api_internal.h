@@ -9,11 +9,13 @@
 #include <c50/c50.h>
 
 #include "c50_input.h"
+#include "c50_rng.h"
 
 #define C50_ERROR_MESSAGE_CAPACITY 1024
 #define C50_LINE_BUFFER_CAPACITY 10000
 
 struct c50_implicit_state;
+struct _rulerec;
 
 struct c50_context
 {
@@ -23,6 +25,8 @@ struct c50_context
     int sample_from;
     int suppress_error_messages;
     int delimiter;
+    int max_label;
+    int attributes_winnowed;
     char line_buffer[C50_LINE_BUFFER_CAPACITY];
     char *line_buffer_position;
     struct c50_implicit_state *implicit_state;
@@ -32,6 +36,15 @@ struct c50_context
     char property_name[20];
     char *property_value;
     int property_value_size;
+    int *active_rules;
+    int active_rule_count;
+    int active_rule_capacity;
+    float confidence;
+    float *class_sum;
+    float *votes;
+    int *trial_predictions;
+    struct _rulerec **most_specific_rules;
+    KRState random;
 };
 
 typedef void (*c50_operation_fn)(c50_context *context, void *user_data);
@@ -56,5 +69,8 @@ c50_status c50_set_context_error(c50_context *context, c50_status status,
 
 /* Unwind the active operation, or return zero when no operation is active. */
 int c50_abort_active_operation(int exit_status);
+
+/* Release context-owned prediction workspace. */
+void c50_clear_prediction_state(c50_context *context);
 
 #endif

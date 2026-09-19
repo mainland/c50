@@ -59,9 +59,6 @@ CaseCount	MINITEMS=2,	/* minimum cases each side of a cut */
 float		CF=0.25,	/* confidence limit for tree pruning */
 		SAMPLE=0.0;	/* sample training proportion */
 
-Boolean		LOCK=false;	/* sample locked */
-
-
 /*************************************************************************/
 /*									 */
 /*		Attributes and data					 */
@@ -85,7 +82,6 @@ int		IValsSize=0,	/* size of above */
 int		MaxAtt,		/* max att number */
 		MaxClass,	/* max class number */
 		MaxDiscrVal=3,	/* max discrete values for any att */
-		MaxLabel=0,	/* max characters in case label */
 		LineNo=0,	/* input line number */
 		ErrMsgs=0,	/* errors found */
 		AttExIn=0,	/* attribute exclusions/inclusions */
@@ -99,8 +95,7 @@ Definition	*AttDef=0;	/* definitions of implicit atts */
 Attribute	**AttDefUses=0;	/* list of attributes used by definition */
 
 Boolean		*SomeMiss=Nil,	/* att has missing values */
-		*SomeNA=Nil,	/* att has N/A values */
-		Winnowed=0;	/* atts have been winnowed */
+		*SomeNA=Nil;	/* att has N/A values */
 
 ContValue	*ClassThresh=0;	/* thresholded class attribute */
 
@@ -122,15 +117,11 @@ Tree		*Raw=0,		/* unpruned trees */
 		*Pruned=0,	/* pruned trees */
 		WTree=0;	/* winnow tree */
 
-float		Confidence,	/* set by classify() */
-		SampleFrac=1,	/* fraction used when sampling */
-		*Vote=0,	/* total votes for classes */
+float		SampleFrac=1,	/* fraction used when sampling */
 		*BVoteBlock=0,	/* boost voting block */
 		**MCost=0,	/* misclass cost [pred][real] */
 		**NCost=0,	/* normalised MCost used for rules */
 		*WeightMul=0;	/* prior adjustment factor */
-
-CRule		*MostSpec=0;	/* most specific rule for each class */
 
 Boolean		UnitWeights=1,	/* all weights are 1.0 */
 		CostWeights=0;	/* reweight cases for costs */
@@ -138,15 +129,12 @@ Boolean		UnitWeights=1,	/* all weights are 1.0 */
 int		Trial,		/* trial number for boosting */
 		MaxTree=0;	/* max tree grown */
 
-ClassNo		*TrialPred=0;	/* predictions for each boost trial */
-
 double		*ClassFreq=0,	/* ClassFreq[c] = # cases of class c */
 		**DFreq=0;	/* DFreq[a][c*x] = Freq[][] for attribute a */
 
 float		*Gain=0,	/* Gain[a] = info gain by split on att a */
 		*Info=0,	/* Info[a] = max info from split on att a */
-		*EstMaxGR=0,	/* EstMaxGR[a] = est max GR from folit on a */
-		*ClassSum=0;	/* class weights during classification */
+		*EstMaxGR=0;	/* EstMaxGR[a] = est max GR from folit on a */
 
 ContValue	*Bar=0;		/* Bar[a]  = best threshold for contin att a */
 
@@ -208,4 +196,3 @@ FILE		*TRf=0;		/* file pointer for tree and rule i/o */
 char		Fn[500];	/* file name */
 
 FILE  		*Of=0;		/* output file */
-

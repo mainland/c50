@@ -45,8 +45,6 @@ extern	CaseCount	MINITEMS,
 extern	float		CF,
 			SAMPLE;
 
-extern	Boolean		LOCK;
-
 extern	Attribute	ClassAtt,
 			LabelAtt,
 			CWtAtt;
@@ -64,7 +62,6 @@ extern	int		IValsSize,
 extern	int		MaxAtt,
 			MaxClass,
 			MaxDiscrVal,
-			MaxLabel,
 			LineNo,
 			ErrMsgs,
 			AttExIn,
@@ -78,8 +75,7 @@ extern	Definition	*AttDef;
 extern	Attribute	**AttDefUses;
 
 extern	Boolean		*SomeMiss,
-			*SomeNA,
-			Winnowed;
+			*SomeNA;
 
 extern	ContValue	*ClassThresh;
 
@@ -95,15 +91,11 @@ extern	Tree		*Raw,
 			*Pruned,
 			WTree;
 
-extern	float		Confidence,
-			SampleFrac,
-			*Vote,
+extern	float		SampleFrac,
 			*BVoteBlock,
 			**MCost,
 			**NCost,
 			*WeightMul;
-
-extern	CRule		*MostSpec;
 
 extern	Boolean		UnitWeights,
 			CostWeights;
@@ -111,15 +103,12 @@ extern	Boolean		UnitWeights,
 extern	int		Trial,
 			MaxTree;
 
-extern	ClassNo		*TrialPred;
-
 extern double		*ClassFreq,
 			**DFreq;
 
 extern	float		*Gain,
 			*Info,
-			*EstMaxGR,
-			*ClassSum;
+			*EstMaxGR;
 
 extern	ContValue	*Bar;
 
@@ -167,4 +156,3 @@ extern	FILE		*TRf;
 extern	char		Fn[500];
 
 extern	FILE  		*Of;
-

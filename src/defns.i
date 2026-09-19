@@ -53,6 +53,7 @@
 #include <c50/c50.h>
 
 #include "c50_input.h"
+#include "c50_rng.h"
 #include "text.i"
 
 
@@ -462,9 +463,9 @@ void	    FreeClassifier(int Trial);
 void	    ConstructClassifiers(c50_context *Context);
 void	    InitialiseWeights(void);
 void	    SetAvCWt(void);
-void	    Evaluate(int Flags);
-void	    EvaluateSingle(int Flags);
-void	    EvaluateBoost(int Flags);
+void	    Evaluate(c50_context *Context, int Flags);
+void	    EvaluateSingle(c50_context *Context, int Flags);
+void	    EvaluateBoost(c50_context *Context, int Flags);
 void	    RecordAttUsage(DataRec Case, int *Usage);
 
 	/* getnames.c */
@@ -528,14 +529,14 @@ void	    GetMCostsInput(c50_context *Context, c50_input *Input);
 
 	/* attwinnow.c */
 
-void	    WinnowAtts(void);
-float	    TrialTreeCost(Boolean FirstTime);
-float	    ErrCost(Tree T, CaseNo Fp, CaseNo Lp);
+void	    WinnowAtts(c50_context *Context);
+float	    TrialTreeCost(c50_context *Context, Boolean FirstTime);
+float	    ErrCost(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp);
 void	    ScanTree(Tree T, Boolean *Used);
 
 	/* formtree.c */
 
-void	    InitialiseTreeData(void);
+void	    InitialiseTreeData(c50_context *Context);
 void	    FreeTreeData(void);
 void	    SetMinGainThresh(void);
 void	    FormTree(CaseNo, CaseNo, int, Tree *);
@@ -595,44 +596,49 @@ void	    MoveBlock(DiscrValue V1, DiscrValue V2);
 
 	/* prune.c */
 
-void	    Prune(Tree T);
+void	    Prune(c50_context *Context, Tree T);
 void	    EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags);
-void	    GlobalPrune(Tree T);
+void	    GlobalPrune(c50_context *Context, Tree T);
 void	    FindMinCC(Tree T);
 void	    InsertParents(Tree T, Tree P);
 void	    CheckSubsets(Tree T, Boolean);
 void	    InitialiseExtraErrs(void);
 float	    ExtraErrs(CaseCount N, CaseCount E, ClassNo C);
 float	    RawExtraErrs(CaseCount N, CaseCount E);
-void	    RestoreDistribs(Tree T);
+void	    RestoreDistribs(c50_context *Context, Tree T);
 void	    CompressBranches(Tree T);
 void	    SetGlobalUnitWeights(int LocalFlag);
 
 	/* p-thresh.c */
 
-void	    SoftenThresh(Tree T);
+void	    SoftenThresh(c50_context *Context, Tree T);
 void	    ResubErrs(Tree T, CaseNo Fp, CaseNo Lp);
-void	    FindBounds(Tree T, CaseNo Fp, CaseNo Lp);
+void	    FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp);
 
 	/* classify.c */
 
-ClassNo	    TreeClassify(DataRec Case, Tree DecisionTree);
-void	    FollowAllBranches(DataRec Case, Tree T, float Fraction);
-ClassNo	    RuleClassify(DataRec Case, CRuleSet RS);
+ClassNo	    TreeClassify(c50_context *Context, DataRec Case,
+			 Tree DecisionTree);
+void	    FollowAllBranches(c50_context *Context, DataRec Case, Tree T,
+			      float Fraction);
+ClassNo	    RuleClassify(c50_context *Context, DataRec Case, CRuleSet RS);
 int	    FindOutcome(DataRec Case, Condition OneCond);
 Boolean	    Matches(CRule R, DataRec Case);
-void	    CheckActiveSpace(int N);
-void	    MarkActive(RuleTree RT, DataRec Case);
-void	    SortActive(void);
-void	    CheckUtilityBand(int *u, RuleNo r, ClassNo Actual, ClassNo Default);
-ClassNo	    BoostClassify(DataRec Case, int MaxTrial);
-ClassNo	    SelectClass(ClassNo Default, Boolean UseCosts);
-ClassNo	    Classify(DataRec Case);
+void	    CheckActiveSpace(c50_context *Context, int N);
+void	    MarkActive(c50_context *Context, RuleTree RT, DataRec Case);
+void	    SortActive(c50_context *Context);
+void	    CheckUtilityBand(c50_context *Context, int *u, RuleNo r,
+			     ClassNo Actual, ClassNo Default);
+ClassNo	    BoostClassify(c50_context *Context, DataRec Case, int MaxTrial);
+ClassNo	    SelectClass(c50_context *Context, ClassNo Default,
+			Boolean UseCosts);
+ClassNo	    Classify(c50_context *Context, DataRec Case);
 float	    Interpolate(Tree T, ContValue Val);
 
 	/* special case for dual-purpose routines  */
 
-void	    FindLeaf(DataRec Case, Tree T, Tree PT, float Wt);
+void	    FindLeaf(c50_context *Context, DataRec Case, Tree T, Tree PT,
+		     float Wt);
 Boolean	    Satisfies(DataRec Case, Condition OneCond);
 
 	/* sort.c */
@@ -670,8 +676,6 @@ void	    FreeVector(void **V, int First, int Last);
 DataRec	    NewCase(void);
 void	    FreeCases(void);
 void	    FreeLastCase(DataRec Case);
-double	    KRandom(void);
-void	    ResetKR(int KRInit);
 void	    Error(int ErrNo, String S1, String S2);
 void	    C50Exit(int Status);
 String	    CaseLabel(CaseNo N);
@@ -703,7 +707,7 @@ void	    PrintUsageInfo(CaseNo *Usage);
 
 	/* formrules.c */
 
-CRuleSet    FormRules(Tree T);
+CRuleSet    FormRules(c50_context *Context, Tree T);
 void	    Scan(Tree T);
 void	    SetupNCost(void);
 void	    PushCondition(void);
@@ -734,7 +738,7 @@ void	    PrintCondition(Condition C);
 
 	/* siftrules.c */
 
-void	    SiftRules(float EstErrRate);
+void	    SiftRules(c50_context *Context, float EstErrRate);
 void	    InvertFires(void);
 void	    FindTestCodes(void);
 float	    CondBits(Condition C);
@@ -747,7 +751,7 @@ void	    CountVotes(CaseNo i);
 void	    UpdateDeltaErrs(CaseNo i, double Delta, RuleNo Toggle);
 CaseCount   CalculateDeltaErrs(void);
 void	    PruneSubsets(void);
-void	    SetDefaultClass(void);
+void	    SetDefaultClass(c50_context *Context);
 void	    SwapRule(RuleNo A, RuleNo B);
 int	    OrderByUtility(void);
 int	    OrderByClass(void);
@@ -802,7 +806,7 @@ void	    Progress(float);
 	/* xval.c */
 
 void	    CrossVal(c50_context *Context);
-void	    Prepare(void);
-void	    Shuffle(int *Vec);
+void	    Prepare(c50_context *Context);
+void	    Shuffle(c50_context *Context, int *Vec);
 void	    Summary(void);
 float	    SE(float sum, float sumsq, int no);
