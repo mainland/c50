@@ -19,6 +19,7 @@ struct _datablockrec;
 struct _environment;
 union _attribute_value;
 struct _def_elt;
+struct _condrec;
 struct _rulerec;
 struct _rulesetrec;
 struct _treerec;
@@ -142,7 +143,56 @@ typedef struct
     float attribute_test_bits;
     float *branch_bits;
     int *attribute_values;
+    unsigned char **fires;
+    unsigned char *compression_buffer;
+    int *coverage_counts;
+    int *list;
+    double *log_case_count;
+    double *log_factorial;
+    double *condition_errors;
+    double *condition_totals;
+    float *pessimistic_errors;
+    float *condition_costs;
+    unsigned char **condition_failed_by;
+    unsigned char *deleted_conditions;
+    struct _condrec **condition_stack;
+    int max_rule_depth;
+    int condition_count;
+    int best_condition;
+    int target_class;
+    short *failure_count;
+    short *local_failure_count;
+    int fail_zero;
+    int fail_one;
+    int fail_many;
+    int *successors;
 } c50_rule_build_state;
+
+typedef struct
+{
+    struct _condrec **tests;
+    int test_count;
+    int test_capacity;
+    int *test_occurrences;
+    int *rule_conditions_satisfied;
+    unsigned char *tests_used;
+} c50_rule_tree_state;
+
+typedef struct
+{
+    float *delta_errors;
+    float *rule_bits;
+    float error_bits;
+    float correct_bits;
+    int **total_votes;
+    int *top_classes;
+    int *alternate_classes;
+    unsigned char *rules_included;
+    unsigned char *covered_cases;
+    unsigned char *coverage_block;
+    unsigned char **coverage_pointers;
+    int *last_covering_rule;
+} c50_rule_selection_state;
 
 struct c50_context
 {
@@ -163,6 +213,8 @@ struct c50_context
     c50_options_state options;
     c50_split_state splits;
     c50_rule_build_state rule_build;
+    c50_rule_tree_state rule_tree;
+    c50_rule_selection_state rule_selection;
     double average_case_weight;
     char *ignored_values;
     int ignored_values_size;

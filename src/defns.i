@@ -739,15 +739,14 @@ void	    Scan(c50_context *Context, Tree T);
 void	    SetupNCost(c50_context *Context);
 void	    PushCondition(c50_context *Context);
 void	    PopCondition(c50_context *Context);
-void	    PruneRule(c50_context *Context, Condition Cond[],
-		      ClassNo TargetClass);
+void	    PruneRule(c50_context *Context, Condition Cond[]);
 void	    ProcessLists(c50_context *Context);
-void	    AddToList(CaseNo *List, CaseNo N);
-void	    DeleteFromList(CaseNo *Before, CaseNo N);
-int	    SingleFail(CaseNo i);
+void	    AddToList(c50_context *Context, CaseNo *List, CaseNo N);
+void	    DeleteFromList(c50_context *Context, CaseNo *Before, CaseNo N);
+int	    SingleFail(c50_context *Context, CaseNo i);
 void	    Increment(c50_context *Context, int d, CaseNo i,
-		      double *Total, double *Errors);
-void	    FreeFormRuleData(void);
+		      double *totals, double *errors);
+void	    FreeFormRuleData(c50_context *Context);
 
 	/* rules.c */
 
@@ -756,7 +755,7 @@ Boolean	    NewRule(c50_context *Context, Condition Cond[], int NConds,
 		    Boolean *Deleted, CRule Existing,
 		    CaseCount Cover, CaseCount Correct, float Prior);
 void	    ListSort(int *L, int Fp, int Lp);
-Byte	    *Compress(int *L);
+Byte	    *Compress(c50_context *Context, int *L);
 void	    Uncompress(Byte *CL, int *UCL);
 Boolean	    SameRule(c50_context *Context, RuleNo r, Condition Cond[],
 		     int NConds, ClassNo TargetClass);
@@ -788,7 +787,7 @@ void	    SwapRule(c50_context *Context, RuleNo A, RuleNo B);
 int	    OrderByUtility(c50_context *Context);
 int	    OrderByClass(c50_context *Context);
 void	    OrderRules(c50_context *Context);
-void	    GenerateLogs(int MaxN);
+void	    GenerateLogs(c50_context *Context, int MaxN);
 void	    FreeSiftRuleData(c50_context *Context);
 
 	/* ruletree.c */
@@ -797,7 +796,8 @@ void	    ConstructRuleTree(c50_context *Context, CRuleSet RS);
 void	    SetTestIndex(c50_context *Context, Condition C);
 RuleTree    GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule);
 int	    DesiredOutcome(c50_context *Context, CRule R, int TI);
-int	    SelectTest(RuleNo *RR, int RRN, CRule *Rule);
+int	    SelectTest(c50_context *Context, RuleNo *RR, int RRN,
+		       CRule *Rule);
 void	    FreeRuleTree(RuleTree RT);
 
 	/* modelfiles.c */
