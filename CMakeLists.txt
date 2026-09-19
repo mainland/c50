@@ -109,6 +109,11 @@ if(BUILD_TESTING)
     target_link_libraries(c50_c_api_model PRIVATE C50::core)
     add_executable(c50_c_api_prediction tests/c_api_prediction.c)
     target_link_libraries(c50_c_api_prediction PRIVATE C50::core)
+    add_executable(
+        c50_c_api_context_isolation
+        tests/c_api_context_isolation.c
+    )
+    target_link_libraries(c50_c_api_context_isolation PRIVATE C50::core)
     add_executable(c50_cpp_api_compile tests/c_api_compile.cpp)
     target_compile_features(c50_cpp_api_compile PRIVATE cxx_std_11)
     target_link_libraries(c50_cpp_api_compile PRIVATE C50::core)
@@ -120,6 +125,7 @@ if(BUILD_TESTING)
         c50_c_api_failure
         c50_c_api_model
         c50_c_api_prediction
+        c50_c_api_context_isolation
         c50_cpp_api_compile
     )
     list(
@@ -130,6 +136,7 @@ if(BUILD_TESTING)
         c50_c_api_failure
         c50_c_api_model
         c50_c_api_prediction
+        c50_c_api_context_isolation
         c50_cpp_api_compile
     )
 endif()
@@ -177,7 +184,18 @@ if(BUILD_TESTING)
     add_test(NAME c-api-failure COMMAND c50_c_api_failure)
     add_test(NAME c-api-model COMMAND c50_c_api_model)
     add_test(NAME c-api-prediction COMMAND c50_c_api_prediction)
+    add_test(NAME c-api-context-isolation COMMAND c50_c_api_context_isolation)
     add_test(NAME cpp-api-compile COMMAND c50_cpp_api_compile)
+    if(CMAKE_NM AND UNIX)
+        add_test(
+            NAME writable-global-inventory
+            COMMAND
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_writable_globals.sh"
+                "${CMAKE_NM}"
+                "$<TARGET_FILE:c50_core>"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/expected/writable-globals.txt"
+        )
+    endif()
     add_test(
         NAME cli-regression
         COMMAND
