@@ -41,7 +41,7 @@
 
 #define Inc 2048
 
-#define XError(a,b,c)	if (! Context->suppress_error_messages) Error(a,b,c)
+#define XError(a,b,c)	if (! Context->suppress_error_messages) Error(Context, a,b,c)
 
 
 /*************************************************************************/
@@ -76,7 +76,7 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
     CaseNo	CaseSpace, WantTrain, LeftTrain, WantTest, LeftTest;
     Boolean	FirstIgnore=true, SelectTrain;
 
-    LineNo = 0;
+    Context->io.line_number = 0;
     Context->suppress_error_messages = Context->options.sample_fraction && ! Train;
 
     /*  Don't reset case count if appending data for xval  */
@@ -98,11 +98,11 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 	if ( Train )
 	{
 	    Context->sample_from = CountDataInput(Input);
-	    ResetKR(&Context->random, KRInit);	/* initialise KRandom() */
+	    ResetKR(&Context->random, Context->io.random_initial_seed);	/* initialise KRandom() */
 	}
 	else
 	{
-	    ResetKR(&Context->random, KRInit);	/* restore  KRandom() */
+	    ResetKR(&Context->random, Context->io.random_initial_seed);	/* restore  KRandom() */
 	}
 
 	WantTrain = Context->sample_from * Context->options.sample_fraction + 0.5;
@@ -163,9 +163,9 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 	}
 	else
 	{
-	    if ( FirstIgnore && Of )
+	    if ( FirstIgnore && Context->io.output )
 	    {
-		fprintf(Of, T_IgnoreBadClass);
+		fprintf(Context->io.output, T_IgnoreBadClass);
 		FirstIgnore = false;
 	    }
 
@@ -326,7 +326,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 
 		if ( TStampVal(Att) )
 		{
-		    CVal(DVec, Att) = Cv = TStampToMins(Name);
+		    CVal(DVec, Att) = Cv = TStampToMins(Context, Name);
 		    if ( Cv >= 1E9 )	/* long time in future */
 		    {
 			XError(BADTSTMP, Context->schema.attribute_names[Att], Name);
@@ -394,7 +394,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 	{
 	    if ( ! ReadNameInput(Context, Input, Name, 1000, '\00') )
 	    {
-		XError(HITEOF, Fn, "");
+		XError(HITEOF, Context->io.file_name, "");
 		FreeLastCase(Context, DVec);
 		return Nil;
 	    }
@@ -566,7 +566,7 @@ void CheckValue(c50_context *Context, DataRec DVec, Attribute Att)
     Cv = CVal(DVec, Att);
     if ( ! finite(Cv) )
     {
-	Error(BADNUMBER, Context->schema.attribute_names[Att], "");
+	Error(Context, BADNUMBER, Context->schema.attribute_names[Att], "");
 
 	CVal(DVec, Att) = UNKNOWN;
     }

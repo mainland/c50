@@ -9,8 +9,6 @@
 
 #include "c50_api_internal.h"
 
-static c50_context *ActiveContext;
-
 static void SetError(c50_context *context, c50_status status,
                      const char *message)
 {
@@ -50,6 +48,8 @@ c50_status c50_context_create(c50_context **out_context)
     context->options.minimum_cases = 2;
     context->options.confidence_factor = 0.25f;
     context->splits.sample_fraction = 1;
+    context->io.file_stem = "undefined";
+    context->io.option_index = 1;
     *out_context = context;
     return C50_STATUS_OK;
 }
@@ -118,30 +118,31 @@ c50_status c50_run_operation(c50_context *context,
 {
     if ( ! context || ! operation ) return C50_STATUS_INVALID_ARGUMENT;
 
-    if ( ActiveContext )
+    if ( context->operation_active )
     {
         SetError(context, C50_STATUS_INTERNAL_ERROR,
-                 "a C5.0 operation is already active");
+                 "a C5.0 operation is already active on this context");
         return context->status;
     }
 
     context->status = C50_STATUS_OK;
     context->error_message[0] = '\0';
 
+    context->operation_active = 1;
     if ( ! setjmp(context->exit_target) )
     {
-        ActiveContext = context;
         operation(context, user_data);
     }
 
-    ActiveContext = NULL;
+    context->operation_active = 0;
     if ( cleanup ) cleanup(context, user_data);
     return context->status;
 }
 
-void c50_record_error(c50_status status, const char *message)
+void c50_record_error(c50_context *context, c50_status status,
+                      const char *message)
 {
-    SetError(ActiveContext, status, message);
+    SetError(context, status, message);
 }
 
 c50_status c50_set_context_error(c50_context *context, c50_status status,
@@ -155,15 +156,15 @@ c50_status c50_set_context_error(c50_context *context, c50_status status,
     return status;
 }
 
-int c50_abort_active_operation(int exit_status)
+int c50_abort_active_operation(c50_context *context, int exit_status)
 {
-    if ( ! ActiveContext ) return 0;
+    if ( ! context || ! context->operation_active ) return 0;
 
-    if ( ActiveContext->status == C50_STATUS_OK )
+    if ( context->status == C50_STATUS_OK )
     {
-        SetError(ActiveContext, C50_STATUS_INTERNAL_ERROR,
+        SetError(context, C50_STATUS_INTERNAL_ERROR,
                  exit_status ? "C5.0 operation failed" :
                                "C5.0 operation terminated");
     }
-    longjmp(ActiveContext->exit_target, exit_status ? exit_status : 1);
+    longjmp(context->exit_target, exit_status ? exit_status : 1);
 }

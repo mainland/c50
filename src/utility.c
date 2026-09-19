@@ -41,7 +41,7 @@
 #define  NAME T_C50
 
 
-void PrintHeader(String Title)
+void PrintHeader(c50_context *Context, String Title)
 /*   -----------  */
 {
     char	TitleLine[80];
@@ -50,11 +50,11 @@ void PrintHeader(String Title)
 
     clock = time(0);
     sprintf(TitleLine, "%s%s [%s]", NAME, Title, TX_Release(RELEASE));
-    fprintf(Of, "\n%s  \t%s", TitleLine, ctime(&clock));
+    fprintf(Context->io.output, "\n%s  \t%s", TitleLine, ctime(&clock));
 
     Underline = CharWidth(TitleLine);
-    while ( Underline-- ) putc('-', Of);
-    putc('\n', Of);
+    while ( Underline-- ) putc('-', Context->io.output);
+    putc('\n', Context->io.output);
 }
 
 
@@ -66,27 +66,26 @@ void PrintHeader(String Title)
 /*************************************************************************/
 
 
-String	OptArg, Option;
-
-
-char ProcessOption(int Argc, char *Argv[], char *Options)
+char ProcessOption(c50_context *Context, int Argc, char *Argv[],
+		   char *Options)
 /*   -------------  */
 {
     int		i;
-    static int	OptNo=1;
+    if ( Context->io.option_index >= Argc ) return '\00';
 
-    if ( OptNo >= Argc ) return '\00';
-
-    if ( *(Option = Argv[OptNo++]) != '-' ) return '?';
+    if ( *(Context->io.option = Argv[Context->io.option_index++]) != '-' )
+	return '?';
 
     for ( i = 0 ; Options[i] ; i++ )
     {
-	if ( Options[i] == Option[1] )
+	if ( Options[i] == Context->io.option[1] )
 	{
-	    OptArg = (char *) ( Options[i+1] != '+' ? Nil :
-				Option[2] ? Option+2 :
-				OptNo < Argc ? Argv[OptNo++] : "0" );
-	    return Option[1];
+	    Context->io.option_argument =
+		(char *) ( Options[i+1] != '+' ? Nil :
+			   Context->io.option[2] ? Context->io.option+2 :
+			   Context->io.option_index < Argc ?
+			       Argv[Context->io.option_index++] : "0" );
+	    return Context->io.option[1];
 	}
     }
 
@@ -103,7 +102,7 @@ char ProcessOption(int Argc, char *Argv[], char *Options)
 
 
 
-void *Pmalloc(size_t Bytes)
+void *Pmalloc(c50_context *Context, size_t Bytes)
 /*    -------  */
 {
     void *p=Nil;
@@ -113,35 +112,35 @@ void *Pmalloc(size_t Bytes)
 	return p;
     }
 
-    Error(NOMEM, "", "");
+    Error(Context, NOMEM, "", "");
 
     return Nil;
 }
 
 
 
-void *Prealloc(void *Present, size_t Bytes)
+void *Prealloc(c50_context *Context, void *Present, size_t Bytes)
 /*    --------  */
 {
     void *p=Nil;
 
     if ( ! Bytes ) return Nil;
 
-    if ( ! Present ) return Pmalloc(Bytes);
+    if ( ! Present ) return Pmalloc(Context, Bytes);
 
     if ( (p = (void *) realloc(Present, Bytes)) )
     {
 	return p;
     }
 
-    Error(NOMEM, "", "");
+    Error(Context, NOMEM, "", "");
 
     return Nil;
 }
 
 
 
-void *Pcalloc(size_t Number, unsigned int Size)
+void *Pcalloc(c50_context *Context, size_t Number, unsigned int Size)
 /*    -------  */
 {
     void *p=Nil;
@@ -151,7 +150,7 @@ void *Pcalloc(size_t Number, unsigned int Size)
 	return p;
     }
 
-    Error(NOMEM, "", "");
+    Error(Context, NOMEM, "", "");
 
     return Nil;
 }
@@ -314,10 +313,10 @@ void ResetKR(KRState *State, int Seed)
 /*************************************************************************/
 
 
-void C50Exit(int Status)
+void C50Exit(c50_context *Context, int Status)
 /*   -------  */
 {
-    if ( c50_abort_active_operation(Status) ) return;
+    if ( c50_abort_active_operation(Context, Status) ) return;
     exit(Status);
 }
 
@@ -330,7 +329,7 @@ void ErrorContext(c50_context *Context, int ErrNo, String S1, String S2)
     char	Buffer[10000], *Msg=Buffer;
 
 
-    if ( Of ) fprintf(Of, "\n");
+    if ( Context->io.output ) fprintf(Context->io.output, "\n");
 
     if ( ErrNo == NOFILE || ErrNo == NOMEM || ErrNo == MODELFILE )
     {
@@ -338,14 +337,14 @@ void ErrorContext(c50_context *Context, int ErrNo, String S1, String S2)
     }
     else
     {
-	sprintf(Msg, TX_Line(LineNo, Fn));
+	sprintf(Msg, TX_Line(Context->io.line_number, Context->io.file_name));
     }
     Msg += strlen(Buffer);
 
     switch ( ErrNo )
     {
 	case NOFILE:
-	    sprintf(Msg, E_NOFILE(Fn, S2));
+	    sprintf(Msg, E_NOFILE(Context->io.file_name, S2));
 	    Quit = true;
 	    break;
 
@@ -479,26 +478,26 @@ void ErrorContext(c50_context *Context, int ErrNo, String S1, String S2)
 	    break;
 
 	case MODELFILE:
-	    sprintf(Msg, EX_MODELFILE(Fn));
+	    sprintf(Msg, EX_MODELFILE(Context->io.file_name));
 	    sprintf(Msg, "    (%s `%s')\n", S1, S2);
 	    Quit = true;
 	    break;
     }
 
-    if ( Of ) fputs(Buffer, Of);
+    if ( Context->io.output ) fputs(Buffer, Context->io.output);
 	
     if ( ! WarningOnly )
     {
-	ErrMsgs++;
-	c50_record_error(ErrNo == NOMEM ? C50_STATUS_OUT_OF_MEMORY :
+	Context->io.error_count++;
+	c50_record_error(Context, ErrNo == NOMEM ? C50_STATUS_OUT_OF_MEMORY :
 			 ErrNo == NOFILE ? C50_STATUS_IO_ERROR :
 			 C50_STATUS_PARSE_ERROR,
 			 Buffer);
     }
 
-    if ( ErrMsgs == 10 )
+    if ( Context->io.error_count == 10 )
     {
-	if ( Of ) fprintf(Of,  T_ErrorLimit);
+	if ( Context->io.output ) fprintf(Context->io.output,  T_ErrorLimit);
 	Context->cases.max_case--;
 	Quit = true;
     }
@@ -511,10 +510,10 @@ void ErrorContext(c50_context *Context, int ErrNo, String S1, String S2)
 
 
 
-void Error(int ErrNo, String S1, String S2)
+void Error(c50_context *Context, int ErrNo, String S1, String S2)
 /*   -----  */
 {
-    ErrorContext(Nil, ErrNo, S1, S2);
+    ErrorContext(Context, ErrNo, S1, S2);
 }
 
 
@@ -524,9 +523,6 @@ void Error(int ErrNo, String S1, String S2)
 /*      Generate the label for a case                                    */
 /*                                                                       */
 /*************************************************************************/
-
-char	LabelBuffer[1000];
-
 
 String CaseLabel(c50_context *Context, CaseNo N)
 /*     ---------  */
@@ -539,8 +535,8 @@ String CaseLabel(c50_context *Context, CaseNo N)
 	;
     else
     {
-	sprintf(LabelBuffer, "#%d", N+1);
-	p = LabelBuffer;
+	sprintf(Context->io.label_buffer, "#%d", N+1);
+	p = Context->io.label_buffer;
     }
 
     return p;
@@ -555,12 +551,12 @@ String CaseLabel(c50_context *Context, CaseNo N)
 /*************************************************************************/
 
 
-FILE *GetFile(String Extension, String RW)
+FILE *GetFile(c50_context *Context, String Extension, String RW)
 /*    --------  */
 {
-    strcpy(Fn, FileStem);
-    strcat(Fn, Extension);
-    return fopen(Fn, RW);
+    strcpy(Context->io.file_name, Context->io.file_stem);
+    strcat(Context->io.file_name, Extension);
+    return fopen(Context->io.file_name, RW);
 }
 
 
@@ -773,16 +769,17 @@ void SecsToTime(int Secs, String Time)
 
 
 
-void SetTSBase(int y)
+void SetTSBase(c50_context *Context, int y)
 /*   ---------  */
 {
     y -= 15;
-    TSBase = y * 365 + y / 4 - y / 100 + y / 400 + (367 * 4) / 12 + 1 - 30;
+    Context->io.timestamp_base =
+	y * 365 + y / 4 - y / 100 + y / 400 + (367 * 4) / 12 + 1 - 30;
 }
 
 
 
-int TStampToMins(String TS)
+int TStampToMins(c50_context *Context, String TS)
 /*  ------------  */
 {
     int		Day, Sec, i;
@@ -809,7 +806,7 @@ int TStampToMins(String TS)
     /*  Return a long time in the future if there is an error  */
 
     return ( Day < 1 || Sec < 0 ? (1 << 30) :
-	     (Day - TSBase) * 1440 + (Sec + 30) / 60 );
+	     (Day - Context->io.timestamp_base) * 1440 + (Sec + 30) / 60 );
 }
 
 
@@ -829,7 +826,7 @@ void CValToStr(c50_context *Context, ContValue CV, Attribute Att, String DS)
 
     if ( TStampVal(Att) )
     {
-	DayToDate(floor(CV / 1440) + TSBase, DS);
+	DayToDate(floor(CV / 1440) + Context->io.timestamp_base, DS);
 	DS[10] = ' ';
 	Mins = rint(CV) - floor(CV / 1440) * 1440;
 	SecsToTime(Mins * 60, DS+11);
@@ -859,13 +856,13 @@ void CValToStr(c50_context *Context, ContValue CV, Attribute Att, String DS)
 /*************************************************************************/
 
 
-void Check(float Val, float Low, float High)
+void Check(c50_context *Context, float Val, float Low, float High)
 /*   -----  */
 {
     if ( Val < Low || Val > High )
     {
-	fprintf(Of, TX_IllegalValue(Val, Low, High));
-	C50Exit(1);
+	fprintf(Context->io.output, TX_IllegalValue(Val, Low, High));
+	C50Exit(Context, 1);
     }
 }
 
@@ -888,7 +885,7 @@ void Cleanup(c50_context *Context)
     NotifyStage(Context, CLEANUP);
 
     CheckClose(Context->progress.update_file);					Context->progress.update_file = Nil;
-    CheckClose(TRf);					TRf = Nil;
+    CheckClose(Context->io.model_file);					Context->io.model_file = Nil;
 
     /*  Boost voting (construct.c)  */
 

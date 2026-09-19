@@ -241,11 +241,29 @@ typedef struct
     int stage;
 } c50_progress_state;
 
+typedef struct
+{
+    int line_number;
+    int error_count;
+    int attribute_exclusions;
+    int timestamp_base;
+    int random_initial_seed;
+    char *file_stem;
+    char file_name[500];
+    FILE *model_file;
+    FILE *output;
+    char *option_argument;
+    char *option;
+    int option_index;
+    char label_buffer[1000];
+} c50_io_state;
+
 struct c50_context
 {
     c50_status status;
     char error_message[C50_ERROR_MESSAGE_CAPACITY];
     jmp_buf exit_target;
+    int operation_active;
     int sample_from;
     int suppress_error_messages;
     int delimiter;
@@ -265,6 +283,7 @@ struct c50_context
     c50_pruning_state pruning;
     c50_cross_validation_state cross_validation;
     c50_progress_state progress;
+    c50_io_state io;
     double average_case_weight;
     char *ignored_values;
     int ignored_values_size;
@@ -297,22 +316,23 @@ typedef void (*c50_operation_cleanup_fn)(c50_context *context,
 
 /*
  * Run operation below a C-only failure boundary. Cleanup must not fail or call
- * C50Exit. The legacy core is not reentrant, so nested operations are rejected.
+ * C50Exit. Nested operations on the same context are rejected.
  */
 c50_status c50_run_operation(c50_context *context,
                              c50_operation_fn operation,
                              c50_operation_cleanup_fn cleanup,
                              void *user_data);
 
-/* Record the first error raised by the active operation. */
-void c50_record_error(c50_status status, const char *message);
+/* Record the first error raised by an operation. */
+void c50_record_error(c50_context *context, c50_status status,
+                      const char *message);
 
 /* Replace the context result without starting an operation. */
 c50_status c50_set_context_error(c50_context *context, c50_status status,
                                  const char *message);
 
-/* Unwind the active operation, or return zero when no operation is active. */
-int c50_abort_active_operation(int exit_status);
+/* Unwind the context's operation, or return zero when none is active. */
+int c50_abort_active_operation(c50_context *context, int exit_status);
 
 /* Release context-owned prediction workspace. */
 void c50_clear_prediction_state(c50_context *context);

@@ -45,7 +45,7 @@ void GetMCostsInput(c50_context *Context, c50_input *Cf)
     CaseNo	i;
     float	Val, Sum=0;
 
-    LineNo = 0;
+    Context->io.line_number = 0;
     Context->line_buffer_position = Context->line_buffer;
     Context->line_buffer[0] = '\0';
 
@@ -55,19 +55,19 @@ void GetMCostsInput(c50_context *Context, c50_input *Cf)
     {
 	if ( ! (Pred = Which(Name, Context->schema.class_names, 1, Context->schema.max_class)) )
 	{
-	    Error(BADCOSTCLASS, Name, "");
+	    Error(Context, BADCOSTCLASS, Name, "");
 	}
 
 	if ( ! ReadNameInput(Context, Cf, Name, 1000, ':') ||
 	     ! (Real = Which(Name, Context->schema.class_names, 1, Context->schema.max_class)) )
 	{
-	    Error(BADCOSTCLASS, Name, "");
+	    Error(Context, BADCOSTCLASS, Name, "");
 	}
 
 	if ( ! ReadNameInput(Context, Cf, Name, 1000, ':') ||
 	     sscanf(Name, "%f", &Val) != 1 || Val < 0 )
 	{
-	    Error(BADCOST, "", "");
+	    Error(Context, BADCOST, "", "");
 	    Val = 1;
 	}
 

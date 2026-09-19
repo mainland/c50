@@ -91,15 +91,15 @@ void PrintTree(c50_context *Context, Tree T, String Title)
     FindDepth(T);
 
     Context->trees.printed_subtree_count=0;
-    fprintf(Of, "\n%s\n", Title);
+    fprintf(Context->io.output, "\n%s\n", Title);
     Show(Context, T, 0);
-    fprintf(Of, "\n");
+    fprintf(Context->io.output, "\n");
 
     ForEach(s, 1, Context->trees.printed_subtree_count)
     {
-	fprintf(Of, T_Subtree, s);
+	fprintf(Context->io.output, T_Subtree, s);
 	Show(Context, Context->trees.printed_subtrees[s], 0);
-	fprintf(Of, "\n");
+	fprintf(Context->io.output, "\n");
     }
 }
 
@@ -138,7 +138,7 @@ void Show(c50_context *Context, Tree T, int Sh)
 	    }
 
 	    Context->trees.printed_subtrees[Context->trees.printed_subtree_count] = T;
-	    fprintf(Of, " [S%d]", Context->trees.printed_subtree_count);
+	    fprintf(Context->io.output, " [S%d]", Context->trees.printed_subtree_count);
 	}
 	else
 	{
@@ -174,15 +174,15 @@ void Show(c50_context *Context, Tree T, int Sh)
     }
     else
     {
-	fprintf(Of, " %s (%.8g", Context->schema.class_names[T->Leaf], P1(T->Cases));
+	fprintf(Context->io.output, " %s (%.8g", Context->schema.class_names[T->Leaf], P1(T->Cases));
 	if ( T->Cases >= MinLeaf )
 	{
 	    if ( (Errors = T->Cases - T->ClassDist[T->Leaf]) >= 0.05 )
 	    {
-		fprintf(Of, "/%.8g", P1(Errors));
+		fprintf(Context->io.output, "/%.8g", P1(Errors));
 	    }
 	}
-	putc(')', Of);
+	putc(')', Context->io.output);
     }
 }
 
@@ -213,7 +213,7 @@ void ShowBranch(c50_context *Context, int Sh, Tree T, DiscrValue v,
 
 	    Indent(Context, Sh, BrNo);
 
-	    fprintf(Of, "%s = %s:", Context->schema.attribute_names[Att], Context->schema.attribute_value_names[Att][v]);
+	    fprintf(Context->io.output, "%s = %s:", Context->schema.attribute_names[Att], Context->schema.attribute_value_names[Att][v]);
 
 	    break;
 
@@ -221,11 +221,11 @@ void ShowBranch(c50_context *Context, int Sh, Tree T, DiscrValue v,
 
 	    Indent(Context, Sh, BrNo);
 
-	    fprintf(Of, "%s", Context->schema.attribute_names[Att]);
+	    fprintf(Context->io.output, "%s", Context->schema.attribute_names[Att]);
 
 	    if ( v == 1 )
 	    {
-		fprintf(Of, " = N/A:");
+		fprintf(Context->io.output, " = N/A:");
 	    }
 	    else
 	    if ( T->Lower != T->Upper )
@@ -234,19 +234,19 @@ void ShowBranch(c50_context *Context, int Sh, Tree T, DiscrValue v,
 		{
 		    CValToStr(Context, T->Lower, Att, CVS1);
 		    CValToStr(Context, T->Mid  , Att, CVS2);
-		    fprintf(Of, " <= %s (%s):", CVS1, CVS2);
+		    fprintf(Context->io.output, " <= %s (%s):", CVS1, CVS2);
 		}
 		else
 		{
 		    CValToStr(Context, T->Upper, Att, CVS1);
 		    CValToStr(Context, T->Mid  , Att, CVS2);
-		    fprintf(Of, " >= %s (%s):", CVS1, CVS2);
+		    fprintf(Context->io.output, " >= %s (%s):", CVS1, CVS2);
 		}
 	    }
 	    else
 	    {
 		CValToStr(Context, T->Cut, Att, CVS1);
-		fprintf(Of, " %s %s:", ( v == 2 ? "<=" : ">" ), CVS1);
+		fprintf(Context->io.output, " %s %s:", ( v == 2 ? "<=" : ">" ), CVS1);
 	    }
 
 	    break;
@@ -262,7 +262,7 @@ void ShowBranch(c50_context *Context, int Sh, Tree T, DiscrValue v,
 
 	    if ( Values == 1 )
 	    {
-		fprintf(Of, "%s = %s:", Context->schema.attribute_names[Att], Context->schema.attribute_value_names[Att][Last]);
+		fprintf(Context->io.output, "%s = %s:", Context->schema.attribute_names[Att], Context->schema.attribute_value_names[Att][Last]);
 		break;
 	    }
 
@@ -273,12 +273,12 @@ void ShowBranch(c50_context *Context, int Sh, Tree T, DiscrValue v,
 		for ( Pv = 1 ; ! In(Pv, T->Subset[v]) ; Pv++ )
 		    ;
 
-		fprintf(Of, "%s %s [%s-%s]:", Context->schema.attribute_names[Att], T_InRange,
+		fprintf(Context->io.output, "%s %s [%s-%s]:", Context->schema.attribute_names[Att], T_InRange,
 			Context->schema.attribute_value_names[Att][Pv], Context->schema.attribute_value_names[Att][Last]);
 		break;
 	    }
 
-	    fprintf(Of, "%s %s {", Context->schema.attribute_names[Att], T_ElementOf);
+	    fprintf(Context->io.output, "%s %s {", Context->schema.attribute_names[Att], T_ElementOf);
 	    FirstValue = true;
 	    Skip = CharWidth(Context->schema.attribute_names[Att]) + CharWidth(T_ElementOf) + 3;
 	    TextWidth = Skip + Sh * TabSize;
@@ -309,22 +309,22 @@ void ShowBranch(c50_context *Context, int Sh, Tree T, DiscrValue v,
 			     Extra + 1 > Width )
 		    {
 			Indent(Context, Sh, 0);
-			fprintf(Of, "%s",
+			fprintf(Context->io.output, "%s",
 				( Context->trees.last_branches[Sh+1] && ! T->Branch[v]->NodeType ?
 				  "    " : ":   " ));
-			ForEach(i, 5, Skip) putc(' ', Of);
+			ForEach(i, 5, Skip) putc(' ', Context->io.output);
 
 			TextWidth = Skip + Sh * TabSize;
 			FirstValue = true;
 		    }
 
-		    fprintf(Of, "%s%c",
+		    fprintf(Context->io.output, "%s%c",
 				Context->schema.attribute_value_names[Att][Pv], Pv == Last ? '}' : ',');
 		    TextWidth += CharWidth(Context->schema.attribute_value_names[Att][Pv]) + 1;
 		    FirstValue = false;
 		}
 	    }
-	    putc(':', Of);
+	    putc(':', Context->io.output);
     }
 
     Show(Context, T->Branch[v], Sh+1);
@@ -476,10 +476,10 @@ void Indent(c50_context *Context, int Sh, int BrNo)
 {
     int	i;
 
-    fprintf(Of, "\n");
+    fprintf(Context->io.output, "\n");
     for ( i = 1 ; i <= Sh ; i++ )
     {
-	fprintf(Of, "%s", ( i == Sh && BrNo == 1 ? ":..." :
+	fprintf(Context->io.output, "%s", ( i == Sh && BrNo == 1 ? ":..." :
 			    Context->trees.last_branches[i] ? "    " : ":   " ));
     }
 }
@@ -564,7 +564,7 @@ Tree Leaf(c50_context *Context, double *Freq, ClassNo NodeClass,
 /*************************************************************************/
 
 
-void Sprout(Tree T, DiscrValue Branches)
+void Sprout(c50_context *Context, Tree T, DiscrValue Branches)
 /*   ------  */
 {
     T->Forks = Branches;

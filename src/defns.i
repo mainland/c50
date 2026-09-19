@@ -65,7 +65,7 @@
 /*************************************************************************/
 
 
-#define Goodbye(x)		C50Exit(x)
+#define Goodbye(x)		C50Exit(Context, x)
 
 #ifdef	VerbOpt
 #include <assert.h>
@@ -123,9 +123,9 @@
 
 #define  Plural(n)		((n) != 1 ? "s" : "")
 
-#define  AllocZero(N,T)		(T *) Pcalloc(N, sizeof(T))
+#define  AllocZero(N,T)		(T *) Pcalloc(Context, N, sizeof(T))
 #define  Alloc(N,T)		AllocZero(N,T) /* for safety */
-#define  Realloc(V,N,T)		V = (T *) Prealloc(V, (N)*sizeof(T))
+#define  Realloc(V,N,T)		V = (T *) Prealloc(Context, V, (N)*sizeof(T))
 
 #define	 Max(a,b)               ((a)>(b) ? (a) : (b))
 #define	 Min(a,b)               ((a)<(b) ? (a) : (b))
@@ -682,7 +682,7 @@ void	    Indent(c50_context *Context, int Sh, int BrNo);
 void	    FreeTree(Tree T);
 Tree	    Leaf(c50_context *Context, double *Freq, ClassNo NodeClass,
 		 CaseCount Cases, CaseCount Errors);
-void	    Sprout(Tree T, DiscrValue Branches);
+void	    Sprout(c50_context *Context, Tree T, DiscrValue Branches);
 void	    UnSprout(Tree T);
 int	    TreeSize(Tree T);
 int	    ExpandedLeafCount(c50_context *Context, Tree T);
@@ -691,21 +691,22 @@ Tree	    CopyTree(c50_context *Context, Tree T);
 
 	/* utility.c */
 
-void	    PrintHeader(String Title);
-char	    ProcessOption(int Argc, char **Argv, char *Str);
-void	    *Pmalloc(size_t Bytes);
-void	    *Prealloc(void *Present, size_t Bytes);
-void	    *Pcalloc(size_t Number, unsigned int Size);
+void	    PrintHeader(c50_context *Context, String Title);
+char	    ProcessOption(c50_context *Context, int Argc, char **Argv,
+			  char *Str);
+void	    *Pmalloc(c50_context *Context, size_t Bytes);
+void	    *Prealloc(c50_context *Context, void *Present, size_t Bytes);
+void	    *Pcalloc(c50_context *Context, size_t Number, unsigned int Size);
 void	    FreeVector(void **V, int First, int Last);
 DataRec	    NewCase(c50_context *Context);
 void	    FreeCases(c50_context *Context);
 void	    FreeLastCase(c50_context *Context, DataRec Case);
-void	    Error(int ErrNo, String S1, String S2);
+void	    Error(c50_context *Context, int ErrNo, String S1, String S2);
 void	    ErrorContext(c50_context *Context, int ErrNo, String S1,
 			 String S2);
-void	    C50Exit(int Status);
+void	    C50Exit(c50_context *Context, int Status);
 String	    CaseLabel(c50_context *Context, CaseNo N);
-FILE *	    GetFile(String Extension, String RW);
+FILE *	    GetFile(c50_context *Context, String Extension, String RW);
 double	    ExecTime(void);
 int	    Denominator(ContValue Val);
 int	    GetInt(String S, int N);
@@ -713,9 +714,9 @@ int	    DateToDay(String DS);
 void	    DayToDate(int DI, String Date);
 int	    TimeToSecs(String TS);
 void	    SecsToTime(int Secs, String Time);
-void	    SetTSBase(int y);
-int	    TStampToMins(String TS);
-void	    Check(float Val, float Low, float High);
+void	    SetTSBase(c50_context *Context, int y);
+int	    TStampToMins(c50_context *Context, String TS);
+void	    Check(c50_context *Context, float Val, float Low, float High);
 void	    CValToStr(c50_context *Context, ContValue CV, Attribute Att,
 		      String DS);
 double	    rint(double v);
@@ -809,7 +810,7 @@ void	    SaveDiscreteNames(c50_context *Context);
 void	    SaveTree(c50_context *Context, Tree T, String Extension);
 void	    OutTree(c50_context *Context, Tree T);
 void	    SaveRules(c50_context *Context, CRuleSet RS, String Extension);
-void	    AsciiOut(String Pre, String S);
+void	    AsciiOut(c50_context *Context, String Pre, String S);
 void	    ReadHeader(c50_context *Context, c50_input *Input);
 void	    ReadHeaderMemory(c50_context *Context, c50_input *Input,
 			     c50_input *CostsInput);

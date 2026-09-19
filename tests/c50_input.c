@@ -46,7 +46,7 @@ int main(int argc, char *argv[])
     if ( c50_input_getc(&input) != EOF ) return 1;
     if ( c50_input_gets(line, 0, &input) ) return 1;
 
-    Of = stderr;
+    context->io.output = stderr;
     c50_input_init_memory(&input, names, sizeof(names) - 1);
     GetNames(context, &input);
     if ( context->schema.max_class != 2 || context->schema.max_attribute != 2 ) return 1;
@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
 
     context->options.rules = false;
     context->trees.max_tree = 0;
-    context->trees.pruned = AllocZero(2, Tree);
+    context->trees.pruned = Pcalloc(context, 2, sizeof(Tree));
     context->trees.pruned[0] = InTree(context, &input);
     if ( ! context->trees.pruned[0] || context->trees.pruned[0]->NodeType != 0 ||
          context->trees.pruned[0]->Leaf != 1 )

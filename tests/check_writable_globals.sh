@@ -27,9 +27,4 @@ LC_ALL=C "$nm_command" -A -P --defined-only "$archive" |
     }' |
     LC_ALL=C sort > "$actual"
 
-if test ! -s "$actual"; then
-    printf 'nm produced no writable-symbol inventory for %s\n' "$archive" >&2
-    exit 1
-fi
-
 diff -u "$expected" "$actual"

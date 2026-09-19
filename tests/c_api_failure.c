@@ -22,7 +22,7 @@ static void FailWithModelError(c50_context *context, void *user_data)
 
     (void) context;
     state->operation_calls++;
-    Error(MODELFILE, E_MFATT, "unknown");
+    Error(context, MODELFILE, E_MFATT, "unknown");
 }
 
 static void Succeed(c50_context *context, void *user_data)
@@ -39,10 +39,10 @@ static void CleanupOperation(c50_context *context, void *user_data)
 
     (void) context;
     state->cleanup_calls++;
-    if ( Of )
+    if ( context->io.output )
     {
-        fclose(Of);
-        Of = NULL;
+        fclose(context->io.output);
+        context->io.output = NULL;
     }
 }
 
@@ -57,9 +57,10 @@ int main(int argc, char *argv[])
 
     if ( c50_context_create(&context) != C50_STATUS_OK ) return 1;
 
-    Of = tmpfile();
-    if ( ! Of ) return 1;
-    snprintf(Fn, sizeof(Fn), "%s", "memory.tree");
+    context->io.output = tmpfile();
+    if ( ! context->io.output ) return 1;
+    snprintf(context->io.file_name, sizeof(context->io.file_name),
+             "%s", "memory.tree");
 
     status = c50_run_operation(context, FailWithModelError,
                                CleanupOperation, &state);
@@ -67,7 +68,7 @@ int main(int argc, char *argv[])
     if ( c50_context_last_status(context) != C50_STATUS_PARSE_ERROR ) return 1;
     if ( ! strstr(c50_context_error_message(context), "unknown") ) return 1;
     if ( state.operation_calls != 1 || state.cleanup_calls != 1 ) return 1;
-    if ( Of ) return 1;
+    if ( context->io.output ) return 1;
 
     status = c50_run_operation(context, Succeed, CleanupOperation, &state);
     if ( status != C50_STATUS_OK ) return 1;

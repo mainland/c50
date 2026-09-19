@@ -108,7 +108,7 @@ Boolean NewRule(c50_context *Context, Condition Cond[], int NCond,
     {
 	if ( SameRule(Context, r, Lhs, Size, TargetClass) )
 	{
-	    Verbosity(1, fprintf(Of, "\tduplicates rule %d\n", r))
+	    Verbosity(1, fprintf(Context->io.output, "\tduplicates rule %d\n", r))
 
 	    /*  Keep the most optimistic error estimate  */
 
@@ -442,7 +442,7 @@ void PrintRules(c50_context *Context, CRuleSet RS, String Msg)
 {
     int	r;
 
-    fprintf(Of, "\n%s\n", Msg);
+    fprintf(Context->io.output, "\n%s\n", Msg);
 
     ForEach(r, 1, RS->SNRules)
     {
@@ -464,21 +464,21 @@ void PrintRule(c50_context *Context, CRule R)
 {
     int		d;
 
-    fprintf(Of, T_RuleHeader);
-    if ( Context->options.trials > 1 ) fprintf(Of, "%d/", R->TNo);
-    fprintf(Of, "%d: (%.8g", R->RNo, P1(R->Cover));
+    fprintf(Context->io.output, T_RuleHeader);
+    if ( Context->options.trials > 1 ) fprintf(Context->io.output, "%d/", R->TNo);
+    fprintf(Context->io.output, "%d: (%.8g", R->RNo, P1(R->Cover));
     if ( R->Correct < R->Cover - 0.1 )
     {
-	fprintf(Of, "/%.8g", P1(R->Cover - R->Correct));
+	fprintf(Context->io.output, "/%.8g", P1(R->Cover - R->Correct));
     }
-    fprintf(Of, T_RuleLift, ((R->Correct + 1) / (R->Cover + 2)) / R->Prior);
+    fprintf(Context->io.output, T_RuleLift, ((R->Correct + 1) / (R->Cover + 2)) / R->Prior);
 
     ForEach(d, 1, R->Size)
     {
 	PrintCondition(Context, R->Lhs[d]);
     }
 
-    fprintf(Of, "\t->  " T_class " %s  [%.3f]\n",
+    fprintf(Context->io.output, "\t->  " T_class " %s  [%.3f]\n",
 		Context->schema.class_names[R->Rhs], R->Vote/1000.0);
 }
 
@@ -503,29 +503,29 @@ void PrintCondition(c50_context *Context, Condition C)
     v   = C->TestValue;
     Att = C->Tested;
 
-    fprintf(Of, "\t%s", Context->schema.attribute_names[Att]);
+    fprintf(Context->io.output, "\t%s", Context->schema.attribute_names[Att]);
 
     if ( v < 0 )
     {
-	fprintf(Of, T_IsUnknown);
+	fprintf(Context->io.output, T_IsUnknown);
 	return;
     }
 
     switch ( C->NodeType )
     {
 	case BrDiscr:
-	    fprintf(Of, " = %s\n", Context->schema.attribute_value_names[Att][v]);
+	    fprintf(Context->io.output, " = %s\n", Context->schema.attribute_value_names[Att][v]);
 	    break;
 
 	case BrThresh:
 	    if ( v == 1 )
 	    {
-		fprintf(Of, " = N/A\n");
+		fprintf(Context->io.output, " = N/A\n");
 	    }
 	    else
 	    {
 		CValToStr(Context, C->Cut, Att, CVS);
-		fprintf(Of, " %s %s\n", ( v == 2 ? "<=" : ">" ), CVS);
+		fprintf(Context->io.output, " %s %s\n", ( v == 2 ? "<=" : ">" ), CVS);
 	    }
 	    break;
 
@@ -535,7 +535,7 @@ void PrintCondition(c50_context *Context, Condition C)
 	    Values = Elements(Context, Att, C->Subset, &Last);
 	    if ( Values == 1 )
 	    {
-		fprintf(Of, " = %s\n", Context->schema.attribute_value_names[Att][Last]);
+		fprintf(Context->io.output, " = %s\n", Context->schema.attribute_value_names[Att][Last]);
 		break;
 	    }
 
@@ -546,14 +546,14 @@ void PrintCondition(c50_context *Context, Condition C)
 		for ( pv = 1 ; ! In(pv, C->Subset) ; pv++ )
 		    ;
 
-		fprintf(Of, " %s [%s-%s]\n", T_InRange,
+		fprintf(Context->io.output, " %s [%s-%s]\n", T_InRange,
 			Context->schema.attribute_value_names[Att][pv], Context->schema.attribute_value_names[Att][Last]);
 		break;
 	    }
 
 	    /*  Must keep track of position to break long lines  */
 
-	    fprintf(Of, " %s {", T_ElementOf);
+	    fprintf(Context->io.output, " %s {", T_ElementOf);
 	    Col = Base = CharWidth(Context->schema.attribute_names[Att]) + CharWidth(T_ElementOf) + 11;
 
 	    ForEach(pv, 1, Context->schema.max_attribute_value[Att])
@@ -570,18 +570,18 @@ void PrintCondition(c50_context *Context, Condition C)
 		    if ( Col + Entry + 2 >= Width )
 		    {
 			Col = Base;
-			fprintf(Of, ",\n%*s", Col, "");
+			fprintf(Context->io.output, ",\n%*s", Col, "");
 		    }
 		    else
 		    {
-			fprintf(Of, ", ");
+			fprintf(Context->io.output, ", ");
 			Col += 2;
 		    }
 
-		    fprintf(Of, "%s", Context->schema.attribute_value_names[Att][pv]);
+		    fprintf(Context->io.output, "%s", Context->schema.attribute_value_names[Att][pv]);
 		    Col += Entry;
 		}
 	    }
-	    fprintf(Of, "}\n");
+	    fprintf(Context->io.output, "}\n");
     }
 }

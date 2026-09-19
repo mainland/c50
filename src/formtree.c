@@ -372,12 +372,12 @@ void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
 			 Cases - Context->training.class_frequencies[BestLeaf]);
 
     Verbosity(1,
-    	fprintf(Of, "\n<%d> %d cases", Level, No(Fp,Lp));
+	fprintf(Context->io.output, "\n<%d> %d cases", Level, No(Fp,Lp));
 	if ( fabs(No(Fp,Lp) - Cases) >= 0.1 )
 	{
-	    fprintf(Of, ", total weight %.1f", Cases);
+	    fprintf(Context->io.output, ", total weight %.1f", Cases);
 	}
-	fprintf(Of, "\n"))
+	fprintf(Context->io.output, "\n"))
 
     /*  Do not try to split if:
 	- all cases are of the same class
@@ -416,18 +416,18 @@ void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
 
     if ( BestAtt == None )
     {
-	Verbosity(1, fprintf(Of, "\tno sensible splits\n"))
+	Verbosity(1, fprintf(Context->io.output, "\tno sensible splits\n"))
 	if ( Context->progress.stage == FORMTREE ) Progress(Context, Cases);
     }
     else
     {
 	Verbosity(1,
-	    fprintf(Of, "\tbest attribute %s", Context->schema.attribute_names[BestAtt]);
+	    fprintf(Context->io.output, "\tbest attribute %s", Context->schema.attribute_names[BestAtt]);
 	    if ( Continuous(BestAtt) )
 	    {
-		fprintf(Of, " cut %.3f", Context->splits.thresholds[BestAtt]);
+		fprintf(Context->io.output, " cut %.3f", Context->splits.thresholds[BestAtt]);
 	    }
-	    fprintf(Of, " inf %.3f gain %.3f val %.3f\n",
+	    fprintf(Context->io.output, " inf %.3f gain %.3f val %.3f\n",
 		   Context->splits.information[BestAtt], Context->splits.gain[BestAtt], Context->splits.gain[BestAtt] / Context->splits.information[BestAtt]))
 
 	/*  Build a node of the selected test  */
@@ -466,7 +466,7 @@ void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
 	if ( TreeErrs >= 0.999 * Node->Errors )
 	{
 	    Verbosity(1,
-		fprintf(Of, "<%d> Collapse tree for %d cases to leaf %s\n",
+		fprintf(Context->io.output, "<%d> Collapse tree for %d cases to leaf %s\n",
 			    Level, No(Fp,Lp), Context->schema.class_names[BestLeaf]))
 
 	    UnSprout(Node);
@@ -732,7 +732,7 @@ Attribute FindBestAtt(c50_context *Context, CaseCount Cases)
     MinGain = AvGain * Context->splits.average_gain_weight + MDL * Context->splits.mdl_weight;
 
     Verbosity(2,
-	fprintf(Of, "\tav gain=%.3f, MDL (%d) = %.3f, min=%.3f\n",
+	fprintf(Context->io.output, "\tav gain=%.3f, MDL (%d) = %.3f, min=%.3f\n",
 		    AvGain, Possible, MDL, MinGain))
 
     /*  Find best attribute according to Context->splits.gain Ratio criterion subject
@@ -814,7 +814,7 @@ void EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases)
     if ( NBr > Context->splits.max_leaves + 1 )
     {
 	Verbosity(2,
-	    fprintf(Of, "\t(cancelled -- %d leaves, max %d)\n", NBr, Context->splits.max_leaves))
+	    fprintf(Context->io.output, "\t(cancelled -- %d leaves, max %d)\n", NBr, Context->splits.max_leaves))
 
 	Context->splits.gain[Att] = None;
     }
