@@ -12,6 +12,7 @@ static void Usage(void)
 int main(int argc, char **argv)
 {
     FILE *F;
+    c50_input NamesInput;
     ClassNo Actual, Predicted, c;
     CaseNo i;
     String Extension;
@@ -29,7 +30,9 @@ int main(int argc, char **argv)
     Extension = ( RULES ? ".rules" : ".tree" );
 
     if ( ! (F = GetFile(".names", "r")) ) Error(NOFILE, "", "");
-    GetNames(F);
+    c50_input_init_file(&NamesInput, F);
+    GetNames(&NamesInput);
+    fclose(F);
 
     SomeMiss = AllocZero(MaxAtt+1, Boolean);
     SomeNA = AllocZero(MaxAtt+1, Boolean);

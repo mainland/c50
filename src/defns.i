@@ -50,6 +50,7 @@
 #include <limits.h>
 #include <float.h>
 
+#include "c50_input.h"
 #include "text.i"
 
 
@@ -469,17 +470,18 @@ void	    RecordAttUsage(DataRec Case, int *Usage);
 	/* getnames.c */
 
 Boolean	    ReadName(FILE *f, String s, int n, char ColonOpt);
-void	    GetNames(FILE *Nf);
-void	    ExplicitAtt(FILE *Nf);
+Boolean	    ReadNameInput(c50_input *f, String s, int n, char ColonOpt);
+void	    GetNames(c50_input *Nf);
+void	    ExplicitAtt(c50_input *Nf);
 int	    Which(String Val, String *List, int First, int Last);
 void	    ListAttsUsed(void);
 void	    FreeNames(void);
-int	    InChar(FILE *f);
+int	    InChar(c50_input *f);
 
 	/* implicitatt.c */
 
-void	    ImplicitAtt(FILE *Nf);
-void	    ReadDefinition(FILE *f);
+void	    ImplicitAtt(c50_input *Nf);
+void	    ReadDefinition(c50_input *f);
 void	    Append(char c);
 Boolean	    Expression(void);
 Boolean	    Conjunct(void);

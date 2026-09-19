@@ -82,7 +82,7 @@ typedef  union  _xstack_elt
 /*************************************************************************/
 
 
-void ImplicitAtt(FILE *Nf)
+void ImplicitAtt(c50_input *Nf)
 /*   -----------  */
 {
 #ifdef CUBIST
@@ -164,7 +164,7 @@ void ImplicitAtt(FILE *Nf)
 /*************************************************************************/
 
 
-void ReadDefinition(FILE *f)
+void ReadDefinition(c50_input *f)
 /*   --------------  */
 {
     Boolean	LastWasPeriod=false;

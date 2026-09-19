@@ -22,6 +22,7 @@ SRC_DIR = src
 sources =\
 	$(SRC_DIR)/global.c\
 	$(SRC_DIR)/c50_api.c\
+	$(SRC_DIR)/c50_input.c\
 	$(SRC_DIR)/c50.c\
 	$(SRC_DIR)/construct.c\
 	$(SRC_DIR)/formtree.c\
@@ -67,6 +68,7 @@ objects =\
 
 headers =\
 	$(SRC_DIR)/c50_api_internal.h\
+	$(SRC_DIR)/c50_input.h\
 	$(SRC_DIR)/defns.i\
 	$(SRC_DIR)/extern.i\
 	$(SRC_DIR)/text.i
