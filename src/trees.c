@@ -46,13 +46,6 @@
 	    printed, subtrees are broken off and printed separately after
 	    the main tree is finished	 */
 
-int	SubTree,		/* highest subtree to be printed */
-	SubSpace=0;		/* maximum subtree encountered */
-Tree	*SubDef=Nil;		/* pointers to subtrees */
-Boolean	LastBranch[Width];	/* whether printing last branch of subtree */
-
-
-
 /*************************************************************************/
 /*									 */
 /*	Calculate the depth of nodes in a tree in Utility field		 */
@@ -97,15 +90,15 @@ void PrintTree(c50_context *Context, Tree T, String Title)
 
     FindDepth(T);
 
-    SubTree=0;
+    Context->trees.printed_subtree_count=0;
     fprintf(Of, "\n%s\n", Title);
     Show(Context, T, 0);
     fprintf(Of, "\n");
 
-    ForEach(s, 1, SubTree)
+    ForEach(s, 1, Context->trees.printed_subtree_count)
     {
 	fprintf(Of, T_Subtree, s);
-	Show(Context, SubDef[s], 0);
+	Show(Context, Context->trees.printed_subtrees[s], 0);
 	fprintf(Of, "\n");
     }
 }
@@ -131,21 +124,21 @@ void Show(c50_context *Context, Tree T, int Sh)
 
 	if ( Sh && Sh * TabSize + MaxLine(Context, T) > Width )
 	{
-	    if ( ++SubTree >= SubSpace )
+	    if ( ++Context->trees.printed_subtree_count >= Context->trees.printed_subtree_capacity )
 	    {
-		SubSpace += 100;
-		if ( SubDef )
+		Context->trees.printed_subtree_capacity += 100;
+		if ( Context->trees.printed_subtrees )
 		{
-		    Realloc(SubDef, SubSpace, Tree);
+		    Realloc(Context->trees.printed_subtrees, Context->trees.printed_subtree_capacity, Tree);
 		}
 		else
 		{
-		    SubDef = Alloc(SubSpace, Tree);
+		    Context->trees.printed_subtrees = Alloc(Context->trees.printed_subtree_capacity, Tree);
 		}
 	    }
 
-	    SubDef[SubTree] = T;
-	    fprintf(Of, " [S%d]", SubTree);
+	    Context->trees.printed_subtrees[Context->trees.printed_subtree_count] = T;
+	    fprintf(Of, " [S%d]", Context->trees.printed_subtree_count);
 	}
 	else
 	{
@@ -172,7 +165,7 @@ void Show(c50_context *Context, Tree T, int Sh)
 		    }
 		}
 
-		LastBranch[Sh+1] = ( ++BrNo == MaxV );
+		Context->trees.last_branches[Sh+1] = ( ++BrNo == MaxV );
 		ShowBranch(Context, Sh, T, Simplest,
 			   (int)( BrNo == First ));
 		T->Branch[Simplest]->Utility = 1E10;
@@ -218,7 +211,7 @@ void ShowBranch(c50_context *Context, int Sh, Tree T, DiscrValue v,
     {
 	case BrDiscr:
 
-	    Indent(Sh, BrNo);
+	    Indent(Context, Sh, BrNo);
 
 	    fprintf(Of, "%s = %s:", Context->schema.attribute_names[Att], Context->schema.attribute_value_names[Att][v]);
 
@@ -226,7 +219,7 @@ void ShowBranch(c50_context *Context, int Sh, Tree T, DiscrValue v,
 
 	case BrThresh:
 
-	    Indent(Sh, BrNo);
+	    Indent(Context, Sh, BrNo);
 
 	    fprintf(Of, "%s", Context->schema.attribute_names[Att]);
 
@@ -265,7 +258,7 @@ void ShowBranch(c50_context *Context, int Sh, Tree T, DiscrValue v,
 	    Values = Elements(Context, Att, T->Subset[v], &Last);
 	    if ( ! Values ) return;
 
-	    Indent(Sh, BrNo);
+	    Indent(Context, Sh, BrNo);
 
 	    if ( Values == 1 )
 	    {
@@ -315,9 +308,9 @@ void ShowBranch(c50_context *Context, int Sh, Tree T, DiscrValue v,
 			 TextWidth + CharWidth(Context->schema.attribute_value_names[Att][Pv]) +
 			     Extra + 1 > Width )
 		    {
-		  	Indent(Sh, 0);
+			Indent(Context, Sh, 0);
 			fprintf(Of, "%s",
-				( LastBranch[Sh+1] && ! T->Branch[v]->NodeType ?
+				( Context->trees.last_branches[Sh+1] && ! T->Branch[v]->NodeType ?
 				  "    " : ":   " ));
 			ForEach(i, 5, Skip) putc(' ', Of);
 
@@ -478,7 +471,7 @@ int MaxLine(c50_context *Context, Tree T)
 /*************************************************************************/
 
 
-void Indent(int Sh, int BrNo)
+void Indent(c50_context *Context, int Sh, int BrNo)
 /*   ------  */
 {
     int	i;
@@ -487,7 +480,7 @@ void Indent(int Sh, int BrNo)
     for ( i = 1 ; i <= Sh ; i++ )
     {
 	fprintf(Of, "%s", ( i == Sh && BrNo == 1 ? ":..." :
-			    LastBranch[i] ? "    " : ":   " ));
+			    Context->trees.last_branches[i] ? "    " : ":   " ));
     }
 }
 

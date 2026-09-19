@@ -885,9 +885,6 @@ void Cleanup(c50_context *Context)
 {
     int		t, r;
 
-    extern DataRec	*Blocked;
-    extern Tree		*SubDef;
-    extern int		SubSpace;
     extern FILE		*Uf;
 
     NotifyStage(CLEANUP);
@@ -922,7 +919,8 @@ void Cleanup(c50_context *Context)
 	FreeTree(Context->trees.winnow);				Context->trees.winnow = Nil;
     }
 
-    FreeUnlessNil(Blocked);				Blocked = Nil;
+    FreeUnlessNil(Context->cross_validation.blocked_cases);
+    Context->cross_validation.blocked_cases = Nil;
 
     FreeData(Context);
 
@@ -966,8 +964,9 @@ void Cleanup(c50_context *Context)
 
     FreeNames(Context);
 
-    FreeUnlessNil(SubDef);				SubDef = Nil;
-							SubSpace = 0;
+    FreeUnlessNil(Context->trees.printed_subtrees);
+    Context->trees.printed_subtrees = Nil;
+    Context->trees.printed_subtree_capacity = 0;
     Context->cases.max_case = -1;
 
     NotifyStage(0);

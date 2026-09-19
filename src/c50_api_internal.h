@@ -66,6 +66,10 @@ typedef struct
     struct _treerec *winnow;
     int trial;
     int max_tree;
+    int printed_subtree_count;
+    int printed_subtree_capacity;
+    struct _treerec **printed_subtrees;
+    unsigned char last_branches[80];
 } c50_tree_state;
 
 typedef struct
@@ -136,6 +140,17 @@ typedef struct
     unsigned char *tested_attributes;
     unsigned char ***subsets;
     int *subset_counts;
+    unsigned char all_attributes_multi_valued;
+    unsigned char use_subsampling;
+    float average_gain_weight;
+    float mdl_weight;
+    int *discrete_attributes;
+    int discrete_attribute_count;
+    int max_leaves;
+    float value_threshold;
+    unsigned char sampled;
+    int *waiting_attributes;
+    int waiting_count;
 } c50_split_state;
 
 typedef struct
@@ -194,6 +209,26 @@ typedef struct
     int *last_covering_rule;
 } c50_rule_selection_state;
 
+typedef struct
+{
+    unsigned char **possible_values;
+    double maximum_extra_errors;
+    double total_extra_errors;
+    struct _treerec **minimum_cost_subtrees;
+    int minimum_cost_subtree_count;
+    float minimum_cost_complexity;
+    unsigned char recalculate_errors;
+    float confidence_coefficient;
+} c50_pruning_state;
+
+typedef struct
+{
+    union _attribute_value **blocked_cases;
+    float **results;
+    int *confusion_matrix;
+    int saved_folds;
+} c50_cross_validation_state;
+
 struct c50_context
 {
     c50_status status;
@@ -215,6 +250,8 @@ struct c50_context
     c50_rule_build_state rule_build;
     c50_rule_tree_state rule_tree;
     c50_rule_selection_state rule_selection;
+    c50_pruning_state pruning;
+    c50_cross_validation_state cross_validation;
     double average_case_weight;
     char *ignored_values;
     int ignored_values_size;
