@@ -899,7 +899,7 @@ void Cleanup(c50_context *Context)
 
     /*  Boost voting (construct.c)  */
 
-    FreeUnlessNil(BVoteBlock);				BVoteBlock = Nil;
+    FreeUnlessNil(Context->training.boost_vote_block);				Context->training.boost_vote_block = Nil;
 
     /*  Stuff from attribute winnowing  */
 
@@ -908,57 +908,57 @@ void Cleanup(c50_context *Context)
     FreeUnlessNil(Split);				Split = Nil;
     FreeUnlessNil(Used);				Used = Nil;
 
-    if ( RULES )
+    if ( Context->options.rules )
     {
 	FreeFormRuleData();
-	FreeSiftRuleData();
+	FreeSiftRuleData(Context);
     }
 
     /*  May have interrupted a winnowing tree  */
 
-    if ( WINNOW && WTree )
+    if ( Context->options.winnow && Context->trees.winnow )
     {
-	FreeTree(WTree);				WTree = Nil;
+	FreeTree(Context->trees.winnow);				Context->trees.winnow = Nil;
     }
 
     FreeUnlessNil(Blocked);				Blocked = Nil;
 
     FreeData(Context);
 
-    if ( MCost )
+    if ( Context->costs.matrix )
     {
-	FreeVector((void **) MCost, 1, Context->schema.max_class);	MCost = Nil;
-	FreeUnlessNil(WeightMul);			WeightMul = Nil;
+	FreeVector((void **) Context->costs.matrix, 1, Context->schema.max_class);	Context->costs.matrix = Nil;
+	FreeUnlessNil(Context->costs.weight_multipliers);			Context->costs.weight_multipliers = Nil;
     }
 
-    ForEach(t, 0, MaxTree)
+    ForEach(t, 0, Context->trees.max_tree)
     {
-	FreeClassifier(t);
+	FreeClassifier(Context, t);
     }
 
-    if ( RULES )
+    if ( Context->options.rules )
     {
-	/*  May be incomplete ruleset in Rule[]  */
+	/*  May be incomplete ruleset in Context->rules.rules[]  */
 
-	if ( Rule )
+	if ( Context->rules.rules )
 	{
-	    ForEach(r, 1, NRules)
+	    ForEach(r, 1, Context->rules.count)
 	    {
-		FreeRule(Rule[r]);
+		FreeRule(Context->rules.rules[r]);
 	    }
-	    Free(Rule);					Rule = Nil;
+	    Free(Context->rules.rules);					Context->rules.rules = Nil;
 	}						
 
-	FreeUnlessNil(RuleSet);				RuleSet = Nil;
+	FreeUnlessNil(Context->rules.sets);				Context->rules.sets = Nil;
 	FreeUnlessNil(LogCaseNo);			LogCaseNo = Nil;
 	FreeUnlessNil(LogFact);				LogFact = Nil;
     }
 
     FreeTreeData(Context);
 
-    FreeUnlessNil(UtilErr);				UtilErr = Nil;
-    FreeUnlessNil(UtilBand);				UtilBand = Nil;
-    FreeUnlessNil(UtilCost);				UtilCost = Nil;
+    FreeUnlessNil(Context->evaluation.utility_errors);				Context->evaluation.utility_errors = Nil;
+    FreeUnlessNil(Context->evaluation.utility_bands);				Context->evaluation.utility_bands = Nil;
+    FreeUnlessNil(Context->evaluation.utility_costs);				Context->evaluation.utility_costs = Nil;
 
     FreeUnlessNil(Context->cases.some_missing);				Context->cases.some_missing = Nil;
     FreeUnlessNil(Context->cases.some_not_applicable);				Context->cases.some_not_applicable = Nil;

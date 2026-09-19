@@ -78,7 +78,7 @@ void SiftRules(c50_context *Context, float EstErrRate)
     CaseNo	i;
 
     NotifyStage(SIFTRULES);
-    Progress(-(float) NRules);
+    Progress(-(float) Context->rules.count);
 
     /*  Determine inverse of Fires in CovBy, CovByPtr, CovByBlock  */
 
@@ -87,27 +87,27 @@ void SiftRules(c50_context *Context, float EstErrRate)
     /*  Clean up any subsets in conditions by removing values that do
 	not appear in the covered cases  */
 
-    if ( SUBSET )
+    if ( Context->options.subset_splits )
     {
 	PruneSubsets(Context);
     }
 
     Covered = Alloc(Context->cases.max_case+1, Boolean);
-    RuleIn  = AllocZero(NRules+1, Boolean);
+    RuleIn  = AllocZero(Context->rules.count+1, Boolean);
 
     /*  Set initial theory  */
 
     SetInitialTheory(Context);
 
-    Bits = Alloc(NRules+1, float);
+    Bits = Alloc(Context->rules.count+1, float);
 
     /*  Calculate the number of bits associated with attribute tests;
 	this is not repeated in boosting, composite rulesets etc  */
 
-    if ( ! BranchBits || NRules > Context->cases.max_case )
+    if ( ! BranchBits || Context->rules.count > Context->cases.max_case )
     {
 	GenerateLogs(Max(Context->cases.max_case+1, Max(Context->schema.max_attribute, Max(Context->schema.max_class,
-			 Max(Context->schema.max_discrete_value, NRules)))));
+			 Max(Context->schema.max_discrete_value, Context->rules.count)))));
     }
 
     if ( ! BranchBits )
@@ -117,14 +117,14 @@ void SiftRules(c50_context *Context, float EstErrRate)
 
     /*  Determine rule codelengths  */
 
-    if ( NRules >= Context->cases.max_case+1 )
+    if ( Context->rules.count >= Context->cases.max_case+1 )
     {
-	Realloc(List, NRules+1, CaseNo);
+	Realloc(List, Context->rules.count+1, CaseNo);
     }
 
-    ForEach(r, 1, NRules)
+    ForEach(r, 1, Context->rules.count)
     {
-	R = Rule[r];
+	R = Context->rules.rules[r];
 
 	CodeLength = 0;
 	ForEach(d, 1, R->Size)
@@ -145,7 +145,7 @@ void SiftRules(c50_context *Context, float EstErrRate)
 
     /*  Allocate tables used in hillclimbing  */
 
-    DeltaErrs = Alloc(NRules+1, float);
+    DeltaErrs = Alloc(Context->rules.count+1, float);
     TopClass = Alloc(Context->cases.max_case+1, ClassNo);
 
     AltClass = Alloc(Context->cases.max_case+1, ClassNo);
@@ -169,7 +169,7 @@ void SiftRules(c50_context *Context, float EstErrRate)
 
     /*  Deallocate storage  */
 
-    FreeSiftRuleData();
+    FreeSiftRuleData(Context);
 }
 
 
@@ -196,7 +196,7 @@ void InvertFires(c50_context *Context)
     size_t	CovByBlockSize=0;
 
     CovByPtr = Alloc(Context->cases.max_case+2, Byte *);
-    Extra = NRules / 128;		/* max number of filler entries */
+    Extra = Context->rules.count / 128;		/* max number of filler entries */
     ForEach(i, 1, Context->cases.max_case+1)
     {
 	CovByBlockSize += CovBy[i-1] + Extra;
@@ -213,7 +213,7 @@ void InvertFires(c50_context *Context)
 
     /*  Add entries for each rule  */
 
-    ForEach(r, 1, NRules)
+    ForEach(r, 1, Context->rules.count)
     {
 	Uncompress(Fires[r], List);
 	ForEach(j, 1, List[0])
@@ -425,7 +425,7 @@ void SetInitialTheory(c50_context *Context)
 
     /*  Remove rules that don't help coverage  */
 
-    ForEach(r, 1, NRules)
+    ForEach(r, 1, Context->rules.count)
     {
 	if ( (RuleIn[r] &= 1) ) Active++;
     }
@@ -443,19 +443,19 @@ void CoverClass(c50_context *Context, ClassNo Target)
 
     memset(Covered, false, Context->cases.max_case+1);
 
-    Remaining = ClassFreq[Target];
+    Remaining = Context->training.class_frequencies[Target];
 
     while ( Remaining > FalsePos )
     {
 	/*  Find most accurate unused rule from a leaf  */
 
 	Best = 0;
-	ForEach(r, 1, NRules)
+	ForEach(r, 1, Context->rules.count)
 	{
-	    if ( Rule[r]->Rhs == Target && ! RuleIn[r] &&
-		 Rule[r]->Correct >= MINITEMS )
+	    if ( Context->rules.rules[r]->Rhs == Target && ! RuleIn[r] &&
+		 Context->rules.rules[r]->Correct >= Context->options.minimum_cases )
 	    {
-		if ( ! Best || Rule[r]->Vote > Rule[Best]->Vote ) Best = r;
+		if ( ! Best || Context->rules.rules[r]->Vote > Context->rules.rules[Best]->Vote ) Best = r;
 	    }
 	}
 
@@ -485,7 +485,7 @@ void CoverClass(c50_context *Context, ClassNo Target)
 	/*  If coverage is not increased, set RuleIn to 2 so that
 	    the rule can be removed later  */
 
-	if ( NewTruePos - NewFalsePos <= MINITEMS + Epsilon )
+	if ( NewTruePos - NewFalsePos <= Context->options.minimum_cases + Epsilon )
 	{
 	    RuleIn[Best] = 2;
 	}
@@ -558,7 +558,7 @@ void HillClimb(c50_context *Context)
 
     (void) LastCost;  /* Used only when VerbOpt is enabled. */
 
-    ForEach(r, 1, NRules)
+    ForEach(r, 1, Context->rules.count)
     {
 	if ( RuleIn[r] )
 	{
@@ -595,7 +595,7 @@ void HillClimb(c50_context *Context)
 
 	Toggle = OutCount = 0;
 
-	ForEach(r, 1, NRules)
+	ForEach(r, 1, Context->rules.count)
 	{
 	    if ( r == LastToggle ) continue;
 
@@ -640,7 +640,7 @@ void HillClimb(c50_context *Context)
 	Verbosity(1,
 	    fprintf(Of, "\t%s rule %d/%d (errs=%.1f, cost=%.1f bits)\n",
 		   ( RuleIn[Toggle] ? "Delete" : "Add" ),
-		   Rule[Toggle]->TNo, Rule[Toggle]->RNo,
+		   Context->rules.rules[Toggle]->TNo, Context->rules.rules[Toggle]->RNo,
 		   Errs + DeltaErrs[Toggle], NewCost/100.0))
 
 	/*  Adjust vote information  */
@@ -656,11 +656,11 @@ void HillClimb(c50_context *Context)
 
 	    if ( RuleIn[Toggle] )
 	    {
-		TotVote[i][Rule[Toggle]->Rhs] -= Rule[Toggle]->Vote;
+		TotVote[i][Context->rules.rules[Toggle]->Rhs] -= Context->rules.rules[Toggle]->Vote;
 	    }
 	    else
 	    {
-		TotVote[i][Rule[Toggle]->Rhs] += Rule[Toggle]->Vote;
+		TotVote[i][Context->rules.rules[Toggle]->Rhs] += Context->rules.rules[Toggle]->Vote;
 	    }
 
 	    CountVotes(Context, i);
@@ -715,12 +715,12 @@ void InitialiseVotes(c50_context *Context)
 
     /*  Adjust vote for each case covered by rule  */
 
-    ForEach(r, 1, NRules)
+    ForEach(r, 1, Context->rules.count)
     {
 	if ( ! RuleIn[r] ) continue;
 
-	Rhs  = Rule[r]->Rhs;
-	Vote = Rule[r]->Vote;
+	Rhs  = Context->rules.rules[r]->Rhs;
+	Vote = Context->rules.rules[r]->Vote;
 
 	Uncompress(Fires[r], List);
 	for ( j = List[0] ; j ; j-- )
@@ -814,26 +814,26 @@ void UpdateDeltaErrs(c50_context *Context, CaseNo i, double Delta,
 	{
 	    /*  Examine effect of adding or deleting rule  */
 	
-	    Rhs = Rule[r]->Rhs;
+	    Rhs = Context->rules.rules[r]->Rhs;
 
 	    if ( RuleIn[r] )
 	    {
 		if ( Rhs == Top &&
-		     Prefer(TotVote[i][Alt] - (TotVote[i][Top] - Rule[r]->Vote),
+		     Prefer(TotVote[i][Alt] - (TotVote[i][Top] - Context->rules.rules[r]->Vote),
 			    Alt, Top) )
 		{
 		    DeltaErrs[r] +=
-			(NCost[Alt][RealClass] - NCost[Top][RealClass]) * Delta;
+			(Context->costs.normalized_matrix[Alt][RealClass] - Context->costs.normalized_matrix[Top][RealClass]) * Delta;
 		}
 	    }
 	    else
 	    {
 		if ( Rhs != Top &&
-		     Prefer(TotVote[i][Rhs] + Rule[r]->Vote - TotVote[i][Top],
+		     Prefer(TotVote[i][Rhs] + Context->rules.rules[r]->Vote - TotVote[i][Top],
 			    Rhs, Top) )
 		{
 		    DeltaErrs[r] +=
-			(NCost[Rhs][RealClass] - NCost[Top][RealClass]) * Delta;
+			(Context->costs.normalized_matrix[Rhs][RealClass] - Context->costs.normalized_matrix[Top][RealClass]) * Delta;
 		}
 	    }
 	}
@@ -858,10 +858,10 @@ CaseCount CalculateDeltaErrs(c50_context *Context)
 
     ForEach(i, 0, Context->cases.max_case)
     {
-	Errs += Weight(Context->cases.records[i]) * NCost[TopClass[i]][Class(Context->cases.records[i])];
+	Errs += Weight(Context->cases.records[i]) * Context->costs.normalized_matrix[TopClass[i]][Class(Context->cases.records[i])];
     }
 
-    ForEach(r, 1, NRules)
+    ForEach(r, 1, Context->rules.count)
     {
 	DeltaErrs[r] = 0;
     }
@@ -910,9 +910,9 @@ void PruneSubsets(c50_context *Context)
 
     /*  Check each rule in turn  */
 
-    ForEach(r, 1, NRules)
+    ForEach(r, 1, Context->rules.count)
     {
-	R = Rule[r];
+	R = Context->rules.rules[r];
 	NAtts = 0;
 
 	/*  Find all subset conditions  */
@@ -992,7 +992,7 @@ void SetDefaultClass(c50_context *Context)
 
     /*  Check which cases are covered by at least one rule  */
 
-    ForEach(r, 1, NRules)
+    ForEach(r, 1, Context->rules.count)
     {
 	if ( ! RuleIn[r] ) continue;
 
@@ -1021,15 +1021,15 @@ void SetDefaultClass(c50_context *Context)
     ForEach(c, 1, Context->schema.max_class)
     {
 	Verbosity(1, fprintf(Of, "\t%s (%.2f): %.1f\n",
-			    Context->schema.class_names[c], ClassFreq[c] / (Context->cases.max_case + 1.0),
+			    Context->schema.class_names[c], Context->training.class_frequencies[c] / (Context->cases.max_case + 1.0),
 			    UncoveredWeight[c]));
 
 	Context->class_sum[c] = (UncoveredWeight[c] + 1) / (TotUncovered + 2.0) +
-		      ClassFreq[c] / (Context->cases.max_case + 1.0);
+		      Context->training.class_frequencies[c] / (Context->cases.max_case + 1.0);
     }
 
     Context->default_class =
-	SelectClass(Context, 1, (Boolean) (MCost && ! CostWeights));
+	SelectClass(Context, 1, (Boolean) (Context->costs.matrix && ! Context->costs.weighted));
 
     Free(UncoveredWeight);
 }
@@ -1043,15 +1043,15 @@ void SetDefaultClass(c50_context *Context)
 /*************************************************************************/
 
 
-void SwapRule(RuleNo A, RuleNo B)
+void SwapRule(c50_context *Context, RuleNo A, RuleNo B)
 /*   --------  */
 {
     CRule	Hold;
     Boolean	HoldIn;
 
-    Hold    = Rule[A];
-    Rule[A] = Rule[B];
-    Rule[B] = Hold;
+    Hold    = Context->rules.rules[A];
+    Context->rules.rules[A] = Context->rules.rules[B];
+    Context->rules.rules[B] = Hold;
 
     HoldIn    = RuleIn[A];
     RuleIn[A] = RuleIn[B];
@@ -1078,7 +1078,7 @@ int OrderByUtility(c50_context *Context)
 
     Verbosity(1, fprintf(Of, "\n    Determining rule utility\n"))
 
-    Drop = Alloc(NRules, RuleNo);
+    Drop = Alloc(Context->rules.count, RuleNo);
 
     /*  Find the rule that has the least beneficial effect on accuracy  */
 
@@ -1086,7 +1086,7 @@ int OrderByUtility(c50_context *Context)
     {
 	Toggle = OutCount = 0;
 
-	ForEach(r, 1, NRules)
+	ForEach(r, 1, Context->rules.count)
 	{
 	    if ( ! RuleIn[r] ) continue;
 
@@ -1108,7 +1108,7 @@ int OrderByUtility(c50_context *Context)
 
 	Verbosity(1,
 	    fprintf(Of, "\tDelete rule %d/%d (errs up %.1f)\n",
-		   Rule[Toggle]->TNo, Rule[Toggle]->RNo,
+		   Context->rules.rules[Toggle]->TNo, Context->rules.rules[Toggle]->RNo,
 		   Errs + DeltaErrs[Toggle]))
 
 	/*  Adjust vote information  */
@@ -1122,7 +1122,7 @@ int OrderByUtility(c50_context *Context)
 
 	    UpdateDeltaErrs(Context, i, -Weight(Context->cases.records[i]), Toggle);
 
-	    TotVote[i][Rule[Toggle]->Rhs] -= Rule[Toggle]->Vote;
+	    TotVote[i][Context->rules.rules[Toggle]->Rhs] -= Context->rules.rules[Toggle]->Vote;
 
 	    CountVotes(Context, i);
 
@@ -1143,7 +1143,7 @@ int OrderByUtility(c50_context *Context)
     {
 	NewNRules++;
 	RuleIn[Drop[NDrop]] = true;
-	SwapRule(Drop[NDrop], NewNRules);
+	SwapRule(Context, Drop[NDrop], NewNRules);
 
 	/*  Have to alter rule number in Drop  */
 	ForEach(r, 0, NDrop-1)
@@ -1161,7 +1161,7 @@ int OrderByUtility(c50_context *Context)
 
 /*************************************************************************/
 /*									 */
-/*	Order rules by class and then by rule CF			 */
+/*	Order rules by class and then by rule Context->options.confidence_factor			 */
 /*									 */
 /*************************************************************************/
 
@@ -1177,10 +1177,10 @@ int OrderByClass(c50_context *Context)
 	while ( true )
 	{
 	    nr = 0;
-	    ForEach(r, NewNRules+1, NRules)
+	    ForEach(r, NewNRules+1, Context->rules.count)
 	    {
-		if ( RuleIn[r] && Rule[r]->Rhs == c &&
-		     ( ! nr || Rule[r]->Vote > Rule[nr]->Vote ) )
+		if ( RuleIn[r] && Context->rules.rules[r]->Rhs == c &&
+		     ( ! nr || Context->rules.rules[r]->Vote > Context->rules.rules[nr]->Vote ) )
 		{
 		    nr = r;
 		}
@@ -1191,7 +1191,7 @@ int OrderByClass(c50_context *Context)
 	    NewNRules++;
 	    if ( nr != NewNRules )
 	    {
-		SwapRule(NewNRules, nr);
+		SwapRule(Context, NewNRules, nr);
 	    }
 	}
     }
@@ -1204,7 +1204,7 @@ int OrderByClass(c50_context *Context)
 /*************************************************************************/
 /*									 */
 /*	Discard deleted rules and sequence and renumber those remaining. */
-/*	Sort by class and then by rule CF or by utility			 */
+/*	Sort by class and then by rule Context->options.confidence_factor or by utility			 */
 /*									 */
 /*************************************************************************/
 
@@ -1214,21 +1214,21 @@ void OrderRules(c50_context *Context)
 {
     RuleNo	r, NewNRules;
 
-    NewNRules = ( UTILITY ? OrderByUtility(Context) : OrderByClass(Context) );
+    NewNRules = ( Context->options.utility_bands ? OrderByUtility(Context) : OrderByClass(Context) );
 
     ForEach(r, 1, NewNRules)
     {
-	Rule[r]->RNo = r;
+	Context->rules.rules[r]->RNo = r;
     }
 
     /*  Free discarded rules  */
 
-    ForEach(r, NewNRules+1, NRules)
+    ForEach(r, NewNRules+1, Context->rules.count)
     {
-	FreeRule(Rule[r]);
+	FreeRule(Context->rules.rules[r]);
     }
 
-    NRules = NewNRules;
+    Context->rules.count = NewNRules;
 }
 
 
@@ -1270,11 +1270,11 @@ void GenerateLogs(int MaxN)
 
 
 
-void FreeSiftRuleData()
+void FreeSiftRuleData(c50_context *Context)
 /*   ----------------  */
 {
     FreeUnlessNil(List);				List = Nil;
-    FreeVector((void **) Fires, 1, RuleSpace-1);	Fires = Nil;
+    FreeVector((void **) Fires, 1, Context->rules.capacity-1);	Fires = Nil;
     FreeUnlessNil(CBuffer);				CBuffer = Nil;
     FreeUnlessNil(Covered);				Covered = Nil;
     FreeUnlessNil(RuleIn);				RuleIn = Nil;

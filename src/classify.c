@@ -56,7 +56,7 @@ ClassNo TreeClassify(c50_context *Context, DataRec Case, Tree DecisionTree)
 
     FindLeaf(Context, Case, DecisionTree, Nil, 1.0);
 
-    return SelectClass(Context, 1, (Boolean)(MCost != Nil));
+    return SelectClass(Context, 1, (Boolean)(Context->costs.matrix != Nil));
 }
 
 
@@ -257,7 +257,7 @@ ClassNo RuleClassify(c50_context *Context, DataRec Case, CRuleSet RS)
 
     /*  Must sort rules if using utility bands  */
 
-    if ( UtilBand )
+    if ( Context->evaluation.utility_bands )
     {
 	SortActive(Context);
     }
@@ -276,7 +276,7 @@ ClassNo RuleClassify(c50_context *Context, DataRec Case, CRuleSet RS)
 		Tested[R->Lhs[d]->Tested] = true;	/* for usage */
 	    }
 	}
-	if ( UtilBand )
+	if ( Context->evaluation.utility_bands )
 	{
 	    CheckUtilityBand(Context, &u, r, Class(Case), RS->SDefault);
 	}
@@ -297,7 +297,7 @@ ClassNo RuleClassify(c50_context *Context, DataRec Case, CRuleSet RS)
 
     /*  Flush any remaining utility bands  */
 
-    if ( UtilBand )
+    if ( Context->evaluation.utility_bands )
     {
 	CheckUtilityBand(Context, &u, RS->SNRules+1, Class(Case),
 			 RS->SDefault);
@@ -521,13 +521,13 @@ void CheckUtilityBand(c50_context *Context, int *u, RuleNo r,
 {
     ClassNo	c;
 
-    while ( *u < UTILITY && r > UtilBand[*u] )
+    while ( *u < Context->options.utility_bands && r > Context->evaluation.utility_bands[*u] )
     {
 	c = SelectClass(Context, Default, false);
 	if ( c != Actual )
 	{
-	    UtilErr[*u]++;
-	    if ( MCost ) UtilCost[*u] += MCost[c][Actual];
+	    Context->evaluation.utility_errors[*u]++;
+	    if ( Context->costs.matrix ) Context->evaluation.utility_costs[*u] += Context->costs.matrix[c][Actual];
 	}
 
 	(*u)++;
@@ -565,8 +565,8 @@ ClassNo BoostClassify(c50_context *Context, DataRec Case, int MaxTrial)
 
     ForEach(t, 0, MaxTrial)
     {
-	Best = ( RULES ? RuleClassify(Context, Case, RuleSet[t]) :
-		 TreeClassify(Context, Case, Pruned[t]) );
+	Best = ( Context->options.rules ? RuleClassify(Context, Case, Context->rules.sets[t]) :
+		 TreeClassify(Context, Case, Context->trees.pruned[t]) );
 
 	Context->votes[Best] += Context->confidence;
 	Total += Context->confidence;
@@ -610,7 +610,7 @@ ClassNo SelectClass(c50_context *Context, ClassNo Default, Boolean UseCosts)
 	    ForEach(cc, 1, Context->schema.max_class)
 	    {
 		if ( cc == c ) continue;
-		ExpCost += Context->class_sum[cc] * MCost[c][cc];
+		ExpCost += Context->class_sum[cc] * Context->costs.matrix[c][cc];
 	    }
 
 	    TotCost += ExpCost;
@@ -650,9 +650,9 @@ ClassNo Classify(c50_context *Context, DataRec Case)
 /*      --------  */
 {
 
-    return ( TRIALS > 1 ? BoostClassify(Context, Case, TRIALS-1) :
-	     RULES ?	  RuleClassify(Context, Case, RuleSet[0]) :
-		  TreeClassify(Context, Case, Pruned[0]) );
+    return ( Context->options.trials > 1 ? BoostClassify(Context, Case, Context->options.trials-1) :
+	     Context->options.rules ?	  RuleClassify(Context, Case, Context->rules.sets[0]) :
+		  TreeClassify(Context, Case, Context->trees.pruned[0]) );
 }
 
 
@@ -685,21 +685,23 @@ float Interpolate(Tree T, ContValue Val)
 /*************************************************************************/
 
 
-void FreeClassifier(int Trial)
+void FreeClassifier(c50_context *Context, int trial)
 /*   --------------  */
 {
-    if ( Raw )
+    if ( Context->trees.raw )
     {
-	FreeTree(Raw[Trial]);				Raw[Trial] = Nil;
+	FreeTree(Context->trees.raw[trial]);
+	Context->trees.raw[trial] = Nil;
     }
 
-    if ( Pruned )
+    if ( Context->trees.pruned )
     {
-	FreeTree(Pruned[Trial]);			Pruned[Trial] = Nil;
+	FreeTree(Context->trees.pruned[trial]);
+	Context->trees.pruned[trial] = Nil;
     }
 
-    if ( RULES && RuleSet && RuleSet[Trial] )
+    if ( Context->options.rules && Context->rules.sets && Context->rules.sets[trial] )
     {
-	FreeRules(RuleSet[Trial]);			RuleSet[Trial] = Nil;
+	FreeRules(Context->rules.sets[trial]);			Context->rules.sets[trial] = Nil;
     }
 }

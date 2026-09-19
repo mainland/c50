@@ -30,8 +30,8 @@ int main(int argc, char **argv)
 
     Of = stderr;
     FileStem = argv[1];
-    RULES = ! strcmp(argv[2], "rules");
-    Extension = ( RULES ? ".rules" : ".tree" );
+    Context->options.rules = ! strcmp(argv[2], "rules");
+    Extension = ( Context->options.rules ? ".rules" : ".tree" );
 
     if ( ! (F = GetFile(".names", "r")) ) Error(NOFILE, "", "");
     c50_input_init_file(&NamesInput, F);
@@ -42,31 +42,31 @@ int main(int argc, char **argv)
     Context->cases.some_not_applicable = AllocZero(Context->schema.max_attribute+1, Boolean);
 
     CheckFile(Context, Extension, false);
-    MaxTree = TRIALS-1;
+    Context->trees.max_tree = Context->options.trials-1;
 
-    if ( RULES )
+    if ( Context->options.rules )
     {
-        RuleSet = AllocZero(TRIALS+1, CRuleSet);
-        ForEach(Trial, 0, TRIALS-1)
+        Context->rules.sets = AllocZero(Context->options.trials+1, CRuleSet);
+        ForEach(Context->trees.trial, 0, Context->options.trials-1)
         {
-            RuleSet[Trial] = GetRules(Context, Extension);
+            Context->rules.sets[Context->trees.trial] = GetRules(Context, Extension);
         }
         Context->most_specific_rules = Alloc(Context->schema.max_class+1, CRule);
     }
     else
     {
-        Pruned = AllocZero(TRIALS+1, Tree);
-        ForEach(Trial, 0, TRIALS-1)
+        Context->trees.pruned = AllocZero(Context->options.trials+1, Tree);
+        ForEach(Context->trees.trial, 0, Context->options.trials-1)
         {
-            Pruned[Trial] = GetTree(Context, Extension);
+            Context->trees.pruned[Context->trees.trial] = GetTree(Context, Extension);
         }
     }
 
     Context->default_class =
-        ( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
+        ( Context->options.rules ? Context->rules.sets[0]->SDefault : Context->trees.pruned[0]->Leaf );
     Context->class_sum = AllocZero(Context->schema.max_class+1, float);
     Context->votes = AllocZero(Context->schema.max_class+1, float);
-    Context->trial_predictions = AllocZero(TRIALS, ClassNo);
+    Context->trial_predictions = AllocZero(Context->options.trials, ClassNo);
 
     if ( ! (F = GetFile(".test", "r")) ) Error(NOFILE, "", "");
     GetData(Context, F, false, false);

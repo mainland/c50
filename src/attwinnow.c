@@ -244,41 +244,41 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
     /*  Build and prune trial tree  */
 
     SaveMaxCase   = Context->cases.max_case;
-    SaveVERBOSITY = VERBOSITY;
-    SaveMINITEMS  = MINITEMS;
-    MINITEMS      = Max(MINITEMS / 2, 2.0);
+    SaveVERBOSITY = Context->options.verbosity;
+    SaveMINITEMS  = Context->options.minimum_cases;
+    Context->options.minimum_cases      = Max(Context->options.minimum_cases / 2, 2.0);
 
     Cut = (Context->cases.max_case+1) / 2 - 1;
 
     InitialiseWeights(Context);
-    LEAFRATIO = 0;
-    VERBOSITY = 0;
+    Context->options.leaf_ratio = 0;
+    Context->options.verbosity = 0;
     Context->cases.max_case   = Cut;
 
     memset(Tested, 0, Context->schema.max_attribute+1);		/* reset tested attributes */
 
     SetMinGainThresh(Context);
-    FormTree(Context, 0, Cut, 0, &WTree);
+    FormTree(Context, 0, Cut, 0, &Context->trees.winnow);
 
     if ( FirstTime )
     {
 	/*  Find attributes used in unpruned tree  */
 
-	ScanTree(WTree, Split);
+	ScanTree(Context->trees.winnow, Split);
     }
 
-    Prune(Context, WTree);
+    Prune(Context, Context->trees.winnow);
 
-    VERBOSITY = SaveVERBOSITY;
+    Context->options.verbosity = SaveVERBOSITY;
     Context->cases.max_case   = SaveMaxCase;
-    MINITEMS  = SaveMINITEMS;
+    Context->options.minimum_cases  = SaveMINITEMS;
 
     Verbosity(2,
-	PrintTree(Context, WTree, "Winnowing tree:");
+	PrintTree(Context, Context->trees.winnow, "Winnowing tree:");
 	fprintf(Of, "\n  training error cost %g\n",
-		ErrCost(Context, WTree, 0, Cut)))
+		ErrCost(Context, Context->trees.winnow, 0, Cut)))
 
-    Base = ErrCost(Context, WTree, Cut+1, Context->cases.max_case);
+    Base = ErrCost(Context, Context->trees.winnow, Cut+1, Context->cases.max_case);
 
     Verbosity(1,
 	fprintf(Of, "  initial error cost %g\n", Base))
@@ -287,7 +287,7 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
     {
 	/*  Check each attribute used in pruned tree  */
 
-	ScanTree(WTree, Used);
+	ScanTree(Context->trees.winnow, Used);
 
 	ForEach(Att, 1, Context->schema.max_attribute)
 	{
@@ -312,7 +312,7 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 
 	    Context->schema.special_status[Att] ^= SKIP;
 
-	    Cost = ErrCost(Context, WTree, Cut+1, Context->cases.max_case);
+	    Cost = ErrCost(Context, Context->trees.winnow, Cut+1, Context->cases.max_case);
 
 	    AttImp[Att] = ( Cost < Base ? -1 : Cost / Base );
 	    Verbosity(1,
@@ -324,9 +324,9 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 	}
     }
 
-    if ( WTree )
+    if ( Context->trees.winnow )
     {
-	FreeTree(WTree);				WTree = Nil;
+	FreeTree(Context->trees.winnow);				Context->trees.winnow = Nil;
     }
 
     return Base;
@@ -348,13 +348,13 @@ float ErrCost(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
     float	ErrCost=0;
     ClassNo	Pred;
 
-    if ( MCost )
+    if ( Context->costs.matrix )
     {
 	ForEach(i, Fp, Lp)
 	{
 	    if ( (Pred = TreeClassify(Context, Context->cases.records[i], T)) != Class(Context->cases.records[i]) )
 	    {
-		ErrCost += MCost[Pred][Class(Context->cases.records[i])];
+		ErrCost += Context->costs.matrix[Pred][Class(Context->cases.records[i])];
 	    }
 	}
     }

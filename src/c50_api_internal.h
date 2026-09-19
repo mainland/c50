@@ -19,6 +19,8 @@ struct _datablockrec;
 union _attribute_value;
 struct _def_elt;
 struct _rulerec;
+struct _rulesetrec;
+struct _treerec;
 
 #ifdef USEDOUBLE
 typedef double c50_continuous_value;
@@ -55,6 +57,65 @@ typedef struct
     unsigned char *some_not_applicable;
 } c50_case_state;
 
+typedef struct
+{
+    struct _treerec **raw;
+    struct _treerec **pruned;
+    struct _treerec *winnow;
+    int trial;
+    int max_tree;
+} c50_tree_state;
+
+typedef struct
+{
+    struct _rulerec **rules;
+    struct _rulesetrec **sets;
+    int count;
+    int capacity;
+} c50_rule_state;
+
+typedef struct
+{
+    float **matrix;
+    float **normalized_matrix;
+    float *weight_multipliers;
+    unsigned char unit_weights;
+    unsigned char weighted;
+} c50_cost_state;
+
+typedef struct
+{
+    double *class_frequencies;
+    float *boost_vote_block;
+} c50_training_state;
+
+typedef struct
+{
+    int *utility_errors;
+    int *utility_bands;
+    double *utility_costs;
+} c50_evaluation_state;
+
+typedef struct
+{
+    int verbosity;
+    int trials;
+    int folds;
+    int utility_bands;
+    unsigned char subset_splits;
+    unsigned char boosting;
+    unsigned char probabilistic_thresholds;
+    unsigned char rules;
+    unsigned char cross_validation;
+    unsigned char ignore_costs;
+    unsigned char winnow;
+    unsigned char global_pruning;
+    float minimum_cases;
+    float leaf_ratio;
+    float confidence_factor;
+    float sample_fraction;
+} c50_options_state;
+
 struct c50_context
 {
     c50_status status;
@@ -66,6 +127,12 @@ struct c50_context
     int max_label;
     c50_schema_state schema;
     c50_case_state cases;
+    c50_tree_state trees;
+    c50_rule_state rules;
+    c50_cost_state costs;
+    c50_training_state training;
+    c50_evaluation_state evaluation;
+    c50_options_state options;
     double average_case_weight;
     char *ignored_values;
     int ignored_values_size;

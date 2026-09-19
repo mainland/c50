@@ -43,6 +43,12 @@ c50_status c50_context_create(c50_context **out_context)
     context->status = C50_STATUS_OK;
     context->schema.max_discrete_value = 3;
     context->cases.max_case = -1;
+    context->costs.unit_weights = 1;
+    context->options.trials = 1;
+    context->options.folds = 10;
+    context->options.global_pruning = 1;
+    context->options.minimum_cases = 2;
+    context->options.confidence_factor = 0.25f;
     *out_context = context;
     return C50_STATUS_OK;
 }

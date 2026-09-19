@@ -57,12 +57,20 @@ int main(void)
         "entries=\"1\"\n"
         "type=\"0\" class=\"third\" freq=\"0,0,4\"\n";
     static const char cases_b[] = "2, ?\n";
+    static const char tree_cost[] =
+        "id=\"See5/C5.0 2.07 GPL Edition 2026-09-19\"\n"
+        "costs=\"1\"\n"
+        "entries=\"1\"\n"
+        "type=\"0\" class=\"low\" freq=\"6,4\"\n";
+    static const char costs[] = "low, high: 5\n";
     static const char malformed_cases[] = "1";
     c50_context *context_a = NULL;
     c50_context *context_b = NULL;
+    c50_context *context_cost = NULL;
     c50_context *temporary_context = NULL;
     c50_model *model_a = NULL;
     c50_model *model_b = NULL;
+    c50_model *model_cost = NULL;
     c50_predictions *predictions = NULL;
     c50_status status;
     int iteration;
@@ -70,6 +78,7 @@ int main(void)
 
     REQUIRE(c50_context_create(&context_a) == C50_STATUS_OK);
     REQUIRE(c50_context_create(&context_b) == C50_STATUS_OK);
+    REQUIRE(c50_context_create(&context_cost) == C50_STATUS_OK);
 
     status = c50_model_load(context_a, C50_MODEL_TREE,
                             names_a, sizeof(names_a) - 1,
@@ -81,7 +90,18 @@ int main(void)
                             tree_b, sizeof(tree_b) - 1,
                             NULL, 0, &model_b);
     REQUIRE(status == C50_STATUS_OK && model_b);
+    status = c50_model_load(context_cost, C50_MODEL_TREE,
+                            names_a, sizeof(names_a) - 1,
+                            tree_cost, sizeof(tree_cost) - 1,
+                            costs, sizeof(costs) - 1, &model_cost);
+    REQUIRE(status == C50_STATUS_OK && model_cost);
 
+    REQUIRE(CheckPrediction(context_a, model_a,
+                            cases_a, sizeof(cases_a) - 1,
+                            2, 0, "low"));
+    REQUIRE(CheckPrediction(context_cost, model_cost,
+                            cases_a, sizeof(cases_a) - 1,
+                            2, 1, "high"));
     REQUIRE(CheckPrediction(context_a, model_a,
                             cases_a, sizeof(cases_a) - 1,
                             2, 0, "low"));
@@ -131,10 +151,12 @@ int main(void)
 
 cleanup:
     c50_predictions_destroy(predictions);
+    c50_model_destroy(model_cost);
     c50_model_destroy(model_b);
     c50_model_destroy(model_a);
     c50_context_destroy(temporary_context);
     c50_context_destroy(context_b);
+    c50_context_destroy(context_cost);
     c50_context_destroy(context_a);
     return result;
 }

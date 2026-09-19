@@ -142,10 +142,10 @@ static void ParseModel(c50_context *context, const c50_model *model)
     Of = NULL;
     FileStem = "memory";
     snprintf(Fn, sizeof(Fn), "%s", "memory.model");
-    RULES = model->kind == C50_MODEL_RULES;
-    TRIALS = 1;
-    MaxTree = -1;
-    SAMPLE = 0;
+    context->options.rules = model->kind == C50_MODEL_RULES;
+    context->options.trials = 1;
+    context->trees.max_tree = -1;
+    context->options.sample_fraction = 0;
 
     c50_input_init_memory(&names_input, model->names_data, model->names_size);
     GetNames(context, &names_input);
@@ -158,28 +158,28 @@ static void ParseModel(c50_context *context, const c50_model *model)
         costs = &costs_input;
     }
     ReadHeaderMemory(context, &model_input, costs);
-    if ( TRIALS < 1 )
+    if ( context->options.trials < 1 )
     {
         c50_record_error(C50_STATUS_PARSE_ERROR,
                          "model contains no classifier entries");
         C50Exit(1);
     }
 
-    MaxTree = TRIALS - 1;
-    if ( RULES )
+    context->trees.max_tree = context->options.trials - 1;
+    if ( context->options.rules )
     {
-        RuleSet = AllocZero(TRIALS + 1, CRuleSet);
-        ForEach(Trial, 0, TRIALS - 1)
+        context->rules.sets = AllocZero(context->options.trials + 1, CRuleSet);
+        ForEach(context->trees.trial, 0, context->options.trials - 1)
         {
-            InRulesAt(context, &model_input, &RuleSet[Trial]);
+            InRulesAt(context, &model_input, &context->rules.sets[context->trees.trial]);
         }
     }
     else
     {
-        Pruned = AllocZero(TRIALS + 1, Tree);
-        ForEach(Trial, 0, TRIALS - 1)
+        context->trees.pruned = AllocZero(context->options.trials + 1, Tree);
+        ForEach(context->trees.trial, 0, context->options.trials - 1)
         {
-            InTreeAt(context, &model_input, &Pruned[Trial]);
+            InTreeAt(context, &model_input, &context->trees.pruned[context->trees.trial]);
         }
     }
 }
@@ -276,12 +276,12 @@ static void PredictModel(c50_context *context, void *user_data)
 
     context->cases.some_missing = AllocZero(context->schema.max_attribute + 1, Boolean);
     context->cases.some_not_applicable = AllocZero(context->schema.max_attribute + 1, Boolean);
-    if ( RULES ) context->most_specific_rules = Alloc(context->schema.max_class + 1, CRule);
+    if ( context->options.rules ) context->most_specific_rules = Alloc(context->schema.max_class + 1, CRule);
     context->default_class =
-        ( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
+        ( context->options.rules ? context->rules.sets[0]->SDefault : context->trees.pruned[0]->Leaf );
     context->class_sum = AllocZero(context->schema.max_class + 1, float);
     context->votes = AllocZero(context->schema.max_class + 1, float);
-    context->trial_predictions = AllocZero(TRIALS, ClassNo);
+    context->trial_predictions = AllocZero(context->options.trials, ClassNo);
 
     c50_input_init_memory(&cases_input, state->cases_data, state->cases_size);
     GetDataInput(context, &cases_input, false, true);

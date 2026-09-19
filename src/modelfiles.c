@@ -144,19 +144,19 @@ void WriteFilePrefix(c50_context *Context, String Extension)
 	    now->tm_mon / 10, now->tm_mon % 10,
 	    now->tm_mday / 10, now->tm_mday % 10);
 
-    if ( MCost )
+    if ( Context->costs.matrix )
     {
 	fprintf(TRf, "costs=\"1\"\n");
     }
 
-    if ( SAMPLE > 0 )
+    if ( Context->options.sample_fraction > 0 )
     {
-	fprintf(TRf, "sample=\"%g\" init=\"%d\"\n", SAMPLE, KRInit);
+	fprintf(TRf, "sample=\"%g\" init=\"%d\"\n", Context->options.sample_fraction, KRInit);
     }
 
     SaveDiscreteNames(Context);
 
-    fprintf(TRf, "entries=\"%d\"\n", TRIALS);
+    fprintf(TRf, "entries=\"%d\"\n", Context->options.trials);
 }
 
 
@@ -174,8 +174,8 @@ void ReadFilePrefix(c50_context *Context, String Extension)
     if ( ! (TRf = GetFile(Extension, "r")) ) Error(NOFILE, Fn, "");
 
     c50_input_init_file(&Context->classifier_input, TRf);
-    StreamIn(&Context->classifier_input, (char *) &TRIALS, sizeof(int));
-    if ( memcmp((char *) &TRIALS, "id=", 3) != 0 )
+    StreamIn(&Context->classifier_input, (char *) &Context->options.trials, sizeof(int));
+    if ( memcmp((char *) &Context->options.trials, "id=", 3) != 0 )
     {
 	printf("\nCannot read old format classifiers\n");
 	C50Exit(1);
@@ -472,7 +472,7 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 		}
 		break;
 	    case SAMPLEP:
-		sscanf(Context->property_value, "\"%f\"", &SAMPLE);
+		sscanf(Context->property_value, "\"%f\"", &Context->options.sample_fraction);
 		break;
 
 	    case INITP:
@@ -508,7 +508,7 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 		break;
 
 	    case ENTRIESP:
-		sscanf(Context->property_value, "\"%d\"", &TRIALS);
+		sscanf(Context->property_value, "\"%d\"", &Context->options.trials);
 		Context->model_entry = 0;
 		return;
 	}

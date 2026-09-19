@@ -94,7 +94,7 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
     GEnv.ReasonableSubsets = 0;
     ForEach(c, 1, Context->schema.max_attribute_value[Att])
     {
-	if ( GEnv.ValFreq[c] >= MINITEMS ) GEnv.ReasonableSubsets++;
+	if ( GEnv.ValFreq[c] >= Context->options.minimum_cases ) GEnv.ReasonableSubsets++;
     }
 
     if ( ! GEnv.ReasonableSubsets )
@@ -214,7 +214,7 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 	    fprintf(Of, "\tprelim merges -> inf %.3f, gain %.3f, val %.3f%s%s",
 			PrevInfo, PrevGain, Val,
 		        ( Better ? " **" : "" ),
-			(VERBOSITY > 2 ? "" : "\n" ));
+			(Context->options.verbosity > 2 ? "" : "\n" ));
 	    Verbosity(3, PrintDistribution(Context, Att, 0, GEnv.Blocks, GEnv.Freq,
 					   GEnv.ValFreq, false))
 	})
@@ -266,8 +266,8 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 	    ForEach(V2, V1+1, GEnv.Blocks)
 	    {
 		if ( GEnv.ReasonableSubsets == 2 &&
-		     GEnv.ValFreq[V1] >= MINITEMS-Epsilon &&
-		     GEnv.ValFreq[V2] >= MINITEMS-Epsilon )
+		     GEnv.ValFreq[V1] >= Context->options.minimum_cases-Epsilon &&
+		     GEnv.ValFreq[V2] >= Context->options.minimum_cases-Epsilon )
 		{
 		    continue;
 		}
@@ -495,15 +495,15 @@ void AddBlock(c50_context *Context, DiscrValue V1, DiscrValue V2)
     ClassNo	c;
     int		b;
 
-    if ( GEnv.ValFreq[V1] >= MINITEMS-Epsilon &&
-	 GEnv.ValFreq[V2] >= MINITEMS-Epsilon )
+    if ( GEnv.ValFreq[V1] >= Context->options.minimum_cases-Epsilon &&
+	 GEnv.ValFreq[V2] >= Context->options.minimum_cases-Epsilon )
     {
 	GEnv.ReasonableSubsets--;
     }
     else
-    if ( GEnv.ValFreq[V1] < MINITEMS-Epsilon &&
-	 GEnv.ValFreq[V2] < MINITEMS-Epsilon &&
-	 GEnv.ValFreq[V1] + GEnv.ValFreq[V2] >= MINITEMS-Epsilon )
+    if ( GEnv.ValFreq[V1] < Context->options.minimum_cases-Epsilon &&
+	 GEnv.ValFreq[V2] < Context->options.minimum_cases-Epsilon &&
+	 GEnv.ValFreq[V1] + GEnv.ValFreq[V2] >= Context->options.minimum_cases-Epsilon )
     {
 	GEnv.ReasonableSubsets++;
     }

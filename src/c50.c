@@ -116,73 +116,73 @@ int main(int Argc, char *Argv[])
 		    fprintf(Of, T_OptApplication, FileStem);
 		    ArgOK = true;
 		    break;
-	case 'b':   BOOST = true;
+	case 'b':   Context->options.boosting = true;
 		    fprintf(Of, T_OptBoost);
-		    if ( TRIALS == 1 ) TRIALS = 10;
+		    if ( Context->options.trials == 1 ) Context->options.trials = 10;
 		    ArgOK = true;
 		    break;
-	case 'p':   PROBTHRESH = true;
+	case 'p':   Context->options.probabilistic_thresholds = true;
 		    fprintf(Of, T_OptProbThresh);
 		    ArgOK = true;
 		    break;
 #ifdef VerbOpt
-	case 'v':   SetIOpt(VERBOSITY);
-		    fprintf(Of, "\tVerbosity level %d\n", VERBOSITY);
+	case 'v':   SetIOpt(Context->options.verbosity);
+		    fprintf(Of, "\tVerbosity level %d\n", Context->options.verbosity);
 		    ArgOK = true;
 		    break;
 #endif
-	case 't':   SetIOpt(TRIALS);
-		    fprintf(Of, T_OptTrials, TRIALS);
-		    Check(TRIALS, 3, 1000);
-		    BOOST = true;
+	case 't':   SetIOpt(Context->options.trials);
+		    fprintf(Of, T_OptTrials, Context->options.trials);
+		    Check(Context->options.trials, 3, 1000);
+		    Context->options.boosting = true;
 		    break;
-	case 's':   SUBSET = true;
+	case 's':   Context->options.subset_splits = true;
 		    fprintf(Of, T_OptSubsets);
 		    ArgOK = true;
 		    break;
-	case 'm':   SetFOpt(MINITEMS);
-		    fprintf(Of, T_OptMinCases, MINITEMS);
-		    Check(MINITEMS, 1, 1000000);
+	case 'm':   SetFOpt(Context->options.minimum_cases);
+		    fprintf(Of, T_OptMinCases, Context->options.minimum_cases);
+		    Check(Context->options.minimum_cases, 1, 1000000);
 		    break;
-	case 'c':   SetFOpt(CF);
-		    fprintf(Of, T_OptCF, CF);
-		    Check(CF, 0, 100);
-		    CF /= 100;
+	case 'c':   SetFOpt(Context->options.confidence_factor);
+		    fprintf(Of, T_OptCF, Context->options.confidence_factor);
+		    Check(Context->options.confidence_factor, 0, 100);
+		    Context->options.confidence_factor /= 100;
 		    break;
-	case 'r':   RULES = true;
+	case 'r':   Context->options.rules = true;
 		    fprintf(Of, T_OptRules);
 		    ArgOK = true;
 		    break;
-	case 'S':   SetFOpt(SAMPLE);
-		    fprintf(Of, T_OptSampling, SAMPLE);
-		    Check(SAMPLE, 0.1, 99.9);
-		    SAMPLE /= 100;
+	case 'S':   SetFOpt(Context->options.sample_fraction);
+		    fprintf(Of, T_OptSampling, Context->options.sample_fraction);
+		    Check(Context->options.sample_fraction, 0.1, 99.9);
+		    Context->options.sample_fraction /= 100;
 		    break;
 	case 'I':   SetIOpt(KRInit);
 		    fprintf(Of, T_OptSeed, KRInit);
 		    KRInit = KRInit & 07777;
 		    break;
-	case 'u':   SetIOpt(UTILITY);
-		    fprintf(Of, T_OptUtility, UTILITY);
-		    Check(UTILITY, 2, 10000);
-		    RULES = true;
+	case 'u':   SetIOpt(Context->options.utility_bands);
+		    fprintf(Of, T_OptUtility, Context->options.utility_bands);
+		    Check(Context->options.utility_bands, 2, 10000);
+		    Context->options.rules = true;
 		    break;
-	case 'e':   NOCOSTS = true;
+	case 'e':   Context->options.ignore_costs = true;
 		    fprintf(Of, T_OptNoCosts);
 		    ArgOK = true;
 		    break;
-	case 'w':   WINNOW = true;
+	case 'w':   Context->options.winnow = true;
 		    fprintf(Of, T_OptWinnow);
 		    ArgOK = true;
 		    break;
-	case 'g':   GLOBAL = false;
+	case 'g':   Context->options.global_pruning = false;
 		    fprintf(Of, T_OptNoGlobal);
 		    ArgOK = true;
 		    break;
-	case 'X':   SetIOpt(FOLDS);
-		    fprintf(Of, T_OptXval, FOLDS);
-		    Check(FOLDS, 2, 1000);
-		    XVAL = true;
+	case 'X':   SetIOpt(Context->options.folds);
+		    fprintf(Of, T_OptXval, Context->options.folds);
+		    Check(Context->options.folds, 2, 1000);
+		    Context->options.cross_validation = true;
 		    break;
 	}
 
@@ -200,7 +200,7 @@ int main(int Argc, char *Argv[])
 	}
     }
 
-    if ( UTILITY && BOOST )
+    if ( Context->options.utility_bands && Context->options.boosting )
     {
 	fprintf(Of, T_UBWarn);
     }
@@ -233,7 +233,7 @@ int main(int Argc, char *Argv[])
     GetData(Context, F, true, false);
     fprintf(Of, TX_ReadData(Context->cases.max_case+1, Context->schema.max_attribute, FileStem));
 
-    if ( XVAL && (F = GetFile(".test", "r")) )
+    if ( Context->options.cross_validation && (F = GetFile(".test", "r")) )
     {
 	SaveMaxCase = Context->cases.max_case;
 	GetData(Context, F, false, false);
@@ -247,10 +247,10 @@ int main(int Argc, char *Argv[])
 	fprintf(Of, T_CWtAtt);
     }
 
-    if ( ! NOCOSTS && (F = GetFile(".costs", "r")) )
+    if ( ! Context->options.ignore_costs && (F = GetFile(".costs", "r")) )
     {
 	GetMCosts(Context, F);
-	if ( MCost )
+	if ( Context->costs.matrix )
 	{
 	    fprintf(Of, T_ReadCosts, FileStem);
 	}
@@ -275,25 +275,25 @@ int main(int Argc, char *Argv[])
 
     /*  Build decision trees  */
 
-    if ( ! BOOST )
+    if ( ! Context->options.boosting )
     {
-	TRIALS = 1;
+	Context->options.trials = 1;
     }
 
     InitialiseTreeData(Context);
-    if ( RULES )
+    if ( Context->options.rules )
     {
-	RuleSet = AllocZero(TRIALS+1, CRuleSet);
+	Context->rules.sets = AllocZero(Context->options.trials+1, CRuleSet);
     }
 
-    if ( WINNOW )
+    if ( Context->options.winnow )
     {
 	NotifyStage(WINNOWATTS);
 	Progress(-Context->schema.max_attribute);
 	WinnowAtts(Context);
     }
 
-    if ( XVAL )
+    if ( Context->options.cross_validation )
     {
 	CrossVal(Context);
     }
@@ -306,11 +306,11 @@ int main(int Argc, char *Argv[])
 	fprintf(Of, T_EvalTrain, Context->cases.max_case+1);
 
 	NotifyStage(EVALTRAIN);
-	Progress(-TRIALS * (Context->cases.max_case+1.0));
+	Progress(-Context->options.trials * (Context->cases.max_case+1.0));
 
 	Evaluate(Context, CMINFO | USAGEINFO);
 
-	if ( (F = GetFile(( SAMPLE ? ".data" : ".test" ), "r")) )
+	if ( (F = GetFile(( Context->options.sample_fraction ? ".data" : ".test" ), "r")) )
 	{
 	    NotifyStage(READTEST);
 	    fprintf(Of, "\n");
@@ -321,7 +321,7 @@ int main(int Argc, char *Argv[])
 	    fprintf(Of, T_EvalTest, Context->cases.max_case+1);
 
 	    NotifyStage(EVALTEST);
-	    Progress(-TRIALS * (Context->cases.max_case+1.0));
+	    Progress(-Context->options.trials * (Context->cases.max_case+1.0));
 
 	    Evaluate(Context, CMINFO);
 	}

@@ -69,7 +69,7 @@
 
 #ifdef	VerbOpt
 #include <assert.h>
-#define	Verbosity(d,s)		if(VERBOSITY >= d) {s;}
+#define	Verbosity(d,s)		if(Context->options.verbosity >= d) {s;}
 #else
 #define	 assert(x)
 #define Verbosity(d,s)
@@ -143,7 +143,7 @@
 #define	 ForEach(v,f,l)		for(v=f ; v<=l ; ++v)
 
 #define	 CountCases(Context,f,l) \
-	(UnitWeights ? (l-(f)+1.0) : SumWeights(Context,f,l))
+	(Context->costs.unit_weights ? (l-(f)+1.0) : SumWeights(Context,f,l))
 
 #define	 StatBit(a,b)		(Context->schema.special_status[a]&(b))
 #define	 Exclude(a)		StatBit(a,EXCLUDE)
@@ -458,7 +458,7 @@ typedef struct _rulesetrec
 	/* c50.c */
 
 int	    main(int, char *[]);
-void	    FreeClassifier(int Trial);
+void	    FreeClassifier(c50_context *Context, int trial);
 
 	/* construct.c */
 
@@ -619,12 +619,13 @@ void	    GlobalPrune(c50_context *Context, Tree T);
 void	    FindMinCC(Tree T);
 void	    InsertParents(c50_context *Context, Tree T, Tree P);
 void	    CheckSubsets(c50_context *Context, Tree T, Boolean);
-void	    InitialiseExtraErrs(void);
-float	    ExtraErrs(CaseCount N, CaseCount E, ClassNo C);
-float	    RawExtraErrs(CaseCount N, CaseCount E);
+void	    InitialiseExtraErrs(c50_context *Context);
+float	    ExtraErrs(c50_context *Context, CaseCount N, CaseCount E,
+		      ClassNo C);
+float	    RawExtraErrs(c50_context *Context, CaseCount N, CaseCount E);
 void	    RestoreDistribs(c50_context *Context, Tree T);
 void	    CompressBranches(c50_context *Context, Tree T);
-void	    SetGlobalUnitWeights(int LocalFlag);
+void	    SetGlobalUnitWeights(c50_context *Context, int LocalFlag);
 
 	/* p-thresh.c */
 
@@ -782,12 +783,12 @@ void	    UpdateDeltaErrs(c50_context *Context, CaseNo i, double Delta,
 CaseCount   CalculateDeltaErrs(c50_context *Context);
 void	    PruneSubsets(c50_context *Context);
 void	    SetDefaultClass(c50_context *Context);
-void	    SwapRule(RuleNo A, RuleNo B);
+void	    SwapRule(c50_context *Context, RuleNo A, RuleNo B);
 int	    OrderByUtility(c50_context *Context);
 int	    OrderByClass(c50_context *Context);
 void	    OrderRules(c50_context *Context);
 void	    GenerateLogs(int MaxN);
-void	    FreeSiftRuleData(void);
+void	    FreeSiftRuleData(c50_context *Context);
 
 	/* ruletree.c */
 
@@ -838,5 +839,5 @@ void	    Progress(float);
 void	    CrossVal(c50_context *Context);
 void	    Prepare(c50_context *Context);
 void	    Shuffle(c50_context *Context, int *Vec);
-void	    Summary(void);
+void	    Summary(c50_context *Context);
 float	    SE(float sum, float sumsq, int no);
