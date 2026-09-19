@@ -21,6 +21,16 @@ struct c50_model
     size_t costs_size;
 };
 
+struct c50_predictions
+{
+    size_t row_count;
+    size_t class_count;
+    char **class_names;
+    size_t *class_indices;
+    double *confidences;
+    double *scores;
+};
+
 typedef struct c50_model_load_state
 {
     c50_context *context;
@@ -33,6 +43,15 @@ typedef struct c50_model_load_state
     size_t costs_size;
     c50_model *model;
 } c50_model_load_state;
+
+typedef struct c50_predict_state
+{
+    c50_context *context;
+    const c50_model *model;
+    const char *cases_data;
+    size_t cases_size;
+    c50_predictions *predictions;
+} c50_predict_state;
 
 static char *CopyInput(const char *data, size_t size)
 {
@@ -59,36 +78,85 @@ c50_model_kind c50_model_get_kind(const c50_model *model)
     return model ? model->kind : C50_MODEL_TREE;
 }
 
-static void LoadModel(void *user_data)
+void c50_predictions_destroy(c50_predictions *predictions)
 {
-    c50_model_load_state *state = user_data;
-    c50_input names_input, model_input, costs_input, *costs = NULL;
+    size_t class_index;
 
-    state->model = AllocZero(1, c50_model);
-    state->model->kind = state->kind;
-    state->model->names_size = state->names_size;
-    state->model->names_data = CopyInput(state->names_data, state->names_size);
-    state->model->model_size = state->model_size;
-    state->model->model_data = CopyInput(state->model_data, state->model_size);
-    state->model->costs_size = state->costs_size;
-    state->model->costs_data = CopyInput(state->costs_data, state->costs_size);
+    if ( ! predictions ) return;
+    if ( predictions->class_names )
+    {
+        for ( class_index = 0; class_index < predictions->class_count;
+              class_index++ )
+        {
+            free(predictions->class_names[class_index]);
+        }
+    }
+    free(predictions->class_names);
+    free(predictions->class_indices);
+    free(predictions->confidences);
+    free(predictions->scores);
+    free(predictions);
+}
+
+size_t c50_predictions_row_count(const c50_predictions *predictions)
+{
+    return predictions ? predictions->row_count : 0;
+}
+
+size_t c50_predictions_class_count(const c50_predictions *predictions)
+{
+    return predictions ? predictions->class_count : 0;
+}
+
+const char *c50_predictions_class_name(const c50_predictions *predictions,
+                                       size_t class_index)
+{
+    if ( ! predictions || class_index >= predictions->class_count ) return NULL;
+    return predictions->class_names[class_index];
+}
+
+size_t c50_predictions_class_index(const c50_predictions *predictions,
+                                   size_t row)
+{
+    if ( ! predictions || row >= predictions->row_count ) return (size_t) -1;
+    return predictions->class_indices[row];
+}
+
+double c50_predictions_confidence(const c50_predictions *predictions,
+                                  size_t row)
+{
+    if ( ! predictions || row >= predictions->row_count ) return 0;
+    return predictions->confidences[row];
+}
+
+double c50_predictions_score(const c50_predictions *predictions,
+                             size_t row, size_t class_index)
+{
+    if ( ! predictions || row >= predictions->row_count ||
+         class_index >= predictions->class_count ) return 0;
+    return predictions->scores[row * predictions->class_count + class_index];
+}
+
+static void ParseModel(const c50_model *model)
+{
+    c50_input names_input, model_input, costs_input, *costs = NULL;
 
     Of = NULL;
     FileStem = "memory";
     snprintf(Fn, sizeof(Fn), "%s", "memory.model");
-    RULES = state->kind == C50_MODEL_RULES;
+    RULES = model->kind == C50_MODEL_RULES;
     TRIALS = 1;
     MaxTree = -1;
     SAMPLE = 0;
 
-    c50_input_init_memory(&names_input, state->names_data, state->names_size);
+    c50_input_init_memory(&names_input, model->names_data, model->names_size);
     GetNames(&names_input);
 
-    c50_input_init_memory(&model_input, state->model_data, state->model_size);
-    if ( state->costs_size )
+    c50_input_init_memory(&model_input, model->model_data, model->model_size);
+    if ( model->costs_size )
     {
-        c50_input_init_memory(&costs_input, state->costs_data,
-                              state->costs_size);
+        c50_input_init_memory(&costs_input, model->costs_data,
+                              model->costs_size);
         costs = &costs_input;
     }
     ReadHeaderMemory(&model_input, costs);
@@ -116,6 +184,22 @@ static void LoadModel(void *user_data)
             InTreeAt(&model_input, &Pruned[Trial]);
         }
     }
+}
+
+static void LoadModel(void *user_data)
+{
+    c50_model_load_state *state = user_data;
+
+    state->model = AllocZero(1, c50_model);
+    state->model->kind = state->kind;
+    state->model->names_size = state->names_size;
+    state->model->names_data = CopyInput(state->names_data, state->names_size);
+    state->model->model_size = state->model_size;
+    state->model->model_data = CopyInput(state->model_data, state->model_size);
+    state->model->costs_size = state->costs_size;
+    state->model->costs_data = CopyInput(state->costs_data, state->costs_size);
+
+    ParseModel(state->model);
 }
 
 static void CleanupModelLoad(void *user_data)
@@ -180,5 +264,108 @@ c50_status c50_model_load(c50_context *context, c50_model_kind kind,
 
     status = c50_run_operation(context, LoadModel, CleanupModelLoad, &state);
     if ( status == C50_STATUS_OK ) *out_model = state.model;
+    return status;
+}
+
+static void PredictModel(void *user_data)
+{
+    c50_predict_state *state = user_data;
+    c50_input cases_input;
+    c50_predictions *predictions;
+    CaseNo row;
+    ClassNo class_number, predicted;
+
+    ParseModel(state->model);
+
+    SomeMiss = AllocZero(MaxAtt + 1, Boolean);
+    SomeNA = AllocZero(MaxAtt + 1, Boolean);
+    if ( RULES ) MostSpec = Alloc(MaxClass + 1, CRule);
+    Default = ( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
+    ClassSum = AllocZero(MaxClass + 1, float);
+    Vote = AllocZero(MaxClass + 1, float);
+    TrialPred = AllocZero(TRIALS, ClassNo);
+
+    c50_input_init_memory(&cases_input, state->cases_data, state->cases_size);
+    GetDataInput(&cases_input, false, true);
+
+    predictions = AllocZero(1, c50_predictions);
+    state->predictions = predictions;
+    predictions->class_count = MaxClass;
+    predictions->class_names = AllocZero(MaxClass, char *);
+    ForEach(class_number, 1, MaxClass)
+    {
+        predictions->class_names[class_number - 1] =
+            CopyInput(ClassName[class_number], strlen(ClassName[class_number]) + 1);
+    }
+
+    predictions->row_count = MaxCase + 1;
+    if ( predictions->row_count )
+    {
+        predictions->class_indices =
+            AllocZero(predictions->row_count, size_t);
+        predictions->confidences =
+            AllocZero(predictions->row_count, double);
+        predictions->scores =
+            AllocZero(predictions->row_count * predictions->class_count, double);
+    }
+
+    ForEach(row, 0, MaxCase)
+    {
+        predicted = Classify(Case[row]);
+        predictions->class_indices[row] = predicted - 1;
+        predictions->confidences[row] = Confidence;
+        ForEach(class_number, 1, MaxClass)
+        {
+            predictions->scores[
+                row * predictions->class_count + class_number - 1] =
+                ClassSum[class_number];
+        }
+    }
+}
+
+static void CleanupPrediction(void *user_data)
+{
+    c50_predict_state *state = user_data;
+
+    Cleanup();
+    Of = NULL;
+    if ( c50_context_last_status(state->context) != C50_STATUS_OK )
+    {
+        c50_predictions_destroy(state->predictions);
+        state->predictions = NULL;
+    }
+}
+
+c50_status c50_model_predict(c50_context *context, const c50_model *model,
+                             const char *cases_data, size_t cases_size,
+                             c50_predictions **out_predictions)
+{
+    c50_predict_state state;
+    c50_status status;
+
+    if ( out_predictions ) *out_predictions = NULL;
+    if ( ! context ) return C50_STATUS_INVALID_ARGUMENT;
+    if ( ! out_predictions )
+    {
+        return InvalidArgument(context, "out_predictions is NULL");
+    }
+    if ( ! model ) return InvalidArgument(context, "model is NULL");
+    if ( ! cases_data && cases_size )
+    {
+        return InvalidArgument(context, "cases_data is NULL");
+    }
+    if ( cases_size && memchr(cases_data, '\0', cases_size) )
+    {
+        return InvalidArgument(context, "cases input contains a NUL byte");
+    }
+
+    memset(&state, 0, sizeof(state));
+    state.context = context;
+    state.model = model;
+    state.cases_data = cases_data;
+    state.cases_size = cases_size;
+
+    status = c50_run_operation(context, PredictModel, CleanupPrediction, &state);
+    if ( status == C50_STATUS_OK ) *out_predictions = state.predictions;
     return status;
 }

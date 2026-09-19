@@ -19,6 +19,15 @@ typedef struct c50_context c50_context;
 /* Opaque handle reserved for a trained tree, ruleset, or boosted ensemble. */
 typedef struct c50_model c50_model;
 
+/* Opaque owner of one batch of prediction results. */
+typedef struct c50_predictions c50_predictions;
+
+/*
+ * The imported core uses process-global mutable state. C5.0 operations must be
+ * serialized across all contexts. Callers must also prevent concurrent access
+ * to the same context or model handle.
+ */
+
 /* Status values returned by public API operations. */
 typedef enum c50_status
 {
@@ -83,6 +92,38 @@ void c50_model_destroy(c50_model *model);
 
 /* Return the serialized representation kind. model must not be NULL. */
 c50_model_kind c50_model_get_kind(const c50_model *model);
+
+/*
+ * Predict cases encoded in the C5.0 data-file syntax. Each row must contain
+ * all input fields plus a final class field, which may be "?" when unknown.
+ * cases_data may be NULL only when cases_size is zero. On success, the caller
+ * owns *out_predictions and must release it with c50_predictions_destroy().
+ * An empty input produces an empty result with the model's class metadata.
+ */
+c50_status c50_model_predict(c50_context *context, const c50_model *model,
+                             const char *cases_data, size_t cases_size,
+                             c50_predictions **out_predictions);
+
+/* Release prediction results. A NULL pointer is allowed and has no effect. */
+void c50_predictions_destroy(c50_predictions *predictions);
+
+size_t c50_predictions_row_count(const c50_predictions *predictions);
+size_t c50_predictions_class_count(const c50_predictions *predictions);
+
+/* Return a borrowed class name, or NULL when class_index is out of range. */
+const char *c50_predictions_class_name(const c50_predictions *predictions,
+                                       size_t class_index);
+
+/*
+ * Access one row. Class indices are zero-based. Invalid row or class indices
+ * return (size_t) -1 for the class index and zero for numeric values.
+ */
+size_t c50_predictions_class_index(const c50_predictions *predictions,
+                                   size_t row);
+double c50_predictions_confidence(const c50_predictions *predictions,
+                                  size_t row);
+double c50_predictions_score(const c50_predictions *predictions,
+                             size_t row, size_t class_index);
 
 #ifdef __cplusplus
 }

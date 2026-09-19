@@ -76,6 +76,15 @@ if(BUILD_TESTING)
     list(APPEND C50_COMPILE_TARGETS c50_prediction_probe)
     list(APPEND C50_EXECUTABLE_TARGETS c50_prediction_probe)
 
+    add_executable(c50_api_prediction_probe tests/api_prediction_probe.c)
+    target_link_libraries(c50_api_prediction_probe PRIVATE C50::core)
+    set_target_properties(
+        c50_api_prediction_probe
+        PROPERTIES OUTPUT_NAME api-prediction-probe
+    )
+    list(APPEND C50_COMPILE_TARGETS c50_api_prediction_probe)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_api_prediction_probe)
+
     add_executable(c50_c_api_compile tests/c_api_compile.c)
     target_link_libraries(c50_c_api_compile PRIVATE C50::core)
     add_executable(c50_input_test tests/c50_input.c)
@@ -98,6 +107,8 @@ if(BUILD_TESTING)
     target_link_libraries(c50_c_api_failure PRIVATE C50::core)
     add_executable(c50_c_api_model tests/c_api_model.c)
     target_link_libraries(c50_c_api_model PRIVATE C50::core)
+    add_executable(c50_c_api_prediction tests/c_api_prediction.c)
+    target_link_libraries(c50_c_api_prediction PRIVATE C50::core)
     add_executable(c50_cpp_api_compile tests/c_api_compile.cpp)
     target_compile_features(c50_cpp_api_compile PRIVATE cxx_std_11)
     target_link_libraries(c50_cpp_api_compile PRIVATE C50::core)
@@ -108,6 +119,7 @@ if(BUILD_TESTING)
         c50_data_input_test
         c50_c_api_failure
         c50_c_api_model
+        c50_c_api_prediction
         c50_cpp_api_compile
     )
     list(
@@ -117,6 +129,7 @@ if(BUILD_TESTING)
         c50_data_input_test
         c50_c_api_failure
         c50_c_api_model
+        c50_c_api_prediction
         c50_cpp_api_compile
     )
 endif()
@@ -163,6 +176,7 @@ if(BUILD_TESTING)
     add_test(NAME data-input-stream COMMAND c50_data_input_test)
     add_test(NAME c-api-failure COMMAND c50_c_api_failure)
     add_test(NAME c-api-model COMMAND c50_c_api_model)
+    add_test(NAME c-api-prediction COMMAND c50_c_api_prediction)
     add_test(NAME cpp-api-compile COMMAND c50_cpp_api_compile)
     add_test(
         NAME cli-regression
@@ -184,6 +198,7 @@ if(BUILD_TESTING)
             ${CMAKE_COMMAND} -E env
             "C50_BINARY=$<TARGET_FILE:c50_cli>"
             "C50_PREDICTION_BINARY=$<TARGET_FILE:c50_prediction_probe>"
+            "C50_API_PREDICTION_BINARY=$<TARGET_FILE:c50_api_prediction_probe>"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_predictions.sh"
     )
 endif()
