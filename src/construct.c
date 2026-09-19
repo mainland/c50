@@ -67,16 +67,15 @@ void ConstructClassifiers(c50_context *Context)
     CaseNo	i, Errs, Cases, Bp, Excl=0;
     double	ErrWt, ExclWt=0, OKWt, ExtraErrWt, NFact, MinWt=1.0, a, b;
     ClassNo	c, Pred, Real, Best;
-    static	ClassNo	*Wrong=Nil;
     int		BaseLeaves;
     Boolean	NoStructure, CheckExcl;
     float	*BVote;
 
     /*  Clean up after possible interrupt  */
 
-    FreeUnlessNil(Wrong);
+    FreeUnlessNil(Context->training.wrong_predictions);
 
-    Wrong = Alloc(Context->cases.max_case+1, ClassNo);
+    Context->training.wrong_predictions = Alloc(Context->cases.max_case+1, ClassNo);
 
     if ( Context->options.trials > 1 )
     {
@@ -122,8 +121,8 @@ void ConstructClassifiers(c50_context *Context)
 	    fprintf(Of, "\n-----  " F_Trial " %d:  -----\n", Context->trees.trial);
 	}
 
-	NotifyStage(FORMTREE);
-	Progress(-(Context->cases.max_case+1.0));
+	NotifyStage(Context, FORMTREE);
+	Progress(Context, -(Context->cases.max_case+1.0));
 
 	/*  Update count here in case tree construction is interrupted  */
 
@@ -140,8 +139,8 @@ void ConstructClassifiers(c50_context *Context)
 	Verbosity(1, if ( ! Context->options.rules )
 	    PrintTree(Context, Context->trees.raw[Context->trees.trial], "Before pruning:"))
 
-	NotifyStage(SIMPLIFYTREE);
-	Progress(-(Context->cases.max_case+1));
+	NotifyStage(Context, SIMPLIFYTREE);
+	Progress(Context, -(Context->cases.max_case+1));
 
 	/*  If still need raw tree, copy it; otherwise set initial
 	    pruned tree to raw tree  */
@@ -216,7 +215,7 @@ void ConstructClassifiers(c50_context *Context)
 	    if ( Weight(Context->cases.records[i]) <= 0 )
 	    {
 		Context->cases.records[i]  = Context->cases.records[Bp];
-		Wrong[i] = Wrong[Bp];
+		Context->training.wrong_predictions[i] = Context->training.wrong_predictions[Bp];
 		Bp++;
 		continue;
 	    }
@@ -248,7 +247,7 @@ void ConstructClassifiers(c50_context *Context)
 
 		    Weight(Context->cases.records[i]) = 0;
 		    Context->cases.records[i]  = Context->cases.records[Bp];
-		    Wrong[i] = Wrong[Bp];
+		    Context->training.wrong_predictions[i] = Context->training.wrong_predictions[Bp];
 		    Bp++;
 
 		    continue;
@@ -257,13 +256,13 @@ void ConstructClassifiers(c50_context *Context)
 
 	    if ( Pred != Real )
 	    {
-		Wrong[i] = Pred;
+		Context->training.wrong_predictions[i] = Pred;
 		ErrWt   += Weight(Context->cases.records[i]);
 		Errs++;
 	    }
 	    else
 	    {
-		Wrong[i] = 0;
+		Context->training.wrong_predictions[i] = 0;
 		OKWt    += Weight(Context->cases.records[i]);
 	    }
 	}
@@ -301,7 +300,7 @@ void ConstructClassifiers(c50_context *Context)
 
 	    ForEach(i, Bp, Context->cases.max_case)
 	    {
-		if ( Wrong[i] )
+		if ( Context->training.wrong_predictions[i] )
 		{
 		    Weight(Context->cases.records[i]) = NFact * (Weight(Context->cases.records[i]) + b);
 		}
@@ -379,7 +378,7 @@ void ConstructClassifiers(c50_context *Context)
     }
     TRf = 0;
 
-    Free(Wrong);					Wrong = Nil;
+    Free(Context->training.wrong_predictions);					Context->training.wrong_predictions = Nil;
     FreeUnlessNil(Context->training.boost_vote_block);				Context->training.boost_vote_block = Nil;
 }
 
@@ -466,31 +465,6 @@ void SetAvCWt(c50_context *Context)
 /*									 */
 /*************************************************************************/
 
-char *Multi[]  = {	F_Trial,
-			F_UTrial,
-			"" },
-
-     *StdR[]   = {	"   Before Pruning   ",
-			"  ----------------  ",
-			"  " F_SizeErrors "  " },
-
-     *StdP[]   = {	"  " F_DecisionTree16 "  ",
-			"  ----------------  ",
-			"  " F_SizeErrors "  " },
-
-     *StdPC[]  = {	"  " F_DecisionTree23 "  ",
-			"  -----------------------  ",
-			"  " F_SizeErrorsCost "  " },
-
-     *Extra[]  = {	"  " F_Rules16,
-			"  ----------------",
-			"  " F_NoErrors },
-
-     *ExtraC[] = {	"  " F_Rules23,
-			"  -----------------------",
-			"  " F_NoErrorsCost };
-
-
 void Evaluate(c50_context *Context, int Flags)
 /*   --------  */
 {
@@ -514,6 +488,18 @@ void EvaluateSingle(c50_context *Context, int Flags)
     CaseNo	*ConfusionMat, *Usage, i, RawErrs=0, Errs=0;
     double	ECost=0, Tests;
     Boolean	CMInfo, UsageInfo;
+    const char	*StdR[] = { "   Before Pruning   ",
+			    "  ----------------  ", "  " F_SizeErrors "  " };
+    const char	*StdP[] = { "  " F_DecisionTree16 "  ",
+			    "  ----------------  ", "  " F_SizeErrors "  " };
+    const char	*StdPC[] = { "  " F_DecisionTree23 "  ",
+			     "  -----------------------  ",
+			     "  " F_SizeErrorsCost "  " };
+    const char	*Extra[] = { "  " F_Rules16, "  ----------------",
+			     "  " F_NoErrors };
+    const char	*ExtraC[] = { "  " F_Rules23,
+			      "  -----------------------",
+			      "  " F_NoErrorsCost };
 
     (void) RawErrs;  /* Used only when VerbOpt is enabled. */
 
@@ -692,6 +678,17 @@ void EvaluateBoost(c50_context *Context, int Flags)
     CaseNo	*ConfusionMat, *Usage, i, *Errs, BoostErrs=0;
     double	*ECost, BoostECost=0, Tests;
     Boolean	CMInfo, UsageInfo;
+    const char	*Multi[] = { F_Trial, F_UTrial, "" };
+    const char	*StdP[] = { "  " F_DecisionTree16 "  ",
+			    "  ----------------  ", "  " F_SizeErrors "  " };
+    const char	*StdPC[] = { "  " F_DecisionTree23 "  ",
+			     "  -----------------------  ",
+			     "  " F_SizeErrorsCost "  " };
+    const char	*Extra[] = { "  " F_Rules16, "  ----------------",
+			     "  " F_NoErrors };
+    const char	*ExtraC[] = { "  " F_Rules23,
+			      "  -----------------------",
+			      "  " F_NoErrorsCost };
 
     CMInfo    = Flags & CMINFO;
     UsageInfo = Flags & USAGEINFO;

@@ -57,8 +57,8 @@ void SiftRules(c50_context *Context, float EstErrRate)
     float	CodeLength;
     CaseNo	i;
 
-    NotifyStage(SIFTRULES);
-    Progress(-(float) Context->rules.count);
+    NotifyStage(Context, SIFTRULES);
+    Progress(Context, -(float) Context->rules.count);
 
     /*  Determine inverse of Context->rule_build.fires in Context->rule_build.coverage_counts, Context->rule_selection.coverage_pointers, Context->rule_selection.coverage_block  */
 
@@ -675,7 +675,7 @@ void HillClimb(c50_context *Context)
 	LastToggle = Toggle;
 	LastCost   = CurrentCost;
 
-	Progress(1.0);
+	Progress(Context, 1.0);
     }
 }
 

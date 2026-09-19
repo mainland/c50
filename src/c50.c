@@ -219,8 +219,8 @@ int main(int Argc, char *Argv[])
 	fprintf(Of, T_ClassVar, Context->schema.attribute_names[Context->schema.class_attribute]);
     }
 
-    NotifyStage(READDATA);
-    Progress(-1.0);
+    NotifyStage(Context, READDATA);
+    Progress(Context, -1.0);
 
     /*  Allocate space for Context->cases.some_missing[] and Context->cases.some_not_applicable[] */
 
@@ -288,8 +288,8 @@ int main(int Argc, char *Argv[])
 
     if ( Context->options.winnow )
     {
-	NotifyStage(WINNOWATTS);
-	Progress(-Context->schema.max_attribute);
+	NotifyStage(Context, WINNOWATTS);
+	Progress(Context, -Context->schema.max_attribute);
 	WinnowAtts(Context);
     }
 
@@ -305,14 +305,14 @@ int main(int Argc, char *Argv[])
 
 	fprintf(Of, T_EvalTrain, Context->cases.max_case+1);
 
-	NotifyStage(EVALTRAIN);
-	Progress(-Context->options.trials * (Context->cases.max_case+1.0));
+	NotifyStage(Context, EVALTRAIN);
+	Progress(Context, -Context->options.trials * (Context->cases.max_case+1.0));
 
 	Evaluate(Context, CMINFO | USAGEINFO);
 
 	if ( (F = GetFile(( Context->options.sample_fraction ? ".data" : ".test" ), "r")) )
 	{
-	    NotifyStage(READTEST);
+	    NotifyStage(Context, READTEST);
 	    fprintf(Of, "\n");
 
 	    FreeData(Context);
@@ -320,8 +320,8 @@ int main(int Argc, char *Argv[])
 
 	    fprintf(Of, T_EvalTest, Context->cases.max_case+1);
 
-	    NotifyStage(EVALTEST);
-	    Progress(-Context->options.trials * (Context->cases.max_case+1.0));
+	    NotifyStage(Context, EVALTEST);
+	    Progress(Context, -Context->options.trials * (Context->cases.max_case+1.0));
 
 	    Evaluate(Context, CMINFO);
 	}

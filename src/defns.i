@@ -832,8 +832,8 @@ void	    StreamIn(c50_input *Input, String S, int n);
 
 	/* update.c (Unix) or winmain.c (WIN32) */
 
-void	    NotifyStage(int);
-void	    Progress(float);
+void	    NotifyStage(c50_context *Context, int Stage);
+void	    Progress(c50_context *Context, float Delta);
 
 	/* xval.c */
 

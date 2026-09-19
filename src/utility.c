@@ -885,16 +885,16 @@ void Cleanup(c50_context *Context)
 {
     int		t, r;
 
-    extern FILE		*Uf;
+    NotifyStage(Context, CLEANUP);
 
-    NotifyStage(CLEANUP);
-
-    CheckClose(Uf);					Uf = Nil;
+    CheckClose(Context->progress.update_file);					Context->progress.update_file = Nil;
     CheckClose(TRf);					TRf = Nil;
 
     /*  Boost voting (construct.c)  */
 
     FreeUnlessNil(Context->training.boost_vote_block);				Context->training.boost_vote_block = Nil;
+    FreeUnlessNil(Context->training.wrong_predictions);
+    Context->training.wrong_predictions = Nil;
 
     /*  Stuff from attribute winnowing  */
 
@@ -969,7 +969,7 @@ void Cleanup(c50_context *Context)
     Context->trees.printed_subtree_capacity = 0;
     Context->cases.max_case = -1;
 
-    NotifyStage(0);
+    NotifyStage(Context, 0);
 }
 
 

@@ -34,9 +34,7 @@
 
 #include "defns.i"
 #include "extern.i"
-
-
-FILE	*Uf=0;			/* File to which update info written  */
+#include "c50_api_internal.h"
 
 
 /*************************************************************************/
@@ -47,13 +45,16 @@ FILE	*Uf=0;			/* File to which update info written  */
 /*************************************************************************/
 
 
-void NotifyStage(int S)
+void NotifyStage(c50_context *Context, int Stage)
 /*   -----------  */
 {
-    Now = S;
-    if ( S == 1 )
+    Context->progress.stage = Stage;
+    if ( Stage == 1 )
     {
-	if ( ! (Uf = GetFile(".tmp", "w")) ) Error(NOFILE, "", E_ForWrite);
+	if ( ! (Context->progress.update_file = GetFile(".tmp", "w")) )
+	{
+	    Error(NOFILE, "", E_ForWrite);
+	}
     }
 }
 
@@ -68,62 +69,68 @@ void NotifyStage(int S)
 /*************************************************************************/
 
 
-void Progress(float Delta)
+void Progress(c50_context *Context, float Delta)
 /*   --------  */
 {
-    static float Total, Current=0;
-    static int   Twentieth=0, LastStage=0;
-    int		 p;
-    static char *Message[]={ "",
-			     "Reading training data      ",
-			     "Winnowing attributes       ",
-			     "Constructing decision tree ",
-			     "Simplifying decision tree  ",
-			     "Forming rules              ",
-			     "Selecting final rules      ",
-			     "Evaluating on training data",
-			     "Reading test data          ",
-			     "Evaluating on test data    ",
-			     "Cleaning up                ",
-			     "Allocating tables          ",
-			     "Preparing results          " },
-		Tell[]={ 0,0,0,1,1,1,1,0,0,0,0,0,0 },
+    int p;
+    int tell = (Context->progress.stage >= FORMTREE &&
+		Context->progress.stage <= SIFTRULES);
+    const char *message;
+    const char done[] = ">>>>>>>>>>>>>>>>>>>>";
+    const char todo[] = "....................";
 
-		*Done=">>>>>>>>>>>>>>>>>>>>",
-		*ToDo="....................";
+    switch ( Context->progress.stage )
+    {
+	case READDATA:     message = "Reading training data      "; break;
+	case WINNOWATTS:   message = "Winnowing attributes       "; break;
+	case FORMTREE:     message = "Constructing decision tree "; break;
+	case SIMPLIFYTREE: message = "Simplifying decision tree  "; break;
+	case FORMRULES:    message = "Forming rules              "; break;
+	case SIFTRULES:    message = "Selecting final rules      "; break;
+	case EVALTRAIN:    message = "Evaluating on training data"; break;
+	case READTEST:     message = "Reading test data          "; break;
+	case EVALTEST:     message = "Evaluating on test data    "; break;
+	case CLEANUP:      message = "Cleaning up                "; break;
+	case ALLOCTABLES:  message = "Allocating tables          "; break;
+	case RESULTS:      message = "Preparing results          "; break;
+	default:           message = ""; break;
+    }
 
-    if ( LastStage == Now && ! Tell[Now] )
+    if ( Context->progress.last_stage == Context->progress.stage && ! tell )
     {
 	return;
     }
 
-    LastStage = Now;
+    Context->progress.last_stage = Context->progress.stage;
 
     if ( Delta <= -1 )
     {
-	Total = -Delta;
-	Current = 0;
-	Twentieth = -1;
+	Context->progress.total = -Delta;
+	Context->progress.current = 0;
+	Context->progress.twentieth = -1;
     }
     else
     {
-	Current = Min(Total, Current + Delta);
+	Context->progress.current =
+	    Min(Context->progress.total, Context->progress.current + Delta);
     }
 
-    if ( (p = rint((20.0 * Current) / Total)) != Twentieth )
+    if ( (p = rint((20.0 * Context->progress.current) /
+		   Context->progress.total)) != Context->progress.twentieth )
     {
-	Twentieth = p;
+	Context->progress.twentieth = p;
 assert(p >= 0 && p <= 20);
-	fprintf(Uf, "%s", Message[Now]);
-	if ( Tell[Now] )
+	fprintf(Context->progress.update_file, "%s", message);
+	if ( tell )
 	{
-	    fprintf(Uf, "  %s%s  (%d %s)",
-			Done + (20 - Twentieth), ToDo + Twentieth,
-			(int) (Current+0.5),
-			( Now == SIFTRULES ?
+	    fprintf(Context->progress.update_file, "  %s%s  (%d %s)",
+			&done[20 - Context->progress.twentieth],
+			&todo[Context->progress.twentieth],
+			(int) (Context->progress.current+0.5),
+			( Context->progress.stage == SIFTRULES ?
 			    "refinements" : "cases covered" ));
 	}
-	fprintf(Uf, "\n");
-	fflush(Uf);
+	fprintf(Context->progress.update_file, "\n");
+	fflush(Context->progress.update_file);
     }
 }
