@@ -36,6 +36,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+#include <stdarg.h>
+
 static const char PropertyNames[] =
     "null\0att\0class\0cut\0conds\0elts\0entries\0forks\0freq\0id\0"
     "type\0low\0mid\0high\0result\0rules\0val\0lift\0cover\0ok\0"
@@ -82,6 +84,37 @@ static int WhichProperty(const char *Name)
 }
 
 
+static void ModelWriteError(c50_context *Context)
+{
+    c50_record_error(Context,
+                     Context->classifier_output.kind == C50_OUTPUT_MEMORY ?
+                         C50_STATUS_OUT_OF_MEMORY : C50_STATUS_IO_ERROR,
+                     "could not write classifier");
+    C50Exit(Context, 1);
+}
+
+
+static void ModelPrintf(c50_context *Context, const char *Format, ...)
+{
+    int Length;
+    va_list Arguments;
+
+    va_start(Arguments, Format);
+    Length = c50_output_vprintf(&Context->classifier_output, Format, Arguments);
+    va_end(Arguments);
+    if ( Length < 0 ) ModelWriteError(Context);
+}
+
+
+static void ModelPutc(c50_context *Context, int Character)
+{
+    if ( c50_output_putc(Character, &Context->classifier_output) == EOF )
+    {
+        ModelWriteError(Context);
+    }
+}
+
+
 /*************************************************************************/
 /*									 */
 /*	Check whether file is open.  If it is not, open it and		 */
@@ -93,25 +126,31 @@ static int WhichProperty(const char *Name)
 void CheckFile(c50_context *Context, String Extension, Boolean Write)
 /*   ---------  */
 {
-    if ( ! Context->io.model_file || ! Context->last_model_extension ||
-	 strcmp(Context->last_model_extension, Extension) )
+    if ( Write )
     {
-	Context->last_model_extension = Extension;
-
-	if ( Context->io.model_file )
+	if ( ! Context->classifier_output_active ||
+	     ! Context->last_model_extension ||
+	     strcmp(Context->last_model_extension, Extension) )
 	{
-	    fprintf(Context->io.model_file, "\n");
-	    fclose(Context->io.model_file);
-	}
-
-	if ( Write )
-	{
+	    if ( Context->classifier_output_active &&
+		 Context->last_model_extension )
+	    {
+		ModelPrintf(Context, "\n");
+		c50_output_close(&Context->classifier_output);
+		Context->classifier_output_active = false;
+	    }
+	    Context->last_model_extension = Extension;
 	    WriteFilePrefix(Context, Extension);
 	}
-	else
-	{
-	    ReadFilePrefix(Context, Extension);
-	}
+    }
+    else if ( ! Context->io.model_file ||
+	      ! Context->last_model_extension ||
+	      strcmp(Context->last_model_extension, Extension) )
+    {
+	Context->last_model_extension = Extension;
+	CheckClose(Context->io.model_file);
+	Context->io.model_file = Nil;
+	ReadFilePrefix(Context, Extension);
     }
 }
 
@@ -128,35 +167,48 @@ void WriteFilePrefix(c50_context *Context, String Extension)
 /*   ---------------  */
 {
     time_t	clock;
-    struct tm	*now;
+    struct tm	now;
+    int		month;
 
-    if ( ! (Context->io.model_file = GetFile(Context, Extension, "w")) )
+    if ( ! Context->classifier_output_active )
     {
-	Error(Context, NOFILE, Context->io.file_name, E_ForWrite);
+	FILE *ModelFile = GetFile(Context, Extension, "w");
+	if ( ! ModelFile ) Error(Context, NOFILE, Context->io.file_name, E_ForWrite);
+	c50_output_init_file(&Context->classifier_output, ModelFile, true);
+	Context->classifier_output_active = true;
     }
 
     clock = time(0);
-    now = localtime(&clock);
-    now->tm_mon++;
-    fprintf(Context->io.model_file, "id=\"See5/C5.0 %s %d-%d%d-%d%d\"\n",
+#ifdef _WIN32
+    if ( localtime_s(&now, &clock) )
+#else
+    if ( ! localtime_r(&clock, &now) )
+#endif
+    {
+	c50_record_error(Context, C50_STATUS_INTERNAL_ERROR,
+			 "could not determine classifier timestamp");
+	C50Exit(Context, 1);
+    }
+    month = now.tm_mon + 1;
+    ModelPrintf(Context, "id=\"See5/C5.0 %s %d-%d%d-%d%d\"\n",
 	    RELEASE,
-	    now->tm_year + 1900,
-	    now->tm_mon / 10, now->tm_mon % 10,
-	    now->tm_mday / 10, now->tm_mday % 10);
+	    now.tm_year + 1900,
+	    month / 10, month % 10,
+	    now.tm_mday / 10, now.tm_mday % 10);
 
     if ( Context->costs.matrix )
     {
-	fprintf(Context->io.model_file, "costs=\"1\"\n");
+	ModelPrintf(Context, "costs=\"1\"\n");
     }
 
     if ( Context->options.sample_fraction > 0 )
     {
-	fprintf(Context->io.model_file, "sample=\"%g\" init=\"%d\"\n", Context->options.sample_fraction, Context->io.random_initial_seed);
+	ModelPrintf(Context, "sample=\"%g\" init=\"%d\"\n", Context->options.sample_fraction, Context->io.random_initial_seed);
     }
 
     SaveDiscreteNames(Context);
 
-    fprintf(Context->io.model_file, "entries=\"%d\"\n", Context->options.trials);
+    ModelPrintf(Context, "entries=\"%d\"\n", Context->options.trials);
 }
 
 
@@ -213,7 +265,7 @@ void SaveDiscreteNames(c50_context *Context)
 	{
 	    AsciiOut(Context, ",", Context->schema.attribute_value_names[Att][v]);
 	}
-	fprintf(Context->io.model_file, "\n");
+	ModelPrintf(Context, "\n");
     }
 }
 
@@ -243,22 +295,22 @@ void OutTree(c50_context *Context, Tree T)
     ClassNo	c;
     Boolean	First;
 
-    fprintf(Context->io.model_file, "type=\"%d\"", T->NodeType);
+    ModelPrintf(Context, "type=\"%d\"", T->NodeType);
     AsciiOut(Context, " class=", Context->schema.class_names[T->Leaf]);
     if ( T->Cases > 0 )
     {
-	fprintf(Context->io.model_file, " freq=\"%g", T->ClassDist[1]);
+	ModelPrintf(Context, " freq=\"%g", T->ClassDist[1]);
 	ForEach(c, 2, Context->schema.max_class)
 	{
-	    fprintf(Context->io.model_file, ",%g", T->ClassDist[c]);
+	    ModelPrintf(Context, ",%g", T->ClassDist[c]);
 	}
-	fprintf(Context->io.model_file, "\"");
+	ModelPrintf(Context, "\"");
     }
 
     if ( T->NodeType )
     {
 	AsciiOut(Context, " att=", Context->schema.attribute_names[T->Tested]);
-	fprintf(Context->io.model_file, " forks=\"%d\"", T->Forks);
+	ModelPrintf(Context, " forks=\"%d\"", T->Forks);
 
 	switch ( T->NodeType )
 	{
@@ -266,10 +318,10 @@ void OutTree(c50_context *Context, Tree T)
 		break;
 
 	    case BrThresh:
-		fprintf(Context->io.model_file, " cut=\"%.*g\"", PREC+1, T->Cut);
+		ModelPrintf(Context, " cut=\"%.*g\"", PREC+1, T->Cut);
 		if ( T->Upper > T->Cut )
 		{
-		    fprintf(Context->io.model_file, " low=\"%.*g\" mid=\"%.*g\" high=\"%.*g\"",
+		    ModelPrintf(Context, " low=\"%.*g\" mid=\"%.*g\" high=\"%.*g\"",
 				 PREC, T->Lower, PREC, T->Mid, PREC, T->Upper);
 		}
 		break;
@@ -299,7 +351,7 @@ void OutTree(c50_context *Context, Tree T)
 		}
 		break;
 	}
-	fprintf(Context->io.model_file, "\n");
+	ModelPrintf(Context, "\n");
 
 	ForEach(v, 1, T->Forks)
 	{
@@ -308,7 +360,7 @@ void OutTree(c50_context *Context, Tree T)
     }
     else
     {
-	fprintf(Context->io.model_file, "\n");
+	ModelPrintf(Context, "\n");
     }
 }
 
@@ -332,24 +384,24 @@ void SaveRules(c50_context *Context, CRuleSet RS, String Extension)
 
     CheckFile(Context, Extension, true);
 
-    fprintf(Context->io.model_file, "rules=\"%d\"", RS->SNRules);
+    ModelPrintf(Context, "rules=\"%d\"", RS->SNRules);
     AsciiOut(Context, " default=", Context->schema.class_names[RS->SDefault]);
-    fprintf(Context->io.model_file, "\n");
+    ModelPrintf(Context, "\n");
 
     ForEach(ri, 1, RS->SNRules)
     {
 	R = RS->SRule[ri];
-	fprintf(Context->io.model_file, "conds=\"%d\" cover=\"%g\" ok=\"%g\" lift=\"%g\"",
+	ModelPrintf(Context, "conds=\"%d\" cover=\"%g\" ok=\"%g\" lift=\"%g\"",
 		     R->Size, R->Cover, R->Correct,
 		     (R->Correct + 1) / ((R->Cover + 2) * R->Prior));
 	AsciiOut(Context, " class=", Context->schema.class_names[R->Rhs]);
-	fprintf(Context->io.model_file, "\n");
+	ModelPrintf(Context, "\n");
 
 	ForEach(d, 1, R->Size)
 	{
 	    C = R->Lhs[d];
 
-	    fprintf(Context->io.model_file, "type=\"%d\"", C->NodeType);
+	    ModelPrintf(Context, "type=\"%d\"", C->NodeType);
 	    AsciiOut(Context, " att=", Context->schema.attribute_names[C->Tested]);
 
 	    switch ( C->NodeType )
@@ -361,11 +413,11 @@ void SaveRules(c50_context *Context, CRuleSet RS, String Extension)
 		case BrThresh:
 		    if ( C->TestValue == 1 )	/* N/A */
 		    {
-			fprintf(Context->io.model_file, " val=\"N/A\"");
+			ModelPrintf(Context, " val=\"N/A\"");
 		    }
 		    else
 		    {
-			fprintf(Context->io.model_file, " cut=\"%.*g\" result=\"%c\"",
+			ModelPrintf(Context, " cut=\"%.*g\" result=\"%c\"",
 				     PREC+1, C->Cut,
 				     ( C->TestValue == 2 ? '<' : '>' ));
 		    }
@@ -391,7 +443,7 @@ void SaveRules(c50_context *Context, CRuleSet RS, String Extension)
 		    break;
 	    }
 
-	    fprintf(Context->io.model_file, "\n");
+	    ModelPrintf(Context, "\n");
 	}
     }
 }
@@ -408,13 +460,13 @@ void SaveRules(c50_context *Context, CRuleSet RS, String Extension)
 void AsciiOut(c50_context *Context, String Pre, String S)
 /*   --------  */
 {
-    fprintf(Context->io.model_file, "%s\"", Pre);
+    ModelPrintf(Context, "%s\"", Pre);
     while ( *S )
     {
-	if ( *S == '"' || *S == '\\' ) fputc('\\', Context->io.model_file);
-	fputc(*S++, Context->io.model_file);
+	if ( *S == '"' || *S == '\\' ) ModelPutc(Context, '\\');
+	ModelPutc(Context, *S++);
     }
-    fputc('"', Context->io.model_file);
+    ModelPutc(Context, '"');
 }
 
 

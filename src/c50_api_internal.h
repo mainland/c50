@@ -10,6 +10,7 @@
 #include <c50/c50.h>
 
 #include "c50_input.h"
+#include "c50_output.h"
 #include "c50_rng.h"
 
 #define C50_ERROR_MESSAGE_CAPACITY 1024
@@ -293,6 +294,8 @@ struct c50_context
     char *line_buffer_position;
     struct c50_implicit_state *implicit_state;
     c50_input classifier_input;
+    c50_output classifier_output;
+    int classifier_output_active;
     const char *last_model_extension;
     int model_entry;
     char property_name[20];
