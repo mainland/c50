@@ -1,0 +1,61 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `multiclass'
+
+Read 24 cases (2 attributes) from multiclass.data
+
+Decision tree:
+
+shape = circle:
+:...value <= 4: red (4)
+:   value > 4: green (4)
+shape = square:
+:...value <= 4: green (4)
+:   value > 4: blue (4)
+shape = triangle:
+:...value <= 4: blue (4)
+    value > 4: red (4)
+
+
+Evaluation on training data (24 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     6    0( 0.0%)   <<
+
+
+	   (a)   (b)   (c)    <-classified as
+	  ----  ----  ----
+	     8                (a): class red
+	           8          (b): class green
+	                 8    (c): class blue
+
+
+	Attribute usage:
+
+	    100%  value
+	    100%  shape
+
+
+Evaluation on test data (6 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     6    0( 0.0%)   <<
+
+
+	   (a)   (b)   (c)    <-classified as
+	  ----  ----  ----
+	     2                (a): class red
+	           2          (b): class green
+	                 2    (c): class blue
+
+
+Time: <elapsed> secs
