@@ -145,6 +145,9 @@ if(BUILD_TESTING)
     add_executable(c50_cpp_api_compile tests/c_api_compile.cpp)
     target_compile_features(c50_cpp_api_compile PRIVATE cxx_std_11)
     target_link_libraries(c50_cpp_api_compile PRIVATE C50::core)
+    add_executable(c50_cpp_api tests/cpp_api.cpp)
+    target_compile_features(c50_cpp_api PRIVATE cxx_std_11)
+    target_link_libraries(c50_cpp_api PRIVATE C50::core)
     list(
         APPEND C50_COMPILE_TARGETS
         c50_c_api_compile
@@ -159,6 +162,7 @@ if(BUILD_TESTING)
         c50_c_api_concurrency
         c50_c_api_training_concurrency
         c50_cpp_api_compile
+        c50_cpp_api
     )
     list(
         APPEND C50_EXECUTABLE_TARGETS
@@ -174,6 +178,7 @@ if(BUILD_TESTING)
         c50_c_api_concurrency
         c50_c_api_training_concurrency
         c50_cpp_api_compile
+        c50_cpp_api
     )
 endif()
 
@@ -245,6 +250,7 @@ if(BUILD_TESTING)
         COMMAND c50_c_api_training_concurrency
     )
     add_test(NAME cpp-api-compile COMMAND c50_cpp_api_compile)
+    add_test(NAME cpp-api COMMAND c50_cpp_api)
     if(CMAKE_NM AND UNIX)
         add_test(
             NAME writable-global-inventory
