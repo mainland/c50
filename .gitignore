@@ -1,0 +1,6 @@
+*.o
+
+/c5.0
+/c5.0dbg
+/report
+/src/c50gt.c
