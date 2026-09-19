@@ -114,6 +114,8 @@ void PrintDistribution(Attribute Att, DiscrValue MinVal, DiscrValue MaxVal,
     ClassNo c;
     String Val;
 
+    (void) ValFreq;
+
     fprintf(Of, "\n\t\t\t ");
     ForEach(c, 1, MaxClass)
     {

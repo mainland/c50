@@ -371,6 +371,8 @@ void PruneRule(Condition Cond[], ClassNo TargetClass)
     float	Prior;
     double	Base, Gain, Cost=0;
 
+    (void) Bestid;  /* Used only when VerbOpt is enabled. */
+
     ForEach(d, 0, NCond)
     {
 	Deleted[d] = false;

@@ -112,7 +112,7 @@ void Prune(Tree T)
     PossibleValues = AllocZero(MaxAtt+1, Set);
     ForEach(Att, 1, MaxAtt)
     {
-	if ( Ordered(Att) || Discrete(Att) && SUBSET )
+	if ( Ordered(Att) || ( Discrete(Att) && SUBSET ) )
 	{
 	    PossibleValues[Att] = AllocZero((MaxAttVal[Att]>>3)+1, Byte);
 	    ForEach(i, 1, MaxAttVal[Att])
@@ -340,7 +340,7 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
     {
 	if ( ! T->Branch[v]->NodeType ||
 	     T->Branch[v]->Cases < 0.1 * T->Cases ||
-	     T->Branch[v]->Tested == Att && Continuous(Att) )
+	     ( T->Branch[v]->Tested == Att && Continuous(Att) ) )
 	{
 	    continue;
 	}
@@ -580,7 +580,8 @@ void FindMinCC(Tree T)
 		should be discarded  */
 
 	    if ( CC < MinCC ||
-		 CC <= MinCC && CC < SaveMinCC /* changed by descendants */ )
+		 ( CC <= MinCC &&
+		   CC < SaveMinCC /* changed by descendants */ ) )
 	    {
 		/*  This is the first of a possible group of ties  */
 
@@ -974,7 +975,7 @@ void CompressBranches(Tree T)
 	    /*  Don't check if compression impossible  */
 
 	    if ( v == 1 || T->Forks < 4 || Br->NodeType ||
-		 EmptyOnly && Br->Cases >= MinLeaf )
+		 ( EmptyOnly && Br->Cases >= MinLeaf ) )
 	    {
 		vv = v + 1;
 	    }

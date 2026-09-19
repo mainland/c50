@@ -100,6 +100,7 @@ void PrintErrorBreakdown(CaseNo *ConfusionMat)
 {
     CaseNo	*TruePos, *FalsePos, *FalseNeg, Entry;
     int		Row, Col, EntryWidth=100000, ClassWidth=5;
+    size_t	NameWidth;
 
     TruePos  = AllocZero(MaxClass+1, CaseNo);
     FalsePos = AllocZero(MaxClass+1, CaseNo);
@@ -123,7 +124,9 @@ void PrintErrorBreakdown(CaseNo *ConfusionMat)
 	}
 
 	EntryWidth = Max(EntryWidth, TruePos[Row] + FalseNeg[Row]);
-	ClassWidth = Max(ClassWidth, strlen(ClassName[Row]));
+	NameWidth = strlen(ClassName[Row]);
+	if ( NameWidth > INT_MAX ) Error(LONGNAME, "", "");
+	ClassWidth = Max(ClassWidth, (int) NameWidth);
     }
 
     EntryWidth = floor(Log(EntryWidth + 100.0) / Log(10.0)) + 2;

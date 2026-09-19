@@ -272,7 +272,7 @@ void ConstructClassifiers()
 	    fprintf(Of, TX_Reduced1(TRIALS), TRIALS);
 	}
 	else
-	if ( Trial && NoStructure || ErrWt / Cases >= 0.49 )
+	if ( ( Trial && NoStructure ) || ErrWt / Cases >= 0.49 )
 	{
 	    TRIALS = ( Trial ? Trial : 1 );
 	    fprintf(Of, TX_Reduced2(TRIALS), TRIALS);
@@ -508,6 +508,8 @@ void EvaluateSingle(int Flags)
     CaseNo	*ConfusionMat, *Usage, i, RawErrs=0, Errs=0;
     double	ECost=0, Tests;
     Boolean	CMInfo, UsageInfo;
+
+    (void) RawErrs;  /* Used only when VerbOpt is enabled. */
 
     CMInfo    = Flags & CMINFO;
     UsageInfo = Flags & USAGEINFO;
