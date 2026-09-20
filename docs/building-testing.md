@@ -86,6 +86,19 @@ python3.12 -m venv .venv
 .venv/bin/python -m pytest
 ```
 
+The package includes the PEP 561 `py.typed` marker, inline annotations for the
+estimator, and a stub for the compiled extension. Run the strict source and
+public-API type checks with:
+
+```sh
+.venv/bin/python -m mypy
+.venv/bin/python -m mypy.stubtest \
+    --allowlist tests/typing/stubtest-allowlist.txt c50._c50
+```
+
+CTest runs both checks as `python-typecheck` and `python-stubtest` when the
+Python binding is enabled in a non-sanitizer build.
+
 Build source and binary distributions with `build` installed:
 
 ```sh

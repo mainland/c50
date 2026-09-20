@@ -106,6 +106,30 @@ operations release the Python GIL and use separate native contexts, so they can
 execute concurrently; callers should still serialize mutation of each Python
 object.
 
+Install the optional NumPy and scikit-learn dependencies to use the
+array-oriented estimator:
+
+```sh
+python -m pip install 'c50-gpl[sklearn]'
+```
+
+```python
+import numpy as np
+
+from c50.sklearn import C50Classifier
+
+X = np.asarray([[0.0], [0.5], [2.5], [3.0]])
+y = np.asarray(["low", "low", "high", "high"])
+
+classifier = C50Classifier(minimum_cases=1).fit(X, y)
+labels = classifier.predict([[0.25], [2.75]])
+scores = classifier.predict_proba([[0.25], [2.75]])
+```
+
+The estimator supports dense numeric and categorical inputs, missing values,
+native training options, misclassification costs, pipelines, and grid search.
+The detailed input and concurrency contracts are in the project documentation.
+
 Run `./c5.0 -h` to see the available command-line options. C5.0 uses a file stem
 to locate inputs such as `<stem>.names`, `<stem>.data`, and optional
 `<stem>.test` and `<stem>.costs` files:
