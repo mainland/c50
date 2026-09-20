@@ -121,6 +121,11 @@ if(C50_BUILD_PYTHON)
         ${CMAKE_CURRENT_BINARY_DIR}/python/c50/__init__.py
         COPYONLY
     )
+    configure_file(
+        python/c50/_data.py
+        ${CMAKE_CURRENT_BINARY_DIR}/python/c50/_data.py
+        COPYONLY
+    )
     install(
         TARGETS c50_python
         LIBRARY DESTINATION c50 COMPONENT python

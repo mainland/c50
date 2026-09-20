@@ -30,11 +30,21 @@ Repository = "https://github.com/mainland/c50"
 Issues = "https://github.com/mainland/c50/issues"
 
 [project.optional-dependencies]
-test = ["pytest>=8"]
+sklearn = [
+    "numpy>=1.26",
+    "scikit-learn>=1.6",
+]
+test = [
+    "numpy>=1.26",
+    "pytest>=8",
+    "scikit-learn>=1.6",
+]
 docs = [
     "breathe",
     "furo",
     "myst-parser",
+    "numpy>=1.26",
+    "scikit-learn>=1.6",
     "sphinx>=7",
 ]
 
