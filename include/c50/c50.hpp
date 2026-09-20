@@ -68,7 +68,10 @@ public:
     {
     }
 
-    /** @brief Return the native status that caused the exception. */
+    /**
+     * @brief Return the native status that caused the exception.
+     * @return The status value supplied at construction.
+     */
     c50_status status() const noexcept
     {
         return status_;
@@ -154,7 +157,10 @@ public:
         return handle_;
     }
 
-    /** @brief Return the status of the most recent native operation. */
+    /**
+     * @brief Return the status of the most recent native operation.
+     * @return The context's current native status.
+     */
     c50_status last_status() const noexcept
     {
         return c50_context_last_status(handle_);
@@ -190,7 +196,10 @@ public:
         c50_options_init(&options_);
     }
 
-    /** @brief Return the number of classifiers to construct. */
+    /**
+     * @brief Return the number of classifiers to construct.
+     * @return The configured number of trials.
+     */
     unsigned int trials() const noexcept { return options_.trials; }
     /**
      * @brief Set the number of classifiers to construct.
@@ -203,7 +212,10 @@ public:
         return *this;
     }
 
-    /** @brief Return whether discrete attributes may use subset splits. */
+    /**
+     * @brief Return whether discrete attributes may use subset splits.
+     * @return Whether subset splits are enabled.
+     */
     bool subset_splits() const noexcept { return options_.subset_splits != 0; }
     /**
      * @brief Enable or disable subset splits for discrete attributes.
@@ -216,7 +228,10 @@ public:
         return *this;
     }
 
-    /** @brief Return whether attribute winnowing is enabled. */
+    /**
+     * @brief Return whether attribute winnowing is enabled.
+     * @return Whether winnowing is enabled.
+     */
     bool winnow() const noexcept { return options_.winnow != 0; }
     /**
      * @brief Enable or disable attribute winnowing.
@@ -229,7 +244,10 @@ public:
         return *this;
     }
 
-    /** @brief Return whether global tree pruning is enabled. */
+    /**
+     * @brief Return whether global tree pruning is enabled.
+     * @return Whether global pruning is enabled.
+     */
     bool global_pruning() const noexcept
     {
         return options_.global_pruning != 0;
@@ -245,7 +263,10 @@ public:
         return *this;
     }
 
-    /** @brief Return whether probabilistic thresholds are enabled. */
+    /**
+     * @brief Return whether probabilistic thresholds are enabled.
+     * @return Whether probabilistic thresholds are enabled.
+     */
     bool probabilistic_thresholds() const noexcept
     {
         return options_.probabilistic_thresholds != 0;
@@ -261,7 +282,10 @@ public:
         return *this;
     }
 
-    /** @brief Return whether supplied misclassification costs are ignored. */
+    /**
+     * @brief Return whether supplied misclassification costs are ignored.
+     * @return Whether supplied costs are ignored.
+     */
     bool ignore_costs() const noexcept { return options_.ignore_costs != 0; }
     /**
      * @brief Select whether training ignores supplied costs.
@@ -274,7 +298,10 @@ public:
         return *this;
     }
 
-    /** @brief Return the minimum cases represented by two branches. */
+    /**
+     * @brief Return the minimum cases represented by two branches.
+     * @return The configured minimum case count.
+     */
     double minimum_cases() const noexcept { return options_.minimum_cases; }
     /**
      * @brief Set the minimum cases represented by two branches.
@@ -287,7 +314,10 @@ public:
         return *this;
     }
 
-    /** @brief Return the pruning confidence factor as a fraction. */
+    /**
+     * @brief Return the pruning confidence factor as a fraction.
+     * @return The configured confidence factor.
+     */
     double confidence_factor() const noexcept
     {
         return options_.confidence_factor;
@@ -303,7 +333,10 @@ public:
         return *this;
     }
 
-    /** @brief Return the training sample fraction. */
+    /**
+     * @brief Return the training sample fraction.
+     * @return The configured sample fraction.
+     */
     double sample_fraction() const noexcept
     {
         return options_.sample_fraction;
@@ -319,7 +352,10 @@ public:
         return *this;
     }
 
-    /** @brief Return the sampling seed. */
+    /**
+     * @brief Return the sampling seed.
+     * @return The configured random seed.
+     */
     unsigned int random_seed() const noexcept { return options_.random_seed; }
     /**
      * @brief Set the sampling seed.
@@ -334,10 +370,14 @@ public:
 
     /**
      * @brief Return the mutable native options without transferring ownership.
+     * @return A pointer to the native options owned by this object.
      * @warning Preserve `struct_size` and keep reserved fields zero.
      */
     c50_options *native_handle() noexcept { return &options_; }
-    /** @brief Return the const native options without transferring ownership. */
+    /**
+     * @brief Return the const native options without transferring ownership.
+     * @return A pointer to the native options owned by this object.
+     */
     const c50_options *native_handle() const noexcept { return &options_; }
 
 private:
@@ -390,13 +430,19 @@ public:
         return *this;
     }
 
-    /** @brief Return the number of predicted rows. */
+    /**
+     * @brief Return the number of predicted rows.
+     * @return The row count.
+     */
     std::size_t size() const noexcept
     {
         return c50_predictions_row_count(handle_);
     }
 
-    /** @brief Return the number of classes represented by each row. */
+    /**
+     * @brief Return the number of classes represented by each row.
+     * @return The class count.
+     */
     std::size_t class_count() const noexcept
     {
         return c50_predictions_class_count(handle_);
@@ -446,11 +492,13 @@ public:
 
     /**
      * @brief Return the mutable native handle without transferring ownership.
+     * @return The native handle owned by this object.
      * @warning Do not destroy the returned handle.
      */
     c50_predictions *native_handle() noexcept { return handle_; }
     /**
      * @brief Return the const native handle without transferring ownership.
+     * @return The native handle owned by this object.
      */
     const c50_predictions *native_handle() const noexcept { return handle_; }
 
@@ -631,13 +679,19 @@ public:
                     costs_data.size());
     }
 
-    /** @brief Return the serialized representation kind. */
+    /**
+     * @brief Return the serialized representation kind.
+     * @return The model kind.
+     */
     model_kind kind() const noexcept
     {
         return static_cast<model_kind>(c50_model_get_kind(handle_));
     }
 
-    /** @brief Return a copy of the retained C5.0 names-file contents. */
+    /**
+     * @brief Return a copy of the retained C5.0 names-file contents.
+     * @return The names-file contents.
+     */
     std::string names_data() const
     {
         std::size_t size = 0;
@@ -645,7 +699,10 @@ public:
         return data ? std::string(data, size) : std::string();
     }
 
-    /** @brief Return a copy of the serialized tree or rules-file contents. */
+    /**
+     * @brief Return a copy of the serialized tree or rules-file contents.
+     * @return The serialized classifier.
+     */
     std::string serialized_data() const
     {
         std::size_t size = 0;
@@ -706,10 +763,14 @@ public:
 
     /**
      * @brief Return the mutable native handle without transferring ownership.
+     * @return The native handle owned by this object.
      * @warning Do not mutate or destroy the returned handle.
      */
     c50_model *native_handle() noexcept { return handle_; }
-    /** @brief Return the const native handle without transferring ownership. */
+    /**
+     * @brief Return the const native handle without transferring ownership.
+     * @return The native handle owned by this object.
+     */
     const c50_model *native_handle() const noexcept { return handle_; }
 
 private:
