@@ -126,7 +126,10 @@ class C50Classifier(ClassifierMixin, BaseEstimator):
         label_encoder = LabelEncoder().fit(y_checked)
         classes = label_encoder.classes_
         if classes.shape[0] < 2:
-            raise ValueError("C5.0 classification requires at least two classes")
+            raise ValueError(
+                "C5.0 classification requires at least two classes; one class "
+                "was provided"
+            )
         class_indices = label_encoder.transform(y_checked)
 
         feature_names = getattr(self, "feature_names_in_", None)

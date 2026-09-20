@@ -35,6 +35,7 @@ sklearn = [
     "scikit-learn>=1.6",
 ]
 test = [
+    "mypy>=1.11",
     "numpy>=1.26",
     "pytest>=8",
     "scikit-learn>=1.6",
@@ -67,3 +68,13 @@ BUILD_TESTING = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]
+
+[tool.mypy]
+files = ["python/c50", "tests/typing"]
+mypy_path = "python"
+python_version = "3.12"
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["sklearn", "sklearn.*"]
+ignore_missing_imports = true
