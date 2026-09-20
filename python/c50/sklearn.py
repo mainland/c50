@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.preprocessing import LabelEncoder
+from sklearn.utils import Tags
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import check_is_fitted, validate_data
 
-from ._c50 import Model, ModelKind, Options, train
+from ._c50 import Model, ModelKind, Options, Predictions, train
 from ._data import Schema, encode_costs, fit_schema
 
 
@@ -20,7 +21,7 @@ type ModelKindName = Literal["tree", "rules"]
 type UnknownCategoryPolicy = Literal["error", "missing"]
 
 
-class C50Classifier(ClassifierMixin, BaseEstimator):
+class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
     """Classify dense array-like data with C5.0.
 
     Numeric features are continuous by default. Non-numeric and Boolean
@@ -64,6 +65,16 @@ class C50Classifier(ClassifierMixin, BaseEstimator):
             empty category array.
         cost_matrix_: Validated copy of the fitted cost matrix, or ``None``.
     """
+
+    classes_: NDArray[Any]
+    model_: Model
+    n_features_in_: int
+    feature_names_in_: NDArray[Any]
+    categorical_features_: NDArray[np.signedinteger[Any]]
+    categories_: tuple[NDArray[Any], ...]
+    cost_matrix_: NDArray[np.float64] | None
+    _label_encoder: LabelEncoder
+    _schema: Schema
 
     def __init__(
         self,
@@ -168,7 +179,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):
         self._schema = schema
         return self
 
-    def predict(self, X: ArrayLike) -> NDArray[np.generic]:
+    def predict(self, X: ArrayLike) -> NDArray[Any]:
         """Predict a class label for each row in ``X``.
 
         Args:
@@ -204,7 +215,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):
         """Return whether native model state has been fitted."""
         return hasattr(self, "model_")
 
-    def __sklearn_tags__(self):  # type: ignore[no-untyped-def]
+    def __sklearn_tags__(self) -> Tags:
         """Declare input capabilities to scikit-learn."""
         tags = super().__sklearn_tags__()
         tags.input_tags.allow_nan = True
@@ -212,7 +223,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):
         tags.input_tags.string = True
         return tags
 
-    def _predict_details(self, X: ArrayLike):  # type: ignore[no-untyped-def]
+    def _predict_details(self, X: ArrayLike) -> Predictions:
         check_is_fitted(self)
         X_checked = validate_data(
             self,

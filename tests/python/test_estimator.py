@@ -82,6 +82,23 @@ def test_categorical_features_and_missing_values() -> None:
     ]
 
 
+def test_labels_and_categories_cannot_change_the_c5_input_grammar() -> None:
+    X = np.asarray(
+        [["red, blue"], ["period. | slash\\"], ["red, blue"], ["other: value"]],
+        dtype=object,
+    )
+    y = np.asarray(["class, one", "class. two", "class, one", "class. two"])
+
+    classifier = C50Classifier(
+        categorical_features=(0,),
+        minimum_cases=1,
+    ).fit(X, y)
+
+    assert classifier.predict(X).tolist() == y.tolist()
+    assert "red, blue" not in classifier.model_.names_data
+    assert "class, one" not in classifier.model_.names_data
+
+
 def test_unseen_category_policy() -> None:
     X = np.asarray(
         [[0, "red"], [1, "blue"], [2, "red"], [3, "blue"]],

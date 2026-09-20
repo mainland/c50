@@ -84,6 +84,16 @@ def test_independent_estimators_can_fit_concurrently() -> None:
     assert futures[1].result() == reversed_labels.tolist()
 
 
+def test_one_fitted_estimator_can_predict_concurrently() -> None:
+    classifier = C50Classifier(minimum_cases=1).fit(X, Y)
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(classifier.predict, X) for _ in range(8)]
+
+    for future in futures:
+        assert future.result().tolist() == Y.tolist()
+
+
 def test_sampling_is_reproducible_for_a_fixed_seed() -> None:
     parameters = {
         "minimum_cases": 1,
