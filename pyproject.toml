@@ -24,6 +24,11 @@ classifiers = [
     "Typing :: Typed",
 ]
 
+[project.urls]
+Homepage = "https://github.com/mainland/c50"
+Repository = "https://github.com/mainland/c50"
+Issues = "https://github.com/mainland/c50/issues"
+
 [project.optional-dependencies]
 test = ["pytest>=8"]
 docs = [
