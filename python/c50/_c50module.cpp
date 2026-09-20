@@ -16,6 +16,42 @@ namespace py = pybind11;
 namespace
 {
 
+const char train_doc[] = R"doc(
+Train a C5.0 classifier from text held in memory.
+
+The names, training, and optional costs strings use the corresponding C5.0
+file formats. The returned model owns its serialized representation and is
+independent of the native context used during training.
+)doc";
+
+const char load_doc[] = R"doc(
+Load and validate a serialized C5.0 classifier.
+
+The returned model owns copies of the names, serialized classifier, and
+optional costs strings.
+)doc";
+
+const char predict_details_doc[] = R"doc(
+Predict cases and return labels, confidences, and per-class scores.
+
+Each case row uses C5.0 data-file syntax and includes a final class field,
+which may be ``?`` when unknown.
+)doc";
+
+const char predict_doc[] = R"doc(
+Predict the class label for each case row.
+
+Each case row uses C5.0 data-file syntax and includes a final class field,
+which may be ``?`` when unknown.
+)doc";
+
+const char predict_proba_doc[] = R"doc(
+Return C5.0's per-class scores for each case row.
+
+Columns follow ``classes_`` order. Each case row uses C5.0 data-file syntax
+and includes a final class field, which may be ``?`` when unknown.
+)doc";
+
 class python_model
 {
 public:
@@ -222,23 +258,39 @@ void translate_c50_exception(std::exception_ptr pointer)
 
 PYBIND11_MODULE(_c50, module)
 {
-    module.doc() = "Bindings for the C5.0 GPL core.";
+    module.doc() = R"doc(
+Python bindings for the C5.0 GPL classifier core.
+
+Native operations use independent C++ facade contexts and release the Python
+GIL while training, loading, or predicting.
+)doc";
     py::register_exception<c50::exception>(module, "C50Error",
                                            PyExc_RuntimeError);
+    module.attr("C50Error").attr("__doc__") =
+        "Base exception for native C5.0 failures not mapped to a built-in "
+        "Python exception.";
     py::register_exception_translator(&translate_c50_exception);
 
-    py::enum_<c50::model_kind>(module, "ModelKind")
-        .value("TREE", c50::model_kind::tree)
-        .value("RULES", c50::model_kind::rules);
+    py::enum_<c50::model_kind>(
+        module, "ModelKind",
+        "Serialized classifier representations supported by C5.0.")
+        .value("TREE", c50::model_kind::tree,
+               "A decision tree or boosted tree ensemble.")
+        .value("RULES", c50::model_kind::rules,
+               "A ruleset or boosted ruleset ensemble.");
 
-    py::class_<c50::options>(module, "Options")
-        .def(py::init<>())
+    py::class_<c50::options>(
+        module, "Options",
+        "Mutable classifier-construction options. Values are validated when "
+        "training begins.")
+        .def(py::init<>(), "Construct deterministic single-tree defaults.")
         .def_property(
             "trials",
             [](const c50::options &options) { return options.trials(); },
             [](c50::options &options, unsigned int value) {
                 options.trials(value);
-            })
+            },
+            "Number of classifiers to construct, from 1 through 1000.")
         .def_property(
             "subset_splits",
             [](const c50::options &options) {
@@ -246,11 +298,13 @@ PYBIND11_MODULE(_c50, module)
             },
             [](c50::options &options, bool value) {
                 options.subset_splits(value);
-            })
+            },
+            "Whether discrete attributes may use subset splits.")
         .def_property(
             "winnow",
             [](const c50::options &options) { return options.winnow(); },
-            [](c50::options &options, bool value) { options.winnow(value); })
+            [](c50::options &options, bool value) { options.winnow(value); },
+            "Whether to winnow attributes before training.")
         .def_property(
             "global_pruning",
             [](const c50::options &options) {
@@ -258,7 +312,8 @@ PYBIND11_MODULE(_c50, module)
             },
             [](c50::options &options, bool value) {
                 options.global_pruning(value);
-            })
+            },
+            "Whether to perform global tree pruning.")
         .def_property(
             "probabilistic_thresholds",
             [](const c50::options &options) {
@@ -266,7 +321,8 @@ PYBIND11_MODULE(_c50, module)
             },
             [](c50::options &options, bool value) {
                 options.probabilistic_thresholds(value);
-            })
+            },
+            "Whether to use probabilistic continuous-value thresholds.")
         .def_property(
             "ignore_costs",
             [](const c50::options &options) {
@@ -274,7 +330,8 @@ PYBIND11_MODULE(_c50, module)
             },
             [](c50::options &options, bool value) {
                 options.ignore_costs(value);
-            })
+            },
+            "Whether training ignores supplied misclassification costs.")
         .def_property(
             "minimum_cases",
             [](const c50::options &options) {
@@ -282,7 +339,9 @@ PYBIND11_MODULE(_c50, module)
             },
             [](c50::options &options, double value) {
                 options.minimum_cases(value);
-            })
+            },
+            "Minimum cases represented by two branches, from 1 through "
+            "1000000.")
         .def_property(
             "confidence_factor",
             [](const c50::options &options) {
@@ -290,7 +349,8 @@ PYBIND11_MODULE(_c50, module)
             },
             [](c50::options &options, double value) {
                 options.confidence_factor(value);
-            })
+            },
+            "Pruning confidence factor expressed as a fraction in [0, 1].")
         .def_property(
             "sample_fraction",
             [](const c50::options &options) {
@@ -298,7 +358,9 @@ PYBIND11_MODULE(_c50, module)
             },
             [](c50::options &options, double value) {
                 options.sample_fraction(value);
-            })
+            },
+            "Training sample fraction in [0, 0.999], or zero for no "
+            "sampling.")
         .def_property(
             "random_seed",
             [](const c50::options &options) {
@@ -306,37 +368,66 @@ PYBIND11_MODULE(_c50, module)
             },
             [](c50::options &options, unsigned int value) {
                 options.random_seed(value);
-            });
+            },
+            "Sampling seed in the range 0 through 4095.");
 
-    py::class_<c50::predictions>(module, "Predictions")
-        .def("__len__", &c50::predictions::size)
-        .def_property_readonly("class_names", &prediction_class_names)
-        .def_property_readonly("class_indices", &prediction_class_indices)
-        .def_property_readonly("labels", &prediction_labels)
-        .def_property_readonly("confidences", &prediction_confidences)
-        .def_property_readonly("scores", &prediction_scores);
+    py::class_<c50::predictions>(
+        module, "Predictions",
+        "Owned results for one prediction batch.")
+        .def("__len__", &c50::predictions::size,
+             "Return the number of predicted rows.")
+        .def_property_readonly(
+            "class_names", &prediction_class_names,
+            "Class names in score-column order.")
+        .def_property_readonly(
+            "class_indices", &prediction_class_indices,
+            "Zero-based predicted class index for each row.")
+        .def_property_readonly(
+            "labels", &prediction_labels,
+            "Predicted class label for each row.")
+        .def_property_readonly(
+            "confidences", &prediction_confidences,
+            "C5.0 confidence in the predicted class for each row.")
+        .def_property_readonly(
+            "scores", &prediction_scores,
+            "Per-class scores as rows in class_names order.");
 
-    py::class_<python_model>(module, "Model")
+    py::class_<python_model>(
+        module, "Model",
+        "Immutable, pickleable C5.0 classifier with move-only native "
+        "ownership.")
         .def_static("train", &python_model::train,
+                    train_doc,
                     py::arg("names"), py::arg("training_data"),
                     py::arg("kind") = c50::model_kind::tree,
                     py::arg("options") = c50::options(),
                     py::arg("costs") = "")
         .def_static("load", &python_model::load,
+                    load_doc,
                     py::arg("names"), py::arg("serialized_data"),
                     py::arg("kind") = c50::model_kind::tree,
                     py::arg("costs") = "")
-        .def_property_readonly("kind", &python_model::kind)
-        .def_property_readonly("names_data", &python_model::names_data)
+        .def_property_readonly(
+            "kind", &python_model::kind,
+            "Serialized classifier representation.")
+        .def_property_readonly(
+            "names_data", &python_model::names_data,
+            "Retained C5.0 names-file contents.")
         .def_property_readonly("serialized_data",
-                               &python_model::serialized_data)
-        .def_property_readonly("costs_data", &python_model::costs_data)
-        .def_property_readonly("classes_", &python_model::classes)
+                               &python_model::serialized_data,
+                               "Serialized tree or rules-file contents.")
+        .def_property_readonly(
+            "costs_data", &python_model::costs_data,
+            "Retained costs-file contents, or an empty string.")
+        .def_property_readonly(
+            "classes_", &python_model::classes,
+            "Class names in score-column order.")
         .def("predict_details", &python_model::predict_details,
-             py::arg("cases"))
-        .def("predict", &python_model::predict, py::arg("cases"))
+             predict_details_doc, py::arg("cases"))
+        .def("predict", &python_model::predict,
+             predict_doc, py::arg("cases"))
         .def("predict_proba", &python_model::predict_proba,
-             py::arg("cases"))
+             predict_proba_doc, py::arg("cases"))
         .def(py::pickle(
             [](const python_model &model) {
                 return py::make_tuple(model.kind(), model.names_data(),
@@ -356,11 +447,13 @@ PYBIND11_MODULE(_c50, module)
             }));
 
     module.def("train", &python_model::train,
+               train_doc,
                py::arg("names"), py::arg("training_data"),
                py::arg("kind") = c50::model_kind::tree,
                py::arg("options") = c50::options(),
                py::arg("costs") = "");
     module.def("load", &python_model::load,
+               load_doc,
                py::arg("names"), py::arg("serialized_data"),
                py::arg("kind") = c50::model_kind::tree,
                py::arg("costs") = "");
