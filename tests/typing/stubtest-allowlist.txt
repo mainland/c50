@@ -1,0 +1,15 @@
+# pybind11 classes use a native metaclass that stubs cannot express.
+c50._c50.Model
+c50._c50.Options
+c50._c50.Predictions
+
+# Model and Predictions intentionally have no public constructor.
+c50._c50.Model.__init__
+c50._c50.Predictions.__init__
+
+# pybind11's enum emulation differs from enum.Enum at runtime.
+c50._c50.ModelKind.RULES
+c50._c50.ModelKind.TREE
+c50._c50.ModelKind.__index__
+c50._c50.ModelKind.__int__
+c50._c50.ModelKind.__members__

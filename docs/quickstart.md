@@ -58,3 +58,30 @@ scores = model.predict_proba("0, ?\n3, ?\n")
 
 Use `ModelKind.RULES` to construct a rules model. `Options` exposes the native
 training controls.
+
+## Use the scikit-learn estimator
+
+Install the optional NumPy and scikit-learn dependencies with:
+
+```sh
+python -m pip install '.[sklearn]'
+```
+
+The estimator accepts dense array-like inputs and delegates to the same native
+training and prediction implementation:
+
+```python
+import numpy as np
+
+from c50.sklearn import C50Classifier
+
+X = np.asarray([[0.0], [0.5], [2.5], [3.0]])
+y = np.asarray(["low", "low", "high", "high"])
+
+classifier = C50Classifier(minimum_cases=1).fit(X, y)
+labels = classifier.predict([[0.25], [2.75]])
+scores = classifier.predict_proba([[0.25], [2.75]])
+```
+
+See {doc}`estimator` for the array, categorical-value, missing-value, and cost
+matrix contracts.

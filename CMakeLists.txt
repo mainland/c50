@@ -121,6 +121,26 @@ if(C50_BUILD_PYTHON)
         ${CMAKE_CURRENT_BINARY_DIR}/python/c50/__init__.py
         COPYONLY
     )
+    configure_file(
+        python/c50/_c50.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/python/c50/_c50.pyi
+        COPYONLY
+    )
+    configure_file(
+        python/c50/_data.py
+        ${CMAKE_CURRENT_BINARY_DIR}/python/c50/_data.py
+        COPYONLY
+    )
+    configure_file(
+        python/c50/sklearn.py
+        ${CMAKE_CURRENT_BINARY_DIR}/python/c50/sklearn.py
+        COPYONLY
+    )
+    configure_file(
+        python/c50/py.typed
+        ${CMAKE_CURRENT_BINARY_DIR}/python/c50/py.typed
+        COPYONLY
+    )
     install(
         TARGETS c50_python
         LIBRARY DESTINATION c50 COMPONENT python
@@ -376,6 +396,31 @@ if(BUILD_TESTING)
                 ENVIRONMENT
                     "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python"
         )
+        if(NOT C50_ENABLE_SANITIZERS AND NOT C50_ENABLE_THREAD_SANITIZER)
+            add_test(
+                NAME python-typecheck
+                COMMAND ${Python_EXECUTABLE} -m mypy
+            )
+            set_tests_properties(
+                python-typecheck
+                PROPERTIES
+                    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            )
+            add_test(
+                NAME python-stubtest
+                COMMAND
+                    ${Python_EXECUTABLE} -m mypy.stubtest
+                    --allowlist
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/typing/stubtest-allowlist.txt"
+                    c50._c50
+            )
+            set_tests_properties(
+                python-stubtest
+                PROPERTIES
+                    ENVIRONMENT
+                        "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python"
+            )
+        endif()
     endif()
     if(NOT C50_ENABLE_SANITIZERS AND NOT C50_ENABLE_THREAD_SANITIZER)
         add_test(

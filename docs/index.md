@@ -10,6 +10,7 @@ line programs, and Python 3.12-or-newer bindings.
 :caption: Guide
 
 quickstart
+estimator
 building-testing
 ownership-concurrency
 compatibility
@@ -22,4 +23,5 @@ compatibility
 api/c
 api/cpp
 api/python
+api/sklearn
 ```

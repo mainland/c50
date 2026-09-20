@@ -46,6 +46,7 @@ extensions = [
     "breathe",
     "myst_parser",
     "sphinx.ext.autodoc",
+    "sphinx.ext.napoleon",
 ]
 
 templates_path = ["_templates"]
