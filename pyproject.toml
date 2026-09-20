@@ -26,6 +26,12 @@ classifiers = [
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
+docs = [
+    "breathe",
+    "furo",
+    "myst-parser",
+    "sphinx>=7",
+]
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
@@ -35,6 +41,7 @@ install.components = ["python"]
 sdist.exclude = [
     "AGENTS.md",
     "build*/**",
+    "docs/_build/**",
     "notes/**",
     "python/*.egg-info/**",
 ]

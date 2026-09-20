@@ -5,6 +5,11 @@ while preserving its learning behavior and model compatibility. The intended
 deliverables are a reusable C library, a header-only C++ facade linked to that
 library, command-line compatibility, and Python bindings.
 
+The [project documentation](docs/index.md) contains build and testing guides,
+ownership and concurrency contracts, and generated C, C++, and Python API
+references. The repository includes configuration for publishing that site on
+Read the Docs.
+
 Geoffrey Mainland maintains this modernization project. The imported C5.0
 implementation remains attributed to RuleQuest Research Pty Ltd. in its source
 notices.
