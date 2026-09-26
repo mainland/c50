@@ -4,6 +4,8 @@
 #ifndef C50_API_INTERNAL_H
 #define C50_API_INTERNAL_H
 
+
+
 typedef struct c50_context c50_context;
 enum c50_status {
     C50_STATUS_OK, C50_STATUS_INVALID_ARGUMENT, C50_STATUS_OUT_OF_MEMORY,
@@ -18,8 +20,17 @@ const char *c50_status_message(c50_status status);
 struct c50_operation_abort { int status; };
 
 
-typedef void (*c50_operation_fn)(void *user_data);
-typedef void (*c50_operation_cleanup_fn)(void *user_data);
+#define C50_ERROR_MESSAGE_CAPACITY 1024
+
+struct c50_context
+{
+    c50_status status;
+    char error_message[C50_ERROR_MESSAGE_CAPACITY];
+};
+
+typedef void (*c50_operation_fn)(c50_context *context, void *user_data);
+typedef void (*c50_operation_cleanup_fn)(c50_context *context,
+                                         void *user_data);
 
 /*
  * Run operation below a C++ exception boundary. Cleanup must not fail or call
