@@ -558,6 +558,7 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 
 	    case ELTSP:
 		Context->schema.max_attribute_value[Att] = 1;
+		free(Context->schema.attribute_value_names[Att][1]);
 		Context->schema.attribute_value_names[Att][1] = strdup("N/A");
 
 		for ( p = Context->property_value ; *p ; )
