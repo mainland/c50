@@ -511,6 +511,7 @@ void	    CheckValue(DataRec Case, Attribute Att);
 	/* mcost.c */
 
 void	    GetMCosts(FILE *f);
+void	    GetMCostsInput(c50_input *Input);
 
 	/* attwinnow.c */
 
@@ -760,17 +761,22 @@ void	    SaveTree(Tree T, const char *Extension);
 void	    OutTree(Tree T);
 void	    SaveRules(CRuleSet RS, const char *Extension);
 void	    AsciiOut(const char *Pre, String S);
-void	    ReadHeader(void);
+void	    ReadHeader(c50_input *Input);
+void	    ReadHeaderMemory(c50_input *Input, c50_input *CostsInput);
 Tree	    GetTree(const char *Extension);
-Tree	    InTree(void);
+Tree	    InTree(c50_input *Input);
+Tree	    InTreeAt(c50_input *Input, Tree *Slot);
 CRuleSet    GetRules(const char *Extension);
-CRuleSet    InRules(void);
-CRule	    InRule(void);
-Condition   InCondition(void);
-int	    ReadProp(char *Delim);
+CRuleSet    InRules(c50_input *Input);
+CRuleSet    InRulesAt(c50_input *Input, CRuleSet *Slot);
+CRule	    InRule(c50_input *Input);
+CRule	    InRuleAt(c50_input *Input, CRule *Slot);
+Condition   InCondition(c50_input *Input);
+Condition   InConditionAt(c50_input *Input, Condition *Slot);
+int	    ReadProp(c50_input *Input, char *Delim);
 String	    RemoveQuotes(String S);
 Set	    MakeSubset(Attribute Att);
-void	    StreamIn(String S, int n);
+void	    StreamIn(c50_input *Input, String S, int n);
 
 	/* update.c (Unix) or winmain.c (WIN32) */
 
