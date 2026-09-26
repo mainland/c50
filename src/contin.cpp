@@ -35,7 +35,7 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
-#define	PartInfo(n) (-(n)*Log((n)/Context->training.environment->Cases))
+#define	PartInfo(n) (-(n)*Log((n)/Workspace.Cases))
 
 
 /*************************************************************************/
@@ -49,7 +49,8 @@
 /*************************************************************************/
 
 
-void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
+void EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace,
+		       Attribute Att, CaseNo Fp,
 		       CaseNo Lp)
 /*   -----------------  */
 {
@@ -62,11 +63,11 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
     Verbosity(3, fprintf(Context->io.output, "\tAtt %s\n", Context->schema.attribute_names[Att]))
 
     Context->splits.gain[Att] = None;
-    PrepareForContin(Context, Att, Fp, Lp);
+    PrepareForContin(Context, Workspace, Att, Fp, Lp);
 
     /*  Special case when very few known values  */
 
-    if ( Context->training.environment->ApplicCases < 2 * Context->options.minimum_cases )
+    if ( Workspace.ApplicCases < 2 * Context->options.minimum_cases )
     {
 	Verbosity(2,
 	    fprintf(Context->io.output, "\tAtt %s\tinsufficient cases with known values\n",
@@ -78,56 +79,56 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
 	information and gain of the split in each case  */
 
     /*  We have to be wary of splitting a small number of cases off one end,
-	as this has little predictive power.  The minimum split Context->training.environment->MinSplit is
+	as this has little predictive power.  The minimum split Workspace.MinSplit is
 	the maximum of Context->options.minimum_cases or (the minimum of 25 and 10% of the cases
 	per class)  */
 
-    Context->training.environment->MinSplit = 0.10 * Context->training.environment->KnownCases / Context->schema.max_class;
-    if ( Context->training.environment->MinSplit > 25 ) Context->training.environment->MinSplit = 25;
-    if ( Context->training.environment->MinSplit < Context->options.minimum_cases ) Context->training.environment->MinSplit = Context->options.minimum_cases;
+    Workspace.MinSplit = 0.10 * Workspace.KnownCases / Context->schema.max_class;
+    if ( Workspace.MinSplit > 25 ) Workspace.MinSplit = 25;
+    if ( Workspace.MinSplit < Context->options.minimum_cases ) Workspace.MinSplit = Context->options.minimum_cases;
 
     /*	Find first possible cut point and initialise scan parameters  */
 
-    i = PrepareForScan(Context, Lp);
+    i = PrepareForScan(Context, Workspace, Lp);
 
     /*  Repeatedly check next possible cut  */
 
-    for ( ; i <= Context->training.environment->Ep ; i++ )
+    for ( ; i <= Workspace.Ep ; i++ )
     {
-	c = Context->training.environment->SRec[i].C;
-	w = Context->training.environment->SRec[i].W;
+	c = Workspace.SRec[i].C;
+	w = Workspace.SRec[i].W;
 	assert(c >= 1 && c <= Context->schema.max_class);
 
-	Context->training.environment->LowCases   += w;
-	Context->training.environment->Freq[2][c] += w;
-	Context->training.environment->Freq[3][c] -= w;
+	Workspace.LowCases   += w;
+	Workspace.Freq[2][c] += w;
+	Workspace.Freq[3][c] -= w;
 
-	Context->training.environment->HighVal = Context->training.environment->SRec[i+1].V;
-	if ( Context->training.environment->HighVal > Context->training.environment->LowVal )
+	Workspace.HighVal = Workspace.SRec[i+1].V;
+	if ( Workspace.HighVal > Workspace.LowVal )
 	{
 	    Tries++;
 
-	    Context->training.environment->LowClass  = Context->training.environment->HighClass;
-	    Context->training.environment->HighClass = Context->training.environment->SRec[i+1].C;
+	    Workspace.LowClass  = Workspace.HighClass;
+	    Workspace.HighClass = Workspace.SRec[i+1].C;
 	    for ( j = i+2 ;
-		  Context->training.environment->HighClass && j <= Context->training.environment->Ep && Context->training.environment->SRec[j].V == Context->training.environment->HighVal ;
+		  Workspace.HighClass && j <= Workspace.Ep && Workspace.SRec[j].V == Workspace.HighVal ;
 		  j++ )
 	    {
-		if ( Context->training.environment->SRec[j].C != Context->training.environment->HighClass ) Context->training.environment->HighClass = 0;
+		if ( Workspace.SRec[j].C != Workspace.HighClass ) Workspace.HighClass = 0;
 	    }
 
-	    if ( ! Context->training.environment->LowClass || Context->training.environment->LowClass != Context->training.environment->HighClass || j > Context->training.environment->Ep )
+	    if ( ! Workspace.LowClass || Workspace.LowClass != Workspace.HighClass || j > Workspace.Ep )
 	    {
-		LowInfo = TotalInfo(Context->training.environment->Freq[2], 1, Context->schema.max_class);
+		LowInfo = TotalInfo(Workspace.Freq[2], 1, Context->schema.max_class);
 
 		/*  If cannot improve on best so far, count remaining
 		    possible cuts and break  */
 
 		if ( LowInfo >= LeastInfo )
 		{
-		    for ( i++ ; i <= Context->training.environment->Ep ; i++ )
+		    for ( i++ ; i <= Workspace.Ep ; i++ )
 		    {
-			if ( Context->training.environment->SRec[i+1].V > Context->training.environment->SRec[i].V )
+			if ( Workspace.SRec[i+1].V > Workspace.SRec[i].V )
 			{
 			    Tries++;
 			}
@@ -135,44 +136,44 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
 		    break;
 		}
 
-		LHInfo = LowInfo + TotalInfo(Context->training.environment->Freq[3], 1, Context->schema.max_class);
+		LHInfo = LowInfo + TotalInfo(Workspace.Freq[3], 1, Context->schema.max_class);
 		if ( LHInfo < LeastInfo )
 		{
 		    LeastInfo = LHInfo;
 		    BestI     = i;
 
-		    BestInfo = (Context->training.environment->FixedSplitInfo
-				+ PartInfo(Context->training.environment->LowCases)
-				+ PartInfo(Context->training.environment->ApplicCases - Context->training.environment->LowCases))
-			       / Context->training.environment->Cases;
+		    BestInfo = (Workspace.FixedSplitInfo
+				+ PartInfo(Workspace.LowCases)
+				+ PartInfo(Workspace.ApplicCases - Workspace.LowCases))
+			       / Workspace.Cases;
 		}
 
 		Verbosity(3,
 		{
 		    fprintf(Context->io.output, "\t\tCut at %.3f  (gain %.3f):",
-			   (Context->training.environment->LowVal + Context->training.environment->HighVal) / 2,
-			   (1 - Context->training.environment->UnknownRate) *
-			   (Context->training.environment->BaseInfo - (Context->training.environment->NAInfo + LHInfo) / Context->training.environment->KnownCases));
-		    PrintDistribution(Context, Att, 2, 3, Context->training.environment->Freq, Context->training.environment->ValFreq, true);
+			   (Workspace.LowVal + Workspace.HighVal) / 2,
+			   (1 - Workspace.UnknownRate) *
+			   (Workspace.BaseInfo - (Workspace.NAInfo + LHInfo) / Workspace.KnownCases));
+		    PrintDistribution(Context, Att, 2, 3, Workspace.Freq, Workspace.ValFreq, true);
 		})
 	    }
 
-	    Context->training.environment->LowVal = Context->training.environment->HighVal;
+	    Workspace.LowVal = Workspace.HighVal;
 	}
     }
 
-    BestGain = (1 - Context->training.environment->UnknownRate) *
-	       (Context->training.environment->BaseInfo - (Context->training.environment->NAInfo + LeastInfo) / Context->training.environment->KnownCases);
+    BestGain = (1 - Workspace.UnknownRate) *
+	       (Workspace.BaseInfo - (Workspace.NAInfo + LeastInfo) / Workspace.KnownCases);
 
     /*  The threshold cost is the lesser of the cost of indicating the
 	cases to split between or the interval containing the split  */
 
     if ( BestGain > 0 )
     {
-	Interval = (Context->training.environment->SRec[Lp].V - Context->training.environment->SRec[Context->training.environment->Xp].V) /
-		   (Context->training.environment->SRec[BestI+1].V - Context->training.environment->SRec[BestI].V);
+	Interval = (Workspace.SRec[Lp].V - Workspace.SRec[Workspace.Xp].V) /
+		   (Workspace.SRec[BestI+1].V - Workspace.SRec[BestI].V);
 	ThreshCost = ( Interval < Tries ? Log(Interval) : Log(Tries) )
-		     / Context->training.environment->Cases;
+		     / Workspace.Cases;
     }
 
     BestGain -= ThreshCost;
@@ -189,16 +190,16 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
 	Context->splits.gain[Att] = BestGain;
 	Context->splits.information[Att] = BestInfo;
 
-	Context->training.environment->LowVal  = Context->training.environment->SRec[BestI].V;
-	Context->training.environment->HighVal = Context->training.environment->SRec[BestI+1].V;
+	Workspace.LowVal  = Workspace.SRec[BestI].V;
+	Workspace.HighVal = Workspace.SRec[BestI+1].V;
 
 	/*  Set threshold, making sure that rounding problems do not
 	    cause it to reach upper value  */
 
-	if ( (Context->splits.thresholds[Att] = (ContValue) (0.5 * (Context->training.environment->LowVal + Context->training.environment->HighVal)))
-	     >= Context->training.environment->HighVal )
+	if ( (Context->splits.thresholds[Att] = (ContValue) (0.5 * (Workspace.LowVal + Workspace.HighVal)))
+	     >= Workspace.HighVal )
 	{
-	    Context->splits.thresholds[Att] = Context->training.environment->LowVal;
+	    Context->splits.thresholds[Att] = Workspace.LowVal;
 	}
 
 	Verbosity(2,
@@ -217,7 +218,8 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
 /*************************************************************************/
 
 
-void EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp, CaseNo Lp)
+void EstimateMaxGR(c50_context *Context, SplitWorkspace &Workspace,
+		   Attribute Att, CaseNo Fp, CaseNo Lp)
 /*   -------------  */
 {
     CaseNo	i, j;
@@ -228,61 +230,61 @@ void EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp, CaseNo Lp)
 
     if ( Skip(Att) || Att == Context->schema.class_attribute ) return;
 
-    PrepareForContin(Context, Att, Fp, Lp);
+    PrepareForContin(Context, Workspace, Att, Fp, Lp);
 
     /*  Special case when very few known values  */
 
-    if ( Context->training.environment->ApplicCases < 2 * Context->options.minimum_cases * Context->splits.sample_fraction )
+    if ( Workspace.ApplicCases < 2 * Context->options.minimum_cases * Context->splits.sample_fraction )
     {
 	return;
     }
 
     /*  Try possible cuts between cases i and i+1.  Use conservative
-	value of Context->training.environment->MinSplit to allow for sampling  */
+	value of Workspace.MinSplit to allow for sampling  */
 
-    Context->training.environment->MinSplit = 0.10 * Context->training.environment->KnownCases / Context->schema.max_class;
-    if ( Context->training.environment->MinSplit > 25 ) Context->training.environment->MinSplit = 25;
-    if ( Context->training.environment->MinSplit < Context->options.minimum_cases ) Context->training.environment->MinSplit = Context->options.minimum_cases;
+    Workspace.MinSplit = 0.10 * Workspace.KnownCases / Context->schema.max_class;
+    if ( Workspace.MinSplit > 25 ) Workspace.MinSplit = 25;
+    if ( Workspace.MinSplit < Context->options.minimum_cases ) Workspace.MinSplit = Context->options.minimum_cases;
 
-    Context->training.environment->MinSplit *= Context->splits.sample_fraction * 0.33;
+    Workspace.MinSplit *= Context->splits.sample_fraction * 0.33;
 
-    i = PrepareForScan(Context, Lp);
+    i = PrepareForScan(Context, Workspace, Lp);
 
     /*  Repeatedly check next possible cut  */
 
-    for ( ; i <= Context->training.environment->Ep ; i++ )
+    for ( ; i <= Workspace.Ep ; i++ )
     {
-	c = Context->training.environment->SRec[i].C;
-	w = Context->training.environment->SRec[i].W;
+	c = Workspace.SRec[i].C;
+	w = Workspace.SRec[i].W;
 	assert(c >= 1 && c <= Context->schema.max_class);
 
-	Context->training.environment->LowCases   += w;
-	Context->training.environment->Freq[2][c] += w;
-	Context->training.environment->Freq[3][c] -= w;
+	Workspace.LowCases   += w;
+	Workspace.Freq[2][c] += w;
+	Workspace.Freq[3][c] -= w;
 
-	Context->training.environment->HighVal = Context->training.environment->SRec[i+1].V;
-	if ( Context->training.environment->HighVal > Context->training.environment->LowVal )
+	Workspace.HighVal = Workspace.SRec[i+1].V;
+	if ( Workspace.HighVal > Workspace.LowVal )
 	{
-	    Context->training.environment->LowClass  = Context->training.environment->HighClass;
-	    Context->training.environment->HighClass = Context->training.environment->SRec[i+1].C;
+	    Workspace.LowClass  = Workspace.HighClass;
+	    Workspace.HighClass = Workspace.SRec[i+1].C;
 	    for ( j = i+2 ;
-		  Context->training.environment->HighClass && j <= Context->training.environment->Ep && Context->training.environment->SRec[j].V == Context->training.environment->HighVal ;
+		  Workspace.HighClass && j <= Workspace.Ep && Workspace.SRec[j].V == Workspace.HighVal ;
 		  j++ )
 	    {
-		if ( Context->training.environment->SRec[j].C != Context->training.environment->HighClass ) Context->training.environment->HighClass = 0;
+		if ( Workspace.SRec[j].C != Workspace.HighClass ) Workspace.HighClass = 0;
 	    }
 
-	    if ( ! Context->training.environment->LowClass || Context->training.environment->LowClass != Context->training.environment->HighClass || j > Context->training.environment->Ep )
+	    if ( ! Workspace.LowClass || Workspace.LowClass != Workspace.HighClass || j > Workspace.Ep )
 	    {
-		LHInfo = TotalInfo(Context->training.environment->Freq[2], 1, Context->schema.max_class)
-			 + TotalInfo(Context->training.environment->Freq[3], 1, Context->schema.max_class);
+		LHInfo = TotalInfo(Workspace.Freq[2], 1, Context->schema.max_class)
+			 + TotalInfo(Workspace.Freq[3], 1, Context->schema.max_class);
 
-		SplitInfo = (Context->training.environment->FixedSplitInfo
-			    + PartInfo(Context->training.environment->LowCases)
-			    + PartInfo(Context->training.environment->ApplicCases - Context->training.environment->LowCases)) / Context->training.environment->Cases;
+		SplitInfo = (Workspace.FixedSplitInfo
+			    + PartInfo(Workspace.LowCases)
+			    + PartInfo(Workspace.ApplicCases - Workspace.LowCases)) / Workspace.Cases;
 
-		ThisGain = (1 - Context->training.environment->UnknownRate) *
-			   (Context->training.environment->BaseInfo - (Context->training.environment->NAInfo + LHInfo) / Context->training.environment->KnownCases);
+		ThisGain = (1 - Workspace.UnknownRate) *
+			   (Workspace.BaseInfo - (Workspace.NAInfo + LHInfo) / Workspace.KnownCases);
 		if ( ThisGain > Context->splits.gain[Att] ) Context->splits.gain[Att] = ThisGain;
 
 		/*  Adjust GR to make it more conservative upper bound  */
@@ -296,12 +298,12 @@ void EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp, CaseNo Lp)
 		Verbosity(3,
 		{
 		    fprintf(Context->io.output, "\t\tCut at %.3f  (gain %.3f):",
-			   (Context->training.environment->LowVal + Context->training.environment->HighVal) / 2, ThisGain);
-		    PrintDistribution(Context, Att, 2, 3, Context->training.environment->Freq, Context->training.environment->ValFreq, true);
+			   (Workspace.LowVal + Workspace.HighVal) / 2, ThisGain);
+		    PrintDistribution(Context, Att, 2, 3, Workspace.Freq, Workspace.ValFreq, true);
 		})
 	    }
 
-	    Context->training.environment->LowVal = Context->training.environment->HighVal;
+	    Workspace.LowVal = Workspace.HighVal;
 	}
     }
 
@@ -320,7 +322,8 @@ void EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp, CaseNo Lp)
 /*************************************************************************/
 
 
-void PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
+void PrepareForContin(c50_context *Context, SplitWorkspace &Workspace,
+		      Attribute Att, CaseNo Fp,
 		      CaseNo Lp)
 /*   ----------------  */
 {
@@ -334,99 +337,99 @@ void PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
     {
 	ForEach(c, 1, Context->schema.max_class)
 	{
-	    Context->training.environment->Freq[v][c] = 0;
+	    Workspace.Freq[v][c] = 0;
 	}
-	Context->training.environment->ValFreq[v] = 0;
+	Workspace.ValFreq[v] = 0;
     }
 
     /*  Omit and count unknown and N/A values */
 
-    Context->training.environment->Cases = 0;
+    Workspace.Cases = 0;
 
     if ( Context->cases.some_missing[Att] || Context->cases.some_not_applicable[Att] )
     {
-	Context->training.environment->Xp = Lp+1;
+	Workspace.Xp = Lp+1;
 
 	ForEach(i, Fp, Lp)
 	{
 	    assert(Class(Context->cases.records[i]) >= 1 && Class(Context->cases.records[i]) <= Context->schema.max_class);
 
-	    Context->training.environment->Cases += Weight(Context->cases.records[i]);
+	    Workspace.Cases += Weight(Context->cases.records[i]);
 
 	    if ( Unknown(Context->cases.records[i], Att) )
 	    {
-		Context->training.environment->Freq[ 0 ][ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
+		Workspace.Freq[ 0 ][ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
 	    }
 	    else
 	    if ( NotApplic(Context, Context->cases.records[i], Att) )
 	    {
-		Context->training.environment->Freq[ 1 ][ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
+		Workspace.Freq[ 1 ][ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
 	    }
 	    else
 	    {
-		Context->training.environment->Freq[ 3 ][ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
-		Context->training.environment->Xp--;
-		Context->training.environment->SRec[Context->training.environment->Xp].V = CVal(Context->cases.records[i], Att);
-		Context->training.environment->SRec[Context->training.environment->Xp].W = Weight(Context->cases.records[i]);
-		Context->training.environment->SRec[Context->training.environment->Xp].C = Class(Context->cases.records[i]);
+		Workspace.Freq[ 3 ][ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
+		Workspace.Xp--;
+		Workspace.SRec[Workspace.Xp].V = CVal(Context->cases.records[i], Att);
+		Workspace.SRec[Workspace.Xp].W = Weight(Context->cases.records[i]);
+		Workspace.SRec[Workspace.Xp].C = Class(Context->cases.records[i]);
 	    }
 	}
 
 	ForEach(c, 1, Context->schema.max_class)
 	{
-	    Context->training.environment->ValFreq[0] += Context->training.environment->Freq[0][c];
-	    Context->training.environment->ValFreq[1] += Context->training.environment->Freq[1][c];
+	    Workspace.ValFreq[0] += Workspace.Freq[0][c];
+	    Workspace.ValFreq[1] += Workspace.Freq[1][c];
 	}
 
-	Context->training.environment->NAInfo = TotalInfo(Context->training.environment->Freq[1], 1, Context->schema.max_class);
-	Context->training.environment->FixedSplitInfo = PartInfo(Context->training.environment->ValFreq[0]) + PartInfo(Context->training.environment->ValFreq[1]);
+	Workspace.NAInfo = TotalInfo(Workspace.Freq[1], 1, Context->schema.max_class);
+	Workspace.FixedSplitInfo = PartInfo(Workspace.ValFreq[0]) + PartInfo(Workspace.ValFreq[1]);
 
-	Verbosity(3, PrintDistribution(Context, Att, 0, 1, Context->training.environment->Freq, Context->training.environment->ValFreq, true))
+	Verbosity(3, PrintDistribution(Context, Att, 0, 1, Workspace.Freq, Workspace.ValFreq, true))
     }
     else
     {
-	Context->training.environment->Xp = Fp;
+	Workspace.Xp = Fp;
 
 	ForEach(i, Fp, Lp)
 	{
-	    Context->training.environment->SRec[i].V = CVal(Context->cases.records[i], Att);
-	    Context->training.environment->SRec[i].W = Weight(Context->cases.records[i]);
-	    Context->training.environment->SRec[i].C = Class(Context->cases.records[i]);
+	    Workspace.SRec[i].V = CVal(Context->cases.records[i], Att);
+	    Workspace.SRec[i].W = Weight(Context->cases.records[i]);
+	    Workspace.SRec[i].C = Class(Context->cases.records[i]);
 
-	    Context->training.environment->Freq[3][Class(Context->cases.records[i])] += Weight(Context->cases.records[i]);
+	    Workspace.Freq[3][Class(Context->cases.records[i])] += Weight(Context->cases.records[i]);
 	}
 
 	ForEach(c, 1, Context->schema.max_class)
 	{
-	    Context->training.environment->Cases += Context->training.environment->Freq[3][c];
+	    Workspace.Cases += Workspace.Freq[3][c];
 	}
 
-	Context->training.environment->NAInfo = Context->training.environment->FixedSplitInfo = 0;
+	Workspace.NAInfo = Workspace.FixedSplitInfo = 0;
     }
 
-    Context->training.environment->KnownCases  = Context->training.environment->Cases - Context->training.environment->ValFreq[0];
-    Context->training.environment->ApplicCases = Context->training.environment->KnownCases - Context->training.environment->ValFreq[1];
+    Workspace.KnownCases  = Workspace.Cases - Workspace.ValFreq[0];
+    Workspace.ApplicCases = Workspace.KnownCases - Workspace.ValFreq[1];
 
-    Context->training.environment->UnknownRate = 1.0 - Context->training.environment->KnownCases / Context->training.environment->Cases;
+    Workspace.UnknownRate = 1.0 - Workspace.KnownCases / Workspace.Cases;
 
-    Cachesort(Context->training.environment->Xp, Lp, Context->training.environment->SRec);
+    Cachesort(Workspace.Xp, Lp, Workspace.SRec);
 
     /*  If unknowns or using sampling, must recompute base information  */
 
-    if ( Context->training.environment->ValFreq[0] > 0 || Context->splits.sample_fraction < 1 )
+    if ( Workspace.ValFreq[0] > 0 || Context->splits.sample_fraction < 1 )
     {
-	/*  Determine base information using Context->training.environment->Freq[0] as temp buffer  */
+	/*  Determine base information using Workspace.Freq[0] as temp buffer  */
 
 	ForEach(c, 1, Context->schema.max_class)
 	{
-	    Context->training.environment->Freq[0][c] = Context->training.environment->Freq[1][c] + Context->training.environment->Freq[3][c];
+	    Workspace.Freq[0][c] = Workspace.Freq[1][c] + Workspace.Freq[3][c];
 	}
 
-	Context->training.environment->BaseInfo = TotalInfo(Context->training.environment->Freq[0], 1, Context->schema.max_class) / Context->training.environment->KnownCases;
+	Workspace.BaseInfo = TotalInfo(Workspace.Freq[0], 1, Context->schema.max_class) / Workspace.KnownCases;
     }
     else
     {
-	Context->training.environment->BaseInfo = Context->splits.base_information;
+	Workspace.BaseInfo = Context->splits.base_information;
     }
 }
 
@@ -440,7 +443,7 @@ void PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
 /*************************************************************************/
 
 
-CaseNo PrepareForScan(c50_context *Context, CaseNo Lp)
+CaseNo PrepareForScan(c50_context *Context, SplitWorkspace &Workspace, CaseNo Lp)
 /*     --------------  */
 {
     CaseNo	i, j;
@@ -449,41 +452,41 @@ CaseNo PrepareForScan(c50_context *Context, CaseNo Lp)
 
     /*  Find last possible split  */
 
-    Context->training.environment->HighCases = Context->training.environment->LowCases = 0;
+    Workspace.HighCases = Workspace.LowCases = 0;
 
-    for ( Context->training.environment->Ep = Lp ; Context->training.environment->Ep >= Context->training.environment->Xp && Context->training.environment->HighCases < Context->training.environment->MinSplit ; Context->training.environment->Ep-- )
+    for ( Workspace.Ep = Lp ; Workspace.Ep >= Workspace.Xp && Workspace.HighCases < Workspace.MinSplit ; Workspace.Ep-- )
     {
-	Context->training.environment->HighCases += Context->training.environment->SRec[Context->training.environment->Ep].W;
+	Workspace.HighCases += Workspace.SRec[Workspace.Ep].W;
     }
 
     /*  Skip cases before first possible cut  */
 
-    for ( i = Context->training.environment->Xp ;
-	  i <= Context->training.environment->Ep &&
-	  ( Context->training.environment->LowCases + Context->training.environment->SRec[i].W < Context->training.environment->MinSplit - 1E-5 ||
-	    Context->training.environment->SRec[i].V == Context->training.environment->SRec[i+1].V ) ;
+    for ( i = Workspace.Xp ;
+	  i <= Workspace.Ep &&
+	  ( Workspace.LowCases + Workspace.SRec[i].W < Workspace.MinSplit - 1E-5 ||
+	    Workspace.SRec[i].V == Workspace.SRec[i+1].V ) ;
 	  i++ )
     {
-	c = Context->training.environment->SRec[i].C;
-	w = Context->training.environment->SRec[i].W;
+	c = Workspace.SRec[i].C;
+	w = Workspace.SRec[i].W;
 	assert(c >= 1 && c <= Context->schema.max_class);
 
-	Context->training.environment->LowCases   += w;
-	Context->training.environment->Freq[2][c] += w;
-	Context->training.environment->Freq[3][c] -= w;
+	Workspace.LowCases   += w;
+	Workspace.Freq[2][c] += w;
+	Workspace.Freq[3][c] -= w;
     }
 
     /*  Find the class key for the first interval  */
 
-    Context->training.environment->HighClass = Context->training.environment->SRec[i].C;
-    for ( j = i-1; Context->training.environment->HighClass && j >= Context->training.environment->Xp ; j-- )
+    Workspace.HighClass = Workspace.SRec[i].C;
+    for ( j = i-1; Workspace.HighClass && j >= Workspace.Xp ; j-- )
     {
-	if ( Context->training.environment->SRec[j].C != Context->training.environment->HighClass ) Context->training.environment->HighClass = 0;
+	if ( Workspace.SRec[j].C != Workspace.HighClass ) Workspace.HighClass = 0;
     }
-    assert(Context->training.environment->HighClass <= Context->schema.max_class);
-    assert(j+1 >= Context->training.environment->Xp);
+    assert(Workspace.HighClass <= Context->schema.max_class);
+    assert(j+1 >= Workspace.Xp);
 
-    Context->training.environment->LowVal = Context->training.environment->SRec[i].V;
+    Workspace.LowVal = Workspace.SRec[i].V;
 
     return i;
 }
