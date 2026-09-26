@@ -444,7 +444,8 @@ void PrepareForContin(c50_context *Context, SplitWorkspace &Workspace,
 /*************************************************************************/
 
 
-CaseNo PrepareForScan(c50_context *Context, SplitWorkspace &Workspace, CaseNo Lp)
+CaseNo PrepareForScan([[maybe_unused]] c50_context *Context,
+                      SplitWorkspace &Workspace, CaseNo Lp)
 /*     --------------  */
 {
     CaseNo	i, j;
