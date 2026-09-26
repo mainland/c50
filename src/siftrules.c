@@ -3,6 +3,7 @@
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
 /*  Author: Ross Quinlan (quinlan@rulequest.com) [Rev Jan 2016]		 */
+/*  Modifications Copyright 2026 Geoffrey Mainland.			 */
 /*									 */
 /*  This file is part of C5.0 GPL Edition, a single-threaded version	 */
 /*  of C5.0 release 2.07.						 */
@@ -192,19 +193,20 @@ void InvertFires()
     int		j, Blocks, Extra;
     CaseNo	i;
     Byte	*p, *From, *To, *Next;
+    size_t	CovByBlockSize=0;
 
     CovByPtr = Alloc(MaxCase+2, Byte *);
     Extra = NRules / 128;		/* max number of filler entries */
-    CovByPtr[0] = 0;
+    ForEach(i, 1, MaxCase+1)
+    {
+	CovByBlockSize += CovBy[i-1] + Extra;
+    }
+
+    CovByBlock = Alloc(CovByBlockSize, Byte);
+    CovByPtr[0] = CovByBlock;
     ForEach(i, 1, MaxCase+1)
     {
 	CovByPtr[i] = CovByPtr[i-1] + CovBy[i-1] + Extra;
-    }
-
-    CovByBlock = Alloc((size_t) CovByPtr[MaxCase+1], Byte);
-    ForEach(i, 0, MaxCase)
-    {
-	CovByPtr[i] += (size_t) CovByBlock;
     }
 
     LastCovBy = AllocZero(MaxCase+1, RuleNo);
@@ -390,6 +392,8 @@ float CondBits(Condition C)
 
 	    return AttTestBits + Code;
     }
+
+    return 0;
 }
 
 
@@ -551,6 +555,8 @@ void HillClimb()
     double	LastCost=1E99, CurrentCost, AltCost, NewCost;
     Boolean	DeleteOnly=false;
 
+    (void) LastCost;  /* Used only when VerbOpt is enabled. */
+
     ForEach(r, 1, NRules)
     {
 	if ( RuleIn[r] )
@@ -612,7 +618,7 @@ void HillClimb()
 			    r, DeltaErrs[r], (AltCost - CurrentCost)/100.0))
 
 	    if ( AltCost < NewCost ||
-		 AltCost == NewCost && RuleIn[r] )
+		 ( AltCost == NewCost && RuleIn[r] ) )
 	    {
 		Toggle  = r;
 		NewCost = AltCost;
@@ -627,7 +633,7 @@ void HillClimb()
 
 	Verbosity(2, fprintf(Of, "\n"))
 
-	if ( ! Toggle || DeleteOnly && RuleCount <= OriginalCount ) break;
+	if ( ! Toggle || ( DeleteOnly && RuleCount <= OriginalCount ) ) break;
 
 	Verbosity(1,
 	    fprintf(Of, "\t%s rule %d/%d (errs=%.1f, cost=%.1f bits)\n",
@@ -775,7 +781,7 @@ void CountVotes(CaseNo i)
 /*************************************************************************/
 
 
-#define Prefer(d,c1,c2) ((d) > 0 || (d) == 0 && c1 < c2)
+#define Prefer(d,c1,c2) ((d) > 0 || ((d) == 0 && c1 < c2))
 
 void UpdateDeltaErrs(CaseNo i, double Delta, RuleNo Toggle)
 /*   ---------------  */
