@@ -41,9 +41,9 @@ int main(int argc, char *argv[])
     if ( comment_input.position != 0 ) return 1;
 
     GetDataInput(context, &data_input, false, false);
-    if ( MaxCase != 1 ) return 1;
-    if ( CVal(Case[0], 2) != 0.25 || Class(Case[0]) != 1 ) return 1;
-    if ( CVal(Case[1], 2) != 1.5 || Class(Case[1]) != 2 ) return 1;
+    if ( context->cases.max_case != 1 ) return 1;
+    if ( CVal(context->cases.records[0], 2) != 0.25 || Class(context->cases.records[0]) != 1 ) return 1;
+    if ( CVal(context->cases.records[1], 2) != 1.5 || Class(context->cases.records[1]) != 2 ) return 1;
     if ( strcmp(CaseLabel(context, 0), "first") ) return 1;
     if ( strcmp(CaseLabel(context, 1), "second") ) return 1;
     SetAvCWt(context);

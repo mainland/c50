@@ -83,7 +83,7 @@ void Prune(c50_context *Context, Tree T)
 			 (UPDATE|REPORTPROGRESS) );
     if ( UnitWeights ) Options |= UNITWEIGHTS;
 
-    EstimateErrs(Context, T, 0, MaxCase, 0, Options);
+    EstimateErrs(Context, T, 0, Context->cases.max_case, 0, Options);
 
     if ( MCost )
     {
@@ -97,7 +97,7 @@ void Prune(c50_context *Context, Tree T)
 	    whether fractional cases might have appeared (for GlobalPrune)  */
 
 	RecalculateErrs = false;
-	InsertParents(T, Nil);
+	InsertParents(Context, T, Nil);
 
 	/*  Possible global pruning phase  */
 
@@ -234,12 +234,12 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 
     if ( CostWeights )
     {
-	MissingCases = SumNocostWeights(Fp, Ep);
-	KnownCases   = SumNocostWeights(Ep+1, Lp);
+	MissingCases = SumNocostWeights(Context, Fp, Ep);
+	KnownCases   = SumNocostWeights(Context, Ep+1, Lp);
     }
     else
     {
-	MissingCases = CountCases(Fp, Ep);
+	MissingCases = CountCases(Context, Fp, Ep);
 	KnownCases   = Cases - MissingCases;
     }
 
@@ -258,11 +258,11 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 	/*  Bp -> first value in missing + remaining values
 	    Ep -> last value in missing + current group  */
 
-	BranchCases[v] = CountCases(Bp + Missing, Ep);
+	BranchCases[v] = CountCases(Context, Bp + Missing, Ep);
 
 	Factor = ( ! Missing ? 0 :
 		   ! CostWeights ? BranchCases[v] / KnownCases :
-		   SumNocostWeights(Bp + Missing, Ep) / KnownCases );
+		   SumNocostWeights(Context, Bp + Missing, Ep) / KnownCases );
 
 	if ( (BranchCases[v] += Factor * MissingCases) >= MinLeaf )
 	{
@@ -270,7 +270,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 	    {
 		ForEach(i, Bp, Bp + Missing - 1)
 		{
-		    Weight(Case[i]) *= Factor;
+		    Weight(Context->cases.records[i]) *= Factor;
 		}
 	    }
 
@@ -283,7 +283,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 	    {
 		ForEach(i, Bp, Ep)
 		{
-		    SmallBranches[ Class(Case[i]) ] += Weight(Case[i]);
+		    SmallBranches[ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
 		}
 
 		SmallBranchCases += BranchCases[v];
@@ -299,9 +299,9 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 	    {
 		for ( i = Ep ; i >= Bp ; i-- )
 		{
-		    if ( Unknown(Case[i], Att) )
+		    if ( Unknown(Context->cases.records[i], Att) )
 		    {
-			Weight(Case[i]) /= Factor;
+			Weight(Context->cases.records[i]) /= Factor;
 			Swap(i, Ep);
 			Ep--;
 		    }
@@ -363,7 +363,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
     }
     else
     {
-	BestBrErrs = MaxCase+1;
+	BestBrErrs = Context->cases.max_case+1;
     }
 
     LocalVerbosity(2,
@@ -467,11 +467,11 @@ void GlobalPrune(c50_context *Context, Tree T)
     if ( RecalculateErrs )
     {
 	BaseErrs = 0;
-	ForEach(i, 0, MaxCase)
+	ForEach(i, 0, Context->cases.max_case)
 	{
-	    if ( TreeClassify(Context, Case[i], T) != Class(Case[i]) )
+	    if ( TreeClassify(Context, Context->cases.records[i], T) != Class(Context->cases.records[i]) )
 	    {
-		BaseErrs += Weight(Case[i]);
+		BaseErrs += Weight(Context->cases.records[i]);
 	    }
 	}
     }
@@ -484,7 +484,7 @@ void GlobalPrune(c50_context *Context, Tree T)
 
     /*  Additional error limit set at 1SE  */
 
-    MaxExtraErrs = sqrt(BaseErrs * (1 - BaseErrs / (MaxCase + 1)));
+    MaxExtraErrs = sqrt(BaseErrs * (1 - BaseErrs / (Context->cases.max_case + 1)));
 
     while ( MaxExtraErrs > 0 )
     {
@@ -620,7 +620,7 @@ void FindMinCC(Tree T)
 /*************************************************************************/
 
 
-void InsertParents(Tree T, Tree P)
+void InsertParents(c50_context *Context, Tree T, Tree P)
 /*   -------------  */
 {
     DiscrValue	v;
@@ -632,12 +632,12 @@ void InsertParents(Tree T, Tree P)
     {
 	ForEach(v, 1, T->Forks)
 	{
-	    InsertParents(T->Branch[v], T);
+	    InsertParents(Context, T->Branch[v], T);
 	    T->Errors += T->Branch[v]->Errors;
 	    T->Leaves += T->Branch[v]->Leaves;
 	}
 
-	if ( SomeMiss[T->Tested] ) RecalculateErrs = true;
+	if ( Context->cases.some_missing[T->Tested] ) RecalculateErrs = true;
     }
     else
     if ( T->Cases > 1E-3 )
