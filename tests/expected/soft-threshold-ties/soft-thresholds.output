@@ -1,0 +1,58 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `soft-threshold-ties'
+	Probability thresholds
+
+Class specified by attribute `class'
+
+Read 234 cases (4 attributes) from soft-threshold-ties.data
+
+Decision tree:
+
+c0 >= 4 (3.5): k1 (23.5/7.9)
+c0 <= 3 (3.5):
+:...c1 <= 0.5 (0.75):
+    :...c0 <= 1 (1.25): k0 (34.9/8.8)
+    :   c0 >= 2 (1.25):
+    :   :...c2 <= 0 (0.25): k0 (10.4/2)
+    :       c2 >= 1 (0.25): k1 (18.7/6.7)
+    c1 >= 1.5 (0.75):
+    :...c2 <= 0.5 (1.25):
+        :...c1 <= 1.5 (2.5): k0 (61.4/26)
+        :   c1 >= 3 (2.5): k1 (31.5/15.7)
+        c2 >= 2 (1.25):
+        :...c2 <= 2 (2.5): k1 (39.6/10.2)
+            c2 >= 3 (2.5):
+            :...c0 >= 3 (2.5): k2 (4.6/2.3)
+                c0 <= 0 (2.5):
+                :...c1 <= 2 (2.5): k0 (5.4/1.7)
+                    c1 >= 3 (2.5): k2 (4.1/1.2)
+
+
+Evaluation on training data (234 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	    10   82(35.0%)   <<
+
+
+	   (a)   (b)   (c)    <-classified as
+	  ----  ----  ----
+	    70    27     1    (a): class k0
+	    26    78     1    (b): class k1
+	     7    20     4    (c): class k2
+
+
+	Attribute usage:
+
+	     94%  c0
+	     86%  c1
+	     74%  c2
+
+
+Time: <elapsed> secs
