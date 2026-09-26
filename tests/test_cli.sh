@@ -67,6 +67,60 @@ run_case()
     fi
 }
 
+run_invalid_definition()
+{
+    invalid_fixture_dir="$script_dir/fixtures/invalid-definition"
+    invalid_expected_dir="$script_dir/expected/invalid-definition"
+    invalid_case_dir="$test_dir/invalid-definition"
+
+    mkdir "$invalid_case_dir"
+    cp "$invalid_fixture_dir/invalid.names" "$invalid_case_dir/"
+    cp "$invalid_fixture_dir/invalid.data" "$invalid_case_dir/"
+
+    set +e
+    (
+        cd "$invalid_case_dir"
+        "$binary" -f invalid > output.raw 2>&1
+    )
+    invalid_exit_code=$?
+    set -e
+
+    if test "$invalid_exit_code" -ne 1; then
+        printf 'invalid definition returned %d, expected 1\n' \
+            "$invalid_exit_code" >&2
+        return 1
+    fi
+
+    normalize_output "$invalid_case_dir/output.raw" \
+        > "$invalid_case_dir/output.actual"
+    diff -u "$invalid_expected_dir/output" "$invalid_case_dir/output.actual"
+}
+
+run_missing_file_format()
+{
+    missing_case_dir="$test_dir/missing-file-format"
+    mkdir "$missing_case_dir"
+
+    set +e
+    (
+        cd "$missing_case_dir"
+        "$binary" -f 'missing%s' > output.raw 2>&1
+    )
+    missing_exit_code=$?
+    set -e
+
+    if test "$missing_exit_code" -ne 1; then
+        printf 'missing file returned %d, expected 1\n' \
+            "$missing_exit_code" >&2
+        return 1
+    fi
+
+    normalize_output "$missing_case_dir/output.raw" \
+        > "$missing_case_dir/output.actual"
+    diff -u "$script_dir/expected/missing-file-format/output" \
+        "$missing_case_dir/output.actual"
+}
+
 run_case basic tree tree
 run_case basic rules rules -r
 run_case basic subsets tree -s
@@ -80,5 +134,7 @@ run_case case-weight case-weight tree
 run_case implicit implicit tree
 run_case multiclass tree tree
 run_case multiclass rules rules -r
+run_invalid_definition
+run_missing_file_format
 
 printf 'CLI regression tests passed\n'
