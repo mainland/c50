@@ -44,6 +44,13 @@
 #include <limits>
 #include <vector>
 
+#ifdef C50_TEST_SPLIT_FAILURE
+#include "split_failure_hooks.hpp"
+#else
+#define C50_SPLIT_TEST_POINT(Event, Worker) ((void) 0)
+#define C50_SPLIT_TEST_WORKER(Worker) ((void) 0)
+#endif
+
 
 #define		SAMPLEUNIT	2000
 
@@ -52,6 +59,7 @@ void c50_split_workspace_deleter::operator()(
     SplitWorkspace *Workspace) const noexcept
 {
     if ( ! Workspace ) return;
+    C50_SPLIT_TEST_POINT(workspace_release, 0);
 
     const DiscrValue MaxValue = Workspace->MaxDiscrValue;
     FreeVector((void **) Workspace->Freq, 0, Max(3, MaxValue+1));
@@ -740,12 +748,16 @@ static void EvaluateQueueInParallel(c50_context *Context, CaseNo WFp,
     Workspaces[0] = Context->training.environment.get();
     for ( size_t Worker = 1; Worker < Workers; ++Worker )
     {
+        C50_SPLIT_TEST_POINT(workspace_begin, Worker);
         ExtraWorkspaces.push_back(MakeSplitWorkspace(Context));
+        C50_SPLIT_TEST_POINT(workspace_ready, Worker);
         Workspaces[Worker] = ExtraWorkspaces.back().get();
     }
 
     auto EvaluateWorker = [&](size_t Worker)
     {
+        C50_SPLIT_TEST_WORKER(Worker);
+        C50_SPLIT_TEST_POINT(worker_begin, Worker);
         SplitWorkspace &Workspace = *Workspaces[Worker];
         for ( size_t Index = Worker; Index < Queue.size(); Index += Workers )
         {
@@ -766,6 +778,7 @@ static void EvaluateQueueInParallel(c50_context *Context, CaseNo WFp,
     Tasks.reserve(Workers - 1);
     for ( size_t Worker = 1; Worker < Workers; ++Worker )
     {
+        C50_SPLIT_TEST_POINT(task_launch, Worker);
         Tasks.push_back(std::async(std::launch::async, EvaluateWorker, Worker));
     }
 
