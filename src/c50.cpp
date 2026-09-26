@@ -41,10 +41,10 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
-#define SetFOpt(V)	V = strtod(OptArg, &EndPtr);\
+#define SetFOpt(V)	V = strtod(Context->io.option_argument, &EndPtr);\
 			if ( ! EndPtr || *EndPtr != '\00' ) break;\
 			ArgOK = true
-#define SetIOpt(V)	V = strtol(OptArg, &EndPtr, 10);\
+#define SetIOpt(V)	V = strtol(Context->io.option_argument, &EndPtr, 10);\
 			if ( ! EndPtr || *EndPtr != '\00' ) break;\
 			ArgOK = true
 
@@ -53,7 +53,6 @@ int main(int Argc, char *Argv[])
 /*  ----  */
 {
     int			o;
-    extern String	OptArg, Option;
     char		*EndPtr;
     Boolean		FirstTime=true, ArgOK;
     double		StartTime;
@@ -85,26 +84,26 @@ int main(int Argc, char *Argv[])
 
     if ( Argc > 2 && ! strcmp(Argv[Argc-2], "-o") )
     {
-	Of = fopen(Argv[Argc-1], "w");
+	Context->io.output = fopen(Argv[Argc-1], "w");
 	Argc -= 2;
     }
 
-    if ( ! Of )
+    if ( ! Context->io.output )
     {
-	Of = stdout;
+	Context->io.output = stdout;
     }
 
-    KRInit = time(0) & 07777;
+    Context->io.random_initial_seed = time(0) & 07777;
 
-    PrintHeader("");
+    PrintHeader(Context, "");
 
     /*  Process options  */
 
-    while ( (o = ProcessOption(Argc, Argv, "f+bpv+t+sm+c+S+I+ru+egX+wh")) )
+    while ( (o = ProcessOption(Context, Argc, Argv, "f+bpv+t+sm+c+S+I+ru+egX+wh")) )
     {
 	if ( FirstTime )
 	{
-	    fprintf(Of, T_OptHeader);
+	    fprintf(Context->io.output, T_OptHeader);
 	    FirstTime = false;
 	}
 
@@ -112,76 +111,76 @@ int main(int Argc, char *Argv[])
 
 	switch (o)
 	{
-	case 'f':   FileStem = OptArg;
-		    fprintf(Of, T_OptApplication, FileStem);
+	case 'f':   Context->io.file_stem = Context->io.option_argument;
+		    fprintf(Context->io.output, T_OptApplication, Context->io.file_stem);
 		    ArgOK = true;
 		    break;
 	case 'b':   Context->options.boosting = true;
-		    fprintf(Of, T_OptBoost);
+		    fprintf(Context->io.output, T_OptBoost);
 		    if ( Context->options.trials == 1 ) Context->options.trials = 10;
 		    ArgOK = true;
 		    break;
 	case 'p':   Context->options.probabilistic_thresholds = true;
-		    fprintf(Of, T_OptProbThresh);
+		    fprintf(Context->io.output, T_OptProbThresh);
 		    ArgOK = true;
 		    break;
 #ifdef VerbOpt
 	case 'v':   SetIOpt(Context->options.verbosity);
-		    fprintf(Of, "\tVerbosity level %d\n", Context->options.verbosity);
+		    fprintf(Context->io.output, "\tVerbosity level %d\n", Context->options.verbosity);
 		    ArgOK = true;
 		    break;
 #endif
 	case 't':   SetIOpt(Context->options.trials);
-		    fprintf(Of, T_OptTrials, Context->options.trials);
-		    Check(Context->options.trials, 3, 1000);
+		    fprintf(Context->io.output, T_OptTrials, Context->options.trials);
+		    Check(Context, Context->options.trials, 3, 1000);
 		    Context->options.boosting = true;
 		    break;
 	case 's':   Context->options.subset_splits = true;
-		    fprintf(Of, T_OptSubsets);
+		    fprintf(Context->io.output, T_OptSubsets);
 		    ArgOK = true;
 		    break;
 	case 'm':   SetFOpt(Context->options.minimum_cases);
-		    fprintf(Of, T_OptMinCases, Context->options.minimum_cases);
-		    Check(Context->options.minimum_cases, 1, 1000000);
+		    fprintf(Context->io.output, T_OptMinCases, Context->options.minimum_cases);
+		    Check(Context, Context->options.minimum_cases, 1, 1000000);
 		    break;
 	case 'c':   SetFOpt(Context->options.confidence_factor);
-		    fprintf(Of, T_OptCF, Context->options.confidence_factor);
-		    Check(Context->options.confidence_factor, 0, 100);
+		    fprintf(Context->io.output, T_OptCF, Context->options.confidence_factor);
+		    Check(Context, Context->options.confidence_factor, 0, 100);
 		    Context->options.confidence_factor /= 100;
 		    break;
 	case 'r':   Context->options.rules = true;
-		    fprintf(Of, T_OptRules);
+		    fprintf(Context->io.output, T_OptRules);
 		    ArgOK = true;
 		    break;
 	case 'S':   SetFOpt(Context->options.sample_fraction);
-		    fprintf(Of, T_OptSampling, Context->options.sample_fraction);
-		    Check(Context->options.sample_fraction, 0.1, 99.9);
+		    fprintf(Context->io.output, T_OptSampling, Context->options.sample_fraction);
+		    Check(Context, Context->options.sample_fraction, 0.1, 99.9);
 		    Context->options.sample_fraction /= 100;
 		    break;
-	case 'I':   SetIOpt(KRInit);
-		    fprintf(Of, T_OptSeed, KRInit);
-		    KRInit = KRInit & 07777;
+	case 'I':   SetIOpt(Context->io.random_initial_seed);
+		    fprintf(Context->io.output, T_OptSeed, Context->io.random_initial_seed);
+		    Context->io.random_initial_seed = Context->io.random_initial_seed & 07777;
 		    break;
 	case 'u':   SetIOpt(Context->options.utility_bands);
-		    fprintf(Of, T_OptUtility, Context->options.utility_bands);
-		    Check(Context->options.utility_bands, 2, 10000);
+		    fprintf(Context->io.output, T_OptUtility, Context->options.utility_bands);
+		    Check(Context, Context->options.utility_bands, 2, 10000);
 		    Context->options.rules = true;
 		    break;
 	case 'e':   Context->options.ignore_costs = true;
-		    fprintf(Of, T_OptNoCosts);
+		    fprintf(Context->io.output, T_OptNoCosts);
 		    ArgOK = true;
 		    break;
 	case 'w':   Context->options.winnow = true;
-		    fprintf(Of, T_OptWinnow);
+		    fprintf(Context->io.output, T_OptWinnow);
 		    ArgOK = true;
 		    break;
 	case 'g':   Context->options.global_pruning = false;
-		    fprintf(Of, T_OptNoGlobal);
+		    fprintf(Context->io.output, T_OptNoGlobal);
 		    ArgOK = true;
 		    break;
 	case 'X':   SetIOpt(Context->options.folds);
-		    fprintf(Of, T_OptXval, Context->options.folds);
-		    Check(Context->options.folds, 2, 1000);
+		    fprintf(Context->io.output, T_OptXval, Context->options.folds);
+		    Check(Context, Context->options.folds, 2, 1000);
 		    Context->options.cross_validation = true;
 		    break;
 	}
@@ -190,33 +189,33 @@ int main(int Argc, char *Argv[])
 	{
 	    if ( o != 'h' )
 	    {
-		fprintf(Of, T_UnregnizedOpt,
-			    Option,
-			    ( ! OptArg || OptArg == Option+2 ? "" : OptArg ));
-		fprintf(Of, T_SummaryOpts);
+		fprintf(Context->io.output, T_UnregnizedOpt,
+			    Context->io.option,
+			    ( ! Context->io.option_argument || Context->io.option_argument == Context->io.option+2 ? "" : Context->io.option_argument ));
+		fprintf(Context->io.output, T_SummaryOpts);
 	    }
-	    fprintf(Of, T_ListOpts);
+	    fprintf(Context->io.output, T_ListOpts);
 	    Goodbye(1);
 	}
     }
 
     if ( Context->options.utility_bands && Context->options.boosting )
     {
-	fprintf(Of, T_UBWarn);
+	fprintf(Context->io.output, T_UBWarn);
     }
 
     StartTime = ExecTime();
 
     /*  Get information on training data  */
 
-    if ( ! (F = GetFile(".names", "r")) ) Error(NOFILE, "", "");
+    if ( ! (F = GetFile(Context, ".names", "r")) ) Error(Context, NOFILE, "", "");
     c50_input_init_file(&NamesInput, F);
     GetNames(Context, &NamesInput);
     fclose(F);
 
     if ( Context->schema.class_attribute )
     {
-	fprintf(Of, T_ClassVar, Context->schema.attribute_names[Context->schema.class_attribute]);
+	fprintf(Context->io.output, T_ClassVar, Context->schema.attribute_names[Context->schema.class_attribute]);
     }
 
     NotifyStage(Context, READDATA);
@@ -229,46 +228,46 @@ int main(int Argc, char *Argv[])
 
     /*  Read data file  */
 
-    if ( ! (F = GetFile(".data", "r")) ) Error(NOFILE, "", "");
+    if ( ! (F = GetFile(Context, ".data", "r")) ) Error(Context, NOFILE, "", "");
     GetData(Context, F, true, false);
-    fprintf(Of, TX_ReadData(Context->cases.max_case+1, Context->schema.max_attribute, FileStem));
+    fprintf(Context->io.output, TX_ReadData(Context->cases.max_case+1, Context->schema.max_attribute, Context->io.file_stem));
 
-    if ( Context->options.cross_validation && (F = GetFile(".test", "r")) )
+    if ( Context->options.cross_validation && (F = GetFile(Context, ".test", "r")) )
     {
 	SaveMaxCase = Context->cases.max_case;
 	GetData(Context, F, false, false);
-	fprintf(Of, TX_ReadTest(Context->cases.max_case-SaveMaxCase, FileStem));
+	fprintf(Context->io.output, TX_ReadTest(Context->cases.max_case-SaveMaxCase, Context->io.file_stem));
     }
 
     /*  Check whether case weight attribute appears  */
 
     if ( Context->schema.case_weight_attribute )
     {
-	fprintf(Of, T_CWtAtt);
+	fprintf(Context->io.output, T_CWtAtt);
     }
 
-    if ( ! Context->options.ignore_costs && (F = GetFile(".costs", "r")) )
+    if ( ! Context->options.ignore_costs && (F = GetFile(Context, ".costs", "r")) )
     {
 	GetMCosts(Context, F);
 	if ( Context->costs.matrix )
 	{
-	    fprintf(Of, T_ReadCosts, FileStem);
+	    fprintf(Context->io.output, T_ReadCosts, Context->io.file_stem);
 	}
     }
 
     /*  Note any attribute exclusions/inclusions  */
 
-    if ( AttExIn )
+    if ( Context->io.attribute_exclusions )
     {
-	fprintf(Of, "%s", ( AttExIn == -1 ? T_AttributesOut : T_AttributesIn ));
+	fprintf(Context->io.output, "%s", ( Context->io.attribute_exclusions == -1 ? T_AttributesOut : T_AttributesIn ));
 
 	ForEach(Att, 1, Context->schema.max_attribute)
 	{
 	    if ( Att != Context->schema.class_attribute &&
 		 Att != Context->schema.case_weight_attribute &&
-		 ( StatBit(Att, SKIP) > 0 ) == ( AttExIn == -1 ) )
+		 ( StatBit(Att, SKIP) > 0 ) == ( Context->io.attribute_exclusions == -1 ) )
 	    {
-		fprintf(Of, "    %s\n", Context->schema.attribute_names[Att]);
+		fprintf(Context->io.output, "    %s\n", Context->schema.attribute_names[Att]);
 	    }
 	}
     }
@@ -303,22 +302,22 @@ int main(int Argc, char *Argv[])
 
 	/*  Evaluation  */
 
-	fprintf(Of, T_EvalTrain, Context->cases.max_case+1);
+	fprintf(Context->io.output, T_EvalTrain, Context->cases.max_case+1);
 
 	NotifyStage(Context, EVALTRAIN);
 	Progress(Context, -Context->options.trials * (Context->cases.max_case+1.0));
 
 	Evaluate(Context, CMINFO | USAGEINFO);
 
-	if ( (F = GetFile(( Context->options.sample_fraction ? ".data" : ".test" ), "r")) )
+	if ( (F = GetFile(Context, ( Context->options.sample_fraction ? ".data" : ".test" ), "r")) )
 	{
 	    NotifyStage(Context, READTEST);
-	    fprintf(Of, "\n");
+	    fprintf(Context->io.output, "\n");
 
 	    FreeData(Context);
 	    GetData(Context, F, false, false);
 
-	    fprintf(Of, T_EvalTest, Context->cases.max_case+1);
+	    fprintf(Context->io.output, T_EvalTest, Context->cases.max_case+1);
 
 	    NotifyStage(Context, EVALTEST);
 	    Progress(Context, -Context->options.trials * (Context->cases.max_case+1.0));
@@ -327,7 +326,7 @@ int main(int Argc, char *Argv[])
 	}
     }
 
-    fprintf(Of, T_Time, ExecTime() - StartTime);
+    fprintf(Context->io.output, T_Time, ExecTime() - StartTime);
 
 #ifdef VerbOpt
     Cleanup(Context);
