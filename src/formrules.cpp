@@ -41,6 +41,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 double		*Errors=Nil,		/* [Condition] */
 		*Total=Nil;		/* [Condition] */
@@ -124,7 +125,7 @@ CRuleSet FormRules(c50_context *Context, Tree T)
     if ( ! BranchBits )
     {
 	GenerateLogs(Max(MaxCase+1, Max(MaxAtt, Max(MaxClass, MaxDiscrVal))));
-	FindTestCodes();
+	FindTestCodes(Context);
     }
 
     SetupNCost();
@@ -132,9 +133,9 @@ CRuleSet FormRules(c50_context *Context, Tree T)
     /*  Extract and prune paths from root to leaves  */
 
     NCond = 0;
-    Scan(T);
+    Scan(Context, T);
 
-    Default = T->Leaf;
+    Context->default_class = T->Leaf;
 
     /*  Deallocate storage  */
 
@@ -153,7 +154,7 @@ CRuleSet FormRules(c50_context *Context, Tree T)
 
     RS->SNRules  = NRules;
     RS->SRule    = Rule;				Rule = Nil;
-    RS->SDefault = Default;
+    RS->SDefault = Context->default_class;
 
     ConstructRuleTree(RS);
 
@@ -241,7 +242,7 @@ void SetupNCost()
 /*************************************************************************/
 
 
-void Scan(Tree T)
+void Scan(c50_context *Context, Tree T)
 /*   ----  */
 {
     DiscrValue	v, Last;
@@ -285,9 +286,9 @@ void Scan(Tree T)
 
 	    /*  Adjust number of failed conditions  */
 
-	    PushCondition();
+	    PushCondition(Context);
 
-	    Scan(T->Branch[v]);
+	    Scan(Context, T->Branch[v]);
 
 	    /*  Reset number of failed conditions  */
 
@@ -320,14 +321,15 @@ void Scan(Tree T)
 /*************************************************************************/
 
 
-void PushCondition()
+void PushCondition(c50_context *Context)
 /*   -------------  */
 {
     int i;
 
     ForEach(i, 0, MaxCase)
     {
-	if ( (CondFailedBy[NCond][i] = ! Satisfies(Case[i], Stack[NCond])) )
+	if ( (CondFailedBy[NCond][i] =
+	      ! Satisfies(Context, Case[i], Stack[NCond])) )
 	{
 	    NFail[i]++;
 	}

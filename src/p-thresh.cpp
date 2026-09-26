@@ -47,7 +47,7 @@
 void SoftenThresh(c50_context *Context, Tree T)
 /*   ------------  */
 {
-    ResubErrs(T, 0, MaxCase);
+    ResubErrs(Context, T, 0, MaxCase);
 
     FindBounds(Context, T, 0, MaxCase);
 }
@@ -61,7 +61,7 @@ void SoftenThresh(c50_context *Context, Tree T)
 /*************************************************************************/
 
 
-void ResubErrs(Tree T, CaseNo Fp, CaseNo Lp)
+void ResubErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 /*   ---------  */
 {
     CaseNo	i, Bp, Ep, Missing;
@@ -80,7 +80,7 @@ void ResubErrs(Tree T, CaseNo Fp, CaseNo Lp)
     /*  Estimate errors for each branch  */
 
     Att = T->Tested;
-    Missing = (Ep = Group(0, Fp, Lp, T)) - Fp + 1;
+    Missing = (Ep = Group(Context, 0, Fp, Lp, T)) - Fp + 1;
 
     if ( CostWeights )
     {
@@ -101,7 +101,7 @@ void ResubErrs(Tree T, CaseNo Fp, CaseNo Lp)
 
     ForEach(v, 1, T->Forks)
     {
-	Ep = Group(v, Bp + Missing, Lp, T);
+	Ep = Group(Context, v, Bp + Missing, Lp, T);
 
 	/*  Bp -> first value in missing + remaining values
 	    Ep -> last value in missing + current group  */
@@ -122,7 +122,7 @@ void ResubErrs(Tree T, CaseNo Fp, CaseNo Lp)
 		}
 	    }
 
-	    ResubErrs(T->Branch[v], Bp, Ep);
+	    ResubErrs(Context, T->Branch[v], Bp, Ep);
 
 	    T->Errors += T->Branch[v]->Errors;
 
@@ -177,7 +177,7 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 
     if ( ! T->NodeType ) return;
 
-    Kp = Group(0, Fp, Lp, T) + 1;
+    Kp = Group(Context, 0, Fp, Lp, T) + 1;
     Missing = Kp - Fp;
 
     Att = T->Tested;
@@ -191,7 +191,7 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 
 	/*  Skip N/A values  */
 
-	Ap = Group(1, Kp, Lp, T) + 1;
+	Ap = Group(Context, 1, Kp, Lp, T) + 1;
 
 	Quicksort(Ap, Lp, Att);
 
@@ -277,7 +277,7 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 
     ForEach(v, 1, T->Forks)
     {
-	Kp = Group(v, Bp + Missing, Lp, T);
+	Kp = Group(Context, v, Bp + Missing, Lp, T);
 
 	/*  Bp -> first value in missing + remaining values
 	    Kp -> last value in missing + current group  */

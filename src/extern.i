@@ -45,19 +45,9 @@ extern	CaseCount	MINITEMS,
 extern	float		CF,
 			SAMPLE;
 
-extern	Attribute	ClassAtt,
-			LabelAtt,
-			CWtAtt;
-
-extern double		AvCWt;
-
 extern	String		*ClassName,
 			*AttName,
 			**AttValName;
-
-extern	char 		*IgnoredVals;
-extern	int		IValsSize,
-			IValsOffset;
 
 extern	int		MaxAtt,
 			MaxClass,
@@ -128,8 +118,6 @@ extern	RuleNo		NRules,
 			RuleSpace;
 
 extern	CRuleSet	 *RuleSet;
-
-extern	ClassNo		Default;
 
 extern	Byte		**Fires,
 			*CBuffer;

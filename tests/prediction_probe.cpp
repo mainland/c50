@@ -62,7 +62,8 @@ int main(int argc, char **argv)
         }
     }
 
-    Default = ( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
+    Context->default_class =
+        ( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
     Context->class_sum = AllocZero(MaxClass+1, float);
     Context->votes = AllocZero(MaxClass+1, float);
     Context->trial_predictions = AllocZero(TRIALS, ClassNo);
@@ -90,7 +91,7 @@ int main(int argc, char **argv)
         putchar('\n');
     }
 
-    Cleanup();
+    Cleanup(Context);
     c50_context_destroy(Context);
     return 0;
 }

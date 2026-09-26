@@ -222,7 +222,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 	{
 	    if ( AttDef[Att] )
 	    {
-		DVec[Att] = EvaluateDef(AttDef[Att], DVec);
+		DVec[Att] = EvaluateDef(Context, AttDef[Att], DVec);
 
 		if ( Continuous(Att) )
 		{
@@ -232,7 +232,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 		if ( SomeMiss )
 		{
 		    SomeMiss[Att] |= Unknown(DVec, Att);
-		    SomeNA[Att]   |= NotApplic(DVec, Att);
+		    SomeNA[Att]   |= NotApplic(Context, DVec, Att);
 		}
 
 		continue;
@@ -250,11 +250,11 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 
 	    if ( Exclude(Att) )
 	    {
-		if ( Att == LabelAtt )
+		if ( Att == Context->label_attribute )
 		{
 		    /*  Record the value as a string  */
 
-		    SVal(DVec,Att) = StoreIVal(Name);
+		    SVal(DVec,Att) = StoreIVal(Context, Name);
 		}
 	    }
 	    else
@@ -266,7 +266,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 		if ( SomeMiss ) SomeMiss[Att] = true;
 	    }
 	    else
-	    if ( Att != ClassAtt && ! strcmp(Name, "N/A") )
+	    if ( Att != Context->class_attribute && ! strcmp(Name, "N/A") )
 	    {
 		/*  Set marker to indicate not applicable  */
 
@@ -367,14 +367,14 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 	    }
 	}
 
-	if ( ClassAtt )
+	if ( Context->class_attribute )
 	{
-	    if ( Discrete(ClassAtt) )
+	    if ( Discrete(Context->class_attribute) )
 	    {
-		Class(DVec) = XDVal(DVec, ClassAtt);
+		Class(DVec) = XDVal(DVec, Context->class_attribute);
 	    }
 	    else
-	    if ( Unknown(DVec, ClassAtt) || NotApplic(DVec, ClassAtt) )
+	    if ( Unknown(DVec, Context->class_attribute) || NotApplic(Context, DVec, Context->class_attribute) )
 	    {
 		Class(DVec) = 0;
 	    }
@@ -382,7 +382,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 	    {
 		/*  Find appropriate segment using class thresholds  */
 
-		Cv = CVal(DVec, ClassAtt);
+		Cv = CVal(DVec, Context->class_attribute);
 
 		for ( Dv = 1 ; Dv < MaxClass && Cv > ClassThresh[Dv] ; Dv++ )
 		    ;
@@ -405,8 +405,9 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 	    }
 	}
 
-    if ( LabelAtt &&
-	     (Chars = strlen(IgnoredVals + SVal(DVec, LabelAtt))) >
+    if ( Context->label_attribute &&
+	     (Chars = strlen(Context->ignored_values +
+			     SVal(DVec, Context->label_attribute))) >
 		 Context->max_label )
     {
 	Context->max_label = Chars;
@@ -495,28 +496,32 @@ CaseNo CountDataInput(c50_input *Input)
 /*************************************************************************/
 
 
-int StoreIVal(String S)
+int StoreIVal(c50_context *Context, String S)
 /*  ---------  */
 {
     int		StartIx, Length;
 
-    if ( (Length=strlen(S) + 1) + IValsOffset > IValsSize )
+    if ( (Length=strlen(S) + 1) + Context->ignored_values_offset >
+	 Context->ignored_values_size )
     {
-	if ( IgnoredVals )
+	if ( Context->ignored_values )
 	{
-	    Realloc(IgnoredVals, IValsSize += 32768, char);
+	    Context->ignored_values_size += 32768;
+	    Realloc(Context->ignored_values, Context->ignored_values_size,
+		    char);
 	}
 	else
 	{
-	    IValsSize   = 32768;
-	    IValsOffset = 0;
-	    IgnoredVals = Alloc(IValsSize, char);
+	    Context->ignored_values_size   = 32768;
+	    Context->ignored_values_offset = 0;
+	    Context->ignored_values = Alloc(Context->ignored_values_size,
+					    char);
 	}
     }
 
-    StartIx = IValsOffset;
-    strcpy(IgnoredVals + StartIx, S);
-    IValsOffset += Length;
+    StartIx = Context->ignored_values_offset;
+    strcpy(Context->ignored_values + StartIx, S);
+    Context->ignored_values_offset += Length;
 
     return StartIx;
 }
@@ -530,13 +535,14 @@ int StoreIVal(String S)
 /*************************************************************************/
 
 
-void FreeData()
+void FreeData(c50_context *Context)
 /*   --------  */
 {
     FreeCases();
 
-    FreeUnlessNil(IgnoredVals);				IgnoredVals = Nil;
-							IValsSize = 0;
+    FreeUnlessNil(Context->ignored_values);
+    Context->ignored_values = Nil;
+    Context->ignored_values_size = Context->ignored_values_offset = 0;
 
     Free(Case);						Case = Nil;
 
