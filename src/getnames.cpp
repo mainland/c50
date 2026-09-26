@@ -62,8 +62,8 @@ char	LineBuffer[MAXLINEBUFFER], *LBp=LineBuffer;
 /*************************************************************************/
 
 
-Boolean ReadName(FILE *f, String s, int n, char ColonOpt)
-/*      --------  */
+Boolean ReadNameInput(c50_input *f, String s, int n, char ColonOpt)
+/*      -------------  */
 {
     register char *Sp=s;
     register int  c;
@@ -150,6 +150,17 @@ Boolean ReadName(FILE *f, String s, int n, char ColonOpt)
 
 
 
+Boolean ReadName(FILE *f, String s, int n, char ColonOpt)
+/*      --------  */
+{
+    c50_input Input;
+
+    c50_input_init_file(&Input, f);
+    return ReadNameInput(&Input, s, n, ColonOpt);
+}
+
+
+
 /*************************************************************************/
 /*									 */
 /*	Read names of classes, attributes and legal attribute values.	 */
@@ -165,10 +176,12 @@ Boolean ReadName(FILE *f, String s, int n, char ColonOpt)
 /*	  MaxClass	-	maximum class number			 */
 /*	  MaxDiscrVal	-	maximum discrete values for an attribute */
 /*									 */
+/*	The caller retains ownership of Nf.				 */
+/*									 */
 /*************************************************************************/
 
 
-void GetNames(FILE *Nf)
+void GetNames(c50_input *Nf)
 /*   --------  */
 {
     char	Buffer[1000]="", *EndBuff;
@@ -192,7 +205,7 @@ void GetNames(FILE *Nf)
     ClassName = AllocZero(ClassCeiling, String);
     do
     {
-	ReadName(Nf, Buffer, 1000, ':');
+	ReadNameInput(Nf, Buffer, 1000, ':');
 
 	if ( ++MaxClass >= ClassCeiling)
 	{
@@ -212,7 +225,7 @@ void GetNames(FILE *Nf)
 
 	do
 	{
-	    ReadName(Nf, Buffer, 1000, ':');
+	    ReadNameInput(Nf, Buffer, 1000, ':');
 
 	    if ( ++MaxClass >= ClassCeiling)
 	    {
@@ -245,7 +258,7 @@ void GetNames(FILE *Nf)
     AttDefUses	  = AllocZero(AttCeiling, Attribute *);
 
     MaxAtt = 0;
-    while ( ReadName(Nf, Buffer, 1000, ':') )
+    while ( ReadNameInput(Nf, Buffer, 1000, ':') )
     {
 	if ( Delimiter != ':' && Delimiter != '=' )
 	{
@@ -267,7 +280,7 @@ void GetNames(FILE *Nf)
 		}
 	    }
 
-	    while ( ReadName(Nf, Buffer, 1000, ':') )
+	    while ( ReadNameInput(Nf, Buffer, 1000, ':') )
 	    {
 		Att = Which(Buffer, AttName, 1, MaxAtt);
 		if ( ! Att )
@@ -413,8 +426,6 @@ void GetNames(FILE *Nf)
 
     ClassName[0] = "?";
 
-    fclose(Nf);
-
     if ( ErrMsgs > 0 ) Goodbye(1);
 }
 
@@ -427,7 +438,7 @@ void GetNames(FILE *Nf)
 /*************************************************************************/
 
 
-void ExplicitAtt(FILE *Nf)
+void ExplicitAtt(c50_input *Nf)
 /*   -----------  */
 {
     char	Buffer[1000]="", *p;
@@ -437,7 +448,7 @@ void ExplicitAtt(FILE *Nf)
 
     /*  Read attribute type or first discrete value  */
 
-    if ( ! ( ReadName(Nf, Buffer, 1000, ':') ) )
+    if ( ! ( ReadNameInput(Nf, Buffer, 1000, ':') ) )
     {
 	Error(EOFINATT, AttName[MaxAtt], "");
     }
@@ -547,7 +558,7 @@ void ExplicitAtt(FILE *Nf)
 
 	do
 	{
-	    if ( ! ( ReadName(Nf, Buffer, 1000, ':') ) )
+	    if ( ! ( ReadNameInput(Nf, Buffer, 1000, ':') ) )
 	    {
 		Error(EOFINATT, AttName[MaxAtt], "");
 	    }
@@ -715,14 +726,14 @@ void FreeNames()
 /*************************************************************************/
 
 
-int InChar(FILE *f)
+int InChar(c50_input *f)
 /*  ------  */
 {
     if ( ! *LBp )
     {
 	LBp = LineBuffer;
 
-	if ( ! fgets(LineBuffer, MAXLINEBUFFER, f) )
+	if ( ! c50_input_gets(LineBuffer, MAXLINEBUFFER, f) )
 	{
 	    LineBuffer[0] = '\00';
 	    return EOF;

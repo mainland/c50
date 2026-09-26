@@ -34,6 +34,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 #include <stdint.h>
 
 
@@ -315,6 +316,15 @@ void ResetKR(int KRInit)
 /*************************************************************************/
 
 
+void C50Exit(int Status)
+/*   -------  */
+{
+    if ( c50_abort_active_operation(Status) ) return;
+    exit(Status);
+}
+
+
+
 void Error(int ErrNo, const char *S1, const char *S2)
 /*   -----  */
 {
@@ -477,18 +487,25 @@ void Error(int ErrNo, const char *S1, const char *S2)
 	    break;
     }
 
-    fputs(Buffer, Of);
+    if ( Of ) fputs(Buffer, Of);
 	
-    if ( ! WarningOnly ) ErrMsgs++;
+    if ( ! WarningOnly )
+    {
+	ErrMsgs++;
+	c50_record_error(ErrNo == NOMEM ? C50_STATUS_OUT_OF_MEMORY :
+			 ErrNo == NOFILE ? C50_STATUS_IO_ERROR :
+			 C50_STATUS_PARSE_ERROR,
+			 Buffer);
+    }
 
     if ( ErrMsgs == 10 )
     {
-	fprintf(Of,  T_ErrorLimit);
+	if ( Of ) fprintf(Of,  T_ErrorLimit);
 	MaxCase--;
 	Quit = true;
     }
 
-    if ( Quit && Of )
+    if ( Quit )
     {
 	Goodbye(1);
     }
@@ -840,7 +857,7 @@ void Check(float Val, float Low, float High)
     if ( Val < Low || Val > High )
     {
 	fprintf(Of, TX_IllegalValue(Val, Low, High));
-	exit(1);
+	C50Exit(1);
     }
 }
 
