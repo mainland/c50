@@ -20,7 +20,7 @@
 
 struct c50_implicit_state;
 struct _datablockrec;
-struct _environment;
+struct _split_workspace;
 union _attribute_value;
 struct _def_elt;
 struct _condrec;
@@ -95,11 +95,17 @@ typedef struct
     unsigned char weighted;
 } c50_cost_state;
 
+/* Frees partially constructed split scratch without consulting the context. */
+struct c50_split_workspace_deleter
+{
+    void operator()(struct _split_workspace *workspace) const noexcept;
+};
+
 typedef struct
 {
     double *class_frequencies;
     float *boost_vote_block;
-    struct _environment *environment;
+    std::unique_ptr<struct _split_workspace, c50_split_workspace_deleter> environment;
     float *attribute_importance;
     unsigned char *split_attributes;
     unsigned char *used_attributes;
