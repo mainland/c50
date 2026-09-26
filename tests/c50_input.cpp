@@ -23,9 +23,12 @@ int main(int argc, char *argv[])
     static const unsigned char costs[] = "low, high: 5\n";
     char line[16];
     c50_input costs_input, input;
+    c50_context *context = NULL;
 
     (void) argc;
     (void) argv;
+
+    if ( c50_context_create(&context) != C50_STATUS_OK ) return 1;
 
     c50_input_init_memory(&input, text, sizeof(text) - 1);
     if ( c50_input_getc(&input) != 'f' ) return 1;
@@ -44,7 +47,7 @@ int main(int argc, char *argv[])
 
     Of = stderr;
     c50_input_init_memory(&input, names, sizeof(names) - 1);
-    GetNames(&input);
+    GetNames(context, &input);
     if ( MaxClass != 2 || MaxAtt != 2 ) return 1;
     if ( strcmp(ClassName[1], "low") || strcmp(ClassName[2], "high") )
     {
@@ -56,20 +59,21 @@ int main(int argc, char *argv[])
     }
     c50_input_init_memory(&input, tree, sizeof(tree) - 1);
     c50_input_init_memory(&costs_input, costs, sizeof(costs) - 1);
-    ReadHeaderMemory(&input, &costs_input);
+    ReadHeaderMemory(context, &input, &costs_input);
     if ( TRIALS != 1 ) return 1;
     if ( ! MCost || MCost[1][2] != 5 ) return 1;
 
     RULES = false;
     MaxTree = 0;
     Pruned = AllocZero(2, Tree);
-    Pruned[0] = InTree(&input);
+    Pruned[0] = InTree(context, &input);
     if ( ! Pruned[0] || Pruned[0]->NodeType != 0 ||
          Pruned[0]->Leaf != 1 )
     {
         return 1;
     }
     Cleanup();
+    c50_context_destroy(context);
 
     return 0;
 }

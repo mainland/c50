@@ -60,8 +60,11 @@ int main(int Argc, char *Argv[])
     c50_input		NamesInput;
     CaseNo		SaveMaxCase;
     Attribute		Att;
+    c50_context	*Context = NULL;
 
     struct rlimit RL;
+
+    if ( c50_context_create(&Context) != C50_STATUS_OK ) return 1;
 
     /*  Make sure there is a largish runtime stack  */
 
@@ -207,7 +210,7 @@ int main(int Argc, char *Argv[])
 
     if ( ! (F = GetFile(".names", "r")) ) Error(NOFILE, "", "");
     c50_input_init_file(&NamesInput, F);
-    GetNames(&NamesInput);
+    GetNames(Context, &NamesInput);
     fclose(F);
 
     if ( ClassAtt )
@@ -226,13 +229,13 @@ int main(int Argc, char *Argv[])
     /*  Read data file  */
 
     if ( ! (F = GetFile(".data", "r")) ) Error(NOFILE, "", "");
-    GetData(F, true, false);
+    GetData(Context, F, true, false);
     fprintf(Of, TX_ReadData(MaxCase+1, MaxAtt, FileStem));
 
     if ( XVAL && (F = GetFile(".test", "r")) )
     {
 	SaveMaxCase = MaxCase;
-	GetData(F, false, false);
+	GetData(Context, F, false, false);
 	fprintf(Of, TX_ReadTest(MaxCase-SaveMaxCase, FileStem));
     }
 
@@ -245,7 +248,7 @@ int main(int Argc, char *Argv[])
 
     if ( ! NOCOSTS && (F = GetFile(".costs", "r")) )
     {
-	GetMCosts(F);
+	GetMCosts(Context, F);
 	if ( MCost )
 	{
 	    fprintf(Of, T_ReadCosts, FileStem);
@@ -291,11 +294,11 @@ int main(int Argc, char *Argv[])
 
     if ( XVAL )
     {
-	CrossVal();
+	CrossVal(Context);
     }
     else
     {
-	ConstructClassifiers();
+	ConstructClassifiers(Context);
 
 	/*  Evaluation  */
 
@@ -312,7 +315,7 @@ int main(int Argc, char *Argv[])
 	    fprintf(Of, "\n");
 
 	    FreeData();
-	    GetData(F, false, false);
+	    GetData(Context, F, false, false);
 
 	    fprintf(Of, T_EvalTest, MaxCase+1);
 
@@ -328,6 +331,8 @@ int main(int Argc, char *Argv[])
 #ifdef VerbOpt
     Cleanup();
 #endif
+
+    c50_context_destroy(Context);
 
     return 0;
 }

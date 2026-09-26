@@ -1,0 +1,41 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `implicit-power'
+
+Read 13 cases (2 attributes) from implicit-power.data
+
+Attributes excluded:
+    x
+
+Decision tree:
+
+p <= 1.732051: low (5.8/1.8)
+p > 1.732051: high (7.2/2.2)
+
+
+Evaluation on training data (13 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2    4(30.8%)   <<
+
+
+	   (a)   (b)   (c)    <-classified as
+	  ----  ----  ----
+	     4                (a): class low
+	           5          (b): class high
+	           4          (c): class bad
+
+
+	Attribute usage:
+
+	     69%  x
+	     69%  p
+
+
+Time: <elapsed> secs

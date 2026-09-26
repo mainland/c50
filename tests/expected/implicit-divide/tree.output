@@ -1,0 +1,43 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `implicit-divide'
+
+Read 13 cases (2 attributes) from implicit-divide.data
+
+Attributes excluded:
+    x
+
+Decision tree:
+
+r > -0.02: low (5.8/1.8)
+r <= -0.02:
+:...r <= -0.5: low (2.9/0.9)
+    r > -0.5: high (4.3/1.3)
+
+
+Evaluation on training data (13 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     3    4(30.8%)   <<
+
+
+	   (a)   (b)   (c)    <-classified as
+	  ----  ----  ----
+	     6                (a): class low
+	           3          (b): class high
+	     4                (c): class bad
+
+
+	Attribute usage:
+
+	     69%  x
+	     69%  r
+
+
+Time: <elapsed> secs

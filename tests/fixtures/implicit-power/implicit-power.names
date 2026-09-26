@@ -1,0 +1,5 @@
+low, high, bad.
+
+x: continuous.
+p := x ^ 0.5.
+attributes excluded: x.
