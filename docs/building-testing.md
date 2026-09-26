@@ -287,3 +287,11 @@ ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 
 The harness uses GNU linker allocation wrappers. It does not establish
 allocation-failure coverage on other platforms or cover every learner path.
+
+`parallel-failure` compiles the production split scheduler with private test
+probes. The installed core contains no probes. The test fails every allocation
+in each additional worker workspace, injects task-launch errors after earlier
+tasks start, and throws from the calling worker, background workers, and all
+workers together. It checks that all started tasks finish before workspace
+release and operation return, then retrains with the same context and compares
+classifiers and predictions. These cases also run in the sanitizer jobs.

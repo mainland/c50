@@ -221,6 +221,18 @@ if(BUILD_TESTING)
         list(APPEND C50_EXECUTABLE_TARGETS c50_allocation_failure)
         add_test(NAME allocation-failure COMMAND c50_allocation_failure
                  "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/boost")
+        # Compile the production scheduler with private failure probes only in
+        # this executable. The installed core contains no test hooks.
+        add_executable(c50_parallel_failure tests/parallel_failure.cpp src/formtree.cpp)
+        target_include_directories(c50_parallel_failure PRIVATE
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+        target_compile_definitions(c50_parallel_failure PRIVATE C50_TEST_SPLIT_FAILURE)
+        target_link_libraries(c50_parallel_failure PRIVATE C50::cpp)
+        target_link_options(c50_parallel_failure PRIVATE -Wl,--wrap=calloc)
+        list(APPEND C50_COMPILE_TARGETS c50_parallel_failure)
+        list(APPEND C50_EXECUTABLE_TARGETS c50_parallel_failure)
+        add_test(NAME parallel-failure COMMAND c50_parallel_failure)
+        set_tests_properties(parallel-failure PROPERTIES TIMEOUT 120)
     endif()
     add_executable(c50_cost_validation tests/cost_validation.cpp)
     target_link_libraries(c50_cost_validation PRIVATE C50::cpp)
