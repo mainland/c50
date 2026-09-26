@@ -1,10 +1,16 @@
 *.o
+*.py[cod]
+*.egg-info/
+__pycache__/
 
 /c5.0
 /c5.0dbg
 /report
 /prediction-probe
-/src/c50gt.cpp
-/src/predictiongt.cpp
+/src/c50gt.c
+/src/predictiongt.c
 /build/
+/build-*/
 /cmake-build-*/
+/docs/_build/
+/.pytest_cache/
