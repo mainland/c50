@@ -44,7 +44,7 @@
 /*************************************************************************/
 
 
-double ComputeGain(c50_context *Context, double BaseInfo, float UnknFrac,
+double ComputeGain(c50_context *Context, SplitWorkspace &Workspace, double BaseInfo, float UnknFrac,
 		   DiscrValue MaxVal, CaseCount TotalCases)
 /*     -----------  */
 {
@@ -60,7 +60,7 @@ double ComputeGain(c50_context *Context, double BaseInfo, float UnknFrac,
 
     ForEach(v, 1, MaxVal)
     {
-	ThisInfo += TotalInfo(Context->training.environment->Freq[v], 1, Context->schema.max_class);
+	ThisInfo += TotalInfo(Workspace.Freq[v], 1, Context->schema.max_class);
     }
     ThisInfo /= TotalCases;
 
