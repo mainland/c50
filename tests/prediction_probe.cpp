@@ -3,6 +3,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 static void Usage(void)
 {
@@ -50,7 +51,7 @@ int main(int argc, char **argv)
         {
             RuleSet[Trial] = GetRules(Context, Extension);
         }
-        MostSpec = Alloc(MaxClass+1, CRule);
+        Context->most_specific_rules = Alloc(MaxClass+1, CRule);
     }
     else
     {
@@ -62,9 +63,9 @@ int main(int argc, char **argv)
     }
 
     Default = ( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
-    ClassSum = AllocZero(MaxClass+1, float);
-    Vote = AllocZero(MaxClass+1, float);
-    TrialPred = AllocZero(TRIALS, ClassNo);
+    Context->class_sum = AllocZero(MaxClass+1, float);
+    Context->votes = AllocZero(MaxClass+1, float);
+    Context->trial_predictions = AllocZero(TRIALS, ClassNo);
 
     if ( ! (F = GetFile(".test", "r")) ) Error(NOFILE, "", "");
     GetData(Context, F, false, false);
@@ -79,12 +80,12 @@ int main(int argc, char **argv)
     ForEach(i, 0, MaxCase)
     {
         Actual = Class(Case[i]);
-        Predicted = Classify(Case[i]);
+        Predicted = Classify(Context, Case[i]);
         printf("%d,%s,%s,%.7g", i+1, ClassName[Actual],
-               ClassName[Predicted], Confidence);
+               ClassName[Predicted], Context->confidence);
         ForEach(c, 1, MaxClass)
         {
-            printf(",%.7g", ClassSum[c]);
+            printf(",%.7g", Context->class_sum[c]);
         }
         putchar('\n');
     }

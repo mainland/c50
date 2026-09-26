@@ -34,6 +34,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 
 Boolean		MultiVal,	/* all atts have many values */
@@ -64,7 +65,7 @@ Attribute	*Waiting=Nil,	/* attribute wait list */
 /*************************************************************************/
 
 
-void InitialiseTreeData()
+void InitialiseTreeData(c50_context *Context)
 /*   ------------------  */
 {
     DiscrValue	v;
@@ -120,17 +121,17 @@ void InitialiseTreeData()
     }
 
     ClassFreq = AllocZero(MaxClass+1, double);
-    ClassSum  = Alloc(MaxClass+1, float);
+    Context->class_sum  = Alloc(MaxClass+1, float);
 
     if ( BOOST )
     {
-	Vote      = Alloc(MaxClass+1, float);
-	TrialPred = Alloc(TRIALS, ClassNo);
+	Context->votes      = Alloc(MaxClass+1, float);
+	Context->trial_predictions = Alloc(TRIALS, ClassNo);
     }
 
     if ( RULES )
     {
-	MostSpec     = Alloc(MaxClass+1, CRule);
+	Context->most_specific_rules     = Alloc(MaxClass+1, CRule);
 	PossibleCuts = Alloc(MaxAtt+1, int);
     }
 
@@ -241,12 +242,6 @@ void FreeTreeData()
     }
 
     FreeUnlessNil(ClassFreq);				ClassFreq = Nil;
-    FreeUnlessNil(ClassSum);				ClassSum = Nil;
-
-    FreeUnlessNil(Vote);				Vote = Nil;
-    FreeUnlessNil(TrialPred);				TrialPred = Nil;
-
-    FreeUnlessNil(MostSpec);				MostSpec = Nil;
     FreeUnlessNil(PossibleCuts);			PossibleCuts = Nil;
 
     vMax = Max(3, MaxDiscrVal+1);

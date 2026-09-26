@@ -76,7 +76,7 @@ CaseNo		Fail0,
 /*************************************************************************/
 
 
-CRuleSet FormRules(Tree T)
+CRuleSet FormRules(c50_context *Context, Tree T)
     /*	 ---------  */
 {
     int		i;
@@ -142,11 +142,12 @@ CRuleSet FormRules(Tree T)
 
     /*  Select final rules  */
 
-    SiftRules((T->Errors + MaxClass-1) / (MaxCase+1 + MaxClass));
+    SiftRules(Context,
+	      (T->Errors + MaxClass-1) / (MaxCase+1 + MaxClass));
 
     FreeVector((void **) NCost, 0, MaxClass);		NCost = Nil;
 
-    CheckActiveSpace(NRules);
+    CheckActiveSpace(Context, NRules);
 
     RS = Alloc(1, RuleSetRec);
 

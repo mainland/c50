@@ -60,6 +60,7 @@ objects = $(sources:.cpp=.o)
 headers =\
 	$(SRC_DIR)/c50_api_internal.h\
 	$(SRC_DIR)/c50_input.h\
+	$(SRC_DIR)/c50_rng.h\
 	$(SRC_DIR)/defns.i\
 	$(SRC_DIR)/extern.i\
 	$(SRC_DIR)/text.i
