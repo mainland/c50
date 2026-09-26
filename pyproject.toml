@@ -43,6 +43,14 @@ test = [
     "setuptools-scm>=9",
     "scikit-learn>=1.6",
 ]
+docs = [
+    "breathe",
+    "furo",
+    "myst-parser",
+    "numpy>=1.26",
+    "scikit-learn>=1.6",
+    "sphinx>=7",
+]
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
