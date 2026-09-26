@@ -134,6 +134,12 @@ static bool ParseModel(c50_context *Context, const c50_model *model)
         ForEach(Context->trees.trial, 0, Context->options.trials - 1)
         {
             InTreeAt(Context, &model_input, &Context->trees.pruned[Context->trees.trial]);
+            if (Context->trees.pruned[Context->trees.trial]->Cases < Epsilon)
+            {
+                c50_record_error(Context, c50::error_code::parse_error,
+                                 "tree root has insufficient class frequencies");
+                C50Exit(Context, 1);
+            }
         }
     }
     return Context->costs.matrix != NULL;

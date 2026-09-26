@@ -88,8 +88,11 @@ void ConstructClassifiers(c50_context *Context)
     /*  Preserve original case order  */
 
     Context->cases.saved_records = Alloc(Context->cases.max_case+1, DataRec);
-    memcpy(Context->cases.saved_records, Context->cases.records,
-	   (Context->cases.max_case+1) * sizeof(DataRec));
+    if ( Context->cases.max_case >= 0 )
+    {
+	memcpy(Context->cases.saved_records, Context->cases.records,
+	       (Context->cases.max_case+1) * sizeof(DataRec));
+    }
 
     /*  If using case weighting, find average  */
 
@@ -160,8 +163,11 @@ void ConstructClassifiers(c50_context *Context)
 	    Context->trees.raw[Context->trees.trial] = Nil;
 	}
 
-	memcpy(Context->cases.records, Context->cases.saved_records,
-	       (Context->cases.max_case+1) * sizeof(DataRec)); /* restore */
+	if ( Context->cases.max_case >= 0 )
+	{
+	    memcpy(Context->cases.records, Context->cases.saved_records,
+		   (Context->cases.max_case+1) * sizeof(DataRec)); /* restore */
+	}
 
 	Prune(Context, Context->trees.pruned[Context->trees.trial]);
 
@@ -182,8 +188,11 @@ void ConstructClassifiers(c50_context *Context)
 	    SoftenThresh(Context, Context->trees.pruned[Context->trees.trial]);
 	}
 
-	memcpy(Context->cases.records, Context->cases.saved_records,
-	       (Context->cases.max_case+1) * sizeof(DataRec)); /* restore */
+	if ( Context->cases.max_case >= 0 )
+	{
+	    memcpy(Context->cases.records, Context->cases.saved_records,
+		   (Context->cases.max_case+1) * sizeof(DataRec)); /* restore */
+	}
 
 	if ( Context->options.rules )
 	{

@@ -339,7 +339,7 @@ void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
     DiscrValue	v;
 
 
-    assert(Fp >= 0 && Lp >= Fp && Lp <= Context->cases.max_case);
+    assert(Fp >= 0 && Lp >= Fp - 1 && Lp <= Context->cases.max_case);
 
     /*  Make a single pass through the cases to determine class frequencies
 	and value/class frequencies for all discrete attributes  */
@@ -1093,7 +1093,7 @@ void FindClassFreq(c50_context *Context, double *Frequencies,
     ClassNo	c;
     CaseNo	i;
 
-    assert(Fp >= 0 && Lp >= Fp && Lp <= Context->cases.max_case);
+    assert(Fp >= 0 && Lp >= Fp - 1 && Lp <= Context->cases.max_case);
 
     ForEach(c, 0, Context->schema.max_class)
     {
