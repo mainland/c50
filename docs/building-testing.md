@@ -249,3 +249,16 @@ AddressSanitizer with leak detection to check exceptional-path ownership:
 ASAN_OPTIONS=detect_leaks=1 \
     ctest --test-dir build/sanitize -R allocation-failure --output-on-failure
 ```
+
+## Continuous validation
+
+`.github/workflows/validation.yml` runs the native suite with GCC and Clang,
+including the optional native correctness workloads and installed C++17/C++20
+consumers. The GCC job also exercises production and verbose Make builds. A
+separate job installs the Python package, runs the estimator and typing checks,
+and builds warning-strict Doxygen and Sphinx documentation.
+
+The workflow runs on pull requests, pushes to `main`, `dev`, and topic branches,
+and manual dispatch. It uses read-only repository permissions and pinned action
+revisions. A checked-in workflow defines the intended checks. Hosted results
+must be inspected before claiming a platform or dependency configuration passed.
