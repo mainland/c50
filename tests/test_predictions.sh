@@ -6,6 +6,7 @@ script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd)
 repo_dir=$(CDPATH= cd "$script_dir/.." && pwd)
 trainer=${C50_BINARY:-"$repo_dir/c5.0"}
 predictor=${C50_PREDICTION_BINARY:-"$repo_dir/prediction-probe"}
+api_predictor=${C50_API_PREDICTION_BINARY:-}
 
 if test ! -x "$trainer"; then
     printf 'C5.0 executable not found: %s\n' "$trainer" >&2
@@ -42,6 +43,19 @@ run_case()
     ) > "$case_dir/predictions.actual"
 
     diff -u "$expected" "$case_dir/predictions.actual"
+
+    if test -n "$api_predictor"; then
+        awk -F, 'BEGIN { OFS="," }
+            {
+                printf "%s,%s", $1, $3
+                for (i = 4; i <= NF; i++) printf ",%s", $i
+                printf "\n"
+            }' "$expected" > "$case_dir/api-predictions.expected"
+        "$api_predictor" "$case_dir/$fixture_name" "$mode" \
+            > "$case_dir/api-predictions.actual"
+        diff -u "$case_dir/api-predictions.expected" \
+            "$case_dir/api-predictions.actual"
+    fi
 }
 
 run_invalid_model()
