@@ -2,8 +2,30 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+# The local hooks run from `.venv`, which holds the pinned checkers:
+#   python3 -m venv .venv
+#   .venv/bin/python -m pip install -U pip
+#   .venv/bin/python -m pip install --group dev
 # Run `pre-commit run --all-files` to check the whole tree.
 repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: .venv/bin/python -m ruff check
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format
+        entry: .venv/bin/python -m ruff format --check
+        language: system
+        types_or: [python, pyi]
+      - id: mypy
+        name: mypy
+        entry: .venv/bin/python -m mypy
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
