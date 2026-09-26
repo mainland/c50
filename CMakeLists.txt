@@ -7,6 +7,7 @@ option(C50_ENABLE_SANITIZERS
 option(C50_ENABLE_THREAD_SANITIZER "Enable ThreadSanitizer" OFF)
 option(C50_BUILD_PYTHON "Build the Python extension module" OFF)
 option(C50_BUILD_DOCUMENTATION "Build the Doxygen API documentation" OFF)
+option(C50_BUILD_FUZZERS "Build AFL++ parser harnesses" OFF)
 option(C50_BUILD_BENCHMARKS "Build native correctness tests and benchmarks" OFF)
 
 if(C50_ENABLE_SANITIZERS AND C50_ENABLE_THREAD_SANITIZER)
@@ -367,6 +368,74 @@ install(
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
 )
 
+if(BUILD_TESTING OR C50_BUILD_FUZZERS)
+    add_library(c50_fuzz_target STATIC tests/fuzz/parser_target.cpp)
+    target_link_libraries(c50_fuzz_target PUBLIC C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_fuzz_target)
+
+    add_executable(c50_fuzz_seed_replay tests/fuzz/replay.cpp)
+    target_link_libraries(c50_fuzz_seed_replay PRIVATE c50_fuzz_target)
+    list(APPEND C50_COMPILE_TARGETS c50_fuzz_seed_replay)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_fuzz_seed_replay)
+endif()
+
+if(C50_BUILD_FUZZERS)
+    get_filename_component(c50_fuzz_compiler "${CMAKE_CXX_COMPILER}" NAME)
+    if(NOT c50_fuzz_compiler MATCHES "^afl-")
+        message(FATAL_ERROR
+                "Parser fuzzing requires an AFL++ C++ compiler wrapper")
+    endif()
+    find_program(C50_AFL_FUZZ_EXECUTABLE NAMES afl-fuzz REQUIRED)
+    find_program(C50_SH_EXECUTABLE NAMES sh REQUIRED)
+
+    add_custom_target(
+        fuzz-seeds
+        COMMAND $<TARGET_FILE:c50_fuzz_seed_replay>
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/corpus"
+        DEPENDS c50_fuzz_seed_replay
+        VERBATIM
+    )
+    add_custom_target(fuzz-smoke)
+    if(C50_ENABLE_SANITIZERS)
+        set(c50_fuzz_memory_limit none)
+    else()
+        set(c50_fuzz_memory_limit 512)
+    endif()
+    set(fuzz_kind 0)
+    foreach(parser schema implicit tree rules cases costs)
+        math(EXPR fuzz_kind "${fuzz_kind} + 1")
+        set(target c50_fuzz_${parser})
+        add_executable(${target} tests/fuzz/parser.cpp)
+        target_compile_definitions(${target} PRIVATE C50_FUZZ_KIND=${fuzz_kind})
+        # AFL++ interprets this compatibility option by linking aflpp_driver.
+        target_link_options(${target} PRIVATE -fsanitize=fuzzer)
+        target_link_libraries(${target} PRIVATE c50_fuzz_target)
+        list(APPEND C50_COMPILE_TARGETS ${target})
+        list(APPEND C50_EXECUTABLE_TARGETS ${target})
+        add_custom_target(
+            fuzz-smoke-${parser}
+            COMMAND
+                ${CMAKE_COMMAND} -E env
+                AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1
+                AFL_NO_UI=1
+                AFL_SKIP_CPUFREQ=1
+                C50_AFL_MEMORY_LIMIT=${c50_fuzz_memory_limit}
+                ${C50_SH_EXECUTABLE}
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/run-afl.sh"
+                "${C50_AFL_FUZZ_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/corpus/${parser}"
+                "${CMAKE_CURRENT_BINARY_DIR}/afl-output/${parser}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/parser.dict"
+                5
+                $<TARGET_FILE:${target}>
+            DEPENDS ${target}
+            USES_TERMINAL
+            VERBATIM
+        )
+        add_dependencies(fuzz-smoke fuzz-smoke-${parser})
+    endforeach()
+endif()
+
 if(C50_ENABLE_THREAD_SANITIZER)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         foreach(target IN LISTS C50_COMPILE_TARGETS)
@@ -426,6 +495,11 @@ if(BUILD_TESTING)
     add_test(NAME reference-compatibility COMMAND c50_reference_compatibility)
     add_test(NAME cost-validation COMMAND c50_cost_validation)
     add_test(NAME parser-validation COMMAND c50_parser_validation)
+    add_test(
+        NAME parser-fuzz-seeds
+        COMMAND c50_fuzz_seed_replay
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/corpus"
+    )
     add_test(NAME cpp-validation COMMAND c50_cpp_validation)
     add_test(NAME operation-failure COMMAND c50_operation_failure)
     add_test(NAME cpp-api COMMAND c50_cpp_api)

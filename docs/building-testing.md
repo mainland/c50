@@ -307,3 +307,9 @@ The same test runs four simultaneous independent fits, each requesting four
 split workers, with trees, rules, and opposing class assignments. Repeated fits
 must reproduce their single-worker classifiers and predictions, and concurrent
 prediction through a shared immutable model must reproduce the reference.
+
+## Parser fuzzing
+
+```{include} ../tests/fuzz/README.md
+:start-line: 2
+```
