@@ -34,9 +34,10 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 
-void GetMCostsInput(c50_input *Cf)
+void GetMCostsInput(c50_context *Context, c50_input *Cf)
 /*   --------------  */
 {
     ClassNo	Pred, Real, p, r;
@@ -45,23 +46,25 @@ void GetMCostsInput(c50_input *Cf)
     float	Val, Sum=0;
 
     LineNo = 0;
+    Context->line_buffer_position = Context->line_buffer;
+    Context->line_buffer[0] = '\0';
 
     /*  Read entries from cost file  */
 
-    while ( ReadNameInput(Cf, Name, 1000, ':') )
+    while ( ReadNameInput(Context, Cf, Name, 1000, ':') )
     {
 	if ( ! (Pred = Which(Name, ClassName, 1, MaxClass)) )
 	{
 	    Error(BADCOSTCLASS, Name, "");
 	}
 
-	if ( ! ReadNameInput(Cf, Name, 1000, ':') ||
+	if ( ! ReadNameInput(Context, Cf, Name, 1000, ':') ||
 	     ! (Real = Which(Name, ClassName, 1, MaxClass)) )
 	{
 	    Error(BADCOSTCLASS, Name, "");
 	}
 
-	if ( ! ReadNameInput(Cf, Name, 1000, ':') ||
+	if ( ! ReadNameInput(Context, Cf, Name, 1000, ':') ||
 	     sscanf(Name, "%f", &Val) != 1 || Val < 0 )
 	{
 	    Error(BADCOST, "", "");
@@ -137,12 +140,12 @@ void GetMCostsInput(c50_input *Cf)
 
 
 
-void GetMCosts(FILE *Cf)
+void GetMCosts(c50_context *Context, FILE *Cf)
 /*   ---------  */
 {
     c50_input Input;
 
     c50_input_init_file(&Input, Cf);
-    GetMCostsInput(&Input);
+    GetMCostsInput(Context, &Input);
     fclose(Cf);
 }

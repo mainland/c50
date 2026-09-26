@@ -1,0 +1,41 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `implicit-log'
+
+Read 14 cases (2 attributes) from implicit-log.data
+
+Attributes excluded:
+    x
+
+Decision tree:
+
+l <= 1.386294: low (6.2/2.2)
+l > 1.386294: high (7.8/2.8)
+
+
+Evaluation on training data (14 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2    0( 0.0%)   <<
+
+
+	   (a)   (b)   (c)    <-classified as
+	  ----  ----  ----
+	     4                (a): class low
+	           5          (b): class high
+	                 5    (c): class bad
+
+
+	Attribute usage:
+
+	     64%  x
+	     64%  l
+
+
+Time: <elapsed> secs

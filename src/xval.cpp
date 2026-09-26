@@ -49,7 +49,7 @@ float	**Result=Nil;	/* Result[f][0] = tree/ruleset size
 /*************************************************************************/
 
 
-void CrossVal()
+void CrossVal(c50_context *Context)
 /*   --------  */
 {
     CaseNo	i, Size, Start=0, Next, SaveMaxCase;
@@ -100,7 +100,7 @@ void CrossVal()
 	    Start = (Start + 1) % (SaveMaxCase + 1);
 	}
 
-	ConstructClassifiers();
+	ConstructClassifiers(Context);
 
 	/*  Check size (if appropriate) and errors  */
 
