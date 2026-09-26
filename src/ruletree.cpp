@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: exception-safe rule construction. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -40,6 +41,21 @@
 #include "defns.i"
 #include "extern.i"
 #include "c50_api_internal.h"
+#include <memory>
+
+namespace {
+struct RuleTreeScratch {
+    c50_rule_tree_state &state;
+    ~RuleTreeScratch()
+    {
+        free(state.tests);
+        free(state.tests_used);
+        free(state.test_occurrences);
+        free(state.rule_conditions_satisfied);
+        state = {};
+    }
+};
+}
 
 /*************************************************************************/
 /*                                                              	 */
@@ -52,12 +68,12 @@ void ConstructRuleTree(c50_context *Context, CRuleSet RS)
 /*   -----------------  */
 {
     int		r, c;
-    RuleNo	*All;
+    RuleTreeScratch Scratch{Context->rule_tree};
 
     Context->rule_tree.tests = Alloc((Context->rule_tree.test_capacity = 1000), Condition);
     Context->rule_tree.test_count = 0;
 
-    All = Alloc(RS->SNRules, RuleNo);
+    std::unique_ptr<RuleNo[], decltype(&free)> All(Alloc(RS->SNRules, RuleNo), &free);
     ForEach(r, 1, RS->SNRules)
     {
 	All[r-1] = r;
@@ -73,13 +89,7 @@ void ConstructRuleTree(c50_context *Context, CRuleSet RS)
 
     Context->rule_tree.rule_conditions_satisfied = AllocZero(RS->SNRules+1, int);
 
-    RS->RT = GrowRT(Context, All, RS->SNRules, RS->SRule);
-
-    Free(All);
-    Free(Context->rule_tree.tests);
-    Free(Context->rule_tree.tests_used);
-    Free(Context->rule_tree.test_occurrences);
-    Free(Context->rule_tree.rule_conditions_satisfied);
+    RS->RT = GrowRT(Context, All.get(), RS->SNRules, RS->SRule);
 }
 
 
@@ -155,15 +165,16 @@ void SetTestIndex(c50_context *Context, Condition C)
 RuleTree GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule)
 /*       ------  */
 {
-    RuleTree	Node;
-    RuleNo	r, *LR;
-    int		FP=0, ri, TI, *Expect, LRN;
+    RuleNo	r;
+    int		FP=0, ri, TI, LRN;
     size_t	FireCount;
     DiscrValue	v;
 
     if ( RRN <= 0 ) return Nil;
 
-    Node = AllocZero(1, RuleTreeRec);
+    std::unique_ptr<RuleTreeRec, decltype(&FreeRuleTree)> Owner(
+        AllocZero(1, RuleTreeRec), &FreeRuleTree);
+    RuleTree Node = Owner.get();
 
     /*  Record and swap to front any rules that are satisfied  */
 
@@ -193,7 +204,7 @@ RuleTree GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule)
 	Node->Fire = Nil;
     }
 
-    if ( ! RRN ) return Node;
+    if ( ! RRN ) return Owner.release();
 
     /*  Choose test for this node  */
 
@@ -204,7 +215,7 @@ RuleTree GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule)
 
     /*  Find the desired outcome for each rule  */
 
-    Expect = Alloc(RRN, int);
+    std::unique_ptr<int[], decltype(&free)> Expect(Alloc(RRN, int), &free);
     ForEach(ri, 0, RRN-1)
     {
 	Expect[ri] = DesiredOutcome(Context, Rule[RR[ri]], TI);
@@ -221,7 +232,7 @@ RuleTree GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule)
 
     Node->Branch = Alloc(Node->Forks+1, RuleTree);
 
-    LR = Alloc(RRN, RuleNo);
+    std::unique_ptr<RuleNo[], decltype(&free)> LR(Alloc(RRN, RuleNo), &free);
     ForEach(v, 0, Node->Forks)
     {
 	/*  Extract rules with outcome v and increment conditions satisfied,
@@ -240,7 +251,7 @@ RuleTree GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule)
 
 	/*  LR now contains rules with outcome v  */
 
-	Node->Branch[v] = GrowRT(Context, LR, LRN, Rule);
+	Node->Branch[v] = GrowRT(Context, LR.get(), LRN, Rule);
 
 	if ( v )
 	{
@@ -255,12 +266,7 @@ RuleTree GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule)
 
     Context->rule_tree.tests_used[TI] = false;
 
-    /*  Free local storage  */
-
-    Free(LR);
-    Free(Expect);
-
-    return Node;
+    return Owner.release();
 }
 
 

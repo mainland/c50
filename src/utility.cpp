@@ -934,6 +934,9 @@ void Cleanup(c50_context *Context)
 
     FreeData(Context);
 
+    FreeVector((void **) Context->costs.normalized_matrix, 0, Context->schema.max_class);
+    Context->costs.normalized_matrix = Nil;
+
     if ( Context->costs.matrix )
     {
 	FreeVector((void **) Context->costs.matrix, 1, Context->schema.max_class);	Context->costs.matrix = Nil;
