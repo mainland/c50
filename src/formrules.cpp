@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: reject undefined cost normalization. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -202,6 +203,8 @@ void SetupNCost(c50_context *Context)
     if ( Context->costs.matrix && ! Context->costs.weighted )
     {
 	AvErrCost = (AvErrCost + 1) / 2;	/* reduced average cost */
+        if (!isfinite(AvErrCost) || AvErrCost <= 0)
+            Error(Context, BADCOST, "rule costs have no finite positive normalization", "");
 	ForEach(Real, 1, Context->schema.max_class)
 	{
 	    ForEach(Pred, 1, Context->schema.max_class)
