@@ -1,17 +1,17 @@
 # C5.0 modernization
 
 This repository modernizes the single-threaded C5.0 Release 2.07 GPL Edition
-while preserving its learning behavior and model compatibility. The intended
-deliverables are a compiled C++17 library, command-line compatibility, and
-Python bindings. Native callers use the compiled C++17 API in `include/c50/c50.hpp`. Link
-against `C50::cpp`; there is no stable binary ABI. Contexts, models, and
-prediction results are move-only owners. Inputs are borrowed during calls.
-Independent contexts may run concurrently; serialize calls on each context.
-Input failures throw `c50::exception`; allocation failures throw `std::bad_alloc`.
+while preserving its learning behavior and model compatibility. It provides a
+compiled C++17 library, compatible command-line programs, and Python bindings.
 
-Geoffrey Mainland maintains this modernization project. The imported C5.0
-implementation remains attributed to RuleQuest Research Pty Ltd. in its source
-notices.
+The [project documentation](docs/index.md) contains build and testing guides,
+ownership and concurrency contracts, and generated C++ and Python API
+references. The repository includes configuration for publishing that site on
+Read the Docs.
+
+Geoffrey Mainland maintains this modernization project. The C5.0 sources were
+subsequently migrated from C to C++; the imported implementation remains
+attributed to RuleQuest Research Pty Ltd. in its source notices.
 
 ## Provenance
 
@@ -26,9 +26,9 @@ The archive used for the import has this SHA-256 digest:
 309db588eda420c06701bf8ae74c06a6c923e9a06e714a598ea761bcadfc5e2e  C50.tgz
 ```
 
-## Current build
+## Build
 
-The legacy programs require a C++17 compiler, a C compiler for `report`, and `make`:
+The compatibility programs require C and C++17 compilers and `make`:
 
 ```sh
 make
@@ -45,6 +45,97 @@ CMake is also supported:
 cmake -S . -B build
 cmake --build build
 ```
+
+Install the native library, C++ header, and CMake package with:
+
+```sh
+cmake --install build --prefix <prefix>
+```
+
+CMake consumers link `C50::cpp`, which carries the compiled core and C++17
+requirements:
+
+```cmake
+find_package(C50 2.07 CONFIG REQUIRED)
+target_link_libraries(my_program PRIVATE C50::cpp)
+```
+
+The public header is `<c50/c50.hpp>`. The C++ API accepts
+C5.0 names, training data, optional costs, and prediction cases from memory.
+Trained models retain their serialized C5.0 representation for storage or
+interchange with compatible tools. The library does not provide a C API or a
+stable binary ABI. C++ consumers must rebuild with a compatible toolchain
+when the library changes.
+
+## Python
+
+The Python bindings require Python 3.12 or later. They are implemented with
+pybind11 and call the compiled C++ API.
+Build and install them from the repository root with:
+
+```sh
+python -m pip install .
+```
+
+The compatibility API accepts the same in-memory C5.0 text formats as the
+C++ API:
+
+```python
+import c50
+
+names = """no, yes.
+
+value: continuous.
+"""
+training_data = """0, no
+1, no
+2, yes
+3, yes
+"""
+
+model = c50.train(names, training_data)
+labels = model.predict("0, ?\n3, ?\n")
+scores = model.predict_proba("0, ?\n3, ?\n")
+
+serialized = model.serialized_data
+restored = c50.load(model.names_data, serialized, model.kind)
+```
+
+`ModelKind.RULES` selects a rules model, and `Options` exposes the native
+training controls. Models are pickleable. Independent training and prediction
+operations release the Python GIL and use separate native contexts, so they can
+execute concurrently; callers should still serialize mutation of each Python
+object.
+
+Install the optional NumPy and scikit-learn dependencies to use the
+array-oriented estimator:
+
+```sh
+python -m pip install 'c50[sklearn]'
+```
+
+```python
+import numpy as np
+
+from c50.sklearn import C50Classifier
+
+X = np.asarray([[0.0], [0.5], [2.5], [3.0]])
+y = np.asarray(["low", "low", "high", "high"])
+
+classifier = C50Classifier(minimum_cases=1).fit(X, y)
+labels = classifier.predict([[0.25], [2.75]])
+scores = classifier.predict_proba([[0.25], [2.75]])
+```
+
+The estimator supports dense numeric and categorical inputs, missing values,
+native training options, misclassification costs, pipelines, and grid search.
+It uses the typed native data path rather than materializing a whole-dataset
+text buffer and batches prediction to bound temporary native storage. Training
+remains in-memory. Set `split_workers` to 1 through 8 to enable bounded
+parallel evaluation of eligible attribute splits; the default is one. Other
+training phases remain serial. The detailed input, concurrency, and
+[large-dataset](docs/large-datasets.md) contracts are in the project
+documentation.
 
 Run `./c5.0 -h` to see the available command-line options. C5.0 uses a file stem
 to locate inputs such as `<stem>.names`, `<stem>.data`, and optional
@@ -71,6 +162,10 @@ Run the same regression tests through CTest with:
 ctest --test-dir build --output-on-failure
 ```
 
+Optional Catch2 3.x sort-correctness tests and a profiling workload are
+enabled with `-DC50_BUILD_BENCHMARKS=ON`. See the [benchmark guide](benchmarks/README.md)
+for the `perf` and Heaptrack workflows.
+
 Configure an AddressSanitizer and UndefinedBehaviorSanitizer build with:
 
 ```sh
@@ -79,6 +174,18 @@ cmake -S . -B build/sanitize \
     -DC50_ENABLE_SANITIZERS=ON
 cmake --build build/sanitize
 ctest --test-dir build/sanitize --output-on-failure
+```
+
+Independent contexts can run concurrently, and immutable loaded models can be
+shared across those operations. Access to an individual context must remain
+serialized. To exercise this contract under ThreadSanitizer, configure with:
+
+```sh
+cmake -S . -B build/tsan \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DC50_ENABLE_THREAD_SANITIZER=ON
+cmake --build build/tsan
+ctest --test-dir build/tsan --output-on-failure
 ```
 
 ## License
