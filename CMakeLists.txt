@@ -6,6 +6,7 @@ option(C50_ENABLE_SANITIZERS
        "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(C50_ENABLE_THREAD_SANITIZER "Enable ThreadSanitizer" OFF)
 option(C50_BUILD_PYTHON "Build the Python extension module" OFF)
+option(C50_BUILD_DOCUMENTATION "Build the Doxygen API documentation" OFF)
 option(C50_BUILD_BENCHMARKS "Build native correctness tests and benchmarks" OFF)
 
 if(C50_ENABLE_SANITIZERS AND C50_ENABLE_THREAD_SANITIZER)
@@ -17,6 +18,37 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 find_package(Threads REQUIRED)
 
+if(C50_BUILD_DOCUMENTATION)
+    find_package(Doxygen 1.9 REQUIRED)
+    set(DOXYGEN_PROJECT_NAME "C5.0 GPL")
+    set(DOXYGEN_PROJECT_NUMBER "${PROJECT_VERSION}")
+    set(
+        DOXYGEN_OUTPUT_DIRECTORY
+        "${CMAKE_CURRENT_BINARY_DIR}/docs/doxygen"
+    )
+    set(DOXYGEN_EXTRACT_ALL NO)
+    set(DOXYGEN_EXTRACT_PRIVATE NO)
+    set(DOXYGEN_EXTRACT_STATIC NO)
+    set(DOXYGEN_FULL_PATH_NAMES NO)
+    set(DOXYGEN_GENERATE_HTML YES)
+    set(DOXYGEN_GENERATE_TREEVIEW YES)
+    set(DOXYGEN_GENERATE_XML YES)
+    set(DOXYGEN_JAVADOC_AUTOBRIEF YES)
+    set(DOXYGEN_MARKDOWN_SUPPORT YES)
+    set(DOXYGEN_QUIET YES)
+    set(DOXYGEN_RECURSIVE NO)
+    set(DOXYGEN_STRIP_FROM_PATH "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    set(DOXYGEN_TYPEDEF_HIDES_STRUCT YES)
+    set(DOXYGEN_WARN_AS_ERROR YES)
+    set(DOXYGEN_WARN_IF_DOC_ERROR YES)
+    set(DOXYGEN_WARN_IF_UNDOCUMENTED YES)
+    set(DOXYGEN_WARN_NO_PARAMDOC YES)
+    doxygen_add_docs(
+        c50-docs
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/c50/c50.hpp"
+        COMMENT "Build the C5.0 C++ API documentation"
+    )
+endif()
 
 set(C50_CORE_SOURCES
     src/attwinnow.cpp
