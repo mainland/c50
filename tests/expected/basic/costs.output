@@ -1,0 +1,45 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `basic'
+
+Read 20 cases (3 attributes) from basic.data
+Read misclassification costs from basic.costs
+
+Decision tree:
+ high (20/8)
+
+
+Evaluation on training data (20 cases):
+
+	       Decision Tree
+	  -----------------------
+	  Size      Errors   Cost
+
+	     1    8(40.0%)   0.40   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	           8    (a): class low
+	          12    (b): class high
+
+
+Evaluation on test data (7 cases):
+
+	       Decision Tree
+	  -----------------------
+	  Size      Errors   Cost
+
+	     1    3(42.9%)   0.43   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	           3    (a): class low
+	           4    (b): class high
+
+
+Time: <elapsed> secs
