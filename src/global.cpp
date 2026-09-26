@@ -208,4 +208,3 @@ FILE		*TRf=0;		/* file pointer for tree and rule i/o */
 char		Fn[500];	/* file name */
 
 FILE  		*Of=0;		/* output file */
-

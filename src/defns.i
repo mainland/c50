@@ -50,6 +50,7 @@
 #include <limits.h>
 #include <float.h>
 
+#include "c50_input.h"
 #include "text.i"
 
 
@@ -62,9 +63,9 @@
 
 
 #ifdef	VerbOpt
-#define Goodbye(x)		{Cleanup(); exit(x);}
+#define Goodbye(x)		{Cleanup(); C50Exit(x);}
 #else
-#define Goodbye(x)		exit(x)
+#define Goodbye(x)		C50Exit(x)
 #endif
 
 #ifdef	VerbOpt
@@ -467,17 +468,18 @@ void	    RecordAttUsage(DataRec Case, int *Usage);
 	/* getnames.c */
 
 Boolean	    ReadName(FILE *f, String s, int n, char ColonOpt);
-void	    GetNames(FILE *Nf);
-void	    ExplicitAtt(FILE *Nf);
+Boolean	    ReadNameInput(c50_input *f, String s, int n, char ColonOpt);
+void	    GetNames(c50_input *Nf);
+void	    ExplicitAtt(c50_input *Nf);
 int	    Which(String Val, String *List, int First, int Last);
 void	    ListAttsUsed(void);
 void	    FreeNames(void);
-int	    InChar(FILE *f);
+int	    InChar(c50_input *f);
 
 	/* implicitatt.c */
 
-void	    ImplicitAtt(FILE *Nf);
-void	    ReadDefinition(FILE *f);
+void	    ImplicitAtt(c50_input *Nf);
+void	    ReadDefinition(c50_input *f);
 void	    Append(char c);
 Boolean	    Expression(void);
 Boolean	    Conjunct(void);
@@ -500,8 +502,12 @@ AttValue    EvaluateDef(Definition D, DataRec Case);
 	/* getdata.c */
 
 void	    GetData(FILE *Df, Boolean Train, Boolean AllowUnknownClass);
+void	    GetDataInput(c50_input *Input, Boolean Train,
+			 Boolean AllowUnknownClass);
 DataRec	    GetDataRec(FILE *Df, Boolean Train);
+DataRec	    GetDataRecInput(c50_input *Input, Boolean Train);
 CaseNo	    CountData(FILE *Df);
+CaseNo	    CountDataInput(c50_input *Input);
 int	    StoreIVal(String s);
 void	    FreeData(void);
 void	    CheckValue(DataRec Case, Attribute Att);
@@ -509,6 +515,7 @@ void	    CheckValue(DataRec Case, Attribute Att);
 	/* mcost.c */
 
 void	    GetMCosts(FILE *f);
+void	    GetMCostsInput(c50_input *Input);
 
 	/* attwinnow.c */
 
@@ -657,6 +664,7 @@ void	    FreeLastCase(DataRec Case);
 double	    KRandom(void);
 void	    ResetKR(int KRInit);
 void	    Error(int ErrNo, const char *S1, const char *S2);
+void	    C50Exit(int Status);
 String	    CaseLabel(CaseNo N);
 FILE *	    GetFile(const char *Extension, const char *RW);
 double	    ExecTime(void);
@@ -757,17 +765,22 @@ void	    SaveTree(Tree T, const char *Extension);
 void	    OutTree(Tree T);
 void	    SaveRules(CRuleSet RS, const char *Extension);
 void	    AsciiOut(const char *Pre, String S);
-void	    ReadHeader(void);
+void	    ReadHeader(c50_input *Input);
+void	    ReadHeaderMemory(c50_input *Input, c50_input *CostsInput);
 Tree	    GetTree(const char *Extension);
-Tree	    InTree(void);
+Tree	    InTree(c50_input *Input);
+Tree	    InTreeAt(c50_input *Input, Tree *Slot);
 CRuleSet    GetRules(const char *Extension);
-CRuleSet    InRules(void);
-CRule	    InRule(void);
-Condition   InCondition(void);
-int	    ReadProp(char *Delim);
+CRuleSet    InRules(c50_input *Input);
+CRuleSet    InRulesAt(c50_input *Input, CRuleSet *Slot);
+CRule	    InRule(c50_input *Input);
+CRule	    InRuleAt(c50_input *Input, CRule *Slot);
+Condition   InCondition(c50_input *Input);
+Condition   InConditionAt(c50_input *Input, Condition *Slot);
+int	    ReadProp(c50_input *Input, char *Delim);
 String	    RemoveQuotes(String S);
 Set	    MakeSubset(Attribute Att);
-void	    StreamIn(String S, int n);
+void	    StreamIn(c50_input *Input, String S, int n);
 
 	/* update.c (Unix) or winmain.c (WIN32) */
 
