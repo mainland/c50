@@ -1,0 +1,59 @@
+name: Sanitizers
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 4 * * 0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sanitizers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - kind: address-undefined-leak
+            cc: clang
+            cxx: clang++
+            option: C50_ENABLE_SANITIZERS
+          - kind: thread
+            cc: gcc
+            cxx: g++
+            option: C50_ENABLE_THREAD_SANITIZER
+    name: ${{ matrix.kind }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install native test dependencies
+        run: sudo apt-get update && sudo apt-get install -y catch2
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -D${{ matrix.option }}=ON -DC50_BUILD_BENCHMARKS=ON
+          cmake --build build --parallel 2
+      - name: Check address, undefined behavior, and leaks
+        if: matrix.kind == 'address-undefined-leak'
+        run: ctest --test-dir build --output-on-failure
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+      - name: Check thread safety
+        if: matrix.kind == 'thread'
+        # GCC TSan needs a compatible shadow-memory address-space layout.
+        run: setarch "$(uname -m)" -R ctest --test-dir build --output-on-failure
+        env:
+          TSAN_OPTIONS: halt_on_error=1
