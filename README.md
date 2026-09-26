@@ -24,7 +24,7 @@ The archive used for the import has this SHA-256 digest:
 
 ## Current build
 
-The legacy programs require a C compiler and `make`:
+The legacy programs require a C++17 compiler, a C compiler for `report`, and `make`:
 
 ```sh
 make

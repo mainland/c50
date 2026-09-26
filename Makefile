@@ -6,8 +6,10 @@
 #*************************************************************************#
 
 
-CC	= gcc -ffloat-store
-CFLAGS = -g -Wall -DVerbOpt -O0
+CC	= gcc
+CXX	= g++ -ffloat-store
+CXXSTD = -std=c++17
+CXXFLAGS = $(CXXSTD) -g -Wall -DVerbOpt -O0
 LFLAGS = $(S)
 
 .PHONY: all test
@@ -19,37 +21,37 @@ LFLAGS = $(S)
 SRC_DIR = src
 
 sources =\
-	$(SRC_DIR)/global.c\
-	$(SRC_DIR)/c50.c\
-	$(SRC_DIR)/construct.c\
-	$(SRC_DIR)/formtree.c\
-	$(SRC_DIR)/info.c\
-	$(SRC_DIR)/discr.c\
-	$(SRC_DIR)/contin.c\
-	$(SRC_DIR)/subset.c\
-	$(SRC_DIR)/prune.c\
-	$(SRC_DIR)/p-thresh.c\
-	$(SRC_DIR)/trees.c\
-	$(SRC_DIR)/siftrules.c\
-	$(SRC_DIR)/ruletree.c\
-	$(SRC_DIR)/rules.c\
-	$(SRC_DIR)/getdata.c\
-	$(SRC_DIR)/implicitatt.c\
-	$(SRC_DIR)/mcost.c\
-	$(SRC_DIR)/confmat.c\
-	$(SRC_DIR)/sort.c\
-	$(SRC_DIR)/update.c\
-	$(SRC_DIR)/attwinnow.c\
-	$(SRC_DIR)/classify.c\
-	$(SRC_DIR)/formrules.c\
-	$(SRC_DIR)/getnames.c\
-	$(SRC_DIR)/modelfiles.c\
-	$(SRC_DIR)/utility.c\
-	$(SRC_DIR)/xval.c
+	$(SRC_DIR)/global.cpp\
+	$(SRC_DIR)/c50.cpp\
+	$(SRC_DIR)/construct.cpp\
+	$(SRC_DIR)/formtree.cpp\
+	$(SRC_DIR)/info.cpp\
+	$(SRC_DIR)/discr.cpp\
+	$(SRC_DIR)/contin.cpp\
+	$(SRC_DIR)/subset.cpp\
+	$(SRC_DIR)/prune.cpp\
+	$(SRC_DIR)/p-thresh.cpp\
+	$(SRC_DIR)/trees.cpp\
+	$(SRC_DIR)/siftrules.cpp\
+	$(SRC_DIR)/ruletree.cpp\
+	$(SRC_DIR)/rules.cpp\
+	$(SRC_DIR)/getdata.cpp\
+	$(SRC_DIR)/implicitatt.cpp\
+	$(SRC_DIR)/mcost.cpp\
+	$(SRC_DIR)/confmat.cpp\
+	$(SRC_DIR)/sort.cpp\
+	$(SRC_DIR)/update.cpp\
+	$(SRC_DIR)/attwinnow.cpp\
+	$(SRC_DIR)/classify.cpp\
+	$(SRC_DIR)/formrules.cpp\
+	$(SRC_DIR)/getnames.cpp\
+	$(SRC_DIR)/modelfiles.cpp\
+	$(SRC_DIR)/utility.cpp\
+	$(SRC_DIR)/xval.cpp
 
 prediction_sources =\
-	$(filter-out $(SRC_DIR)/c50.c,$(sources))\
-	tests/prediction_probe.c
+	$(filter-out $(SRC_DIR)/c50.cpp,$(sources))\
+	tests/prediction_probe.cpp
 
 objects =\
 	 $(SRC_DIR)/c50.o $(SRC_DIR)/global.o\
@@ -84,16 +86,16 @@ report: $(SRC_DIR)/report.c Makefile
 prediction-probe:\
 	$(prediction_sources) $(headers) Makefile
 	cat $(SRC_DIR)/defns.i $(prediction_sources)\
-		| egrep -v 'defns.i|extern.i' >$(SRC_DIR)/predictiongt.c
-	$(CC) $(LFLAGS) -O3 -o $@ $(SRC_DIR)/predictiongt.c -lm
-	rm $(SRC_DIR)/predictiongt.c
+		| egrep -v 'defns.i|extern.i' >$(SRC_DIR)/predictiongt.cpp
+	$(CXX) $(CXXSTD) $(LFLAGS) -O3 -o $@ $(SRC_DIR)/predictiongt.cpp -lm
+	rm $(SRC_DIR)/predictiongt.cpp
 
 
 # debug version (including verbosity option)
 
 c5.0dbg:\
 	$(objects) $(headers) Makefile
-	$(CC) -g -o c5.0dbg $(objects) -lm
+	$(CXX) $(CXXSTD) -g -o c5.0dbg $(objects) -lm
 
 
 # production version
@@ -101,14 +103,14 @@ c5.0dbg:\
 c5.0:\
 	$(sources) $(headers) Makefile
 	cat $(SRC_DIR)/defns.i $(sources)\
-		| egrep -v 'defns.i|extern.i' >$(SRC_DIR)/c50gt.c
-	$(CC) $(LFLAGS) -O3 -o c5.0 $(SRC_DIR)/c50gt.c -lm
+		| egrep -v 'defns.i|extern.i' >$(SRC_DIR)/c50gt.cpp
+	$(CXX) $(CXXSTD) $(LFLAGS) -O3 -o c5.0 $(SRC_DIR)/c50gt.cpp -lm
 	strip c5.0
-	rm $(SRC_DIR)/c50gt.c
+	rm $(SRC_DIR)/c50gt.cpp
 
 
 $(objects):	Makefile $(headers)
 
 
-$(SRC_DIR)/%.o: $(SRC_DIR)/%.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+$(SRC_DIR)/%.o: $(SRC_DIR)/%.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
