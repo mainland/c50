@@ -58,7 +58,7 @@ void EvalDiscreteAtt(c50_context *Context, Attribute Att, CaseCount Cases)
 
     ForEach(v, 1, Context->schema.max_attribute_value[Att])
     {
-	if ( GEnv.ValFreq[v] >= MINITEMS ) ReasonableSubsets++;
+	if ( GEnv.ValFreq[v] >= Context->options.minimum_cases ) ReasonableSubsets++;
     }
 
     if ( ReasonableSubsets < 2 )
@@ -143,7 +143,7 @@ void EvalOrderedAtt(c50_context *Context, Attribute Att, CaseCount Cases)
     ForEach(v, 3, Context->schema.max_attribute_value[Att])
     {
 	if ( GEnv.ValFreq[v] > 0 &&
-	     SplitFreq[2] >= MINITEMS && SplitFreq[3] >= MINITEMS )
+	     SplitFreq[2] >= Context->options.minimum_cases && SplitFreq[3] >= Context->options.minimum_cases )
 	{
 	    Tries++;
 	    ThisGain =

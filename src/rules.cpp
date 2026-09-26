@@ -39,8 +39,8 @@
 
 /*************************************************************************/
 /*								  	 */
-/*	Add a new rule to the current ruleset, by updating Rule[],  	 */
-/*	NRules and, if necessary, RuleSpace			  	 */
+/*	Add a new rule to the current ruleset, by updating Context->rules.rules[],  	 */
+/*	Context->rules.count and, if necessary, Context->rules.capacity			  	 */
 /*								  	 */
 /*************************************************************************/
 
@@ -104,7 +104,7 @@ Boolean NewRule(c50_context *Context, Condition Cond[], int NCond,
 
     /*  See if rule already exists  */
 
-    for ( r = 1 ; ! Exclude && r <= NRules ; r++ )
+    for ( r = 1 ; ! Exclude && r <= Context->rules.count ; r++ )
     {
 	if ( SameRule(Context, r, Lhs, Size, TargetClass) )
 	{
@@ -112,9 +112,9 @@ Boolean NewRule(c50_context *Context, Condition Cond[], int NCond,
 
 	    /*  Keep the most optimistic error estimate  */
 
-	    if ( Vote > Rule[r]->Vote )
+	    if ( Vote > Context->rules.rules[r]->Vote )
 	    {
-		Rule[r]->Vote = Vote;
+		Context->rules.rules[r]->Vote = Vote;
 	    }
 
 	    Exclude = true;
@@ -137,32 +137,32 @@ Boolean NewRule(c50_context *Context, Condition Cond[], int NCond,
 
     /*  Make sure there is enough room for the new rule  */
 
-    NRules++;
-    if ( NRules >= RuleSpace )
+    Context->rules.count++;
+    if ( Context->rules.count >= Context->rules.capacity )
     {
-	RuleSpace += 100;
-	if ( RuleSpace > 100 )
+	Context->rules.capacity += 100;
+	if ( Context->rules.capacity > 100 )
 	{
-	    Realloc(Rule,  RuleSpace, CRule);
-	    Realloc(Fires, RuleSpace, Byte *);
-	    ForEach(r, RuleSpace-100, RuleSpace-1)
+	    Realloc(Context->rules.rules,  Context->rules.capacity, CRule);
+	    Realloc(Fires, Context->rules.capacity, Byte *);
+	    ForEach(r, Context->rules.capacity-100, Context->rules.capacity-1)
 	    {
 		Fires[r] = Nil;
 	    }
 	}
 	else
 	{
-	    Rule  = Alloc(RuleSpace, CRule);
-	    Fires = AllocZero(RuleSpace, Byte *);
+	    Context->rules.rules  = Alloc(Context->rules.capacity, CRule);
+	    Fires = AllocZero(Context->rules.capacity, Byte *);
 	}
     }
 
     /*  Form the new rule  */
 
-    Rule[NRules] = R = Alloc(1, RuleRec);
+    Context->rules.rules[Context->rules.count] = R = Alloc(1, RuleRec);
 
-    R->TNo     = ( Existing ? Existing->TNo : Trial );
-    R->RNo     = ( Existing ? Existing->RNo : NRules );
+    R->TNo     = ( Existing ? Existing->TNo : Context->trees.trial );
+    R->RNo     = ( Existing ? Existing->RNo : Context->rules.count );
     R->Size    = Size;
     R->Lhs     = Lhs;
     R->Rhs     = TargetClass;
@@ -174,7 +174,7 @@ Boolean NewRule(c50_context *Context, Condition Cond[], int NCond,
     /*  Record entry in Fires and CovBy  */
 
     ListSort(List, 1, List[0]);
-    Fires[NRules] = Compress(List);
+    Fires[Context->rules.count] = Compress(List);
 
     ForEach(i, 1, List[0])
     {
@@ -336,15 +336,15 @@ Boolean SameRule(c50_context *Context, RuleNo r, Condition Cond[],
 {
     int	d, i, Bytes;
 
-    if ( Rule[r]->Size != NConds || Rule[r]->Rhs != TargetClass )
+    if ( Context->rules.rules[r]->Size != NConds || Context->rules.rules[r]->Rhs != TargetClass )
     {
 	return false;
     }
 
     ForEach(d, 1, NConds)
     {
-	if ( Rule[r]->Lhs[d]->NodeType != Cond[d]->NodeType ||
-	     Rule[r]->Lhs[d]->Tested   != Cond[d]->Tested )
+	if ( Context->rules.rules[r]->Lhs[d]->NodeType != Cond[d]->NodeType ||
+	     Context->rules.rules[r]->Lhs[d]->Tested   != Cond[d]->Tested )
 	{
 	    return false;
 	}
@@ -352,15 +352,15 @@ Boolean SameRule(c50_context *Context, RuleNo r, Condition Cond[],
 	switch ( Cond[d]->NodeType )
 	{
 	    case BrDiscr:
-		if ( Rule[r]->Lhs[d]->TestValue != Cond[d]->TestValue )
+		if ( Context->rules.rules[r]->Lhs[d]->TestValue != Cond[d]->TestValue )
 		{
 		    return false;
 		}
 		break;
 
 	    case BrThresh:
-		if ( Rule[r]->Lhs[d]->TestValue != Cond[d]->TestValue ||
-		     Rule[r]->Lhs[d]->Cut != Cond[d]->Cut )
+		if ( Context->rules.rules[r]->Lhs[d]->TestValue != Cond[d]->TestValue ||
+		     Context->rules.rules[r]->Lhs[d]->Cut != Cond[d]->Cut )
 		{
 		    return false;
 		}
@@ -370,7 +370,7 @@ Boolean SameRule(c50_context *Context, RuleNo r, Condition Cond[],
 		Bytes = (Context->schema.max_attribute_value[Cond[d]->Tested]>>3) + 1;
 		ForEach(i, 0, Bytes-1)
 		{
-		    if ( Rule[r]->Lhs[d]->Subset[i] != Cond[d]->Subset[i] )
+		    if ( Context->rules.rules[r]->Lhs[d]->Subset[i] != Cond[d]->Subset[i] )
 		    {
 			return false;
 		    }
@@ -464,7 +464,7 @@ void PrintRule(c50_context *Context, CRule R)
     int		d;
 
     fprintf(Of, T_RuleHeader);
-    if ( TRIALS > 1 ) fprintf(Of, "%d/", R->TNo);
+    if ( Context->options.trials > 1 ) fprintf(Of, "%d/", R->TNo);
     fprintf(Of, "%d: (%.8g", R->RNo, P1(R->Cover));
     if ( R->Correct < R->Cover - 0.1 )
     {

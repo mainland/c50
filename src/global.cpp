@@ -39,26 +39,6 @@
 /*									 */
 /*************************************************************************/
 
-int		VERBOSITY=0,	/* verbosity level (0 = none) */
-		TRIALS=1,	/* number of trees to be grown */
-		FOLDS=10,	/* crossvalidation folds */
-		UTILITY=0;	/* rule utility bands */
-
-Boolean		SUBSET=0,	/* subset tests allowed */
-		BOOST=0,	/* boosting invoked */
-		PROBTHRESH=0,	/* to use soft thresholds */
-		RULES=0,	/* rule-based classifiers */
-		XVAL=0,		/* perform crossvalidation */
-		NOCOSTS=0,	/* ignoring costs */
-		WINNOW=0,	/* attribute winnowing */
-		GLOBAL=1;	/* use global pruning for trees */
-
-CaseCount	MINITEMS=2,	/* minimum cases each side of a cut */
-		LEAFRATIO=0;	/* leaves per case for boosting */
-
-float		CF=0.25,	/* confidence limit for tree pruning */
-		SAMPLE=0.0;	/* sample training proportion */
-
 /*************************************************************************/
 /*									 */
 /*		Attributes and data					 */
@@ -78,24 +58,9 @@ String		FileStem="undefined";
 /*									 */
 /*************************************************************************/
 
-Tree		*Raw=0,		/* unpruned trees */
-		*Pruned=0,	/* pruned trees */
-		WTree=0;	/* winnow tree */
+float		SampleFrac=1;	/* fraction used when sampling */
 
-float		SampleFrac=1,	/* fraction used when sampling */
-		*BVoteBlock=0,	/* boost voting block */
-		**MCost=0,	/* misclass cost [pred][real] */
-		**NCost=0,	/* normalised MCost used for rules */
-		*WeightMul=0;	/* prior adjustment factor */
-
-Boolean		UnitWeights=1,	/* all weights are 1.0 */
-		CostWeights=0;	/* reweight cases for costs */
-
-int		Trial,		/* trial number for boosting */
-		MaxTree=0;	/* max tree grown */
-
-double		*ClassFreq=0,	/* ClassFreq[c] = # cases of class c */
-		**DFreq=0;	/* DFreq[a][c*x] = Freq[][] for attribute a */
+double		**DFreq=0;	/* DFreq[a][c*x] = Freq[][] for attribute a */
 
 float		*Gain=0,	/* Gain[a] = info gain by split on att a */
 		*Info=0,	/* Info[a] = max info from split on att a */
@@ -119,13 +84,6 @@ EnvRec		GEnv;		/* environment block */
 /*									 */
 /*************************************************************************/
 
-CRule		*Rule=0;	/* current rules */
-
-RuleNo		NRules,		/* number of rules */
-		RuleSpace;	/* space currently allocated for rules */
-
-CRuleSet	*RuleSet=0;	/* rulesets */
-
 Byte		**Fires=Nil,	/* Fires[r][*] = cases covered by rule r */
 		*CBuffer=Nil;	/* buffer for compressing lists */
 
@@ -140,18 +98,13 @@ int		*AttValues=0,	/* number of attribute values in the data */
 double		*LogCaseNo=0,	/* LogCaseNo[i] = log2(i) */
 		*LogFact=0;	/* LogFact[i] = log2(i!) */
 
-int		*UtilErr=0,	/* error by utility band */
-		*UtilBand=0;	/* last rule in each band */
-double		*UtilCost=0;	/* cost ditto */
-
-
 /*************************************************************************/
 /*									 */
 /*		Misc							 */
 /*									 */
 /*************************************************************************/
 
-int		KRInit=0,	/* KRandom initializer for SAMPLE */
+int		KRInit=0,	/* KRandom initializer for Context->options.sample_fraction */
 		Now=0;		/* current stage */
 
 FILE		*TRf=0;		/* file pointer for tree and rule i/o */

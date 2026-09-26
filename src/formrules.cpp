@@ -86,7 +86,7 @@ CRuleSet FormRules(c50_context *Context, Tree T)
     NotifyStage(FORMRULES);
     Progress(-(Context->cases.max_case+1.0));
 
-    Verbosity(2, PrintTree(Context, T, "Pruned tree:"))
+    Verbosity(2, PrintTree(Context, T, "Context->trees.pruned tree:"))
 
     /*  Find essential parameters and allocate storage  */
 
@@ -119,8 +119,8 @@ CRuleSet FormRules(c50_context *Context, Tree T)
 
     CBuffer	 = Alloc(4 + (Context->cases.max_case+1) + (Context->cases.max_case+1)/128, Byte);
 
-    NRules = RuleSpace = 0;
-    FindClassFreq(Context, ClassFreq, 0, Context->cases.max_case);
+    Context->rules.count = Context->rules.capacity = 0;
+    FindClassFreq(Context, Context->training.class_frequencies, 0, Context->cases.max_case);
 
     if ( ! BranchBits )
     {
@@ -146,14 +146,14 @@ CRuleSet FormRules(c50_context *Context, Tree T)
     SiftRules(Context,
 	      (T->Errors + Context->schema.max_class-1) / (Context->cases.max_case+1 + Context->schema.max_class));
 
-    FreeVector((void **) NCost, 0, Context->schema.max_class);		NCost = Nil;
+    FreeVector((void **) Context->costs.normalized_matrix, 0, Context->schema.max_class);		Context->costs.normalized_matrix = Nil;
 
-    CheckActiveSpace(Context, NRules);
+    CheckActiveSpace(Context, Context->rules.count);
 
     RS = Alloc(1, RuleSetRec);
 
-    RS->SNRules  = NRules;
-    RS->SRule    = Rule;				Rule = Nil;
+    RS->SNRules  = Context->rules.count;
+    RS->SRule    = Context->rules.rules;				Context->rules.rules = Nil;
     RS->SDefault = Context->default_class;
 
     ConstructRuleTree(Context, RS);
@@ -165,8 +165,8 @@ CRuleSet FormRules(c50_context *Context, Tree T)
 
 /*************************************************************************/
 /*								  	 */
-/*	Set up normalised costs.  These are all 0/1 if MCost is not	 */
-/*	defined or if cost weighting is used.  Otherwise, MCost is	 */
+/*	Set up normalised costs.  These are all 0/1 if Context->costs.matrix is not	 */
+/*	defined or if cost weighting is used.  Otherwise, Context->costs.matrix is	 */
 /*	divided by an estimated average error cost, determined as	 */
 /*	follows:							 */
 /*									 */
@@ -179,7 +179,7 @@ CRuleSet FormRules(c50_context *Context, Tree T)
 /*									 */
 /*	The above tends to be pessimistic, so we reduce it somewhat.	 */
 /*								  	 */
-/*	Siftrules requires a row of NCost corresponding to predicted	 */
+/*	Siftrules requires a row of Context->costs.normalized_matrix corresponding to predicted	 */
 /*	class 0 (case not covered by any rule).  All costs in this row	 */
 /*	are set to 1.							 */
 /*								  	 */
@@ -192,42 +192,42 @@ void SetupNCost(c50_context *Context)
     ClassNo	Real, Pred;
     double	AvErrCost=0, ProbPred, ProbReal;
 
-    NCost = Alloc(Context->schema.max_class+1, float *);
+    Context->costs.normalized_matrix = Alloc(Context->schema.max_class+1, float *);
 
     ForEach(Pred, 0, Context->schema.max_class)
     {
-	NCost[Pred] = Alloc(Context->schema.max_class+1, float);
+	Context->costs.normalized_matrix[Pred] = Alloc(Context->schema.max_class+1, float);
 
-	if ( ! MCost || CostWeights || Pred == 0 )
+	if ( ! Context->costs.matrix || Context->costs.weighted || Pred == 0 )
 	{
 	    ForEach(Real, 1, Context->schema.max_class)
 	    {
-		NCost[Pred][Real] = ( Pred != Real );
+		Context->costs.normalized_matrix[Pred][Real] = ( Pred != Real );
 	    }
 	}
 	else
  	{
-	    ProbPred = ClassFreq[Pred] / (Context->cases.max_case+1);
+	    ProbPred = Context->training.class_frequencies[Pred] / (Context->cases.max_case+1);
 	    ForEach(Real, 1, Context->schema.max_class)
 	    {
-		NCost[Pred][Real] = MCost[Pred][Real];
+		Context->costs.normalized_matrix[Pred][Real] = Context->costs.matrix[Pred][Real];
 		if ( Real == Pred ) continue;
 
-		ProbReal = ClassFreq[Real] / (Context->cases.max_case+1);
+		ProbReal = Context->training.class_frequencies[Real] / (Context->cases.max_case+1);
 		AvErrCost +=
-		    ProbPred * (ProbReal / (1 - ProbPred)) * MCost[Pred][Real];
+		    ProbPred * (ProbReal / (1 - ProbPred)) * Context->costs.matrix[Pred][Real];
 	    }
 	}
     }
 
-    if ( MCost && ! CostWeights )
+    if ( Context->costs.matrix && ! Context->costs.weighted )
     {
 	AvErrCost = (AvErrCost + 1) / 2;	/* reduced average cost */
 	ForEach(Real, 1, Context->schema.max_class)
 	{
 	    ForEach(Pred, 1, Context->schema.max_class)
 	    {
-		NCost[Pred][Real] /= AvErrCost;
+		Context->costs.normalized_matrix[Pred][Real] /= AvErrCost;
 	    }
 	}
     }
@@ -386,7 +386,7 @@ void PruneRule(c50_context *Context, Condition Cond[], ClassNo TargetClass)
     }
     Cost -= LogFact[NCond];
 
-    Base = TI(ClassFreq[TargetClass], Context->cases.max_case+1 - ClassFreq[TargetClass]);
+    Base = TI(Context->training.class_frequencies[TargetClass], Context->cases.max_case+1 - Context->training.class_frequencies[TargetClass]);
 
     /*  Initialise all fail lists  */
 
@@ -412,8 +412,8 @@ void PruneRule(c50_context *Context, Condition Cond[], ClassNo TargetClass)
 	Bestd = id = 0;
 
 	Gain = Base - TI(Total[0]-Errors[0], Errors[0])
-		    - TI(ClassFreq[TargetClass]-Total[0]+Errors[0],
-			 Context->cases.max_case+1-ClassFreq[TargetClass]-Errors[0]);
+		    - TI(Context->training.class_frequencies[TargetClass]-Total[0]+Errors[0],
+			 Context->cases.max_case+1-Context->training.class_frequencies[TargetClass]-Errors[0]);
 
 	Verbosity(1,
 	    fprintf(Of, "\n       Err   Used   Pess\tAbsent condition\n"))
@@ -482,12 +482,12 @@ void PruneRule(c50_context *Context, Condition Cond[], ClassNo TargetClass)
 
     if ( Remaining && Total[0] > 0.99 && THEORYFRAC * Cost <= Gain )
     {
-	Prior = ClassFreq[TargetClass] / (Context->cases.max_case+1.0);
+	Prior = Context->training.class_frequencies[TargetClass] / (Context->cases.max_case+1.0);
 
 	/*  Find list of cases covered by this rule and adjust coverage
 	    if using costs  */
 
-	if ( ! MCost )
+	if ( ! Context->costs.matrix )
 	{
 	    RealTotal   = Total[0];
 	    RealCorrect = Total[0] - Errors[0];
@@ -498,23 +498,23 @@ void PruneRule(c50_context *Context, Condition Cond[], ClassNo TargetClass)
 	    }
 	}
 	else
-	if ( CostWeights )
+	if ( Context->costs.weighted )
 	{
 	    /*  Adjust distributions to reverse case weighting  */
 
-	    Prior /= WeightMul[TargetClass];
+	    Prior /= Context->costs.weight_multipliers[TargetClass];
 
 	    RealTotal = 0;
 	    for ( i = Fail0 ; i >= 0 ; i = Succ[i] )
 	    {
-		RealTotal += Weight(Context->cases.records[i]) / WeightMul[Class(Context->cases.records[i])];
+		RealTotal += Weight(Context->cases.records[i]) / Context->costs.weight_multipliers[Class(Context->cases.records[i])];
 		List[++LL] = i;
 	    }
-	    RealCorrect = (Total[0] - Errors[0]) / WeightMul[TargetClass];
+	    RealCorrect = (Total[0] - Errors[0]) / Context->costs.weight_multipliers[TargetClass];
 	}
 	else
 	{
-	    /*  Errors have been weighted by NCost -- undo  */
+	    /*  Errors have been weighted by Context->costs.normalized_matrix -- undo  */
 
 	    RealTotal   = Total[0];
 	    RealCorrect = 0;
@@ -693,7 +693,7 @@ void Increment(c50_context *Context, int d, CaseNo i,
 /*   ---------  */
 {
     Total[d] += Weight(Context->cases.records[i]);
-    Errors[d]+= Weight(Context->cases.records[i]) * NCost[TargetClass][Class(Context->cases.records[i])];
+    Errors[d]+= Weight(Context->cases.records[i]) * Context->costs.normalized_matrix[TargetClass][Class(Context->cases.records[i])];
 }
 
 

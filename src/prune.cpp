@@ -43,7 +43,7 @@
 #define	  UPDATE		1	/* flag: change tree */
 #define	  REGROW		2	/*       regrow branches */
 #define	  REPORTPROGRESS	4	/*	 original tree */
-#define	  UNITWEIGHTS		8	/*	 UnitWeights is true*/
+#define	  UNITWEIGHTS		8	/*	 Context->costs.unit_weights is true*/
 
 Set		*PossibleValues;
 
@@ -73,7 +73,7 @@ void Prune(c50_context *Context, Tree T)
 
     Verbosity(2, fprintf(Of, "\n"))
 
-    Regrow = ( Trial == 0 || Now == WINNOWATTS );
+    Regrow = ( Context->trees.trial == 0 || Now == WINNOWATTS );
 
     /*  Local pruning phase  */
 
@@ -81,13 +81,13 @@ void Prune(c50_context *Context, Tree T)
     Options = ( Now == WINNOWATTS ? (UPDATE|REGROW) :
 		Regrow ? (UPDATE|REGROW|REPORTPROGRESS) :
 			 (UPDATE|REPORTPROGRESS) );
-    if ( UnitWeights ) Options |= UNITWEIGHTS;
+    if ( Context->costs.unit_weights ) Options |= UNITWEIGHTS;
 
     EstimateErrs(Context, T, 0, Context->cases.max_case, 0, Options);
 
-    if ( MCost )
+    if ( Context->costs.matrix )
     {
-	/*  Remove any effects of WeightMul and reset leaf classes  */
+	/*  Remove any effects of Context->costs.weight_multipliers and reset leaf classes  */
 
 	RestoreDistribs(Context, T);
     }
@@ -101,7 +101,7 @@ void Prune(c50_context *Context, Tree T)
 
 	/*  Possible global pruning phase  */
 
-	if ( GLOBAL && Now != WINNOWATTS )
+	if ( Context->options.global_pruning && Now != WINNOWATTS )
 	{
 	    GlobalPrune(Context, T);
 	}
@@ -113,7 +113,7 @@ void Prune(c50_context *Context, Tree T)
     PossibleValues = AllocZero(Context->schema.max_attribute+1, Set);
     ForEach(Att, 1, Context->schema.max_attribute)
     {
-	if ( Ordered(Att) || ( Discrete(Att) && SUBSET ) )
+	if ( Ordered(Att) || ( Discrete(Att) && Context->options.subset_splits ) )
 	{
 	    PossibleValues[Att] = AllocZero((Context->schema.max_attribute_value[Att]>>3)+1, Byte);
 	    ForEach(i, 1, Context->schema.max_attribute_value[Att])
@@ -130,7 +130,7 @@ void Prune(c50_context *Context, Tree T)
     /*  For multibranch splits, merge non-occurring values.  For trees
 	(first boosting trial only), also merge leaves of same class  */
 
-    if ( ! SUBSET )
+    if ( ! Context->options.subset_splits )
     {
 	CompressBranches(Context, T);
     }
@@ -156,14 +156,14 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
     double	Factor, *LocalClassDist;
     DiscrValue	v, BestBr=0;
     ClassNo	c, BestClass=1;
-    int		UnitWeights;			/* local value */
+    int		UnitWeightFlag;			/* local value */
     Tree	Br;
     Attribute	Att;
 
 
     if ( Fp > Lp ) return;
 
-    UnitWeights = (Flags & UNITWEIGHTS);
+    UnitWeightFlag = (Flags & UNITWEIGHTS);
 
     LocalClassDist = Alloc(Context->schema.max_class+1, double);
 
@@ -192,7 +192,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
     }
 
     LeafErrs = Cases - LocalClassDist[BestClass];
-    ExtraLeafErrs = ExtraErrs(Cases, LeafErrs, BestClass);
+    ExtraLeafErrs = ExtraErrs(Context, Cases, LeafErrs, BestClass);
 
     Free(LocalClassDist);
 
@@ -232,7 +232,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
     Att = T->Tested;
     Missing = (Ep = Group(Context, 0, Fp, Lp, T)) - Fp + 1;
 
-    if ( CostWeights )
+    if ( Context->costs.weighted )
     {
 	MissingCases = SumNocostWeights(Context, Fp, Ep);
 	KnownCases   = SumNocostWeights(Context, Ep+1, Lp);
@@ -246,7 +246,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
     SmallBranches = AllocZero(Context->schema.max_class+1, CaseCount);
     BranchCases   = Alloc(T->Forks+1, CaseCount);
 
-    if ( Missing ) UnitWeights = 0;
+    if ( Missing ) UnitWeightFlag = 0;
 
     TreeErrs = 0;
     Bp = Fp;
@@ -261,7 +261,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 	BranchCases[v] = CountCases(Context, Bp + Missing, Ep);
 
 	Factor = ( ! Missing ? 0 :
-		   ! CostWeights ? BranchCases[v] / KnownCases :
+		   ! Context->costs.weighted ? BranchCases[v] / KnownCases :
 		   SumNocostWeights(Context, Bp + Missing, Ep) / KnownCases );
 
 	if ( (BranchCases[v] += Factor * MissingCases) >= MinLeaf )
@@ -275,11 +275,11 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 	    }
 
 	    EstimateErrs(Context, T->Branch[v], Bp, Ep, Sh+1,
-			 ((Flags&7) | UnitWeights));
+			 ((Flags&7) | UnitWeightFlag));
 
 	    /*  Group small branches together for error estimation  */
 
-	    if ( BranchCases[v] < MINITEMS )
+	    if ( BranchCases[v] < Context->options.minimum_cases )
 	    {
 		ForEach(i, Bp, Ep)
 		{
@@ -323,7 +323,8 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 	}
 
 	Errs = SmallBranchCases - SmallBranches[BestClass];
-	TreeErrs += Errs + ExtraErrs(SmallBranchCases, Errs, BestClass);
+	TreeErrs += Errs +
+	    ExtraErrs(Context, SmallBranchCases, Errs, BestClass);
     }
     Free(SmallBranches);
     Free(BranchCases);
@@ -429,7 +430,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 		FreeTree(T->Branch[v]);			T->Branch[v] = Nil;
 	    }
 
-	    SetGlobalUnitWeights(Flags & UNITWEIGHTS);
+	    SetGlobalUnitWeights(Context, Flags & UNITWEIGHTS);
 
 	    Divide(Context, T, Fp, Lp, 0);
 	}
@@ -816,7 +817,7 @@ float Val[] = {  0,  0.001, 0.005, 0.01, 0.05, 0.10, 0.20, 0.40, 1.00},
       Coeff;
 
 
-void InitialiseExtraErrs()
+void InitialiseExtraErrs(c50_context *Context)
 /*   -------------------  */
 {
     int i=1;
@@ -824,12 +825,12 @@ void InitialiseExtraErrs()
     /*  Compute and retain the coefficient value, interpolating from
 	the values in Val and Dev  */
 
-    while ( CF > Val[i] ) i++;
+    while ( Context->options.confidence_factor > Val[i] ) i++;
 
     Coeff = Dev[i-1] +
-	      (Dev[i] - Dev[i-1]) * (CF - Val[i-1]) /(Val[i] - Val[i-1]);
+	      (Dev[i] - Dev[i-1]) * (Context->options.confidence_factor - Val[i-1]) /(Val[i] - Val[i-1]);
     Coeff = Coeff * Coeff;
-    CF = Max(CF, 1E-6);
+    Context->options.confidence_factor = Max(Context->options.confidence_factor, 1E-6);
 }
 
 
@@ -837,47 +838,48 @@ void InitialiseExtraErrs()
 /*									 */
 /*	Calculate extra errors to correct the resubstitution error	 */
 /*	rate at a leaf with N cases, E errors, predicted class C.	 */
-/*	If CostWeights are used, N and E are normalised by removing	 */
+/*	If Context->costs.weighted are used, N and E are normalised by removing	 */
 /*	the effects of cost weighting and then reapplying weights to	 */
 /*	the result.							 */
 /*									 */
 /*************************************************************************/
 
 
-float ExtraErrs(CaseCount N, CaseCount E, ClassNo C)
+float ExtraErrs(c50_context *Context, CaseCount N, CaseCount E, ClassNo C)
 /*    ---------  */
 {
     ClassNo	EC;
     CaseCount	NormC, NormEC;
 
-    if ( ! CostWeights )
+    if ( ! Context->costs.weighted )
     {
-	return RawExtraErrs(N, E);
+	return RawExtraErrs(Context, N, E);
     }
 
     EC = 3 - C;				/* the other class */
-    NormC = (N - E) / WeightMul[C];	/* normalised cases of class C */
-    NormEC = E / WeightMul[EC];		/* ditto the other class */
+    NormC = (N - E) / Context->costs.weight_multipliers[C];	/* normalised cases of class C */
+    NormEC = E / Context->costs.weight_multipliers[EC];		/* ditto the other class */
 
-    return WeightMul[EC] * RawExtraErrs(NormC + NormEC, NormEC);
+    return Context->costs.weight_multipliers[EC] *
+	RawExtraErrs(Context, NormC + NormEC, NormEC);
 }
 
 
 
-float RawExtraErrs(CaseCount N, CaseCount E)
+float RawExtraErrs(c50_context *Context, CaseCount N, CaseCount E)
 /*    ------------  */
 {
     float	Val0, Pr;
 
     if ( E < 1E-6 )
     {
-	return N * (1 - exp(log(CF) / N));
+	return N * (1 - exp(log(Context->options.confidence_factor) / N));
     }
     else
     if ( N > 1 && E < 0.9999 )
     {
-	Val0 = N * (1 - exp(log(CF) / N));
-	return Val0 + E * (RawExtraErrs(N, 1.0) - Val0);
+	Val0 = N * (1 - exp(log(Context->options.confidence_factor) / N));
+	return Val0 + E * (RawExtraErrs(Context, N, 1.0) - Val0);
     }
     else
     if ( E + 0.5 >= N )
@@ -920,12 +922,12 @@ void RestoreDistribs(c50_context *Context, Tree T)
 
     if ( T->Cases >= MinLeaf )
     {
-	if ( CostWeights )
+	if ( Context->costs.weighted )
 	{
 	    T->Cases = 0;
 	    ForEach(c, 1, Context->schema.max_class)
 	    {
-		Context->class_sum[c] = (T->ClassDist[c] /= WeightMul[c]);
+		Context->class_sum[c] = (T->ClassDist[c] /= Context->costs.weight_multipliers[c]);
 		T->Cases += T->ClassDist[c];
 	    }
 	}
@@ -962,7 +964,7 @@ void CompressBranches(c50_context *Context, Tree T)
     ClassNo	c;
     Boolean	EmptyOnly;
 
-    EmptyOnly = Trial || RULES;
+    EmptyOnly = Context->trees.trial || Context->options.rules;
 
     if ( T->NodeType )
     {
@@ -985,7 +987,7 @@ void CompressBranches(c50_context *Context, Tree T)
 	    else
 	    {
 		/*  Check whether some previous branch is mergeable.
-		    For Trial 0, leaves are mergeable if they are
+		    For Context->trees.trial 0, leaves are mergeable if they are
 		    both empty or both non-empty and have the same class;
 		    for later trials, they must both be empty  */
 
@@ -1066,8 +1068,8 @@ void CompressBranches(c50_context *Context, Tree T)
 
 
 
-void SetGlobalUnitWeights(int LocalFlag)
+void SetGlobalUnitWeights(c50_context *Context, int LocalFlag)
 /*   --------------------  */
 {
-    UnitWeights = ( LocalFlag != 0 );
+    Context->costs.unit_weights = ( LocalFlag != 0 );
 }
