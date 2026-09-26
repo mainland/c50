@@ -22,6 +22,7 @@ using c50_model = c50::detail::model_data;
 using c50_predictions = c50::detail::prediction_data;
 using c50_model_kind = c50::model_kind;
 using c50_options = c50::options;
+using c50_dense_dataset = c50::dense_dataset;
 using owned_model = std::unique_ptr<c50_model>;
 using owned_predictions = std::unique_ptr<c50_predictions>;
 
@@ -67,6 +68,7 @@ typedef struct c50_train_state
     size_t names_size;
     const char *training_data;
     size_t training_size;
+    const c50_dense_dataset *dense_dataset;
     const char *costs_data;
     size_t costs_size;
     owned_file diagnostics;
@@ -78,6 +80,7 @@ typedef struct c50_predict_state
     const c50_model *model;
     const char *cases_data;
     size_t cases_size;
+    const c50_dense_dataset *dense_dataset;
     owned_predictions predictions;
 } c50_predict_state;
 
@@ -182,6 +185,188 @@ static const char *ValidateOptions(const c50_options *options)
     return NULL;
 }
 
+static const char *ValidateDenseDataset(const c50_dense_dataset *dataset,
+                                        int training)
+{
+    if ( dataset->row_count > INT_MAX )
+    {
+        return "dense dataset has too many rows";
+    }
+    if ( dataset->feature_count > INT_MAX )
+    {
+        return "dense dataset has too many features";
+    }
+    if ( training && ! dataset->row_count )
+    {
+        return "dense training dataset contains no rows";
+    }
+    if ( dataset->row_count && ! dataset->values )
+    {
+        return "dense dataset values are NULL";
+    }
+    if ( dataset->row_count &&
+         dataset->row_stride < dataset->feature_count )
+    {
+        return "dense dataset row_stride is smaller than feature_count";
+    }
+    if ( dataset->row_count && dataset->row_stride &&
+         dataset->row_count > SIZE_MAX / dataset->row_stride )
+    {
+        return "dense dataset dimensions overflow size_t";
+    }
+    if ( training && ! dataset->class_indices )
+    {
+        return "dense training class_indices are NULL";
+    }
+    return NULL;
+}
+
+static void DenseError(c50_context *Context, c50::error_code status,
+                       const char *message)
+{
+    c50_record_error(Context, status, message);
+    C50Exit(Context, 1);
+}
+
+static void ValidateDenseSchema(c50_context *Context,
+                                const c50_dense_dataset *dataset)
+{
+    Attribute Att;
+
+    if ( Context->schema.class_attribute )
+    {
+        DenseError(Context, c50::error_code::unsupported,
+                   "dense data does not support a class attribute");
+    }
+    if ( dataset->feature_count !=
+         (size_t) Context->schema.max_attribute )
+    {
+        DenseError(Context, c50::error_code::invalid_argument,
+                   "dense feature count does not match names data");
+    }
+
+    ForEach(Att, 1, Context->schema.max_attribute)
+    {
+        if ( Context->schema.attribute_definitions[Att] )
+        {
+            DenseError(Context, c50::error_code::unsupported,
+                       "dense data does not support implicit attributes");
+        }
+        if ( Exclude(Att) )
+        {
+            DenseError(Context, c50::error_code::unsupported,
+                       "dense data does not support ignored or label attributes");
+        }
+        if ( DateVal(Att) || TimeVal(Att) || TStampVal(Att) )
+        {
+            DenseError(Context, c50::error_code::unsupported,
+                       "dense data does not support date or time attributes");
+        }
+        if ( StatBit(Att, DISCRETE) )
+        {
+            DenseError(Context, c50::error_code::unsupported,
+                       "dense categorical features require explicit values");
+        }
+    }
+}
+
+static void LoadDenseData(c50_context *Context,
+                          const c50_dense_dataset *dataset, Boolean Train)
+{
+    size_t row;
+    Attribute Att;
+    CaseNo WantTrain=0, LeftTrain=0;
+    Boolean SelectTrain;
+    DataRec DVec;
+
+    ValidateDenseSchema(Context, dataset);
+    Context->cases.max_case = -1;
+    Context->max_label = 0;
+    Context->cases.records =
+        Alloc(dataset->row_count ? dataset->row_count : 1, DataRec);
+
+    if ( Train && Context->options.sample_fraction )
+    {
+        Context->sample_from = (CaseNo) dataset->row_count;
+        ResetKR(&Context->random, Context->io.random_initial_seed);
+        WantTrain = Context->sample_from * Context->options.sample_fraction + 0.5;
+        LeftTrain = Context->sample_from;
+    }
+
+    for ( row = 0; row < dataset->row_count; row++ )
+    {
+        DVec = NewCase(Context);
+        Weight(DVec) = 1;
+
+        ForEach(Att, 1, Context->schema.max_attribute)
+        {
+            const double value =
+                dataset->values[row * dataset->row_stride + Att - 1];
+
+            if ( isnan(value) )
+            {
+                DVal(DVec, Att) = UNKNOWN;
+                Context->cases.some_missing[Att] = true;
+            }
+            else if ( Discrete(Att) )
+            {
+                const size_t value_count =
+                    (size_t) Context->schema.max_attribute_value[Att] - 1;
+                size_t value_index;
+
+                if ( ! isfinite(value) || value < 0 || floor(value) != value ||
+                     value >= (double) value_count )
+                {
+                    DenseError(Context, c50::error_code::invalid_argument,
+                               "dense categorical value is outside its schema");
+                }
+                value_index = (size_t) value;
+                DVal(DVec, Att) = (DiscrValue) value_index + 2;
+            }
+            else
+            {
+                const ContValue converted = (ContValue) value;
+
+                if ( ! isfinite(value) || ! isfinite(converted) )
+                {
+                    DenseError(Context, c50::error_code::invalid_argument,
+                               "dense continuous value is not finite");
+                }
+                CVal(DVec, Att) = converted;
+            }
+        }
+
+        if ( Train )
+        {
+            if ( dataset->class_indices[row] >=
+                 (size_t) Context->schema.max_class )
+            {
+                DenseError(Context, c50::error_code::invalid_argument,
+                           "dense class index is outside the class schema");
+            }
+            Class(DVec) = (ClassNo) dataset->class_indices[row] + 1;
+        }
+        else
+        {
+            Class(DVec) = 0;
+        }
+
+        if ( Train && Context->options.sample_fraction )
+        {
+            SelectTrain =
+                KRandom(&Context->random) < WantTrain / (float) LeftTrain--;
+            if ( SelectTrain ) WantTrain--;
+            if ( ! SelectTrain )
+            {
+                FreeLastCase(Context, DVec);
+                continue;
+            }
+        }
+
+        Context->cases.records[++Context->cases.max_case] = DVec;
+    }
+}
+
 static void TrainModel(c50_context *Context, void *user_data)
 {
     c50_train_state *state = static_cast<c50_train_state *>(user_data);
@@ -246,11 +431,16 @@ static void TrainModel(c50_context *Context, void *user_data)
     Context->cases.some_not_applicable =
         AllocZero(Context->schema.max_attribute + 1, Boolean);
 
-
-    c50_input_init_memory(&training_input, state->training_data,
-                          state->training_size);
-    GetDataInput(Context, &training_input, true, false);
-
+    if ( state->dense_dataset )
+    {
+        LoadDenseData(Context, state->dense_dataset, true);
+    }
+    else
+    {
+        c50_input_init_memory(&training_input, state->training_data,
+                              state->training_size);
+        GetDataInput(Context, &training_input, true, false);
+    }
     if ( Context->cases.max_case < 0 )
     {
         c50_record_error(Context, c50::error_code::parse_error,
@@ -329,11 +519,16 @@ static void PredictModel(c50_context *Context, void *user_data)
     Context->votes = AllocZero(Context->schema.max_class + 1, float);
     Context->trial_predictions = AllocZero(Context->options.trials, ClassNo);
 
-
-    c50_input_init_memory(&cases_input, state->cases_data,
-                          state->cases_size);
-    GetDataInput(Context, &cases_input, false, true);
-
+    if ( state->dense_dataset )
+    {
+        LoadDenseData(Context, state->dense_dataset, false);
+    }
+    else
+    {
+        c50_input_init_memory(&cases_input, state->cases_data,
+                              state->cases_size);
+        GetDataInput(Context, &cases_input, false, true);
+    }
 
     state->predictions = std::make_unique<c50_predictions>();
     predictions = state->predictions.get();
@@ -395,7 +590,20 @@ void validate_options(const options &settings)
         throw exception(error_code::invalid_argument, error);
 }
 
+dense_dataset validate_dense(dense_dataset dataset, bool training)
+{
+    if (!dataset.row_stride) dataset.row_stride = dataset.feature_count;
+    if (const auto error = ValidateDenseDataset(&dataset, training))
+        throw exception(error_code::invalid_argument, error);
+    return dataset;
 }
+}
+
+dense_dataset::dense_dataset(const double *data, std::size_t rows,
+                             std::size_t features, const std::size_t *classes,
+                             std::size_t stride)
+    : values(data), row_count(rows), feature_count(features),
+      class_indices(classes), row_stride(stride) {}
 
 model::model(std::unique_ptr<detail::model_data> data) : data_(std::move(data)) {}
 model::~model() = default;
@@ -428,6 +636,25 @@ model model::train(context &workspace, model_kind kind, std::string_view names,
     return model(std::move(state.model));
 }
 
+model model::train(context &workspace, model_kind kind, std::string_view names,
+                   const dense_dataset &training, const options &settings,
+                   std::string_view costs)
+{
+    validate_model_inputs(kind, names, costs);
+    validate_options(settings);
+    auto dataset = validate_dense(training, true);
+    c50_train_state state{};
+    state.kind = kind;
+    state.options = settings;
+    state.names_data = names.data();
+    state.names_size = names.size();
+    state.dense_dataset = &dataset;
+    state.costs_data = costs.data();
+    state.costs_size = costs.size();
+    c50_run_operation(workspace.state_.get(), TrainModel, CleanupTraining, &state);
+    return model(std::move(state.model));
+}
+
 model model::load(context &workspace, model_kind kind, std::string_view names,
                   std::string_view serialized, std::string_view costs)
 {
@@ -454,6 +681,16 @@ predictions model::predict(context &workspace, std::string_view cases) const
     state.model = data_.get();
     state.cases_data = cases.data();
     state.cases_size = cases.size();
+    c50_run_operation(workspace.state_.get(), PredictModel, CleanupPrediction, &state);
+    return predictions(std::move(state.predictions));
+}
+
+predictions model::predict(context &workspace, const dense_dataset &cases) const
+{
+    auto dataset = validate_dense(cases, false);
+    c50_predict_state state{};
+    state.model = data_.get();
+    state.dense_dataset = &dataset;
     c50_run_operation(workspace.state_.get(), PredictModel, CleanupPrediction, &state);
     return predictions(std::move(state.predictions));
 }
