@@ -15,8 +15,14 @@ int main(int argc, char *argv[])
         "low, high.\n\n"
         "signal: continuous.\n"
         "group: alpha, beta.\n";
+    static const unsigned char tree[] =
+        "id=\"See5/C5.0 2.07 GPL Edition 2026-09-19\"\n"
+        "costs=\"1\"\n"
+        "entries=\"1\"\n"
+        "type=\"0\" class=\"low\" freq=\"1,0\"\n";
+    static const unsigned char costs[] = "low, high: 5\n";
     char line[16];
-    c50_input input;
+    c50_input costs_input, input;
 
     (void) argc;
     (void) argv;
@@ -48,7 +54,22 @@ int main(int argc, char *argv[])
     {
         return 1;
     }
-    FreeNames();
+    c50_input_init_memory(&input, tree, sizeof(tree) - 1);
+    c50_input_init_memory(&costs_input, costs, sizeof(costs) - 1);
+    ReadHeaderMemory(&input, &costs_input);
+    if ( TRIALS != 1 ) return 1;
+    if ( ! MCost || MCost[1][2] != 5 ) return 1;
+
+    RULES = false;
+    MaxTree = 0;
+    Pruned = AllocZero(2, Tree);
+    Pruned[0] = InTree(&input);
+    if ( ! Pruned[0] || Pruned[0]->NodeType != 0 ||
+         Pruned[0]->Leaf != 1 )
+    {
+        return 1;
+    }
+    Cleanup();
 
     return 0;
 }
