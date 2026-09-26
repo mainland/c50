@@ -208,7 +208,7 @@ void WinnowAtts(c50_context *Context)
     FreeUnlessNil(Context->training.split_attributes);				Context->training.split_attributes = Nil;
     FreeUnlessNil(Context->training.used_attributes);				Context->training.used_attributes = Nil;
 
-    Now = 0;
+    Context->progress.stage = 0;
 }
 
 

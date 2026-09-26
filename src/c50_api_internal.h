@@ -5,6 +5,7 @@
 #define C50_API_INTERNAL_H
 
 
+#include <stdio.h>
 
 typedef struct c50_context c50_context;
 enum c50_status {
@@ -109,6 +110,7 @@ typedef struct
     float *attribute_importance;
     unsigned char *split_attributes;
     unsigned char *used_attributes;
+    int *wrong_predictions;
 } c50_training_state;
 
 typedef struct
@@ -241,6 +243,16 @@ typedef struct
     int saved_folds;
 } c50_cross_validation_state;
 
+typedef struct
+{
+    FILE *update_file;
+    float total;
+    float current;
+    int twentieth;
+    int last_stage;
+    int stage;
+} c50_progress_state;
+
 struct c50_context
 {
     c50_status status;
@@ -263,6 +275,7 @@ struct c50_context
     c50_rule_selection_state rule_selection;
     c50_pruning_state pruning;
     c50_cross_validation_state cross_validation;
+    c50_progress_state progress;
     double average_case_weight;
     char *ignored_values;
     int ignored_values_size;
