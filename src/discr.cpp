@@ -63,7 +63,7 @@ void EvalDiscreteAtt(c50_context *Context, Attribute Att, CaseCount Cases)
 
     if ( ReasonableSubsets < 2 )
     {
-	Verbosity(2, fprintf(Of, "\tAtt %s: poor split\n", Context->schema.attribute_names[Att]))
+	Verbosity(2, fprintf(Context->io.output, "\tAtt %s: poor split\n", Context->schema.attribute_names[Att]))
 	return;
     }
 
@@ -76,11 +76,11 @@ void EvalDiscreteAtt(c50_context *Context, Attribute Att, CaseCount Cases)
 
     Verbosity(2,
     {
-	fprintf(Of, "\tAtt %s", Context->schema.attribute_names[Att]);
+	fprintf(Context->io.output, "\tAtt %s", Context->schema.attribute_names[Att]);
 	Verbosity(3,
 	    PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], Context->training.environment->Freq, Context->training.environment->ValFreq,
 			      true))
-	fprintf(Of, "\tinf %.3f, gain %.3f\n",
+	fprintf(Context->io.output, "\tinf %.3f, gain %.3f\n",
 		Context->splits.information[Att], Context->splits.gain[Att]);
     })
 }
@@ -110,7 +110,7 @@ void EvalOrderedAtt(c50_context *Context, Attribute Att, CaseCount Cases)
     BaseInfo = ( ! Context->training.environment->ValFreq[0] ? Context->splits.base_information :
 		     DiscrKnownBaseInfo(Context, KnownCases, Context->schema.max_attribute_value[Att]) );
 
-    Verbosity(2, fprintf(Of, "\tAtt %s", Context->schema.attribute_names[Att]))
+    Verbosity(2, fprintf(Context->io.output, "\tAtt %s", Context->schema.attribute_names[Att]))
     Verbosity(3, PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], Context->training.environment->Freq,
 				   Context->training.environment->ValFreq, true))
 
@@ -158,7 +158,7 @@ void EvalOrderedAtt(c50_context *Context, Attribute Att, CaseCount Cases)
 	    }
 
 	    Verbosity(3,
-	    {   fprintf(Of, "\t\tFrom %s (gain %.3f)",
+	    {   fprintf(Context->io.output, "\t\tFrom %s (gain %.3f)",
 			Context->schema.attribute_value_names[Att][v], ThisGain);
 		PrintDistribution(Context, Att, 0, 3, Context->training.environment->Freq, Context->training.environment->ValFreq, false);
 	    })
@@ -182,7 +182,7 @@ void EvalOrderedAtt(c50_context *Context, Attribute Att, CaseCount Cases)
 
     if ( BestGain <= 0 )
     {
-	Verbosity(2, fprintf(Of, "\tno gain\n"))
+	Verbosity(2, fprintf(Context->io.output, "\tno gain\n"))
     }
     else
     {
@@ -191,7 +191,7 @@ void EvalOrderedAtt(c50_context *Context, Attribute Att, CaseCount Cases)
 	Context->splits.thresholds[Att]  = BestV;
 
 	Verbosity(2,
-	    fprintf(Of, "\tcut=%g, inf %.3f, gain %.3f\n",
+	    fprintf(Context->io.output, "\tcut=%g, inf %.3f, gain %.3f\n",
 		   Context->splits.thresholds[Att], Context->splits.information[Att], Context->splits.gain[Att]))
     }
 }
@@ -278,7 +278,7 @@ void DiscreteTest(c50_context *Context, Tree Node, Attribute Att)
 
     if ( Ordered(Att) )
     {
-	Sprout(Node, 3);
+	Sprout(Context, Node, 3);
 
 	Node->NodeType	= BrSubset;
 	Node->Tested	= Att;
@@ -302,7 +302,7 @@ void DiscreteTest(c50_context *Context, Tree Node, Attribute Att)
     }
     else
     {
-	Sprout(Node, Context->schema.max_attribute_value[Att]);
+	Sprout(Context, Node, Context->schema.max_attribute_value[Att]);
 
 	Node->NodeType = BrDiscr;
 	Node->Tested   = Att;

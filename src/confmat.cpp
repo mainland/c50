@@ -63,34 +63,34 @@ void PrintConfusionMatrix(c50_context *Context, CaseNo *ConfusionMat)
 
     /*  Print the heading, then each row  */
 
-    fprintf(Of, "\n\n\t");
+    fprintf(Context->io.output, "\n\n\t");
     ForEach(Col, 1, Context->schema.max_class)
     {
-	fprintf(Of, "%*s(%c)", EntryWidth-3, " ", 'a' + Col-1);
+	fprintf(Context->io.output, "%*s(%c)", EntryWidth-3, " ", 'a' + Col-1);
     }
 
-    fprintf(Of, "    <-" T_classified_as "\n\t");
+    fprintf(Context->io.output, "    <-" T_classified_as "\n\t");
     ForEach(Col, 1, Context->schema.max_class)
     {
-	fprintf(Of, "%*.*s", EntryWidth, EntryWidth-2, "----------");
+	fprintf(Context->io.output, "%*.*s", EntryWidth, EntryWidth-2, "----------");
     }
-    fprintf(Of, "\n");
+    fprintf(Context->io.output, "\n");
 
     ForEach(Row, 1, Context->schema.max_class)
     {
-	fprintf(Of, "\t");
+	fprintf(Context->io.output, "\t");
 	ForEach(Col, 1, Context->schema.max_class)
 	{
 	    if ( (Entry = ConfusionMat[Row*(Context->schema.max_class+1) + Col]) )
 	    {
-		fprintf(Of, " %*d", EntryWidth-1, Entry);
+		fprintf(Context->io.output, " %*d", EntryWidth-1, Entry);
 	    }
 	    else
 	    {
-		fprintf(Of, "%*s", EntryWidth, " ");
+		fprintf(Context->io.output, "%*s", EntryWidth, " ");
 	    }
 	}
-	fprintf(Of, "    (%c): " T_class " %s\n", 'a' + Row-1, Context->schema.class_names[Row]);
+	fprintf(Context->io.output, "    (%c): " T_class " %s\n", 'a' + Row-1, Context->schema.class_names[Row]);
     }
 }
 
@@ -126,7 +126,7 @@ void PrintErrorBreakdown(c50_context *Context, CaseNo *ConfusionMat)
 
 	EntryWidth = Max(EntryWidth, TruePos[Row] + FalseNeg[Row]);
 	NameWidth = strlen(Context->schema.class_names[Row]);
-	if ( NameWidth > INT_MAX ) Error(LONGNAME, "", "");
+	if ( NameWidth > INT_MAX ) Error(Context, LONGNAME, "", "");
 	ClassWidth = Max(ClassWidth, (int) NameWidth);
     }
 
@@ -134,7 +134,7 @@ void PrintErrorBreakdown(c50_context *Context, CaseNo *ConfusionMat)
 
     /*  Print heading (tricky spacing) */
 
-    fprintf(Of, "\n\n\t  %-*s %*s %*s %*s\n\t  %*s %*s %*s %*s\n",
+    fprintf(Context->io.output, "\n\n\t  %-*s %*s %*s %*s\n\t  %*s %*s %*s %*s\n",
 		ClassWidth, "Class",
 		EntryWidth, "Cases",
 		EntryWidth, "False",
@@ -143,7 +143,7 @@ void PrintErrorBreakdown(c50_context *Context, CaseNo *ConfusionMat)
 		EntryWidth, "",
 		EntryWidth, "Pos",
 		EntryWidth, "Neg");
-    fprintf(Of, "\t  %-*s %*s %*s %*s\n",
+    fprintf(Context->io.output, "\t  %-*s %*s %*s %*s\n",
 		ClassWidth, "-----",
 		EntryWidth, "-----",
 		EntryWidth, "-----",
@@ -151,7 +151,7 @@ void PrintErrorBreakdown(c50_context *Context, CaseNo *ConfusionMat)
 
     ForEach(Row, 1, Context->schema.max_class)
     {
-	fprintf(Of, "\t  %-*s %*d %*d %*d\n",
+	fprintf(Context->io.output, "\t  %-*s %*d %*d %*d\n",
 		ClassWidth, Context->schema.class_names[Row],
 		EntryWidth, TruePos[Row] + FalseNeg[Row],
 		EntryWidth, FalsePos[Row],
@@ -187,11 +187,11 @@ void PrintUsageInfo(c50_context *Context, CaseNo *Usage)
 
 	if ( First )
 	{
-	    fprintf(Of, T_Usage);
+	    fprintf(Context->io.output, T_Usage);
 	    First = false;
 	}
 
-	fprintf(Of, "\t%7d%%  %s\n",
+	fprintf(Context->io.output, "\t%7d%%  %s\n",
 	    (int) ((100 * Usage[Best]) / Tests + 0.5), Context->schema.attribute_names[Best]);
 
 	Usage[Best] = 0;

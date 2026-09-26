@@ -45,13 +45,6 @@
 /*									 */
 /*************************************************************************/
 
-int		LineNo=0,	/* input line number */
-		ErrMsgs=0,	/* errors found */
-		AttExIn=0,	/* attribute exclusions/inclusions */
-		TSBase=0;	/* base day for time stamps */
-
-String		FileStem="undefined";
-
 /*************************************************************************/
 /*									 */
 /*		Trees							 */
@@ -69,10 +62,3 @@ String		FileStem="undefined";
 /*		Misc							 */
 /*									 */
 /*************************************************************************/
-
-int		KRInit=0;	/* KRandom initializer for Context->options.sample_fraction */
-
-FILE		*TRf=0;		/* file pointer for tree and rule i/o */
-char		Fn[500];	/* file name */
-
-FILE  		*Of=0;		/* output file */
