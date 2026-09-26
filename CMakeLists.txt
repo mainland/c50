@@ -6,11 +6,14 @@ option(C50_ENABLE_SANITIZERS
        "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 
 include(CTest)
+find_package(Threads REQUIRED)
 
 set(C50_CORE_SOURCES
     src/attwinnow.cpp
     src/c50_api.cpp
     src/c50_input.cpp
+    src/c50_locale.cpp
+    src/c50_model.cpp
     src/c50_output.cpp
     src/classify.cpp
     src/confmat.cpp
@@ -41,6 +44,11 @@ set(C50_CORE_SOURCES
 
 add_library(c50_core STATIC ${C50_CORE_SOURCES})
 add_library(C50::core ALIAS c50_core)
+target_include_directories(c50_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(c50_core PUBLIC Threads::Threads)
+add_library(c50_cpp INTERFACE)
+add_library(C50::cpp ALIAS c50_cpp)
+target_link_libraries(c50_cpp INTERFACE C50::core)
 target_compile_features(c50_core PUBLIC cxx_std_17)
 set_target_properties(c50_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
@@ -73,24 +81,6 @@ if(BUILD_TESTING)
 endif()
 
 if(BUILD_TESTING)
-    add_executable(context_workspace tests/context_workspace.cpp)
-    target_include_directories(context_workspace PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    target_link_libraries(context_workspace PRIVATE C50::core)
-    list(APPEND C50_COMPILE_TARGETS context_workspace)
-    list(APPEND C50_EXECUTABLE_TARGETS context_workspace)
-    add_test(NAME context_workspace COMMAND context_workspace)
-endif()
-
-if(BUILD_TESTING)
-    add_executable(operation_boundary tests/operation_boundary.cpp)
-    target_include_directories(operation_boundary PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    target_link_libraries(operation_boundary PRIVATE C50::core)
-    list(APPEND C50_COMPILE_TARGETS operation_boundary)
-    list(APPEND C50_EXECUTABLE_TARGETS operation_boundary)
-    add_test(NAME operation_boundary COMMAND operation_boundary)
-endif()
-
-if(BUILD_TESTING)
     add_executable(c50_input tests/c50_input.cpp)
     target_include_directories(c50_input PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_link_libraries(c50_input PRIVATE C50::core)
@@ -115,6 +105,60 @@ if(BUILD_TESTING)
     list(APPEND C50_COMPILE_TARGETS c50_output)
     list(APPEND C50_EXECUTABLE_TARGETS c50_output)
     add_test(NAME c50_output COMMAND c50_output)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(c50_operation_failure tests/operation_failure.cpp)
+    target_include_directories(c50_operation_failure PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(c50_operation_failure PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_operation_failure)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_operation_failure)
+    add_test(NAME operation-failure COMMAND c50_operation_failure)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(c50_cpp_api tests/cpp_api.cpp)
+    target_include_directories(c50_cpp_api PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(c50_cpp_api PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_cpp_api)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_cpp_api)
+    add_test(NAME cpp-api COMMAND c50_cpp_api)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(c50_operation_state tests/operation_state.cpp)
+    target_include_directories(c50_operation_state PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(c50_operation_state PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_operation_state)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_operation_state)
+    add_test(NAME operation-state COMMAND c50_operation_state)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(c50_implicit_legacy tests/implicit_legacy.cpp)
+    target_include_directories(c50_implicit_legacy PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(c50_implicit_legacy PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_implicit_legacy)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_implicit_legacy)
+    add_test(NAME implicit-legacy COMMAND c50_implicit_legacy "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
+endif()
+
+if(BUILD_TESTING)
+    add_executable(c50_cpp_contracts tests/cpp_contracts.cpp)
+    target_include_directories(c50_cpp_contracts PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(c50_cpp_contracts PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_cpp_contracts)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_cpp_contracts)
+    add_test(NAME cpp-contracts COMMAND c50_cpp_contracts)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(c50_cpp_validation tests/cpp_validation.cpp)
+    target_include_directories(c50_cpp_validation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(c50_cpp_validation PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_cpp_validation)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_cpp_validation)
+    add_test(NAME cpp-validation COMMAND c50_cpp_validation)
 endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

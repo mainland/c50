@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: native C++ library integration. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -316,13 +317,13 @@ void ResetKR(KRState *State, int Seed)
 void C50Exit(c50_context *Context, int Status)
 /*   -------  */
 {
-    if ( c50_abort_active_operation(Context, Status) ) return;
-    exit(Status);
+    c50_abort_operation(Context, Status);
 }
 
 
 
-void ErrorContext(c50_context *Context, int ErrNo, const char *S1, const char *S2)
+void ErrorContext(c50_context *Context, int ErrNo, const char *S1,
+		  const char *S2)
 /*   -----  */
 {
     Boolean	Quit=false, WarningOnly=false;
@@ -489,10 +490,35 @@ void ErrorContext(c50_context *Context, int ErrNo, const char *S1, const char *S
     if ( ! WarningOnly )
     {
 	Context->io.error_count++;
-	c50_record_error(Context, ErrNo == NOMEM ? C50_STATUS_OUT_OF_MEMORY :
-			 ErrNo == NOFILE ? C50_STATUS_IO_ERROR :
-			 C50_STATUS_PARSE_ERROR,
-			 Buffer);
+	/*  Only an error that ends the run counts as reported.  A later
+	    failure that Error does not print still needs its message.  */
+
+	const bool Ends = Quit || ErrNo == NOMEM ||
+			  Context->io.error_count >= 10;
+	if ( Context->io.output && Ends ) Context->failure_reported = 1;
+	if (ErrNo == NOMEM) throw std::bad_alloc();
+	/*  The command-line program prints the decorated text above.  The
+	    exception carries the diagnostic alone.  */
+
+	/*  The command-line program continues past a bad value as Release
+	    2.07 does and stops at the tenth error or at an error that
+	    cannot continue.  A library operation ends at the first
+	    error.  */
+
+	if ( ! Context->continue_past_errors || Ends )
+	{
+	    char *Start = Buffer + ( strncmp(Buffer, "*** ", 4) ? 0 : 4 );
+	    size_t Length;
+
+	    Start += strspn(Start, " \t\n");
+	    Length = strlen(Start);
+	    while ( Length && strchr(" \t\n", Start[Length-1]) ) Length--;
+	    Start[Length] = '\0';
+	    c50_record_error(Context, ErrNo == NOFILE ?
+			     c50::error_code::io_error :
+			     c50::error_code::parse_error,
+			     Start);
+	}
     }
 
     if ( Context->io.error_count == 10 )

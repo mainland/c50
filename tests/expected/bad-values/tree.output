@@ -1,0 +1,46 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `bad-values'
+
+*** line 1 of `bad-values.data': bad value of `zeta' for attribute `group'
+
+*** line 2 of `bad-values.data': bad value of `zeta' for attribute `group'
+
+*** line 3 of `bad-values.data': bad value of `zeta' for attribute `group'
+
+Read 20 cases (3 attributes) from bad-values.data
+
+Decision tree:
+
+signal = N/A: low (2.2/1.1)
+signal > 4.5: high (8.9/0.4)
+signal <= 4.5:
+:...group in {alpha,beta}: low (4.4)
+    group = gamma: high (1.4)
+
+
+Evaluation on training data (20 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     4    2(10.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     8          (a): class low
+	     2    10    (b): class high
+
+
+	Attribute usage:
+
+	     90%  signal
+	     35%  group
+
+
+Time: <elapsed> secs
