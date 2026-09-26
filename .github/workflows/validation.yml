@@ -1,0 +1,80 @@
+name: Validation
+
+on:
+  push:
+    branches: [main, dev, 'topic/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cc: gcc
+            cxx: g++
+          - cc: clang
+            cxx: clang++
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install native test dependencies
+        run: sudo apt-get update && sudo apt-get install -y catch2
+      - name: Configure
+        run: >-
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_COMPILER=${{ matrix.cc }}
+          -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+          -DCMAKE_C_FLAGS='-Wall -Wextra -Wpedantic'
+          -DCMAKE_CXX_FLAGS='-Wall -Wextra -Wpedantic'
+          -DC50_BUILD_BENCHMARKS=ON
+      - name: Build and test native and installed interfaces
+        run: |
+          cmake --build build --parallel 2
+          ctest --test-dir build --output-on-failure
+      - name: Check production and verbose Make workflows
+        if: matrix.cc == 'gcc'
+        run: |
+          make -j2 test
+          make -j2 c5.0dbg
+          C50_BINARY="$PWD/c5.0dbg" ./tests/test_verbose.sh
+
+  python-and-docs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install documentation tools and the package
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen graphviz
+          python -m pip install '.[test,docs]'
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: '2'
+      - name: Test the installed Python package and public types
+        run: |
+          python -m pytest
+          python -m mypy
+          python -m mypy.stubtest --allowlist tests/typing/stubtest-allowlist.txt c50._c50
+          python tests/benchmark_smoke.py
+      - name: Build strict Doxygen and Sphinx documentation
+        run: python -m sphinx -W --keep-going -b html docs docs/_build/html
