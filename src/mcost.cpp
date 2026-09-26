@@ -53,13 +53,13 @@ void GetMCostsInput(c50_context *Context, c50_input *Cf)
 
     while ( ReadNameInput(Context, Cf, Name, 1000, ':') )
     {
-	if ( ! (Pred = Which(Name, ClassName, 1, MaxClass)) )
+	if ( ! (Pred = Which(Name, Context->schema.class_names, 1, Context->schema.max_class)) )
 	{
 	    Error(BADCOSTCLASS, Name, "");
 	}
 
 	if ( ! ReadNameInput(Context, Cf, Name, 1000, ':') ||
-	     ! (Real = Which(Name, ClassName, 1, MaxClass)) )
+	     ! (Real = Which(Name, Context->schema.class_names, 1, Context->schema.max_class)) )
 	{
 	    Error(BADCOSTCLASS, Name, "");
 	}
@@ -79,11 +79,11 @@ void GetMCostsInput(c50_context *Context, c50_input *Cf)
 	    {
 		/*  Set up cost matrices  */
 
-		MCost = Alloc(MaxClass+1, float *);
-		ForEach(p, 1, MaxClass)
+		MCost = Alloc(Context->schema.max_class+1, float *);
+		ForEach(p, 1, Context->schema.max_class)
 		{
-		    MCost[p] = Alloc(MaxClass+1, float);
-		    ForEach(r, 1, MaxClass)
+		    MCost[p] = Alloc(Context->schema.max_class+1, float);
+		    ForEach(r, 1, Context->schema.max_class)
 		    {
 			MCost[p][r] = ( p == r ? 0.0 : 1.0 );
 		    }
@@ -96,16 +96,16 @@ void GetMCostsInput(c50_context *Context, c50_input *Cf)
     /*  Don't need weights etc. for predict or interpret, or
 	if not using cost weighting  */
 
-    if ( ! (CostWeights = MaxClass == 2 && MaxCase >= 0 && MCost) )
+    if ( ! (CostWeights = Context->schema.max_class == 2 && MaxCase >= 0 && MCost) )
     {
 	return;
     }
 
     /*  Determine class frequency distribution  */
 
-    ClassFreq = AllocZero(MaxClass+1, double);
+    ClassFreq = AllocZero(Context->schema.max_class+1, double);
 
-    if ( Context->case_weight_attribute )
+    if ( Context->schema.case_weight_attribute )
     {
 	Context->average_case_weight = 1;			/* relative weights not yet set */
 	ForEach(i, 0, MaxCase)

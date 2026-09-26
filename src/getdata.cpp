@@ -217,16 +217,16 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 
     if ( ReadNameInput(Context, Input, Name, 1000, '\00') )
     {
-	Case[MaxCase] = DVec = NewCase();
-	ForEach(Att, 1, MaxAtt)
+	Case[MaxCase] = DVec = NewCase(Context);
+	ForEach(Att, 1, Context->schema.max_attribute)
 	{
-	    if ( AttDef[Att] )
+	    if ( Context->schema.attribute_definitions[Att] )
 	    {
-		DVec[Att] = EvaluateDef(Context, AttDef[Att], DVec);
+		DVec[Att] = EvaluateDef(Context, Context->schema.attribute_definitions[Att], DVec);
 
 		if ( Continuous(Att) )
 		{
-		    CheckValue(DVec, Att);
+		    CheckValue(Context, DVec, Att);
 		}
 
 		if ( SomeMiss )
@@ -242,7 +242,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 
 	    if ( ! FirstValue && ! ReadNameInput(Context, Input, Name, 1000, '\00') )
 	    {
-		XError(HITEOF, AttName[Att], "");
+		XError(HITEOF, Context->schema.attribute_names[Att], "");
 		FreeLastCase(DVec);
 		return Nil;
 	    }
@@ -250,7 +250,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 
 	    if ( Exclude(Att) )
 	    {
-		if ( Att == Context->label_attribute )
+		if ( Att == Context->schema.label_attribute )
 		{
 		    /*  Record the value as a string  */
 
@@ -266,7 +266,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 		if ( SomeMiss ) SomeMiss[Att] = true;
 	    }
 	    else
-	    if ( Att != Context->class_attribute && ! strcmp(Name, "N/A") )
+	    if ( Att != Context->schema.class_attribute && ! strcmp(Name, "N/A") )
 	    {
 		/*  Set marker to indicate not applicable  */
 
@@ -278,7 +278,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 	    {
 		/*  Discrete attribute  */
 
-		Dv = Which(Name, AttValName[Att], 1, MaxAttVal[Att]);
+		Dv = Which(Name, Context->schema.attribute_value_names[Att], 1, Context->schema.max_attribute_value[Att]);
 		if ( ! Dv )
 		{
 		    if ( StatBit(Att, DISCRETE) )
@@ -287,34 +287,34 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 			{
 			    /*  Add value to list  */
 
-			    if ( MaxAttVal[Att] >=
-				 (intptr_t) AttValName[Att][0] )
+			    if ( Context->schema.max_attribute_value[Att] >=
+				 (intptr_t) Context->schema.attribute_value_names[Att][0] )
 			    {
-				XError(TOOMANYVALS, AttName[Att],
-					 (char *) AttValName[Att][0] - 1);
-				Dv = MaxAttVal[Att];
+				XError(TOOMANYVALS, Context->schema.attribute_names[Att],
+					 (char *) Context->schema.attribute_value_names[Att][0] - 1);
+				Dv = Context->schema.max_attribute_value[Att];
 			    }
 			    else
 			    {
-				Dv = ++MaxAttVal[Att];
-				AttValName[Att][Dv]   = strdup(Name);
-				AttValName[Att][Dv+1] = "<other>"; /* no free */
+				Dv = ++Context->schema.max_attribute_value[Att];
+				Context->schema.attribute_value_names[Att][Dv]   = strdup(Name);
+				Context->schema.attribute_value_names[Att][Dv+1] = "<other>"; /* no free */
 			    }
-			    if ( Dv > MaxDiscrVal )
+			    if ( Dv > Context->schema.max_discrete_value )
 			    {
-				MaxDiscrVal = Dv;
+				Context->schema.max_discrete_value = Dv;
 			    }
 			}
 			else
 			{
 			    /*  Set value to "<other>"  */
 
-			    Dv = MaxAttVal[Att] + 1;
+			    Dv = Context->schema.max_attribute_value[Att] + 1;
 			}
 		    }
 		    else
 		    {
-			XError(BADATTVAL, AttName[Att], Name);
+			XError(BADATTVAL, Context->schema.attribute_names[Att], Name);
 			Dv = UNKNOWN;
 		    }
 		}
@@ -329,7 +329,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 		    CVal(DVec, Att) = Cv = TStampToMins(Name);
 		    if ( Cv >= 1E9 )	/* long time in future */
 		    {
-			XError(BADTSTMP, AttName[Att], Name);
+			XError(BADTSTMP, Context->schema.attribute_names[Att], Name);
 			DVal(DVec, Att) = UNKNOWN;
 		    }
 		}
@@ -339,7 +339,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 		    CVal(DVec, Att) = Cv = DateToDay(Name);
 		    if ( Cv < 1 )
 		    {
-			XError(BADDATE, AttName[Att], Name);
+			XError(BADDATE, Context->schema.attribute_names[Att], Name);
 			DVal(DVec, Att) = UNKNOWN;
 		    }
 		}
@@ -349,7 +349,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 		    CVal(DVec, Att) = Cv = TimeToSecs(Name);
 		    if ( Cv < 0 )
 		    {
-			XError(BADTIME, AttName[Att], Name);
+			XError(BADTIME, Context->schema.attribute_names[Att], Name);
 			DVal(DVec, Att) = UNKNOWN;
 		    }
 		}
@@ -358,23 +358,23 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 		    CVal(DVec, Att) = strtod(Name, &EndName);
 		    if ( EndName == Name || *EndName != '\0' )
 		    {
-			XError(BADATTVAL, AttName[Att], Name);
+			XError(BADATTVAL, Context->schema.attribute_names[Att], Name);
 			DVal(DVec, Att) = UNKNOWN;
 		    }
 		}
 
-		CheckValue(DVec, Att);
+		CheckValue(Context, DVec, Att);
 	    }
 	}
 
-	if ( Context->class_attribute )
+	if ( Context->schema.class_attribute )
 	{
-	    if ( Discrete(Context->class_attribute) )
+	    if ( Discrete(Context->schema.class_attribute) )
 	    {
-		Class(DVec) = XDVal(DVec, Context->class_attribute);
+		Class(DVec) = XDVal(DVec, Context->schema.class_attribute);
 	    }
 	    else
-	    if ( Unknown(DVec, Context->class_attribute) || NotApplic(Context, DVec, Context->class_attribute) )
+	    if ( Unknown(DVec, Context->schema.class_attribute) || NotApplic(Context, DVec, Context->schema.class_attribute) )
 	    {
 		Class(DVec) = 0;
 	    }
@@ -382,9 +382,9 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 	    {
 		/*  Find appropriate segment using class thresholds  */
 
-		Cv = CVal(DVec, Context->class_attribute);
+		Cv = CVal(DVec, Context->schema.class_attribute);
 
-		for ( Dv = 1 ; Dv < MaxClass && Cv > ClassThresh[Dv] ; Dv++ )
+		for ( Dv = 1 ; Dv < Context->schema.max_class && Cv > Context->schema.class_thresholds[Dv] ; Dv++ )
 		    ;
 
 		Class(DVec) = Dv;
@@ -399,15 +399,15 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 		return Nil;
 	    }
 
-	    if ( (Class(DVec) = Dv = Which(Name, ClassName, 1, MaxClass)) == 0 )
+	    if ( (Class(DVec) = Dv = Which(Name, Context->schema.class_names, 1, Context->schema.max_class)) == 0 )
 	    {
 		if ( strcmp(Name, "?") ) XError(BADCLASS, "", Name);
 	    }
 	}
 
-    if ( Context->label_attribute &&
+    if ( Context->schema.label_attribute &&
 	     (Chars = strlen(Context->ignored_values +
-			     SVal(DVec, Context->label_attribute))) >
+			     SVal(DVec, Context->schema.label_attribute))) >
 		 Context->max_label )
     {
 	Context->max_label = Chars;
@@ -558,7 +558,7 @@ void FreeData(c50_context *Context)
 /*************************************************************************/
 
 
-void CheckValue(DataRec DVec, Attribute Att)
+void CheckValue(c50_context *Context, DataRec DVec, Attribute Att)
 /*   ----------  */
 {
     ContValue	Cv;
@@ -566,7 +566,7 @@ void CheckValue(DataRec DVec, Attribute Att)
     Cv = CVal(DVec, Att);
     if ( ! finite(Cv) )
     {
-	Error(BADNUMBER, AttName[Att], "");
+	Error(BADNUMBER, Context->schema.attribute_names[Att], "");
 
 	CVal(DVec, Att) = UNKNOWN;
     }

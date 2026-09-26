@@ -75,7 +75,7 @@ void CrossVal(c50_context *Context)
 
     Result	 = AllocZero((SaveFOLDS = FOLDS), float *);
     Blocked	 = Alloc(MaxCase+1, DataRec);
-    ConfusionMat = AllocZero((MaxClass+1)*(MaxClass+1), CaseNo);
+    ConfusionMat = AllocZero((Context->schema.max_class+1)*(Context->schema.max_class+1), CaseNo);
 
     Prepare(Context);
 
@@ -126,7 +126,7 @@ void CrossVal(c50_context *Context)
 
 		/*  Add to confusion matrix for target classifier  */
 
-		ConfusionMat[ Class(Blocked[Next])*(MaxClass+1)+c ]++;
+		ConfusionMat[ Class(Blocked[Next])*(Context->schema.max_class+1)+c ]++;
 
 		Next = (Next + 1) % (SaveMaxCase + 1);
 	    }
@@ -152,7 +152,7 @@ void CrossVal(c50_context *Context)
 
 		/*  Add to confusion matrix for target classifier  */
 
-		ConfusionMat[ Class(Blocked[Next])*(MaxClass+1)+c ]++;
+		ConfusionMat[ Class(Blocked[Next])*(Context->schema.max_class+1)+c ]++;
 
 		Next = (Next + 1) % (SaveMaxCase + 1);
 	    }
@@ -181,7 +181,7 @@ void CrossVal(c50_context *Context)
     MaxCase = SaveMaxCase;
 
     Summary();
-    PrintConfusionMatrix(ConfusionMat);
+    PrintConfusionMatrix(Context, ConfusionMat);
 
     /*  Free local storage  */
 

@@ -65,29 +65,13 @@ float		CF=0.25,	/* confidence limit for tree pruning */
 /*									 */
 /*************************************************************************/
 
-String		*ClassName=0,	/* class names */
-		*AttName=0,	/* att names */
-		**AttValName=0;	/* att value names */
-
-int		MaxAtt,		/* max att number */
-		MaxClass,	/* max class number */
-		MaxDiscrVal=3,	/* max discrete values for any att */
-		LineNo=0,	/* input line number */
+int		LineNo=0,	/* input line number */
 		ErrMsgs=0,	/* errors found */
 		AttExIn=0,	/* attribute exclusions/inclusions */
 		TSBase=0;	/* base day for time stamps */
 
-DiscrValue	*MaxAttVal=0;	/* number of values for each att */
-
-char		*SpecialStatus=0;/* special att treatment */
-
-Definition	*AttDef=0;	/* definitions of implicit atts */
-Attribute	**AttDefUses=0;	/* list of attributes used by definition */
-
 Boolean		*SomeMiss=Nil,	/* att has missing values */
 		*SomeNA=Nil;	/* att has N/A values */
-
-ContValue	*ClassThresh=0;	/* thresholded class attribute */
 
 CaseNo		MaxCase=-1;	/* max data case number */
 
