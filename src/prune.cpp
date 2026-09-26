@@ -34,27 +34,16 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 
 #define	  LocalVerbosity(x,s)	if (Sh >= 0) {Verbosity(x,s)}
-#define	  Intab(x)		Indent(x, 0)
+#define	  Intab(x)		Indent(Context, x, 0)
 
 #define	  UPDATE		1	/* flag: change tree */
 #define	  REGROW		2	/*       regrow branches */
 #define	  REPORTPROGRESS	4	/*	 original tree */
-#define	  UNITWEIGHTS		8	/*	 UnitWeights is true*/
-
-Set		*PossibleValues;
-
-double		MaxExtraErrs,		/* limit for global prune */
-		TotalExtraErrs;		/* extra errors from ties */
-Tree		*XT;			/* subtrees with lowest cost comp */
-int		NXT;			/* number ditto */
-float		MinCC;			/* cost compexity for XT */
-Boolean		RecalculateErrs;	/* if missing values */
-
-
-
+#define	  UNITWEIGHTS		8	/*	 Context->costs.unit_weights is true*/
 
 /*************************************************************************/
 /*									 */
@@ -63,75 +52,75 @@ Boolean		RecalculateErrs;	/* if missing values */
 /*************************************************************************/
 
 
-void Prune(Tree T)
+void Prune(c50_context *Context, Tree T)
 /*   -----  */
 {
     Attribute	Att;
     int		i, Options;
     Boolean	Regrow;
 
-    Verbosity(2, fprintf(Of, "\n"))
+    Verbosity(2, fprintf(Context->io.output, "\n"))
 
-    Regrow = ( Trial == 0 || Now == WINNOWATTS );
+    Regrow = ( Context->trees.trial == 0 || Context->progress.stage == WINNOWATTS );
 
     /*  Local pruning phase  */
 
 
-    Options = ( Now == WINNOWATTS ? (UPDATE|REGROW) :
+    Options = ( Context->progress.stage == WINNOWATTS ? (UPDATE|REGROW) :
 		Regrow ? (UPDATE|REGROW|REPORTPROGRESS) :
 			 (UPDATE|REPORTPROGRESS) );
-    if ( UnitWeights ) Options |= UNITWEIGHTS;
+    if ( Context->costs.unit_weights ) Options |= UNITWEIGHTS;
 
-    EstimateErrs(T, 0, MaxCase, 0, Options);
+    EstimateErrs(Context, T, 0, Context->cases.max_case, 0, Options);
 
-    if ( MCost )
+    if ( Context->costs.matrix )
     {
-	/*  Remove any effects of WeightMul and reset leaf classes  */
+	/*  Remove any effects of Context->costs.weight_multipliers and reset leaf classes  */
 
-	RestoreDistribs(T);
+	RestoreDistribs(Context, T);
     }
     else
     {
 	/*  Insert information on parents and recalculate errors, noting
 	    whether fractional cases might have appeared (for GlobalPrune)  */
 
-	RecalculateErrs = false;
-	InsertParents(T, Nil);
+	Context->pruning.recalculate_errors = false;
+	InsertParents(Context, T, Nil);
 
 	/*  Possible global pruning phase  */
 
-	if ( GLOBAL && Now != WINNOWATTS )
+	if ( Context->options.global_pruning && Context->progress.stage != WINNOWATTS )
 	{
-	    GlobalPrune(T);
+	    GlobalPrune(Context, T);
 	}
     }
 
     /*  Remove impossible values from subsets and ordered splits.
 	First record possible values for discrete attributes  */
 
-    PossibleValues = AllocZero(MaxAtt+1, Set);
-    ForEach(Att, 1, MaxAtt)
+    Context->pruning.possible_values = AllocZero(Context->schema.max_attribute+1, Set);
+    ForEach(Att, 1, Context->schema.max_attribute)
     {
-	if ( Ordered(Att) || ( Discrete(Att) && SUBSET ) )
+	if ( Ordered(Att) || ( Discrete(Att) && Context->options.subset_splits ) )
 	{
-	    PossibleValues[Att] = AllocZero((MaxAttVal[Att]>>3)+1, Byte);
-	    ForEach(i, 1, MaxAttVal[Att])
+	    Context->pruning.possible_values[Att] = AllocZero((Context->schema.max_attribute_value[Att]>>3)+1, Byte);
+	    ForEach(i, 1, Context->schema.max_attribute_value[Att])
 	    {
-		SetBit(i, PossibleValues[Att]);
+		SetBit(i, Context->pruning.possible_values[Att]);
 	    }
 	}
     }
 
-    CheckSubsets(T, true);
+    CheckSubsets(Context, T, true);
 
-    FreeVector((void **) PossibleValues, 1, MaxAtt);	PossibleValues = Nil;
+    FreeVector((void **) Context->pruning.possible_values, 1, Context->schema.max_attribute);	Context->pruning.possible_values = Nil;
 
     /*  For multibranch splits, merge non-occurring values.  For trees
 	(first boosting trial only), also merge leaves of same class  */
 
-    if ( ! SUBSET )
+    if ( ! Context->options.subset_splits )
     {
-	CompressBranches(T);
+	CompressBranches(Context, T);
     }
 }
 
@@ -144,7 +133,8 @@ void Prune(Tree T)
 /*************************************************************************/
 
 
-void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
+void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
+		  int Sh, int Flags)
 /*   ------------  */
 {
     CaseNo	i, Bp, Ep, Missing;
@@ -154,24 +144,24 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
     double	Factor, *LocalClassDist;
     DiscrValue	v, BestBr=0;
     ClassNo	c, BestClass=1;
-    int		UnitWeights;			/* local value */
+    int		UnitWeightFlag;			/* local value */
     Tree	Br;
     Attribute	Att;
 
 
     if ( Fp > Lp ) return;
 
-    UnitWeights = (Flags & UNITWEIGHTS);
+    UnitWeightFlag = (Flags & UNITWEIGHTS);
 
-    LocalClassDist = Alloc(MaxClass+1, double);
+    LocalClassDist = Alloc(Context->schema.max_class+1, double);
 
-    FindClassFreq(LocalClassDist, Fp, Lp);
+    FindClassFreq(Context, LocalClassDist, Fp, Lp);
 
     /*  Record new class distribution if updating the tree  */
 
     if ( (Flags & UPDATE) )
     {
-	ForEach(c, 1, MaxClass)
+	ForEach(c, 1, Context->schema.max_class)
 	{
 	    T->ClassDist[c] = LocalClassDist[c];
 	    Cases += LocalClassDist[c];
@@ -181,7 +171,7 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
     }
     else
     {
-	ForEach(c, 1, MaxClass)
+	ForEach(c, 1, Context->schema.max_class)
 	{
 	    Cases += LocalClassDist[c];
 
@@ -190,7 +180,7 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
     }
 
     LeafErrs = Cases - LocalClassDist[BestClass];
-    ExtraLeafErrs = ExtraErrs(Cases, LeafErrs, BestClass);
+    ExtraLeafErrs = ExtraErrs(Context, Cases, LeafErrs, BestClass);
 
     Free(LocalClassDist);
 
@@ -203,10 +193,10 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
     if ( ! T->NodeType )	/*  leaf  */
     {
 	if ( (Flags & UPDATE) && (Flags & REPORTPROGRESS) &&
-	     Now == SIMPLIFYTREE &&
+	     Context->progress.stage == SIMPLIFYTREE &&
 	     T->Cases > 0 )
 	{
-	    Progress(T->Cases);
+	    Progress(Context, T->Cases);
 	}
 
 	T->Errors = LeafErrs + ExtraLeafErrs;
@@ -217,7 +207,7 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
 	    {
 		LocalVerbosity(3,
 		    Intab(Sh);
-		    fprintf(Of, "%s (%.2f:%.2f/%.2f)\n", ClassName[T->Leaf],
+		    fprintf(Context->io.output, "%s (%.2f:%.2f/%.2f)\n", Context->schema.class_names[T->Leaf],
 			    T->Cases, LeafErrs, T->Errors))
 	    }
 	}
@@ -228,39 +218,39 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
     /*  Estimate errors for each branch  */
 
     Att = T->Tested;
-    Missing = (Ep = Group(0, Fp, Lp, T)) - Fp + 1;
+    Missing = (Ep = Group(Context, 0, Fp, Lp, T)) - Fp + 1;
 
-    if ( CostWeights )
+    if ( Context->costs.weighted )
     {
-	MissingCases = SumNocostWeights(Fp, Ep);
-	KnownCases   = SumNocostWeights(Ep+1, Lp);
+	MissingCases = SumNocostWeights(Context, Fp, Ep);
+	KnownCases   = SumNocostWeights(Context, Ep+1, Lp);
     }
     else
     {
-	MissingCases = CountCases(Fp, Ep);
+	MissingCases = CountCases(Context, Fp, Ep);
 	KnownCases   = Cases - MissingCases;
     }
 
-    SmallBranches = AllocZero(MaxClass+1, CaseCount);
+    SmallBranches = AllocZero(Context->schema.max_class+1, CaseCount);
     BranchCases   = Alloc(T->Forks+1, CaseCount);
 
-    if ( Missing ) UnitWeights = 0;
+    if ( Missing ) UnitWeightFlag = 0;
 
     TreeErrs = 0;
     Bp = Fp;
 
     ForEach(v, 1, T->Forks)
     {
-	Ep = Group(v, Bp + Missing, Lp, T);
+	Ep = Group(Context, v, Bp + Missing, Lp, T);
 
 	/*  Bp -> first value in missing + remaining values
 	    Ep -> last value in missing + current group  */
 
-	BranchCases[v] = CountCases(Bp + Missing, Ep);
+	BranchCases[v] = CountCases(Context, Bp + Missing, Ep);
 
 	Factor = ( ! Missing ? 0 :
-		   ! CostWeights ? BranchCases[v] / KnownCases :
-		   SumNocostWeights(Bp + Missing, Ep) / KnownCases );
+		   ! Context->costs.weighted ? BranchCases[v] / KnownCases :
+		   SumNocostWeights(Context, Bp + Missing, Ep) / KnownCases );
 
 	if ( (BranchCases[v] += Factor * MissingCases) >= MinLeaf )
 	{
@@ -268,19 +258,20 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
 	    {
 		ForEach(i, Bp, Bp + Missing - 1)
 		{
-		    Weight(Case[i]) *= Factor;
+		    Weight(Context->cases.records[i]) *= Factor;
 		}
 	    }
 
-	    EstimateErrs(T->Branch[v], Bp, Ep, Sh+1, ((Flags&7) | UnitWeights));
+	    EstimateErrs(Context, T->Branch[v], Bp, Ep, Sh+1,
+			 ((Flags&7) | UnitWeightFlag));
 
 	    /*  Group small branches together for error estimation  */
 
-	    if ( BranchCases[v] < MINITEMS )
+	    if ( BranchCases[v] < Context->options.minimum_cases )
 	    {
 		ForEach(i, Bp, Ep)
 		{
-		    SmallBranches[ Class(Case[i]) ] += Weight(Case[i]);
+		    SmallBranches[ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
 		}
 
 		SmallBranchCases += BranchCases[v];
@@ -296,9 +287,9 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
 	    {
 		for ( i = Ep ; i >= Bp ; i-- )
 		{
-		    if ( Unknown(Case[i], Att) )
+		    if ( Unknown(Context->cases.records[i], Att) )
 		    {
-			Weight(Case[i]) /= Factor;
+			Weight(Context->cases.records[i]) /= Factor;
 			Swap(i, Ep);
 			Ep--;
 		    }
@@ -314,13 +305,14 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
     if ( SmallBranchCases )
     {
 	BestClass = 1;
-	ForEach(c, 2, MaxClass)
+	ForEach(c, 2, Context->schema.max_class)
 	{
 	    if ( SmallBranches[c] > SmallBranches[BestClass] ) BestClass = c;
 	}
 
 	Errs = SmallBranchCases - SmallBranches[BestClass];
-	TreeErrs += Errs + ExtraErrs(SmallBranchCases, Errs, BestClass);
+	TreeErrs += Errs +
+	    ExtraErrs(Context, SmallBranchCases, Errs, BestClass);
     }
     Free(SmallBranches);
     Free(BranchCases);
@@ -354,26 +346,26 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
     if ( BestBr )
     {
 	SaveErrs = T->Branch[BestBr]->Errors;
-	EstimateErrs(T->Branch[BestBr], Fp, Lp, -1, 0);
+	EstimateErrs(Context, T->Branch[BestBr], Fp, Lp, -1, 0);
 	BestBrErrs = T->Branch[BestBr]->Errors;
 	T->Branch[BestBr]->Errors = SaveErrs;
     }
     else
     {
-	BestBrErrs = MaxCase+1;
+	BestBrErrs = Context->cases.max_case+1;
     }
 
     LocalVerbosity(2,
 	Intab(Sh);
-	fprintf(Of, "%s:  [%d%%  N=%.2f  tree=%.2f  leaf=%.2f+%.2f",
-		AttName[T->Tested],
+	fprintf(Context->io.output, "%s:  [%d%%  N=%.2f  tree=%.2f  leaf=%.2f+%.2f",
+		Context->schema.attribute_names[T->Tested],
 		(int) ((TreeErrs * 100) / (T->Cases + 0.001)),
 		T->Cases, TreeErrs, LeafErrs, ExtraLeafErrs);
 	if ( BestBr )
 	{
-	    fprintf(Of, "  br[%d]=%.2f", BestBr, BestBrErrs);
+	    fprintf(Context->io.output, "  br[%d]=%.2f", BestBr, BestBrErrs);
 	}
-	fprintf(Of, "]\n"))
+	fprintf(Context->io.output, "]\n"))
 
     /*  See whether tree should be replaced with leaf or best branch  */
 
@@ -382,7 +374,7 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
     {
 	LocalVerbosity(2,
 	    Intab(Sh);
-	    fprintf(Of, "Replaced with leaf %s\n", ClassName[T->Leaf]))
+	    fprintf(Context->io.output, "Replaced with leaf %s\n", Context->schema.class_names[T->Leaf]))
 
 	UnSprout(T);
 	T->Errors = LeafErrs + ExtraLeafErrs;
@@ -392,7 +384,7 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
     {
 	LocalVerbosity(2,
 	    Intab(Sh);
-	    fprintf(Of, "Replaced with branch %d\n", BestBr))
+	    fprintf(Context->io.output, "Replaced with branch %d\n", BestBr))
 
 	/*  Free unused bits of tree  */
 
@@ -426,12 +418,12 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
 		FreeTree(T->Branch[v]);			T->Branch[v] = Nil;
 	    }
 
-	    SetGlobalUnitWeights(Flags & UNITWEIGHTS);
+	    SetGlobalUnitWeights(Context, Flags & UNITWEIGHTS);
 
-	    Divide(T, Fp, Lp, 0);
+	    Divide(Context, T, Fp, Lp, 0);
 	}
 
-	EstimateErrs(T, Fp, Lp, Sh, UPDATE);
+	EstimateErrs(Context, T, Fp, Lp, Sh, UPDATE);
     }
     else
     {
@@ -450,7 +442,7 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
 /*************************************************************************/
 
 
-void GlobalPrune(Tree T)
+void GlobalPrune(c50_context *Context, Tree T)
 /*   -----------  */
 {
     int		DeltaLeaves, x;
@@ -461,14 +453,14 @@ void GlobalPrune(Tree T)
     /*  If fractional cases may have been used, calculate errors
 	directly by checking training data  */
 
-    if ( RecalculateErrs )
+    if ( Context->pruning.recalculate_errors )
     {
 	BaseErrs = 0;
-	ForEach(i, 0, MaxCase)
+	ForEach(i, 0, Context->cases.max_case)
 	{
-	    if ( TreeClassify(Case[i], T) != Class(Case[i]) )
+	    if ( TreeClassify(Context, Context->cases.records[i], T) != Class(Context->cases.records[i]) )
 	    {
-		BaseErrs += Weight(Case[i]);
+		BaseErrs += Weight(Context->cases.records[i]);
 	    }
 	}
     }
@@ -477,35 +469,35 @@ void GlobalPrune(Tree T)
 	BaseErrs = T->Errors;
     }
 
-    XT = Alloc(T->Leaves, Tree);
+    Context->pruning.minimum_cost_subtrees = Alloc(T->Leaves, Tree);
 
     /*  Additional error limit set at 1SE  */
 
-    MaxExtraErrs = sqrt(BaseErrs * (1 - BaseErrs / (MaxCase + 1)));
+    Context->pruning.maximum_extra_errors = sqrt(BaseErrs * (1 - BaseErrs / (Context->cases.max_case + 1)));
 
-    while ( MaxExtraErrs > 0 )
+    while ( Context->pruning.maximum_extra_errors > 0 )
     {
-	TotalExtraErrs = 0;
+	Context->pruning.total_extra_errors = 0;
 
-	MinCC = 1E38;
-	NXT   = 0;
+	Context->pruning.minimum_cost_complexity = 1E38;
+	Context->pruning.minimum_cost_subtree_count   = 0;
 
 	/*  Find all subtrees with lowest cost complexity  */
 
-	FindMinCC(T);
+	FindMinCC(Context, T);
 
 	Verbosity(2,
-	    if ( NXT > 0 && TotalExtraErrs > MaxExtraErrs )
-		fprintf(Of, "%d tied with MinCC=%.3f; total extra errs %.1f\n",
-			NXT, MinCC, TotalExtraErrs))
+	    if ( Context->pruning.minimum_cost_subtree_count > 0 && Context->pruning.total_extra_errors > Context->pruning.maximum_extra_errors )
+		fprintf(Context->io.output, "%d tied with Context->pruning.minimum_cost_complexity=%.3f; total extra errs %.1f\n",
+			Context->pruning.minimum_cost_subtree_count, Context->pruning.minimum_cost_complexity, Context->pruning.total_extra_errors))
 
-	if ( ! NXT || TotalExtraErrs > MaxExtraErrs ) break;
+	if ( ! Context->pruning.minimum_cost_subtree_count || Context->pruning.total_extra_errors > Context->pruning.maximum_extra_errors ) break;
 
 	/*  Make subtree into a leaf  */
 
-	ForEach(x, 0, NXT-1)
+	ForEach(x, 0, Context->pruning.minimum_cost_subtree_count-1)
 	{
-	    ST = XT[x];
+	    ST = Context->pruning.minimum_cost_subtrees[x];
 
 	    UnSprout(ST);
 
@@ -520,16 +512,16 @@ void GlobalPrune(Tree T)
 		ST = ST->Parent;
 	    }
 
-	    MaxExtraErrs -= DeltaErrs;
+	    Context->pruning.maximum_extra_errors -= DeltaErrs;
 
 	    Verbosity(2,
-		fprintf(Of, "global: %d leaves, %.1f errs\n",
+		fprintf(Context->io.output, "global: %d leaves, %.1f errs\n",
 			DeltaLeaves, DeltaErrs))
 	}
-	Verbosity(2, fprintf(Of, "\tremaining=%.1f\n", MaxExtraErrs))
+	Verbosity(2, fprintf(Context->io.output, "\tremaining=%.1f\n", Context->pruning.maximum_extra_errors))
     }
 
-    Free(XT);
+    Free(Context->pruning.minimum_cost_subtrees);
 }
 
 
@@ -537,12 +529,12 @@ void GlobalPrune(Tree T)
 /*************************************************************************/
 /*									 */
 /*	Scan tree computing cost complexity of each subtree and		 */
-/*	record lowest in global variable XT				 */
+/*	record lowest in global variable Context->pruning.minimum_cost_subtrees				 */
 /*									 */
 /*************************************************************************/
 
 
-void FindMinCC(Tree T)
+void FindMinCC(c50_context *Context, Tree T)
 /*   ---------  */
 {
     DiscrValue	v;
@@ -553,9 +545,9 @@ void FindMinCC(Tree T)
     {
 	/*  Save current situation  */
 
-	SaveTotalExtraErrs = TotalExtraErrs;
-	SaveMinCC          = MinCC;
-	SaveNXT		   = NXT;
+	SaveTotalExtraErrs = Context->pruning.total_extra_errors;
+	SaveMinCC          = Context->pruning.minimum_cost_complexity;
+	SaveNXT		   = Context->pruning.minimum_cost_subtree_count;
 
 	/*  Scan subtrees  */
 
@@ -563,7 +555,7 @@ void FindMinCC(Tree T)
 	{
 	    if ( T->Branch[v]->Cases > 0.1 )
 	    {
-		FindMinCC(T->Branch[v]);
+		FindMinCC(Context, T->Branch[v]);
 	    }
 	}
 	
@@ -573,36 +565,36 @@ void FindMinCC(Tree T)
 
 	CC = ExtraErrs / (T->Leaves - 1);
 
-	if ( ExtraErrs <= MaxExtraErrs )
+	if ( ExtraErrs <= Context->pruning.maximum_extra_errors )
 	{
 	    /*  Have to be careful of ties in descendants, because
-		they would inflate TotalExtraErrs.  Any such ties
+		they would inflate Context->pruning.total_extra_errors.  Any such ties
 		should be discarded  */
 
-	    if ( CC < MinCC ||
-		 ( CC <= MinCC &&
+	    if ( CC < Context->pruning.minimum_cost_complexity ||
+		 ( CC <= Context->pruning.minimum_cost_complexity &&
 		   CC < SaveMinCC /* changed by descendants */ ) )
 	    {
 		/*  This is the first of a possible group of ties  */
 
-		MinCC = CC;
-		NXT   = 1;
-		XT[0] = T;
-		TotalExtraErrs = ExtraErrs;
+		Context->pruning.minimum_cost_complexity = CC;
+		Context->pruning.minimum_cost_subtree_count   = 1;
+		Context->pruning.minimum_cost_subtrees[0] = T;
+		Context->pruning.total_extra_errors = ExtraErrs;
 	    }
 	    else
-	    if ( CC <= MinCC )
+	    if ( CC <= Context->pruning.minimum_cost_complexity )
 	    {
 		/*  This is a tie.  Discard any ties among descendants  */
 
-		if ( NXT > SaveNXT )
+		if ( Context->pruning.minimum_cost_subtree_count > SaveNXT )
 		{
-		    TotalExtraErrs = SaveTotalExtraErrs;
-		    NXT		   = SaveNXT;
+		    Context->pruning.total_extra_errors = SaveTotalExtraErrs;
+		    Context->pruning.minimum_cost_subtree_count		   = SaveNXT;
 		}
 
-		XT[NXT++] = T;
-		TotalExtraErrs += ExtraErrs;
+		Context->pruning.minimum_cost_subtrees[Context->pruning.minimum_cost_subtree_count++] = T;
+		Context->pruning.total_extra_errors += ExtraErrs;
 	    }
 	}
     }
@@ -617,7 +609,7 @@ void FindMinCC(Tree T)
 /*************************************************************************/
 
 
-void InsertParents(Tree T, Tree P)
+void InsertParents(c50_context *Context, Tree T, Tree P)
 /*   -------------  */
 {
     DiscrValue	v;
@@ -629,12 +621,12 @@ void InsertParents(Tree T, Tree P)
     {
 	ForEach(v, 1, T->Forks)
 	{
-	    InsertParents(T->Branch[v], T);
+	    InsertParents(Context, T->Branch[v], T);
 	    T->Errors += T->Branch[v]->Errors;
 	    T->Leaves += T->Branch[v]->Leaves;
 	}
 
-	if ( SomeMiss[T->Tested] ) RecalculateErrs = true;
+	if ( Context->cases.some_missing[T->Tested] ) Context->pruning.recalculate_errors = true;
     }
     else
     if ( T->Cases > 1E-3 )
@@ -653,7 +645,7 @@ void InsertParents(Tree T, Tree P)
 /*************************************************************************/
 
 
-void CheckSubsets(Tree T, Boolean PruneDefaults)
+void CheckSubsets(c50_context *Context, Tree T, Boolean PruneDefaults)
 /*   ------------  */
 {
     Set		HoldValues;
@@ -666,7 +658,7 @@ void CheckSubsets(Tree T, Boolean PruneDefaults)
     {
 	A = T->Tested;
 
-	Bytes = (MaxAttVal[A]>>3) + 1;
+	Bytes = (Context->schema.max_attribute_value[A]>>3) + 1;
 	HoldValues = Alloc(Bytes, Byte);
 
 	/*  For non-ordered attributes the last (default) branch contains
@@ -677,7 +669,7 @@ void CheckSubsets(Tree T, Boolean PruneDefaults)
 	{
 	    ForEach(b, 0, Bytes-1)
 	    {
-		T->Subset[T->Forks][b] &= PossibleValues[A][b];
+		T->Subset[T->Forks][b] &= Context->pruning.possible_values[A][b];
 		Any |= T->Subset[T->Forks][b];
 	    }
 
@@ -691,7 +683,7 @@ void CheckSubsets(Tree T, Boolean PruneDefaults)
 
 	/*  Process each subtree, leaving only values in branch subset  */
 
-	CopyBits(Bytes, PossibleValues[A], HoldValues);
+	CopyBits(Bytes, Context->pruning.possible_values[A], HoldValues);
 
 	ForEach(v, 1, T->Forks)
 	{
@@ -699,7 +691,7 @@ void CheckSubsets(Tree T, Boolean PruneDefaults)
 
 	    if ( Ordered(A) )
 	    {
-		ForEach(vv, 1, MaxAttVal[A])
+		ForEach(vv, 1, Context->schema.max_attribute_value[A])
 		{
 		    if ( In(vv, T->Subset[v]) && ! In(vv, HoldValues) )
 		    {
@@ -708,12 +700,12 @@ void CheckSubsets(Tree T, Boolean PruneDefaults)
 		}
 	    }
 
-	    CopyBits(Bytes, T->Subset[v], PossibleValues[A]);
+	    CopyBits(Bytes, T->Subset[v], Context->pruning.possible_values[A]);
 
-	    CheckSubsets(T->Branch[v], PruneDefaults);
+	    CheckSubsets(Context, T->Branch[v], PruneDefaults);
 	}
 
-	CopyBits(Bytes, HoldValues, PossibleValues[A]);
+	CopyBits(Bytes, HoldValues, Context->pruning.possible_values[A]);
 
 	Free(HoldValues);
 
@@ -744,7 +736,7 @@ void CheckSubsets(Tree T, Boolean PruneDefaults)
 			    /*  Add class distribution from branch vv,
 				or replace if branch v has no cases  */
 
-			    ForEach(c, 1, MaxClass)
+			    ForEach(c, 1, Context->schema.max_class)
 			    {
 				if ( ! LeafBr->Cases )
 				{
@@ -790,7 +782,7 @@ void CheckSubsets(Tree T, Boolean PruneDefaults)
     {
 	ForEach(v, 1, T->Forks)
 	{
-	    CheckSubsets(T->Branch[v], PruneDefaults);
+	    CheckSubsets(Context, T->Branch[v], PruneDefaults);
 	}
     }
 }
@@ -799,8 +791,8 @@ void CheckSubsets(Tree T, Boolean PruneDefaults)
 
 /*************************************************************************/
 /*									 */
-/*	Compute Coeff, used by RawExtraErrs() to adjust resubstitution	 */
-/*	error rate to upper limit of the confidence level.  Coeff is	 */
+/*	Compute Context->pruning.confidence_coefficient, used by RawExtraErrs() to adjust resubstitution	 */
+/*	error rate to upper limit of the confidence level.  Context->pruning.confidence_coefficient is	 */
 /*	the square of the number of standard deviations corresponding	 */
 /*	to the selected confidence level.  (Taken from Documenta Geigy	 */
 /*	Scientific Tables (Sixth Edition), p185 (with modifications).)	 */
@@ -808,25 +800,29 @@ void CheckSubsets(Tree T, Boolean PruneDefaults)
 /*************************************************************************/
 
 
-float Val[] = {  0,  0.001, 0.005, 0.01, 0.05, 0.10, 0.20, 0.40, 1.00},
-      Dev[] = {4.0,  3.09,  2.58,  2.33, 1.65, 1.28, 0.84, 0.25, 0.00},
-      Coeff;
+static const float ConfidenceValues[] =
+    {0, 0.001, 0.005, 0.01, 0.05, 0.10, 0.20, 0.40, 1.00};
+static const float ConfidenceDeviations[] =
+    {4.0, 3.09, 2.58, 2.33, 1.65, 1.28, 0.84, 0.25, 0.00};
 
 
-void InitialiseExtraErrs()
+void InitialiseExtraErrs(c50_context *Context)
 /*   -------------------  */
 {
     int i=1;
 
     /*  Compute and retain the coefficient value, interpolating from
-	the values in Val and Dev  */
+	the confidence table  */
 
-    while ( CF > Val[i] ) i++;
+    while ( Context->options.confidence_factor > ConfidenceValues[i] ) i++;
 
-    Coeff = Dev[i-1] +
-	      (Dev[i] - Dev[i-1]) * (CF - Val[i-1]) /(Val[i] - Val[i-1]);
-    Coeff = Coeff * Coeff;
-    CF = Max(CF, 1E-6);
+    Context->pruning.confidence_coefficient = ConfidenceDeviations[i-1] +
+	(ConfidenceDeviations[i] - ConfidenceDeviations[i-1]) *
+	(Context->options.confidence_factor - ConfidenceValues[i-1]) /
+	(ConfidenceValues[i] - ConfidenceValues[i-1]);
+    Context->pruning.confidence_coefficient *=
+	Context->pruning.confidence_coefficient;
+    Context->options.confidence_factor = Max(Context->options.confidence_factor, 1E-6);
 }
 
 
@@ -834,47 +830,48 @@ void InitialiseExtraErrs()
 /*									 */
 /*	Calculate extra errors to correct the resubstitution error	 */
 /*	rate at a leaf with N cases, E errors, predicted class C.	 */
-/*	If CostWeights are used, N and E are normalised by removing	 */
+/*	If Context->costs.weighted are used, N and E are normalised by removing	 */
 /*	the effects of cost weighting and then reapplying weights to	 */
 /*	the result.							 */
 /*									 */
 /*************************************************************************/
 
 
-float ExtraErrs(CaseCount N, CaseCount E, ClassNo C)
+float ExtraErrs(c50_context *Context, CaseCount N, CaseCount E, ClassNo C)
 /*    ---------  */
 {
     ClassNo	EC;
     CaseCount	NormC, NormEC;
 
-    if ( ! CostWeights )
+    if ( ! Context->costs.weighted )
     {
-	return RawExtraErrs(N, E);
+	return RawExtraErrs(Context, N, E);
     }
 
     EC = 3 - C;				/* the other class */
-    NormC = (N - E) / WeightMul[C];	/* normalised cases of class C */
-    NormEC = E / WeightMul[EC];		/* ditto the other class */
+    NormC = (N - E) / Context->costs.weight_multipliers[C];	/* normalised cases of class C */
+    NormEC = E / Context->costs.weight_multipliers[EC];		/* ditto the other class */
 
-    return WeightMul[EC] * RawExtraErrs(NormC + NormEC, NormEC);
+    return Context->costs.weight_multipliers[EC] *
+	RawExtraErrs(Context, NormC + NormEC, NormEC);
 }
 
 
 
-float RawExtraErrs(CaseCount N, CaseCount E)
+float RawExtraErrs(c50_context *Context, CaseCount N, CaseCount E)
 /*    ------------  */
 {
     float	Val0, Pr;
 
     if ( E < 1E-6 )
     {
-	return N * (1 - exp(log(CF) / N));
+	return N * (1 - exp(log(Context->options.confidence_factor) / N));
     }
     else
     if ( N > 1 && E < 0.9999 )
     {
-	Val0 = N * (1 - exp(log(CF) / N));
-	return Val0 + E * (RawExtraErrs(N, 1.0) - Val0);
+	Val0 = N * (1 - exp(log(Context->options.confidence_factor) / N));
+	return Val0 + E * (RawExtraErrs(Context, N, 1.0) - Val0);
     }
     else
     if ( E + 0.5 >= N )
@@ -883,9 +880,9 @@ float RawExtraErrs(CaseCount N, CaseCount E)
     }
     else
     {
-	Pr = (E + 0.5 + Coeff/2
-		+ sqrt(Coeff * ((E + 0.5) * (1 - (E + 0.5)/N) + Coeff/4)) )
-	     / (N + Coeff);
+	Pr = (E + 0.5 + Context->pruning.confidence_coefficient/2
+		+ sqrt(Context->pruning.confidence_coefficient * ((E + 0.5) * (1 - (E + 0.5)/N) + Context->pruning.confidence_coefficient/4)) )
+	     / (N + Context->pruning.confidence_coefficient);
 	return (N * Pr - E);
     }
 }
@@ -901,7 +898,7 @@ float RawExtraErrs(CaseCount N, CaseCount E)
 /*************************************************************************/
 
 
-void RestoreDistribs(Tree T)
+void RestoreDistribs(c50_context *Context, Tree T)
 /*   ---------------  */
 {
     DiscrValue	v;
@@ -911,30 +908,30 @@ void RestoreDistribs(Tree T)
     {
 	ForEach(v, 1, T->Forks)
 	{
-	    RestoreDistribs(T->Branch[v]);
+	    RestoreDistribs(Context, T->Branch[v]);
 	}
     }
 
     if ( T->Cases >= MinLeaf )
     {
-	if ( CostWeights )
+	if ( Context->costs.weighted )
 	{
 	    T->Cases = 0;
-	    ForEach(c, 1, MaxClass)
+	    ForEach(c, 1, Context->schema.max_class)
 	    {
-		ClassSum[c] = (T->ClassDist[c] /= WeightMul[c]);
+		Context->class_sum[c] = (T->ClassDist[c] /= Context->costs.weight_multipliers[c]);
 		T->Cases += T->ClassDist[c];
 	    }
 	}
 	else
 	{
-	    ForEach(c, 1, MaxClass)
+	    ForEach(c, 1, Context->schema.max_class)
 	    {
-		ClassSum[c] = T->ClassDist[c];
+		Context->class_sum[c] = T->ClassDist[c];
 	    }
 	}
 
-	T->Leaf   = SelectClass(1, true);
+	T->Leaf   = SelectClass(Context, 1, true);
 	T->Errors = T->Cases - T->ClassDist[T->Leaf];
     }
 }
@@ -950,7 +947,7 @@ void RestoreDistribs(Tree T)
 /*************************************************************************/
 
 
-void CompressBranches(Tree T)
+void CompressBranches(c50_context *Context, Tree T)
 /*   ----------------  */
 {
     DiscrValue	v, vv, S=0, *LocalSet;
@@ -959,7 +956,7 @@ void CompressBranches(Tree T)
     ClassNo	c;
     Boolean	EmptyOnly;
 
-    EmptyOnly = Trial || RULES;
+    EmptyOnly = Context->trees.trial || Context->options.rules;
 
     if ( T->NodeType )
     {
@@ -970,7 +967,7 @@ void CompressBranches(Tree T)
 	ForEach(v, 1, T->Forks)
 	{
 	    Br = T->Branch[v];
-	    CompressBranches(Br);
+	    CompressBranches(Context, Br);
 
 	    /*  Don't check if compression impossible  */
 
@@ -982,7 +979,7 @@ void CompressBranches(Tree T)
 	    else
 	    {
 		/*  Check whether some previous branch is mergeable.
-		    For Trial 0, leaves are mergeable if they are
+		    For Context->trees.trial 0, leaves are mergeable if they are
 		    both empty or both non-empty and have the same class;
 		    for later trials, they must both be empty  */
 
@@ -1012,7 +1009,7 @@ void CompressBranches(Tree T)
 	    OldBranch   = T->Branch;
 	    T->Branch	= Alloc(S+1, Tree);
 
-	    Bytes = (MaxAttVal[T->Tested]>>3) + 1;
+	    Bytes = (Context->schema.max_attribute_value[T->Tested]>>3) + 1;
 	    S = 0;
 
 	    ForEach(v, 1, T->Forks)
@@ -1023,7 +1020,7 @@ void CompressBranches(Tree T)
 		    Br = T->Branch[S] = OldBranch[v];
 		    if ( ! Br->ClassDist )
 		    {
-			Br->ClassDist = AllocZero(MaxClass+1, CaseCount);
+			Br->ClassDist = AllocZero(Context->schema.max_class+1, CaseCount);
 		    }
 		    T->Subset[S] = AllocZero(Bytes, Byte);
 
@@ -1040,7 +1037,7 @@ void CompressBranches(Tree T)
 
 			    Br->Cases  += OldBranch[vv]->Cases;
 			    Br->Errors += OldBranch[vv]->Errors;
-			    ForEach(c, 1, MaxClass)
+			    ForEach(c, 1, Context->schema.max_class)
 			    {
 				Br->ClassDist[c] += OldBranch[vv]->ClassDist[c];
 			    }
@@ -1063,8 +1060,8 @@ void CompressBranches(Tree T)
 
 
 
-void SetGlobalUnitWeights(int LocalFlag)
+void SetGlobalUnitWeights(c50_context *Context, int LocalFlag)
 /*   --------------------  */
 {
-    UnitWeights = ( LocalFlag != 0 );
+    Context->costs.unit_weights = ( LocalFlag != 0 );
 }
