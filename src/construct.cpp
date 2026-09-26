@@ -496,7 +496,7 @@ void EvaluateSingle(c50_context *Context, int Flags)
     CaseNo	*ConfusionMat, *Usage, i, RawErrs=0, Errs=0;
     double	ECost=0, Tests;
     Boolean	CMInfo, UsageInfo;
-    const char *const StdR[] = { "   Before Pruning   ",
+    [[maybe_unused]] const char *const StdR[] = { "   Before Pruning   ",
 			    "  ----------------  ", "  " F_SizeErrors "  " };
     const char *const StdP[] = { "  " F_DecisionTree16 "  ",
 			    "  ----------------  ", "  " F_SizeErrors "  " };
