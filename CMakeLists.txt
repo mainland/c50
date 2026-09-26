@@ -36,22 +36,25 @@ set(C50_CORE_SOURCES
     src/xval.cpp
 )
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_library(c50_core STATIC ${C50_CORE_SOURCES})
+add_library(C50::core ALIAS c50_core)
+target_compile_features(c50_core PUBLIC cxx_std_17)
+set_target_properties(c50_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-add_executable(c50_cli src/c50.cpp ${C50_CORE_SOURCES})
+add_executable(c50_cli src/c50.cpp)
+target_link_libraries(c50_cli PRIVATE C50::core)
 set_target_properties(c50_cli PROPERTIES OUTPUT_NAME c5.0)
 
 add_executable(c50_report src/report.c)
 set_target_properties(c50_report PROPERTIES OUTPUT_NAME report)
 
-set(C50_TARGETS c50_cli c50_report)
+set(C50_COMPILE_TARGETS c50_core c50_cli c50_report)
+set(C50_EXECUTABLE_TARGETS c50_cli c50_report)
 
 if(BUILD_TESTING)
     add_executable(
         c50_prediction_probe
         tests/prediction_probe.cpp
-        ${C50_CORE_SOURCES}
     )
     target_include_directories(
         c50_prediction_probe
@@ -61,24 +64,25 @@ if(BUILD_TESTING)
         c50_prediction_probe
         PROPERTIES OUTPUT_NAME prediction-probe
     )
-    list(APPEND C50_TARGETS c50_prediction_probe)
+    target_link_libraries(c50_prediction_probe PRIVATE C50::core)
+    list(APPEND C50_COMPILE_TARGETS c50_prediction_probe)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_prediction_probe)
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    foreach(target IN LISTS C50_TARGETS)
+    foreach(target IN LISTS C50_COMPILE_TARGETS)
         target_compile_options(${target} PRIVATE -ffloat-store)
     endforeach()
 endif()
 
 if(NOT MSVC)
-    foreach(target IN LISTS C50_TARGETS)
-        target_link_libraries(${target} PRIVATE m)
-    endforeach()
+    target_link_libraries(c50_core PUBLIC m)
+    target_link_libraries(c50_report PRIVATE m)
 endif()
 
 if(C50_ENABLE_SANITIZERS)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-        foreach(target IN LISTS C50_TARGETS)
+        foreach(target IN LISTS C50_COMPILE_TARGETS)
             target_compile_options(
                 ${target}
                 PRIVATE
@@ -86,6 +90,8 @@ if(C50_ENABLE_SANITIZERS)
                     -fno-omit-frame-pointer
                     -fno-sanitize-recover=all
             )
+        endforeach()
+        foreach(target IN LISTS C50_EXECUTABLE_TARGETS)
             target_link_options(
                 ${target}
                 PRIVATE
