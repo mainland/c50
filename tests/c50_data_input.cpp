@@ -19,12 +19,12 @@ int main(int argc, char *argv[])
         "0.25, low\n"
         "| trailing comment";
     c50_input names_input, data_input, comment_input;
-    c50_context *context = NULL;
+    auto owner = c50_make_context();
+    c50_context *context = owner.get();
 
     (void) argc;
     (void) argv;
 
-    if ( c50_context_create(&context) != C50_STATUS_OK ) return 1;
 
     c50_input_init_memory(&names_input, names, sizeof(names) - 1);
     GetNames(context, &names_input);
@@ -50,6 +50,6 @@ int main(int argc, char *argv[])
     if ( context->average_case_weight != 3 ) return 1;
 
     Cleanup(context);
-    c50_context_destroy(context);
+
     return 0;
 }

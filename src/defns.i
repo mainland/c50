@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: native C++ library integration. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -50,7 +51,9 @@
 #include <limits.h>
 #include <float.h>
 
-#include "c50_api_internal.h"
+#include <c50/c50.hpp>
+
+using c50_context = c50::detail::context_state;
 
 #include "c50_input.h"
 #include "c50_rng.h"
