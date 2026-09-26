@@ -38,8 +38,8 @@ int main(int argc, char **argv)
     GetNames(Context, &NamesInput);
     fclose(F);
 
-    SomeMiss = AllocZero(MaxAtt+1, Boolean);
-    SomeNA = AllocZero(MaxAtt+1, Boolean);
+    SomeMiss = AllocZero(Context->schema.max_attribute+1, Boolean);
+    SomeNA = AllocZero(Context->schema.max_attribute+1, Boolean);
 
     CheckFile(Context, Extension, false);
     MaxTree = TRIALS-1;
@@ -51,7 +51,7 @@ int main(int argc, char **argv)
         {
             RuleSet[Trial] = GetRules(Context, Extension);
         }
-        Context->most_specific_rules = Alloc(MaxClass+1, CRule);
+        Context->most_specific_rules = Alloc(Context->schema.max_class+1, CRule);
     }
     else
     {
@@ -64,17 +64,17 @@ int main(int argc, char **argv)
 
     Context->default_class =
         ( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
-    Context->class_sum = AllocZero(MaxClass+1, float);
-    Context->votes = AllocZero(MaxClass+1, float);
+    Context->class_sum = AllocZero(Context->schema.max_class+1, float);
+    Context->votes = AllocZero(Context->schema.max_class+1, float);
     Context->trial_predictions = AllocZero(TRIALS, ClassNo);
 
     if ( ! (F = GetFile(".test", "r")) ) Error(NOFILE, "", "");
     GetData(Context, F, false, false);
 
     printf("case,actual,predicted,confidence");
-    ForEach(c, 1, MaxClass)
+    ForEach(c, 1, Context->schema.max_class)
     {
-        printf(",score(%s)", ClassName[c]);
+        printf(",score(%s)", Context->schema.class_names[c]);
     }
     putchar('\n');
 
@@ -82,9 +82,9 @@ int main(int argc, char **argv)
     {
         Actual = Class(Case[i]);
         Predicted = Classify(Context, Case[i]);
-        printf("%d,%s,%s,%.7g", i+1, ClassName[Actual],
-               ClassName[Predicted], Context->confidence);
-        ForEach(c, 1, MaxClass)
+        printf("%d,%s,%s,%.7g", i+1, Context->schema.class_names[Actual],
+               Context->schema.class_names[Predicted], Context->confidence);
+        ForEach(c, 1, Context->schema.max_class)
         {
             printf(",%.7g", Context->class_sum[c]);
         }

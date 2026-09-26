@@ -86,7 +86,7 @@ CRuleSet FormRules(c50_context *Context, Tree T)
     NotifyStage(FORMRULES);
     Progress(-(MaxCase+1.0));
 
-    Verbosity(2, PrintTree(T, "Pruned tree:"))
+    Verbosity(2, PrintTree(Context, T, "Pruned tree:"))
 
     /*  Find essential parameters and allocate storage  */
 
@@ -120,15 +120,15 @@ CRuleSet FormRules(c50_context *Context, Tree T)
     CBuffer	 = Alloc(4 + (MaxCase+1) + (MaxCase+1)/128, Byte);
 
     NRules = RuleSpace = 0;
-    FindClassFreq(ClassFreq, 0, MaxCase);
+    FindClassFreq(Context, ClassFreq, 0, MaxCase);
 
     if ( ! BranchBits )
     {
-	GenerateLogs(Max(MaxCase+1, Max(MaxAtt, Max(MaxClass, MaxDiscrVal))));
+	GenerateLogs(Max(MaxCase+1, Max(Context->schema.max_attribute, Max(Context->schema.max_class, Context->schema.max_discrete_value))));
 	FindTestCodes(Context);
     }
 
-    SetupNCost();
+    SetupNCost(Context);
 
     /*  Extract and prune paths from root to leaves  */
 
@@ -144,9 +144,9 @@ CRuleSet FormRules(c50_context *Context, Tree T)
     /*  Select final rules  */
 
     SiftRules(Context,
-	      (T->Errors + MaxClass-1) / (MaxCase+1 + MaxClass));
+	      (T->Errors + Context->schema.max_class-1) / (MaxCase+1 + Context->schema.max_class));
 
-    FreeVector((void **) NCost, 0, MaxClass);		NCost = Nil;
+    FreeVector((void **) NCost, 0, Context->schema.max_class);		NCost = Nil;
 
     CheckActiveSpace(Context, NRules);
 
@@ -156,7 +156,7 @@ CRuleSet FormRules(c50_context *Context, Tree T)
     RS->SRule    = Rule;				Rule = Nil;
     RS->SDefault = Context->default_class;
 
-    ConstructRuleTree(RS);
+    ConstructRuleTree(Context, RS);
 
     return RS;
 }
@@ -186,21 +186,21 @@ CRuleSet FormRules(c50_context *Context, Tree T)
 /*************************************************************************/
 
 
-void SetupNCost()
+void SetupNCost(c50_context *Context)
 /*   ----------  */
 {
     ClassNo	Real, Pred;
     double	AvErrCost=0, ProbPred, ProbReal;
 
-    NCost = Alloc(MaxClass+1, float *);
+    NCost = Alloc(Context->schema.max_class+1, float *);
 
-    ForEach(Pred, 0, MaxClass)
+    ForEach(Pred, 0, Context->schema.max_class)
     {
-	NCost[Pred] = Alloc(MaxClass+1, float);
+	NCost[Pred] = Alloc(Context->schema.max_class+1, float);
 
 	if ( ! MCost || CostWeights || Pred == 0 )
 	{
-	    ForEach(Real, 1, MaxClass)
+	    ForEach(Real, 1, Context->schema.max_class)
 	    {
 		NCost[Pred][Real] = ( Pred != Real );
 	    }
@@ -208,7 +208,7 @@ void SetupNCost()
 	else
  	{
 	    ProbPred = ClassFreq[Pred] / (MaxCase+1);
-	    ForEach(Real, 1, MaxClass)
+	    ForEach(Real, 1, Context->schema.max_class)
 	    {
 		NCost[Pred][Real] = MCost[Pred][Real];
 		if ( Real == Pred ) continue;
@@ -223,9 +223,9 @@ void SetupNCost()
     if ( MCost && ! CostWeights )
     {
 	AvErrCost = (AvErrCost + 1) / 2;	/* reduced average cost */
-	ForEach(Real, 1, MaxClass)
+	ForEach(Real, 1, Context->schema.max_class)
 	{
-	    ForEach(Pred, 1, MaxClass)
+	    ForEach(Pred, 1, Context->schema.max_class)
 	    {
 		NCost[Pred][Real] /= AvErrCost;
 	    }
@@ -267,7 +267,7 @@ void Scan(c50_context *Context, Tree T)
 
 	    if ( T->NodeType == BrSubset )
 	    {
-		if ( Elements(T->Tested, T->Subset[v], &Last) == 1 )
+		if ( Elements(Context, T->Tested, T->Subset[v], &Last) == 1 )
 		{
 		    /*  Subset contains a single element  */
 
@@ -282,7 +282,7 @@ void Scan(c50_context *Context, Tree T)
 		}
 	    }
 
-	    CondCost[NCond] = CondBits(Term);
+	    CondCost[NCond] = CondBits(Context, Term);
 
 	    /*  Adjust number of failed conditions  */
 
@@ -306,7 +306,7 @@ void Scan(c50_context *Context, Tree T)
 	memcpy(LocalNFail, NFail, (MaxCase + 1) * sizeof(short));
 
 	TargetClass = T->Leaf;
-	PruneRule(Stack, T->Leaf);
+	PruneRule(Context, Stack, T->Leaf);
 
 	if ( ! T->NodeType ) Progress(T->Cases);
     }
@@ -365,7 +365,7 @@ void PopCondition()
 #define TI(a,b)		(((a)+(b)) * Log((a)+(b)) - (a) * Log(a) - (b) * Log(b))
 
 
-void PruneRule(Condition Cond[], ClassNo TargetClass)
+void PruneRule(c50_context *Context, Condition Cond[], ClassNo TargetClass)
 /*   ---------  */
 {
     int		d, id, Bestid, Remaining=NCond;
@@ -401,7 +401,7 @@ void PruneRule(Condition Cond[], ClassNo TargetClass)
 
     /*  Find conditions to delete  */
 
-    Verbosity(1, fprintf(Of, "\n  Pruning rule for %s", ClassName[TargetClass]))
+    Verbosity(1, fprintf(Of, "\n  Pruning rule for %s", Context->schema.class_names[TargetClass]))
 
     while (true )
     {
@@ -440,7 +440,7 @@ void PruneRule(Condition Cond[], ClassNo TargetClass)
 	    {
 		id++;
 
-		Verbosity(1, PrintCondition(Cond[d]))
+		Verbosity(1, PrintCondition(Context, Cond[d]))
 
 		/*  Bestd identifies the condition with lowest pessimistic
 		    error  estimate  */
@@ -529,7 +529,7 @@ void PruneRule(Condition Cond[], ClassNo TargetClass)
 
 	if ( (RealCorrect + 1) / ((RealTotal + 2) * Prior) >= 0.95 )
 	{
-	    NewRule(Cond, NCond, TargetClass, Deleted, Nil,
+	    NewRule(Context, Cond, NCond, TargetClass, Deleted, Nil,
 		    RealTotal, RealCorrect, Prior);
 	}
     }
