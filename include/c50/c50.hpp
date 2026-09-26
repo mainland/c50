@@ -75,6 +75,32 @@ struct options {
     unsigned random_seed = 0;            /**< Sampling seed, 0 to 4095. */
 };
 
+/**
+ * Borrowed row-major dense data. Arrays must remain valid throughout the call.
+ * Discrete values are zero-based schema indices. NaN denotes missing values.
+ * Not-applicable values, implicit attributes, ignored attributes, labels,
+ * class attributes, and dynamic discrete values require the text interface.
+ * The caller must provide storage for all addressed elements.
+ */
+struct dense_dataset {
+    const double *values = nullptr;      /**< Feature data, null only for zero rows. */
+    std::size_t row_count = 0;            /**< Training requires at least one row. */
+    std::size_t feature_count = 0;        /**< Must match the explicit schema. */
+    const std::size_t *class_indices = nullptr; /**< Zero-based labels, required for training. */
+    std::size_t row_stride = 0;          /**< Elements between rows, zero means feature_count. */
+
+    /** Construct an empty borrowed dataset. */
+    dense_dataset() = default;
+    /** Construct a borrowed view.
+     * @param values Feature storage, borrowed for each operation.
+     * @param rows Row count.
+     * @param features Feature count.
+     * @param classes Zero-based training labels, or null for prediction.
+     * @param stride Elements between rows, zero means features. */
+    dense_dataset(const double *values, std::size_t rows, std::size_t features,
+                  const std::size_t *classes = nullptr, std::size_t stride = 0);
+};
+
 /** Move-only owner of mutable operation workspace. */
 class context {
 public:
@@ -165,6 +191,17 @@ public:
     static model train(context &workspace, model_kind kind,
                        std::string_view names, std::string_view training,
                        const options &settings = {}, std::string_view costs = {});
+    /** Train from borrowed dense arrays and names/costs file contents.
+     * @param workspace Exclusive operation workspace.
+     * @param kind Classifier representation.
+     * @param names Names-file contents.
+     * @param training Borrowed dense training data.
+     * @param settings Training options.
+     * @param costs Optional costs-file contents.
+     * @return An independently owned model. */
+    static model train(context &workspace, model_kind kind,
+                       std::string_view names, const dense_dataset &training,
+                       const options &settings = {}, std::string_view costs = {});
     /** Validate and copy a serialized legacy classifier, schema, and costs.
      * @param workspace Exclusive operation workspace.
      * @param kind Classifier representation.
@@ -180,6 +217,11 @@ public:
      * @param cases Data-file contents, possibly empty.
      * @return An independently owned prediction batch. */
     predictions predict(context &workspace, std::string_view cases) const;
+    /** Predict from borrowed dense arrays. Class indices are ignored.
+     * @param workspace Exclusive operation workspace.
+     * @param cases Borrowed dense features, possibly empty.
+     * @return An independently owned prediction batch. */
+    predictions predict(context &workspace, const dense_dataset &cases) const;
     /** @return the classifier representation. */
     model_kind kind() const noexcept;
     /** @return owned names-file contents. The reference follows model lifetime. */
