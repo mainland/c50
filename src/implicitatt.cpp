@@ -39,19 +39,34 @@
 #include "c50_api_internal.h"
 #include <ctype.h>
 #include <stdint.h>
+#include <memory>
 
-typedef struct c50_implicit_state
+struct c50_implicit_state
 {
-    char *buffer;
-    int buffer_size;
-    int buffer_position;
-    EltRec *type_stack;
-    int type_stack_size;
-    int type_stack_position;
-    int definition_size;
-    int definition_position;
-    Boolean previous_error;
-} c50_implicit_state;
+    explicit c50_implicit_state(c50_context *owner) : context(owner)
+    {
+        context->implicit_state = this;
+    }
+    ~c50_implicit_state()
+    {
+        free(buffer);
+        free(type_stack);
+        context->implicit_state = nullptr;
+    }
+    c50_implicit_state(const c50_implicit_state &) = delete;
+    c50_implicit_state &operator=(const c50_implicit_state &) = delete;
+
+    c50_context *context;
+    char *buffer = nullptr;
+    int buffer_size = 0;
+    int buffer_position = 0;
+    EltRec *type_stack = nullptr;
+    int type_stack_size = 0;
+    int type_stack_position = 0;
+    int definition_size = 0;
+    int definition_position = 0;
+    Boolean previous_error = false;
+};
 
 #define FailSyn(Msg) {DefSyntaxError(Context, Msg); return false;}
 #define FailSem(Msg) \
@@ -86,9 +101,7 @@ typedef  union  _xstack_elt
 void ImplicitAtt(c50_context *Context, c50_input *Nf)
 /*   -----------  */
 {
-    c50_implicit_state State = {};
-
-    Context->implicit_state = &State;
+    c50_implicit_state State(Context);
 
     /*  Get definition as a string in Context->implicit_state->buffer  */
 
@@ -104,6 +117,7 @@ void ImplicitAtt(c50_context *Context, c50_input *Nf)
 
     Context->schema.attribute_definitions[Context->schema.max_attribute] = Alloc(Context->implicit_state->definition_size = 100, DefElt);
     Context->implicit_state->definition_position = 0;
+    DefOp(Context->schema.attribute_definitions[Context->schema.max_attribute][0]) = OP_END;
 
     /*  Parse Context->implicit_state->buffer as an expression terminated by a period  */
 
@@ -143,6 +157,11 @@ void ImplicitAtt(c50_context *Context, c50_input *Nf)
 
     if ( Context->implicit_state->previous_error )
     {
+        for ( int index = 0; index < State.definition_position; ++index )
+        {
+            auto &element = Context->schema.attribute_definitions[Context->schema.max_attribute][index];
+            if ( DefOp(element) == OP_STR ) free(DefSVal(element));
+        }
 	Context->implicit_state->definition_position = 0;
 	Context->schema.special_status[Context->schema.max_attribute] = EXCLUDE;
     }
@@ -150,10 +169,6 @@ void ImplicitAtt(c50_context *Context, c50_input *Nf)
     /*  Write a terminating marker  */
 
     DefOp(Context->schema.attribute_definitions[Context->schema.max_attribute][Context->implicit_state->definition_position]) = OP_END;
-
-    Free(Context->implicit_state->buffer);
-    Free(Context->implicit_state->type_stack);
-    Context->implicit_state = NULL;
 }
 
 
@@ -744,6 +759,10 @@ void DefSemanticsError(c50_context *Context, int Fi, const char *Msg,
 void Dump(c50_context *Context, char OpCode, ContValue F, String S, int Fi)
 /*   ----  */
 {
+    // A string remains local until its instruction is published successfully.
+    std::unique_ptr<char, decltype(&free)> StringOwner(
+        OpCode == OP_STR ? S : nullptr, &free);
+
     if ( Context->implicit_state->buffer[Fi] == ' ' ) Fi++;
 
     if ( ! UpdateTStack(Context, OpCode, F, S, Fi) ) return;
@@ -766,6 +785,8 @@ void Dump(c50_context *Context, char OpCode, ContValue F, String S, int Fi)
     }
 
     Context->implicit_state->definition_position++;
+    DefOp(Context->schema.attribute_definitions[Context->schema.max_attribute][Context->implicit_state->definition_position]) = OP_END;
+    StringOwner.release();
 }
 
 

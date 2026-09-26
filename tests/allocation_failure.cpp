@@ -69,6 +69,24 @@ int main()
         c50::context context;
         exercise("load", context, [&] { c50::model::load(context, c50::model_kind::tree, names, tree); });
         exercise("train", context, [&] { c50::model::train(context, c50::model_kind::tree, names, data); });
+        exercise("implicit boolean", context, [&] {
+            c50::model::train(context, c50::model_kind::tree,
+                "no, yes.\nx: continuous.\nlarge := x > 1.\n", data);
+        });
+        exercise("implicit string", context, [&] {
+            c50::model::train(context, c50::model_kind::tree,
+                "no, yes.\ncolor: red, blue.\nis red := color = \"red\".\n",
+                "red, no\nred, no\nblue, yes\nblue, yes\n");
+        });
+        std::string nested = "color = \"red\"";
+        for (unsigned level = 0; level < 60; ++level)
+            nested = "color = \"red\" and (" + nested + ")";
+        const std::string nested_names =
+            "no, yes.\ncolor: red, blue.\nis red := " + nested + ".\n";
+        exercise("implicit growth", context, [&] {
+            c50::model::train(context, c50::model_kind::tree, nested_names,
+                "red, no\nred, no\nblue, yes\nblue, yes\n");
+        });
         std::string wide_names = "no, yes.\n";
         for (unsigned index = 0; index < 105; ++index)
             wide_names += "x" + std::to_string(index) + ": continuous.\n";

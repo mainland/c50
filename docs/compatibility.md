@@ -96,3 +96,10 @@ produced invalid weights or unusable classifiers now raise a parse error.
 Cost-based prediction now compares all finite expected costs, including values
 above the former `1e38` initial bound. Such models select the least-cost class
 instead of accidentally retaining the default class.
+
+Implicit-attribute parsing keeps scratch buffers and pending string literals
+owned during exception unwinding. Partially constructed definitions always
+have a terminator, including when an allocation fails. Allocation failures
+therefore raise `std::bad_alloc` without invalid cleanup reads or leaks, and
+the context remains reusable. Accepted expressions and classifier output are
+unchanged.
