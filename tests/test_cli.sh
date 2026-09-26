@@ -47,6 +47,10 @@ run_case()
     if test -f "$fixture_dir/$fixture_name.test"; then
         cp "$fixture_dir/$fixture_name.test" "$case_dir/"
     fi
+    if test "${1:-}" = --with-costs; then
+        cp "$fixture_dir/$fixture_name.costs" "$case_dir/"
+        shift
+    fi
 
     (
         cd "$case_dir"
@@ -54,12 +58,13 @@ run_case()
     )
 
     normalize_output "$case_dir/output.raw" > "$case_dir/output.actual"
-    normalize_model "$case_dir/$fixture_name.$model_extension" \
-        > "$case_dir/model.actual"
-
     diff -u "$expected_dir/$case_name.output" "$case_dir/output.actual"
-    diff -u "$expected_dir/$case_name.$model_extension" \
-        "$case_dir/model.actual"
+    if test "$model_extension" != -; then
+        normalize_model "$case_dir/$fixture_name.$model_extension" \
+            > "$case_dir/model.actual"
+        diff -u "$expected_dir/$case_name.$model_extension" \
+            "$case_dir/model.actual"
+    fi
 }
 
 run_case basic tree tree
@@ -68,7 +73,12 @@ run_case basic subsets tree -s
 run_case basic winnow tree -w
 run_case basic soft-thresholds tree -p
 run_case basic sample tree -S 70 -I 17
+run_case basic costs tree --with-costs
+run_case basic cross-validation - -X 5 -I 17
 run_case boost boost tree -t 5
+run_case case-weight case-weight tree
 run_case implicit implicit tree
+run_case multiclass tree tree
+run_case multiclass rules rules -r
 
 printf 'CLI regression tests passed\n'
