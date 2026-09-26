@@ -77,7 +77,7 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
     Boolean	FirstIgnore=true, SelectTrain;
 
     LineNo = 0;
-    Context->suppress_error_messages = SAMPLE && ! Train;
+    Context->suppress_error_messages = Context->options.sample_fraction && ! Train;
 
     /*  Don't reset case count if appending data for xval  */
 
@@ -93,7 +93,7 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 	Context->cases.max_case++;
     }
 
-    if ( SAMPLE )
+    if ( Context->options.sample_fraction )
     {
 	if ( Train )
 	{
@@ -105,10 +105,10 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 	    ResetKR(&Context->random, KRInit);	/* restore  KRandom() */
 	}
 
-	WantTrain = Context->sample_from * SAMPLE + 0.5;
+	WantTrain = Context->sample_from * Context->options.sample_fraction + 0.5;
 	LeftTrain = Context->sample_from;
 
-	WantTest  = ( SAMPLE < 0.5 ? WantTrain :
+	WantTest  = ( Context->options.sample_fraction < 0.5 ? WantTrain :
 		      Context->sample_from - WantTrain );
 	LeftTest  = Context->sample_from - WantTrain;
     }
@@ -117,7 +117,7 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
     {
 	/*  Check whether to include if we are sampling */
 
-	if ( SAMPLE )
+	if ( Context->options.sample_fraction )
 	{
 	    SelectTrain =
 		KRandom(&Context->random) < WantTrain / (float) LeftTrain--;
@@ -283,7 +283,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 		{
 		    if ( StatBit(Att, DISCRETE) )
 		    {
-			if ( Train || XVAL )
+			if ( Train || Context->options.cross_validation )
 			{
 			    /*  Add value to list  */
 
