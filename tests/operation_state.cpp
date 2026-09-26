@@ -6,6 +6,8 @@
 #include <c50/c50.hpp>
 #include "model_text.hpp"
 #include <iostream>
+#include <limits>
+#include <vector>
 #include <stdexcept>
 #include <string>
 
@@ -169,6 +171,27 @@ static void diagnostics_name_their_input()
     }), "costs"), "costs");
 }
 
+/* A dense value beyond the range of the native float is out of range, not
+   non-finite. */
+static void dense_range_message()
+{
+    const std::vector<double> huge{1e39, 2};
+    const std::vector<double> infinite{std::numeric_limits<double>::infinity(), 2};
+    const std::vector<std::size_t> classes{0, 1};
+    c50::context context;
+    const auto train = [&](const std::vector<double> &values) {
+        return diagnostic([&] {
+            c50::model::train(context, c50::model_kind::tree, cost_names,
+                              c50::dense_dataset(values.data(), 2, 1,
+                                                 classes.data()));
+        });
+    };
+    require(train(huge).find("out of range") != std::string::npos,
+            "out-of-range dense value");
+    require(train(infinite).find("not finite") != std::string::npos,
+            "infinite dense value");
+}
+
 /* Run every case, so that one failure does not hide the others. */
 template<class F> static int run(const char *name, F test)
 {
@@ -187,5 +210,6 @@ int main()
     failures += run("stale timestamp base", stale_timestamp_base);
     failures += run("unused costs", unused_costs);
     failures += run("diagnostics", diagnostics_name_their_input);
+    failures += run("dense range", dense_range_message);
     return failures ? 1 : 0;
 }
