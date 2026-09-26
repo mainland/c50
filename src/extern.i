@@ -33,15 +33,6 @@ extern	int		LineNo,
 
 extern	String		FileStem;
 
-extern	Byte		**Fires,
-			*CBuffer;
-
-extern	int		*CovBy,
-			*List;
-
-extern	double		*LogCaseNo,
-			*LogFact;
-
 extern	int		KRInit,
 			Now;
 

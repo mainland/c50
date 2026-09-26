@@ -144,16 +144,16 @@ Boolean NewRule(c50_context *Context, Condition Cond[], int NCond,
 	if ( Context->rules.capacity > 100 )
 	{
 	    Realloc(Context->rules.rules,  Context->rules.capacity, CRule);
-	    Realloc(Fires, Context->rules.capacity, Byte *);
+	    Realloc(Context->rule_build.fires, Context->rules.capacity, Byte *);
 	    ForEach(r, Context->rules.capacity-100, Context->rules.capacity-1)
 	    {
-		Fires[r] = Nil;
+		Context->rule_build.fires[r] = Nil;
 	    }
 	}
 	else
 	{
 	    Context->rules.rules  = Alloc(Context->rules.capacity, CRule);
-	    Fires = AllocZero(Context->rules.capacity, Byte *);
+	    Context->rule_build.fires = AllocZero(Context->rules.capacity, Byte *);
 	}
     }
 
@@ -171,14 +171,15 @@ Boolean NewRule(c50_context *Context, Condition Cond[], int NCond,
     R->Prior   = Prior;
     R->Vote    = Vote;
 
-    /*  Record entry in Fires and CovBy  */
+    /*  Record entry in Context->rule_build.fires and Context->rule_build.coverage_counts  */
 
-    ListSort(List, 1, List[0]);
-    Fires[Context->rules.count] = Compress(List);
+    ListSort(Context->rule_build.list, 1, Context->rule_build.list[0]);
+    Context->rule_build.fires[Context->rules.count] =
+	Compress(Context, Context->rule_build.list);
 
-    ForEach(i, 1, List[0])
+    ForEach(i, 1, Context->rule_build.list[0])
     {
-	CovBy[List[i]]++;
+	Context->rule_build.coverage_counts[Context->rule_build.list[i]]++;
     }
 
     Verbosity(1, if ( ! Existing ) PrintRule(Context, R))
@@ -204,7 +205,7 @@ Boolean NewRule(c50_context *Context, Condition Cond[], int NCond,
 /*************************************************************************/
 
 
-Byte *Compress(int *L)
+Byte *Compress(c50_context *Context, int *L)
 /*    --------  */
 {
     int		i, Last=0, Entry, Blocks;
@@ -212,8 +213,8 @@ Byte *Compress(int *L)
 
     /*  Copy first integer (uncompressed)  */
 
-    memcpy(CBuffer, L, 4);
-    p = CBuffer + 4;
+    memcpy(Context->rule_build.compression_buffer, L, 4);
+    p = Context->rule_build.compression_buffer + 4;
 
     ForEach(i, 1, L[0])
     {
@@ -233,8 +234,8 @@ Byte *Compress(int *L)
 	*p++ = Entry;
     }
 
-    Compressed = Alloc(p - CBuffer, Byte);
-    memcpy(Compressed, CBuffer, p - CBuffer);
+    Compressed = Alloc(p - Context->rule_build.compression_buffer, Byte);
+    memcpy(Compressed, Context->rule_build.compression_buffer, p - Context->rule_build.compression_buffer);
 
     return Compressed;
 }
