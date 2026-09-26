@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: native C++ library integration. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -316,13 +317,13 @@ void ResetKR(KRState *State, int Seed)
 void C50Exit(c50_context *Context, int Status)
 /*   -------  */
 {
-    if ( c50_abort_active_operation(Context, Status) ) return;
-    exit(Status);
+    c50_abort_operation(Context, Status);
 }
 
 
 
-void ErrorContext(c50_context *Context, int ErrNo, const char *S1, const char *S2)
+void ErrorContext(c50_context *Context, int ErrNo, const char *S1,
+		  const char *S2)
 /*   -----  */
 {
     Boolean	Quit=false, WarningOnly=false;
@@ -489,9 +490,9 @@ void ErrorContext(c50_context *Context, int ErrNo, const char *S1, const char *S
     if ( ! WarningOnly )
     {
 	Context->io.error_count++;
-	c50_record_error(Context, ErrNo == NOMEM ? C50_STATUS_OUT_OF_MEMORY :
-			 ErrNo == NOFILE ? C50_STATUS_IO_ERROR :
-			 C50_STATUS_PARSE_ERROR,
+	if (ErrNo == NOMEM) throw std::bad_alloc();
+	c50_record_error(Context, ErrNo == NOFILE ? c50::error_code::io_error :
+			 c50::error_code::parse_error,
 			 Buffer);
     }
 

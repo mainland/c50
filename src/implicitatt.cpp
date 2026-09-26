@@ -676,7 +676,8 @@ void DefSyntaxError(c50_context *Context, const char *Msg)
 
 
 
-void DefSemanticsError(c50_context *Context, int Fi, const char *Msg, int OpCode)
+void DefSemanticsError(c50_context *Context, int Fi, const char *Msg,
+		       int OpCode)
 /*   -----------------  */
 {
     char	Exp[1000], XMsg[1008], Op[1000];

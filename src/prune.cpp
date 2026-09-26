@@ -133,6 +133,14 @@ void Prune(c50_context *Context, Tree T)
 /*************************************************************************/
 
 
+static CaseCount CountLocalCases(c50_context *Context, int UnitWeightFlag,
+				 CaseNo Fp, CaseNo Lp)
+/*             ---------------  */
+{
+    return ( UnitWeightFlag ? Lp - Fp + 1.0 : SumWeights(Context, Fp, Lp) );
+}
+
+
 void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 		  int Sh, int Flags)
 /*   ------------  */
@@ -227,7 +235,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
     }
     else
     {
-	MissingCases = CountCases(Context, Fp, Ep);
+	MissingCases = CountLocalCases(Context, UnitWeightFlag, Fp, Ep);
 	KnownCases   = Cases - MissingCases;
     }
 
@@ -246,7 +254,8 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 	/*  Bp -> first value in missing + remaining values
 	    Ep -> last value in missing + current group  */
 
-	BranchCases[v] = CountCases(Context, Bp + Missing, Ep);
+	BranchCases[v] = CountLocalCases(Context, UnitWeightFlag,
+					 Bp + Missing, Ep);
 
 	Factor = ( ! Missing ? 0 :
 		   ! Context->costs.weighted ? BranchCases[v] / KnownCases :
