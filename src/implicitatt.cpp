@@ -902,7 +902,7 @@ Boolean UpdateTStack(c50_context *Context, char OpCode, ContValue F, String S,
 #define	D2(x)	(DUNA(XSN-1) || DUNA(XSN-2) ? UNKNOWN : (x))
 
 
-AttValue EvaluateDef(Definition D, DataRec Case)
+AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 /*       -----------  */
 {
     XStackElt	XStack[100];			/* allows 100-level nesting  */
@@ -927,7 +927,7 @@ AttValue EvaluateDef(Definition D, DataRec Case)
 		    else
 		    {
 			XStack[XSN++].sval =
-			    ( Unknown(Case, Att) && ! NotApplic(Case, Att) ? 0 :
+			    ( Unknown(Case, Att) && ! NotApplic(Context, Case, Att) ? 0 :
 			      AttValName[Att][XDVal(Case, Att)] );
 		    }
 		    break;

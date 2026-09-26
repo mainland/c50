@@ -105,12 +105,12 @@ void GetMCostsInput(c50_context *Context, c50_input *Cf)
 
     ClassFreq = AllocZero(MaxClass+1, double);
 
-    if ( CWtAtt )
+    if ( Context->case_weight_attribute )
     {
-	AvCWt = 1;			/* relative weights not yet set */
+	Context->average_case_weight = 1;			/* relative weights not yet set */
 	ForEach(i, 0, MaxCase)
 	{
-	    ClassFreq[Class(Case[i])] += RelCWt(Case[i]);
+	    ClassFreq[Class(Case[i])] += RelCWt(Context, Case[i]);
 	}
     }
     else

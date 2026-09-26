@@ -34,6 +34,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 #include <signal.h>
 
 #include <sys/unistd.h>
@@ -213,9 +214,9 @@ int main(int Argc, char *Argv[])
     GetNames(Context, &NamesInput);
     fclose(F);
 
-    if ( ClassAtt )
+    if ( Context->class_attribute )
     {
-	fprintf(Of, T_ClassVar, AttName[ClassAtt]);
+	fprintf(Of, T_ClassVar, AttName[Context->class_attribute]);
     }
 
     NotifyStage(READDATA);
@@ -241,7 +242,7 @@ int main(int Argc, char *Argv[])
 
     /*  Check whether case weight attribute appears  */
 
-    if ( CWtAtt )
+    if ( Context->case_weight_attribute )
     {
 	fprintf(Of, T_CWtAtt);
     }
@@ -263,8 +264,8 @@ int main(int Argc, char *Argv[])
 
 	ForEach(Att, 1, MaxAtt)
 	{
-	    if ( Att != ClassAtt &&
-		 Att != CWtAtt &&
+	    if ( Att != Context->class_attribute &&
+		 Att != Context->case_weight_attribute &&
 		 ( StatBit(Att, SKIP) > 0 ) == ( AttExIn == -1 ) )
 	    {
 		fprintf(Of, "    %s\n", AttName[Att]);
@@ -314,7 +315,7 @@ int main(int Argc, char *Argv[])
 	    NotifyStage(READTEST);
 	    fprintf(Of, "\n");
 
-	    FreeData();
+	    FreeData(Context);
 	    GetData(Context, F, false, false);
 
 	    fprintf(Of, T_EvalTest, MaxCase+1);
@@ -329,7 +330,7 @@ int main(int Argc, char *Argv[])
     fprintf(Of, T_Time, ExecTime() - StartTime);
 
 #ifdef VerbOpt
-    Cleanup();
+    Cleanup(Context);
 #endif
 
     c50_context_destroy(Context);

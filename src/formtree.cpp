@@ -94,7 +94,7 @@ void InitialiseTreeData(c50_context *Context)
 
 	ForEach(Att, 1, MaxAtt)
 	{
-	    if ( Discrete(Att) && Att != ClassAtt && ! Skip(Att) )
+	    if ( Discrete(Att) && Att != Context->class_attribute && ! Skip(Att) )
 	    {
 		Subset[Att] = AllocZero(MaxAttVal[Att]+1, Set);
 		ForEach(v, 0, MaxAttVal[Att])
@@ -113,7 +113,7 @@ void InitialiseTreeData(c50_context *Context)
     DFreq = AllocZero(MaxAtt+1, double *);
     ForEach(Att, 1, MaxAtt)
     {
-	if ( Att == ClassAtt || Skip(Att) || ! Discrete(Att) ) continue;
+	if ( Att == Context->class_attribute || Skip(Att) || ! Discrete(Att) ) continue;
 
 	DList[NDList++] = Att;
 
@@ -142,7 +142,7 @@ void InitialiseTreeData(c50_context *Context)
     {
 	for ( Att = 1 ; MultiVal && Att <= MaxAtt ; Att++ )
 	{
-	    if ( ! Skip(Att) && Att != ClassAtt )
+	    if ( ! Skip(Att) && Att != Context->class_attribute )
 	    {
 		MultiVal = MaxAttVal[Att] >= 0.3 * (MaxCase + 1);
 	    }
@@ -334,7 +334,8 @@ void SetMinGainThresh()
 /*************************************************************************/
 
 
-void FormTree(CaseNo Fp, CaseNo Lp, int Level, Tree *Result)
+void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
+	      Tree *Result)
 /*   --------  */
 {
     CaseCount	Cases=0, TreeErrs=0;
@@ -407,7 +408,7 @@ void FormTree(CaseNo Fp, CaseNo Lp, int Level, Tree *Result)
     if ( Subsample && No(Fp, Lp) > 5 * MaxClass * SAMPLEUNIT &&
 	 (ClassFreq[Least] * MaxClass * SAMPLEUNIT) / No(Fp, Lp) >= 10 )
     {
-	SampleEstimate(Fp, Lp, Cases);
+	SampleEstimate(Context, Fp, Lp, Cases);
 	Sampled   = true;
     }
     else
@@ -415,7 +416,7 @@ void FormTree(CaseNo Fp, CaseNo Lp, int Level, Tree *Result)
 	Sampled = false;
     }
 
-    BestAtt = ChooseSplit(Fp, Lp, Cases, Sampled);
+    BestAtt = ChooseSplit(Context, Fp, Lp, Cases, Sampled);
 
     /*  Decide whether to branch or not  */
 
@@ -457,7 +458,7 @@ void FormTree(CaseNo Fp, CaseNo Lp, int Level, Tree *Result)
 
 	++Tested[BestAtt];
 
-	Divide(Node, Fp, Lp, Level);
+	Divide(Context, Node, Fp, Lp, Level);
 
 	--Tested[BestAtt];
 
@@ -492,7 +493,8 @@ void FormTree(CaseNo Fp, CaseNo Lp, int Level, Tree *Result)
 /*************************************************************************/
 
 
-void SampleEstimate(CaseNo Fp, CaseNo Lp, CaseCount Cases)
+void SampleEstimate(c50_context *Context, CaseNo Fp, CaseNo Lp,
+		    CaseCount Cases)
 /*   --------------  */
 {
     CaseNo	SLp, SampleSize;
@@ -508,7 +510,7 @@ void SampleEstimate(CaseNo Fp, CaseNo Lp, CaseCount Cases)
 
 	if ( Discrete(Att) )
 	{
-	    EvalDiscrSplit(Att, Cases);
+	    EvalDiscrSplit(Context, Att, Cases);
 
 	    if ( Info[Att] > Epsilon &&
 		 (GR = Gain[Att] / Info[Att]) > ValThresh )
@@ -538,7 +540,7 @@ void SampleEstimate(CaseNo Fp, CaseNo Lp, CaseCount Cases)
 	}
     } 
 
-    ProcessQueue(Fp, SLp, NewCases);
+    ProcessQueue(Context, Fp, SLp, NewCases);
 
     SampleFrac = 1.0;
 }
@@ -581,7 +583,8 @@ void Sample(CaseNo Fp, CaseNo Lp, CaseNo N)
 /*************************************************************************/
 
 
-Attribute ChooseSplit(CaseNo Fp, CaseNo Lp, CaseCount Cases, Boolean Sampled)
+Attribute ChooseSplit(c50_context *Context, CaseNo Fp, CaseNo Lp,
+		      CaseCount Cases, Boolean Sampled)
 /*        -----------  */
 {
     Attribute	Att;
@@ -633,7 +636,7 @@ Attribute ChooseSplit(CaseNo Fp, CaseNo Lp, CaseCount Cases, Boolean Sampled)
 	{
 	    Gain[Att] = None;
 
-	    if ( Skip(Att) || Att == ClassAtt )
+	    if ( Skip(Att) || Att == Context->class_attribute )
 	    {
 		continue;
 	    }
@@ -642,14 +645,15 @@ Attribute ChooseSplit(CaseNo Fp, CaseNo Lp, CaseCount Cases, Boolean Sampled)
 	}
     }
 
-    ProcessQueue(Fp, Lp, Cases);
+    ProcessQueue(Context, Fp, Lp, Cases);
 
     return FindBestAtt(Cases);
 }
 
 
 
-void ProcessQueue(CaseNo WFp, CaseNo WLp, CaseCount WCases)
+void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
+		  CaseCount WCases)
 /*   ------------  */
 {
     Attribute	Att;
@@ -661,12 +665,12 @@ void ProcessQueue(CaseNo WFp, CaseNo WLp, CaseCount WCases)
 
 	if ( Discrete(Att) )
 	{
-	    EvalDiscrSplit(Att, WCases);
+	    EvalDiscrSplit(Context, Att, WCases);
 	}
 	else
 	if ( SampleFrac < 1 )
 	{
-	    EstimateMaxGR(Att, WFp, WLp);
+	    EstimateMaxGR(Context, Att, WFp, WLp);
 	}
 	else
 	if ( Sampled )
@@ -675,7 +679,7 @@ void ProcessQueue(CaseNo WFp, CaseNo WLp, CaseCount WCases)
 
 	    if ( EstMaxGR[Att] > ValThresh )
 	    {
-		EvalContinuousAtt(Att, WFp, WLp);
+		EvalContinuousAtt(Context, Att, WFp, WLp);
 
 		if ( Info[Att] > Epsilon &&
 		     (GR = Gain[Att] / Info[Att]) > ValThresh )
@@ -686,7 +690,7 @@ void ProcessQueue(CaseNo WFp, CaseNo WLp, CaseCount WCases)
 	}
 	else
 	{
-	    EvalContinuousAtt(Att, WFp, WLp);
+	    EvalContinuousAtt(Context, Att, WFp, WLp);
 	}
     }
 }
@@ -775,14 +779,14 @@ Attribute FindBestAtt(CaseCount Cases)
 /*************************************************************************/
 
 
-void EvalDiscrSplit(Attribute Att, CaseCount Cases)
+void EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases)
 /*   --------------  */
 {
     DiscrValue	v, NBr;
 
     Gain[Att] = None;
 
-    if ( Skip(Att) || Att == ClassAtt ) return;
+    if ( Skip(Att) || Att == Context->class_attribute ) return;
 
     if ( Ordered(Att) )
     {
@@ -831,7 +835,7 @@ void EvalDiscrSplit(Attribute Att, CaseCount Cases)
 /*************************************************************************/
 
 
-void Divide(Tree T, CaseNo Fp, CaseNo Lp, int Level)
+void Divide(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp, int Level)
 /*   ------  */
 {
     CaseNo	Bp, Ep, Missing, Cases, i;
@@ -844,7 +848,7 @@ void Divide(Tree T, CaseNo Fp, CaseNo Lp, int Level)
     PrevUnitWeights = UnitWeights;
 
     Att = T->Tested;
-    Missing = (Ep = Group(0, Fp, Lp, T)) - Fp + 1;
+    Missing = (Ep = Group(Context, 0, Fp, Lp, T)) - Fp + 1;
 
     KnownCases = T->Cases - (MissingCases = CountCases(Fp, Ep));
 
@@ -885,7 +889,7 @@ void Divide(Tree T, CaseNo Fp, CaseNo Lp, int Level)
     Bp = Fp;
     ForEach(v, 1, T->Forks)
     {
-	Ep = Group(v, Bp + Missing, Lp, T);
+	Ep = Group(Context, v, Bp + Missing, Lp, T);
 
 	assert(Bp + Missing <= Lp+1 && Ep <= Lp);
 
@@ -910,7 +914,7 @@ void Divide(Tree T, CaseNo Fp, CaseNo Lp, int Level)
 		}
 	    }
 
-	    FormTree(Bp, Ep, Level+1, &T->Branch[v]);
+	    FormTree(Context, Bp, Ep, Level+1, &T->Branch[v]);
 
 	    /*  Restore weights if changed  */
 
@@ -950,7 +954,8 @@ void Divide(Tree T, CaseNo Fp, CaseNo Lp, int Level)
 /*************************************************************************/
 
 
-CaseNo Group(DiscrValue V, CaseNo Bp, CaseNo Ep, Tree TestNode)
+CaseNo Group(c50_context *Context, DiscrValue V, CaseNo Bp, CaseNo Ep,
+	     Tree TestNode)
 /*     -----  */
 {
     CaseNo	i;
@@ -1001,7 +1006,7 @@ CaseNo Group(DiscrValue V, CaseNo Bp, CaseNo Ep, Tree TestNode)
 		Thresh = TestNode->Cut;
 		ForEach(i, Bp, Ep)
 		{
-		    if ( V == 1 ? NotApplic(Case[i], Att) :
+		    if ( V == 1 ? NotApplic(Context, Case[i], Att) :
 			 (CVal(Case[i], Att) <= Thresh) == (V == 2) )
 		    {
 			Swap(Bp, i);
