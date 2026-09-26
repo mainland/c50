@@ -131,6 +131,24 @@ def test_prediction_values_beyond_single_precision_name_the_feature(
         schema.dense_data(cases, "error")
 
 
+@pytest.mark.parametrize("method", ["predict", "predict_proba"])
+@pytest.mark.parametrize("value", [1e300, np.inf])
+def test_prediction_range_errors_name_the_row_in_x(
+    method: str, value: float
+) -> None:
+    from c50.sklearn import C50Classifier
+
+    rng = np.random.default_rng(0)
+    X = rng.random((40, 2))
+    y = np.where(X[:, 0] > 0.5, "a", "b")
+    classifier = C50Classifier(prediction_batch_size=2).fit(X, y)
+    cases = rng.random((8, 2))
+    cases[5, 1] = value
+
+    with pytest.raises(ValueError, match=r"feature 1 .* in row 5$"):
+        getattr(classifier, method)(cases)
+
+
 def test_object_values_beyond_single_precision_name_the_feature() -> None:
     X = np.asarray([[0.0], [1e300], [10**400]], dtype=object)
 
