@@ -2,19 +2,38 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Test time scalar normalization in the feature encoder."""
+"""Tests that dates and durations are categorical in every unit.
+
+NumPy converts dates and durations in some units to `int` when it converts an
+array to `object`, while the other units become `datetime.date`,
+`datetime.datetime`, and `datetime.timedelta`. The estimator keeps the values
+of the first group as `numpy.datetime64` and `numpy.timedelta64` scalars, so
+that each unit is categorical, and a model fitted on one unit rejects the same
+instants in another unit as unseen. Each case below fits or predicts with the
+same values in one unit, one container, and one role.
+"""
 
 from __future__ import annotations
 
+import datetime
+from collections.abc import Callable
+from functools import partial
+from typing import Any
+
 import numpy as np
 import pytest
-from c50._data import fit_schema, is_integer_time_dtype
+from c50._data import is_integer_time_dtype
+from c50.sklearn import C50Classifier
+from model_text import without_date
 
+OFFSETS = np.arange(24) % 4
+LABELS = np.asarray(["no", "yes", "no", "no"])[OFFSETS]
+UNITS = ("D", "s", "us", "ns")
 ALL_UNITS = (
     *("Y", "M", "W", "D", "h", "m", "s", "ms", "us"),
     *("ns", "ps", "fs", "as"),
 )
-
+KINDS = ("date", "duration")
 # The units of each kind that NumPy converts to `int` under `astype(object)`.
 # `test_the_scalar_units_are_the_ones_that_numpy_converts_to_int` checks them
 # against NumPy, and the other units are the ones that were categorical before.
@@ -22,6 +41,128 @@ SCALAR_UNITS = {
     "date": ("ns", "ps", "fs", "as"),
     "duration": ("Y", "M", "ns", "ps", "fs", "as"),
 }
+
+
+def _values(kind: str, unit: str) -> np.ndarray:
+    steps = OFFSETS.astype(f"timedelta64[{unit}]")
+    if kind == "duration":
+        return steps
+    return np.datetime64("1970-01-01", unit) + steps
+
+
+def _object_array(values: np.ndarray) -> np.ndarray:
+    result = np.empty((len(values), 1), dtype=object)
+    result[:, 0] = list(values)
+    return result
+
+
+def _polars(values: np.ndarray) -> Any:
+    pl = pytest.importorskip("polars")
+    return pl.DataFrame({"t": pl.Series(values)})
+
+
+def _pyarrow(values: np.ndarray) -> Any:
+    pa = pytest.importorskip("pyarrow")
+    return pa.table({"t": pa.array(values)})
+
+
+def _polars_zoned(values: np.ndarray) -> Any:
+    pl = pytest.importorskip("polars")
+    return pl.DataFrame({"t": pl.Series(values).dt.replace_time_zone("UTC")})
+
+
+def _pyarrow_zoned(values: np.ndarray) -> Any:
+    pa = pytest.importorskip("pyarrow")
+    return pa.table({"t": pa.array(values, pa.timestamp("ns", tz="UTC"))})
+
+
+# Each container maps a one-dimensional array to a feature matrix, with the
+# units that the container can hold and the kinds that it can hold.
+_Make = Callable[[np.ndarray], Any]
+CONTAINERS: dict[str, tuple[_Make, tuple[str, ...], tuple[str, ...]]] = {
+    "ndarray": (lambda v: v.reshape(-1, 1), ALL_UNITS, KINDS),
+    "object-array": (_object_array, ALL_UNITS, KINDS),
+    "nested-list": (lambda v: [[x] for x in v], ALL_UNITS, KINDS),
+    "polars": (_polars, ("us", "ns"), KINDS),
+    "pyarrow": (_pyarrow, ("s", "us", "ns"), KINDS),
+    "polars-zoned": (_polars_zoned, ("ns",), ("date",)),
+    "pyarrow-zoned": (_pyarrow_zoned, ("ns",), ("date",)),
+}
+CASES = [
+    pytest.param(kind, unit, name, id=f"{kind}-{unit}-{name}")
+    for name, (_, units, kinds) in CONTAINERS.items()
+    for kind in kinds
+    for unit in units
+]
+
+
+def _fit(X: Any, **parameters: Any) -> C50Classifier:
+    return C50Classifier(minimum_cases=1, **parameters).fit(X, LABELS)
+
+
+def _reference(kind: str) -> C50Classifier:
+    """Fit on microseconds, a unit that was categorical before."""
+    return _fit(_values(kind, "us").reshape(-1, 1))
+
+
+def _is_scalar_category(category: object, kind: str, unit: str) -> bool:
+    if unit in SCALAR_UNITS[kind]:
+        return isinstance(
+            category, np.datetime64 if kind == "date" else np.timedelta64
+        )
+    return isinstance(
+        category,
+        (datetime.date, datetime.datetime)
+        if kind == "date"
+        else datetime.timedelta,
+    )
+
+
+@pytest.mark.parametrize(("kind", "unit", "name"), CASES)
+def test_fit_is_categorical_and_matches_microseconds(
+    kind: str, unit: str, name: str
+) -> None:
+    make = CONTAINERS[name][0]
+    classifier = _fit(make(_values(kind, unit)))
+    reference = _reference(kind)
+    assert list(classifier.categorical_features_) == [0]
+    assert without_date(classifier.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
+    assert len(classifier.categories_[0]) == 4
+    assert all(
+        _is_scalar_category(category, kind, unit)
+        for category in classifier.categories_[0]
+    )
+
+
+@pytest.mark.parametrize(("kind", "unit", "name"), CASES)
+def test_predict_matches_microseconds(kind: str, unit: str, name: str) -> None:
+    make = CONTAINERS[name][0]
+    values = make(_values(kind, unit))
+    classifier = _fit(values)
+    assert list(classifier.categorical_features_) == [0]
+    reference = _reference(kind)
+    expected = reference.predict(_values(kind, "us").reshape(-1, 1))
+    np.testing.assert_array_equal(classifier.predict(values), expected)
+    np.testing.assert_array_equal(
+        classifier.predict_proba(values),
+        reference.predict_proba(_values(kind, "us").reshape(-1, 1)),
+    )
+
+
+@pytest.mark.parametrize("kind", KINDS)
+@pytest.mark.parametrize("unit", ALL_UNITS)
+def test_named_categorical_column_holds_the_expected_form(
+    kind: str, unit: str
+) -> None:
+    classifier = _fit(
+        _values(kind, unit).reshape(-1, 1), categorical_features=[0]
+    )
+    assert all(
+        _is_scalar_category(category, kind, unit)
+        for category in classifier.categories_[0]
+    )
 
 
 @pytest.mark.parametrize("kind", ["M", "m"])
@@ -36,16 +177,102 @@ def test_the_scalar_units_are_the_ones_that_numpy_converts_to_int(
     assert is_integer_time_dtype(dtype) == (unit in SCALAR_UNITS[name])
 
 
-@pytest.mark.parametrize("dtype", ["datetime64[ns]", "timedelta64[M]"])
-def test_schema_preserves_time_scalars_and_missing_values(dtype: str) -> None:
-    X = np.array([[1], [2], ["NaT"]], dtype=dtype)
+@pytest.mark.parametrize("kind", KINDS)
+def test_not_a_time_is_missing_in_every_unit(kind: str) -> None:
+    def column(unit: str) -> np.ndarray:
+        values = _values(kind, unit).copy()
+        values[::5] = np.array(["NaT"], dtype=values.dtype)[0]
+        return values
 
-    schema = fit_schema(X, categorical_features=None)
+    reference = _fit(column("us").reshape(-1, 1))
+    for unit in ALL_UNITS:
+        classifier = _fit(column(unit).reshape(-1, 1))
+        assert without_date(classifier.model_.serialized_data) == without_date(
+            reference.model_.serialized_data
+        )
+        assert len(classifier.categories_[0]) == 4
+        np.testing.assert_array_equal(
+            classifier.predict(column(unit).reshape(-1, 1)),
+            reference.predict(column("us").reshape(-1, 1)),
+        )
 
-    assert schema.categorical_indices == (0,)
-    assert all(type(value) is type(X[0, 0]) for value in schema.categories[0])
-    np.testing.assert_array_equal(
-        schema.dense_data(X, "error").ravel(), [0, 1, np.nan]
+
+@pytest.mark.parametrize(
+    ("kind", "unit"),
+    [(kind, unit) for kind in KINDS for unit in SCALAR_UNITS[kind]],
+)
+def test_scalar_units_and_other_units_never_match(
+    kind: str, unit: str
+) -> None:
+    # The categories match by type. A NumPy scalar never equals a `datetime`
+    # object, so the first value, which has the same instant in every unit, is
+    # unseen in a model of the other form. Units within the NumPy group share a
+    # type, so they are not part of this rule.
+    scalars = _values(kind, unit).reshape(-1, 1)
+    for other_unit in ("us", "D"):
+        others = _values(kind, other_unit).reshape(-1, 1)
+        for fitted, other in ((scalars, others), (others, scalars)):
+            classifier = _fit(fitted)
+            with pytest.raises(ValueError, match="unseen category"):
+                classifier.predict(other)
+            lenient = _fit(fitted, unknown_categories="missing")
+            assert lenient.predict(other).shape == (len(other),)
+
+
+def _empty_polars() -> Any:
+    pl = pytest.importorskip("polars")
+    return pl.DataFrame({"t": pl.Series([], dtype=pl.Datetime("ns"))})
+
+
+def _empty_pyarrow() -> Any:
+    pa = pytest.importorskip("pyarrow")
+    return pa.table({"t": pa.array([], pa.timestamp("ns"))})
+
+
+@pytest.mark.parametrize(
+    ("make", "empty"), [(_polars, _empty_polars), (_pyarrow, _empty_pyarrow)]
+)
+@pytest.mark.parametrize("role", ["fit", "predict", "predict_proba"])
+def test_a_table_of_nanoseconds_without_rows_is_rejected(
+    make: _Make, empty: Callable[[], Any], role: str
+) -> None:
+    # The sample-count check of scikit-learn applies in every container.
+    table = empty()
+    classifier = _fit(make(_values("date", "ns")))
+    call = (
+        partial(C50Classifier(minimum_cases=1).fit, table, LABELS[:0])
+        if role == "fit"
+        else partial(getattr(classifier, role), table)
     )
-    with pytest.raises(TypeError, match="feature 0 is continuous"):
-        fit_schema(X, categorical_features=())
+    with pytest.raises(ValueError, match=r"0 sample\(s\)"):
+        call()
+
+
+class _Frame:
+    """Has `columns`, as a data frame does, and converts to an array."""
+
+    columns = ("t",)
+
+    def __init__(self, values: np.ndarray) -> None:
+        self._values = values
+
+    def __array__(
+        self, dtype: Any = None, copy: bool | None = None
+    ) -> np.ndarray:
+        return np.asarray(self._values, dtype=dtype)
+
+
+@pytest.mark.parametrize("shape", [(), (24,)], ids=["scalar", "vector"])
+def test_a_table_of_nanoseconds_must_be_two_dimensional(
+    shape: tuple[int, ...],
+) -> None:
+    # Only a two-dimensional table of such values takes the path of the tables.
+    # Any other shape goes to scikit-learn, which reports it as it does for
+    # every other container.
+    values = _values("date", "ns")
+    table = _Frame(values.reshape(shape) if shape else values[0])
+    classifier = _fit(values.reshape(-1, 1))
+    with pytest.raises(ValueError, match="Expected 2D array"):
+        C50Classifier(minimum_cases=1).fit(table, LABELS)
+    with pytest.raises(ValueError, match="Expected 2D array"):
+        classifier.predict(table)

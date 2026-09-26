@@ -436,7 +436,7 @@ def is_integer_time_dtype(dtype: np.dtype[Any]) -> bool:
     """Return whether NumPy converts ``dtype`` to ``int`` objects.
 
     This holds for ``datetime64`` in nanoseconds and finer, and for
-    ``timedelta64`` in nanoseconds and finer, years, and months. The encoder
+    ``timedelta64`` in nanoseconds and finer, years, and months. The estimator
     keeps such values as ``numpy.datetime64`` and ``numpy.timedelta64``
     scalars, so that the feature stays categorical.
     """
