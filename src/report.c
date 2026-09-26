@@ -1,6 +1,7 @@
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
+/*  Modifications Copyright 2026 Geoffrey Mainland.			 */
 /*									 */
 /*  This file is part of C5.0 GPL Edition, a single-threaded version	 */
 /*  of C5.0 release 2.07.						 */
@@ -50,8 +51,8 @@ int main(int argc, char *argv[])
 {
     char	Line[100], *p;
     int		Cases, Folds, Repeats, f, r, i, N,
-		Size=0, Errs=0, Form, OK;
-    float	***Raw, **Average=0, FX, Tests, Cost=0;
+		Size=0, Errs=0, Form, OK, Status=0;
+    float	***Raw=0, **Average=0, FX, Tests, Cost=0;
 
     sscanf(argv[1], "%d", &Cases);
     sscanf(argv[2], "%d", &Folds);
@@ -119,7 +120,8 @@ int main(int argc, char *argv[])
 	    if ( r + f != 0 && ! fgets(Line, 100, stdin) )
 	    {
 		printf("\nExpecting %d lines\n", Folds * Repeats);
-		exit(1);
+		Status = 1;
+		goto cleanup;
 	    }
 
 	    Tests = Cases / Folds + ( f >= Folds - Cases % Folds);
@@ -166,7 +168,8 @@ int main(int argc, char *argv[])
 	    if ( ! OK )
 	    {
 		printf("\nCannot parse line\n\t%s", Line);
-		exit(1);
+		Status = 1;
+		goto cleanup;
 	    }
 
 	    Raw[r][f][SIZE] = Size;
@@ -196,7 +199,8 @@ int main(int argc, char *argv[])
     if ( fgets(Line, 100, stdin) )
     {
 	printf("\nExpecting %d lines\n", Folds * Repeats * 2);
-	exit(1);
+	Status = 1;
+	goto cleanup;
     }
 
     if ( Average )
@@ -207,8 +211,23 @@ int main(int argc, char *argv[])
     {
 	PrintSummary(Raw[SIZE], Folds, "Fold");
     }
+cleanup:
+    for ( r = 0 ; r < Repeats ; r++ )
+    {
+	if ( Raw[r] )
+	{
+	    for ( f = 0 ; f < Folds ; f++ )
+	    {
+		free(Raw[r][f]);
+	    }
+	    free(Raw[r]);
+	}
+	if ( Average ) free(Average[r]);
+    }
+    free(Raw);
+    free(Average);
 
-    return 0;
+    return Status;
 }
 
 
