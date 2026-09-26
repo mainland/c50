@@ -262,3 +262,10 @@ The workflow runs on pull requests, pushes to `main`, `dev`, and topic branches,
 and manual dispatch. It uses read-only repository permissions and pinned action
 revisions. A checked-in workflow defines the intended checks. Hosted results
 must be inspected before claiming a platform or dependency configuration passed.
+
+`.github/workflows/sanitizers.yml` runs separate Clang address/undefined/leak
+and GCC thread-sanitizer jobs on pull requests, integration-branch pushes,
+manual dispatch, and a weekly schedule. Sanitizer failures fail the job.
+The thread job disables address randomization for the test process to avoid
+GCC TSan's Linux shadow-memory mapping conflict. The ordinary local test target
+does not run these additional builds.
