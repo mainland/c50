@@ -6,6 +6,7 @@
 #include "defns.i"
 #include "extern.i"
 #include "c50_input.h"
+#include "c50_api_internal.h"
 
 int main(int argc, char *argv[])
 {
@@ -48,12 +49,12 @@ int main(int argc, char *argv[])
     Of = stderr;
     c50_input_init_memory(&input, names, sizeof(names) - 1);
     GetNames(context, &input);
-    if ( MaxClass != 2 || MaxAtt != 2 ) return 1;
-    if ( strcmp(ClassName[1], "low") || strcmp(ClassName[2], "high") )
+    if ( context->schema.max_class != 2 || context->schema.max_attribute != 2 ) return 1;
+    if ( strcmp(context->schema.class_names[1], "low") || strcmp(context->schema.class_names[2], "high") )
     {
         return 1;
     }
-    if ( strcmp(AttName[1], "signal") || strcmp(AttName[2], "group") )
+    if ( strcmp(context->schema.attribute_names[1], "signal") || strcmp(context->schema.attribute_names[2], "group") )
     {
         return 1;
     }

@@ -214,9 +214,9 @@ int main(int Argc, char *Argv[])
     GetNames(Context, &NamesInput);
     fclose(F);
 
-    if ( Context->class_attribute )
+    if ( Context->schema.class_attribute )
     {
-	fprintf(Of, T_ClassVar, AttName[Context->class_attribute]);
+	fprintf(Of, T_ClassVar, Context->schema.attribute_names[Context->schema.class_attribute]);
     }
 
     NotifyStage(READDATA);
@@ -224,14 +224,14 @@ int main(int Argc, char *Argv[])
 
     /*  Allocate space for SomeMiss[] and SomeNA[] */
 
-    SomeMiss = AllocZero(MaxAtt+1, Boolean);
-    SomeNA   = AllocZero(MaxAtt+1, Boolean);
+    SomeMiss = AllocZero(Context->schema.max_attribute+1, Boolean);
+    SomeNA   = AllocZero(Context->schema.max_attribute+1, Boolean);
 
     /*  Read data file  */
 
     if ( ! (F = GetFile(".data", "r")) ) Error(NOFILE, "", "");
     GetData(Context, F, true, false);
-    fprintf(Of, TX_ReadData(MaxCase+1, MaxAtt, FileStem));
+    fprintf(Of, TX_ReadData(MaxCase+1, Context->schema.max_attribute, FileStem));
 
     if ( XVAL && (F = GetFile(".test", "r")) )
     {
@@ -242,7 +242,7 @@ int main(int Argc, char *Argv[])
 
     /*  Check whether case weight attribute appears  */
 
-    if ( Context->case_weight_attribute )
+    if ( Context->schema.case_weight_attribute )
     {
 	fprintf(Of, T_CWtAtt);
     }
@@ -262,13 +262,13 @@ int main(int Argc, char *Argv[])
     {
 	fprintf(Of, "%s", ( AttExIn == -1 ? T_AttributesOut : T_AttributesIn ));
 
-	ForEach(Att, 1, MaxAtt)
+	ForEach(Att, 1, Context->schema.max_attribute)
 	{
-	    if ( Att != Context->class_attribute &&
-		 Att != Context->case_weight_attribute &&
+	    if ( Att != Context->schema.class_attribute &&
+		 Att != Context->schema.case_weight_attribute &&
 		 ( StatBit(Att, SKIP) > 0 ) == ( AttExIn == -1 ) )
 	    {
-		fprintf(Of, "    %s\n", AttName[Att]);
+		fprintf(Of, "    %s\n", Context->schema.attribute_names[Att]);
 	    }
 	}
     }
@@ -289,7 +289,7 @@ int main(int Argc, char *Argv[])
     if ( WINNOW )
     {
 	NotifyStage(WINNOWATTS);
-	Progress(-MaxAtt);
+	Progress(-Context->schema.max_attribute);
 	WinnowAtts(Context);
     }
 

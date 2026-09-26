@@ -187,7 +187,7 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 
     if ( T->NodeType == BrThresh )
     {
-	Verbosity(1, fprintf(Of, "\nTest %s <> %g\n", AttName[Att], T->Cut))
+	Verbosity(1, fprintf(Of, "\nTest %s <> %g\n", Context->schema.attribute_names[Att], T->Cut))
 
 	/*  Skip N/A values  */
 

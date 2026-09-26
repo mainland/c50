@@ -49,7 +49,7 @@ ClassNo TreeClassify(c50_context *Context, DataRec Case, Tree DecisionTree)
 {
     ClassNo	c;
 
-    ForEach(c, 0, MaxClass)
+    ForEach(c, 0, Context->schema.max_class)
     {
 	Context->class_sum[c] = 0;
     }
@@ -105,7 +105,7 @@ void FindLeaf(c50_context *Context, DataRec Case, Tree T, Tree PT,
 
 	    /*  Update from all classes  */
 
-	    ForEach(c, 1, MaxClass)
+	    ForEach(c, 1, Context->schema.max_class)
 	    {
 		Context->class_sum[c] += Fraction * T->ClassDist[c] / T->Cases;
 	    }
@@ -114,7 +114,7 @@ void FindLeaf(c50_context *Context, DataRec Case, Tree T, Tree PT,
 
 	case BrDiscr:  /* test of discrete attribute */
 
-	    Dv = DVal(Case, T->Tested);	/* > MaxAttVal if unknown */
+	    Dv = DVal(Case, T->Tested);	/* > Context->schema.max_attribute_value if unknown */
 
 	    if ( Dv <= T->Forks )	/*  Make sure not new discrete value  */
 	    {
@@ -159,9 +159,9 @@ void FindLeaf(c50_context *Context, DataRec Case, Tree T, Tree PT,
 
 	case BrSubset:  /* subset test on discrete attribute  */
 
-	    Dv = DVal(Case, T->Tested);	/* > MaxAttVal if unknown */
+	    Dv = DVal(Case, T->Tested);	/* > Context->schema.max_attribute_value if unknown */
 
-	    if ( Dv <= MaxAttVal[T->Tested] )
+	    if ( Dv <= Context->schema.max_attribute_value[T->Tested] )
 	    {
 		ForEach(v, 1, T->Forks)
 		{
@@ -228,7 +228,7 @@ ClassNo RuleClassify(c50_context *Context, DataRec Case, CRuleSet RS)
     CRule	R;
     RuleNo	r;
 
-    ForEach(c, 0, MaxClass)
+    ForEach(c, 0, Context->schema.max_class)
     {
 	Context->class_sum[c] = 0;
 	Context->most_specific_rules[c] = Nil;
@@ -311,7 +311,7 @@ ClassNo RuleClassify(c50_context *Context, DataRec Case, CRuleSet RS)
 	return RS->SDefault;
     }
 
-    ForEach(c, 1, MaxClass)
+    ForEach(c, 1, Context->schema.max_class)
     {
 	Context->class_sum[c] /= TotWeight;
     }
@@ -363,7 +363,7 @@ int FindOutcome(c50_context *Context, DataRec Case, Condition OneCond)
 	case BrSubset:  /* subset test on discrete attribute  */
 
 	    v = XDVal(Case, Att);
-	    Outcome = ( v <= MaxAttVal[Att] && In(v, OneCond->Subset) ?
+	    Outcome = ( v <= Context->schema.max_attribute_value[Att] && In(v, OneCond->Subset) ?
 			OneCond->TestValue : 0 );
     }
 
@@ -558,7 +558,7 @@ ClassNo BoostClassify(c50_context *Context, DataRec Case, int MaxTrial)
     int		t;
     float	Total=0;
 
-    ForEach(c, 1, MaxClass)
+    ForEach(c, 1, Context->schema.max_class)
     {
 	Context->votes[c] = 0;
     }
@@ -576,7 +576,7 @@ ClassNo BoostClassify(c50_context *Context, DataRec Case, int MaxTrial)
 
     /*  Copy votes into the class sums  */
 
-    ForEach(c, 1, MaxClass)
+    ForEach(c, 1, Context->schema.max_class)
     {
 	Context->class_sum[c] = Context->votes[c] / Total;
     }
@@ -604,10 +604,10 @@ ClassNo SelectClass(c50_context *Context, ClassNo Default, Boolean UseCosts)
 
     if ( UseCosts )
     {
-	ForEach(c, 1, MaxClass)
+	ForEach(c, 1, Context->schema.max_class)
 	{
 	    ExpCost = 0;
-	    ForEach(cc, 1, MaxClass)
+	    ForEach(cc, 1, Context->schema.max_class)
 	    {
 		if ( cc == c ) continue;
 		ExpCost += Context->class_sum[cc] * MCost[c][cc];
@@ -626,7 +626,7 @@ ClassNo SelectClass(c50_context *Context, ClassNo Default, Boolean UseCosts)
     }
     else
     {
-	ForEach(c, 1, MaxClass)
+	ForEach(c, 1, Context->schema.max_class)
 	{
 	    if ( Context->class_sum[c] > Context->class_sum[BestClass] ) BestClass = c;
 	}
