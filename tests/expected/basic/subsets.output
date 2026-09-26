@@ -1,0 +1,56 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `basic'
+	Tests on discrete attribute groups
+
+Read 20 cases (3 attributes) from basic.data
+
+Decision tree:
+
+group = gamma: high (7)
+group in {alpha,beta}:
+:...signal = N/A: low (1.1)
+    signal <= 5: low (6.5)
+    signal > 5: high (5.4/0.4)
+
+
+Evaluation on training data (20 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     4    0( 0.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     8          (a): class low
+	          12    (b): class high
+
+
+	Attribute usage:
+
+	    100%  group
+	     60%  signal
+
+
+Evaluation on test data (7 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     4    0( 0.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     3          (a): class low
+	           4    (b): class high
+
+
+Time: <elapsed> secs
