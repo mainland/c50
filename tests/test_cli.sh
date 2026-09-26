@@ -135,6 +135,57 @@ run_missing_file_format()
         "$missing_case_dir/output.actual"
 }
 
+# Rules with a costs file on data with no cases or with one class among three.
+# The average cost of the rule normalization is then 0/0. Release 2.07 forms no
+# rules, writes the first class or the only class as the default, and exits 0.
+# This project does the same.
+run_rule_costs_degenerate()
+{
+    degenerate_name=$1
+    degenerate_data=$2
+    shift 2
+
+    degenerate_dir="$test_dir/rule-costs-$degenerate_name"
+    mkdir "$degenerate_dir"
+    cp "$script_dir/fixtures/multiclass/multiclass.names" "$degenerate_dir/"
+    cp "$script_dir/fixtures/multiclass/multiclass.test" "$degenerate_dir/"
+    printf '%s' "$degenerate_data" > "$degenerate_dir/multiclass.data"
+    printf 'red, green: 2\nblue, red: 3\n' > "$degenerate_dir/multiclass.costs"
+
+    set +e
+    (
+        cd "$degenerate_dir"
+        "$binary" -f multiclass -r "$@" > output.raw 2>&1
+    )
+    degenerate_exit_code=$?
+    set -e
+
+    if test "$degenerate_exit_code" -ne 0; then
+        printf 'rule costs on %s (%s) returned %d, expected 0\n' \
+            "$degenerate_name" "$*" "$degenerate_exit_code" >&2
+        cat "$degenerate_dir/output.raw" >&2
+        return 1
+    fi
+    if ! grep -F -x -e 'Default class: red' \
+        "$degenerate_dir/output.raw" > /dev/null; then
+        printf 'rule costs on %s (%s) did not default to red\n' \
+            "$degenerate_name" "$*" >&2
+        cat "$degenerate_dir/output.raw" >&2
+        return 1
+    fi
+    printf 'costs="1"\nentries="1"\nrules="0" default="red"\n' \
+        > "$degenerate_dir/rules.expected"
+    normalize_model "$degenerate_dir/multiclass.rules" |
+        sed -e '1d' > "$degenerate_dir/rules.actual"
+    if ! cmp -s "$degenerate_dir/rules.expected" \
+        "$degenerate_dir/rules.actual"; then
+        printf 'rule costs on %s (%s) wrote an unexpected model\n' \
+            "$degenerate_name" "$*" >&2
+        cat "$degenerate_dir/rules.actual" >&2
+        return 1
+    fi
+}
+
 # A failure that `Error` does not print, such as a classifier file that cannot
 # be written, reports its message once on the output stream. Release 2.07
 # exits 0 for the same write failure, so the exit status has no reference.
@@ -258,6 +309,21 @@ run_case multiclass rules rules -r
 # errors, and stops with exit 1 at the tenth.
 run_case bad-values tree tree
 run_case error-limit tree - --status 1
+one_class_data='1, circle, red.
+2, circle, red.
+3, circle, red.
+4, circle, red.
+6, triangle, red.
+7, triangle, red.
+8, triangle, red.
+9, triangle, red.
+'
+run_rule_costs_degenerate zero-cases ''
+run_rule_costs_degenerate zero-cases-bagged '' -b
+run_rule_costs_degenerate zero-cases-utility '' -u 2
+run_rule_costs_degenerate one-class "$one_class_data"
+run_rule_costs_degenerate one-class-bagged "$one_class_data" -b
+run_rule_costs_degenerate one-class-utility "$one_class_data" -u 2
 run_invalid_definition
 run_missing_file_format
 run_unwritable_classifier

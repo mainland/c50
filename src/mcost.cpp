@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: validate costs before normalization. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -35,6 +36,7 @@
 #include "defns.i"
 #include "extern.i"
 #include "c50_api_internal.h"
+#include <cerrno>
 
 
 void GetMCostsInput(c50_context *Context, c50_input *Cf)
@@ -64,8 +66,12 @@ void GetMCostsInput(c50_context *Context, c50_input *Cf)
 	    Error(Context, BADCOSTCLASS, Name, "");
 	}
 
-	if ( ! ReadNameInput(Context, Cf, Name, 1000, ':') ||
-	     sscanf(Name, "%f", &Val) != 1 || Val < 0 )
+        const bool have_value = ReadNameInput(Context, Cf, Name, 1000, ':');
+        char *end = Name;
+        errno = 0;
+        Val = have_value ? strtof(Name, &end) : 0;
+	if ( !have_value || end == Name || *end || errno == ERANGE ||
+             !isfinite(Val) || Val < 0 )
 	{
 	    Error(Context, BADCOST, "", "");
 	    Val = 1;
@@ -93,6 +99,21 @@ void GetMCostsInput(c50_context *Context, c50_input *Cf)
 	    Context->costs.matrix[Pred][Real] = Val;
 	}
     }
+    // Each possible actual class must have a positive, representable total
+    // error cost. Otherwise binary reweighting or prediction confidence can
+    // divide by zero. Individual multiclass zero entries remain valid.
+    if (Context->costs.matrix)
+    {
+        ForEach(r, 1, Context->schema.max_class)
+        {
+            double total = 0;
+            ForEach(p, 1, Context->schema.max_class)
+                total += Context->costs.matrix[p][r];
+            if (!isfinite(total) || total <= 0 || total > FLT_MAX)
+                Error(Context, BADCOST, "each class requires a finite positive total error cost", "");
+        }
+    }
+
     /*  Don't need weights etc. for predict or interpret, or
 	if not using cost weighting  */
 
@@ -128,8 +149,14 @@ void GetMCostsInput(c50_context *Context, c50_input *Cf)
     Sum = (Context->training.class_frequencies[1] * Context->costs.matrix[2][1] + Context->training.class_frequencies[2] * Context->costs.matrix[1][2]) /
 	  (Context->training.class_frequencies[1] + Context->training.class_frequencies[2]);
 
+    if (!isfinite(Sum) || Sum <= 0)
+        Error(Context, BADCOST, "costs give no finite positive weight to observed classes", "");
+
     Context->costs.weight_multipliers[1] = Context->costs.matrix[2][1] / Sum;
     Context->costs.weight_multipliers[2] = Context->costs.matrix[1][2] / Sum;
+    if (!isfinite(Context->costs.weight_multipliers[1]) ||
+        !isfinite(Context->costs.weight_multipliers[2]))
+        Error(Context, BADCOST, "cost weight normalization overflows", "");
 
     /*  Adjust Context->options.minimum_cases to take account of case reweighting  */
 
