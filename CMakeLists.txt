@@ -220,6 +220,11 @@ if(C50_BUILD_BENCHMARKS)
                     --features 12
                     --categorical-features 2
         )
+        add_test(
+            NAME parallel-workload-equivalence
+            COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_parallel_workload.sh"
+                    "$<TARGET_FILE:c50_native_workload>"
+        )
     endif()
 endif()
 

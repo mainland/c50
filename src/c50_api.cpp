@@ -22,6 +22,7 @@ c50::detail::context_state::~context_state()
 std::unique_ptr<c50_context> c50_make_context()
 {
     auto context = std::make_unique<c50_context>();
+    context->split_worker_count = 1;
     context->schema.max_discrete_value = 3;
     snprintf(context->schema.unknown_class_name,
              sizeof(context->schema.unknown_class_name), "%s", "?");
@@ -45,6 +46,14 @@ c50::context::context() : state_(c50_make_context()) {}
 c50::context::~context() = default;
 c50::context::context(context &&) noexcept = default;
 c50::context &c50::context::operator=(context &&) noexcept = default;
+
+void c50::context::split_workers(unsigned count)
+{
+    if (count < 1 || count > 8)
+        throw exception(error_code::invalid_argument,
+                        "split worker count must be between 1 and 8");
+    state_->split_worker_count = count;
+}
 
 void c50_clear_prediction_state(c50_context *context)
 {

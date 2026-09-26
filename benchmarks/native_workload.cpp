@@ -31,6 +31,7 @@ struct configuration
     std::size_t categorical_features = 5;
     std::size_t categories = 8;
     std::uint64_t seed = 1729;
+    std::size_t split_workers = 1;
     bool subsets = false;
     bool quiet = false;
 };
@@ -88,6 +89,7 @@ configuration parse_arguments(int argc, char **argv)
                    "(default 8)\n"
                 << "  --seed N                  Deterministic generator seed "
                    "(default 1729)\n"
+                << "  --workers N               Split workers (1 to 8, default 1)\n"
                 << "  --subsets                 Enable subset splits\n"
                 << "  --quiet                   Suppress the JSON result\n";
             std::exit(0);
@@ -128,6 +130,10 @@ configuration parse_arguments(int argc, char **argv)
         {
             config.seed = parse_size(option, value);
         }
+        else if ( option == "--workers" )
+        {
+            config.split_workers = parse_size(option, value);
+        }
         else
         {
             throw std::invalid_argument("unknown option: " +
@@ -136,6 +142,10 @@ configuration parse_arguments(int argc, char **argv)
     }
 
     if ( config.rows == 0 ) throw std::invalid_argument("rows must be positive");
+    if ( config.split_workers < 1 || config.split_workers > 8 )
+    {
+        throw std::invalid_argument("workers must be between 1 and 8");
+    }
     if ( config.features == 0 )
     {
         throw std::invalid_argument("features must be positive");
@@ -251,6 +261,7 @@ int run(const configuration &config)
     const std::string names = make_names(config);
 
     c50::context context;
+    context.split_workers(static_cast<unsigned>(config.split_workers));
     const c50::dense_dataset dataset(values.data(), config.rows, config.features,
                                      classes.data());
     c50::options options;
@@ -286,6 +297,7 @@ int run(const configuration &config)
             << "    \"features\": " << config.features << ",\n"
             << "    \"rows\": " << config.rows << ",\n"
             << "    \"seed\": " << config.seed << ",\n"
+            << "    \"split_workers\": " << config.split_workers << ",\n"
             << "    \"subsets\": " << (config.subsets ? "true" : "false") << "\n"
             << "  }\n"
             << "}\n";

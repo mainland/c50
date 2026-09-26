@@ -36,7 +36,12 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+#include <algorithm>
+#include <array>
+#include <exception>
+#include <future>
 #include <limits>
+#include <vector>
 
 
 #define		SAMPLEUNIT	2000
@@ -69,10 +74,12 @@ void c50_split_workspace_deleter::operator()(
 /*************************************************************************/
 
 
-static auto MakeSplitWorkspace(c50_context *Context)
+using SplitWorkspacePtr =
+    std::unique_ptr<SplitWorkspace, c50_split_workspace_deleter>;
+
+
+static SplitWorkspacePtr MakeSplitWorkspace(c50_context *Context)
 {
-    using WorkspacePtr =
-        std::unique_ptr<SplitWorkspace, c50_split_workspace_deleter>;
     DiscrValue v;
     if ( Context->schema.max_discrete_value < 3 ||
          Context->schema.max_discrete_value >
@@ -84,7 +91,7 @@ static auto MakeSplitWorkspace(c50_context *Context)
         Error(Context, NOMEM, "", "");
     }
 
-    WorkspacePtr Workspace(new SplitWorkspace{});
+    SplitWorkspacePtr Workspace(new SplitWorkspace{});
     Workspace->MaxDiscrValue = Context->schema.max_discrete_value;
     DiscrValue vMax = Max(3, Context->schema.max_discrete_value + 1);
 
@@ -695,9 +702,111 @@ static void PublishSplitResult(c50_context *Context, Attribute Att,
 }
 
 
+static bool CanEvaluateQueueInParallel(c50_context *Context,
+                                       CaseNo WFp, CaseNo WLp)
+{
+    constexpr size_t MinimumCases = 10000;
+    return Context->split_worker_count > 1 &&
+           Context->splits.waiting_count > 1 &&
+           ! Context->splits.sampled &&
+           Context->splits.sample_fraction == 1 &&
+           Context->options.verbosity == 0 &&
+           WFp >= 0 && WLp >= WFp &&
+           static_cast<size_t>(WLp - WFp) + 1 >= MinimumCases;
+}
+
+
+static void EvaluateQueueInParallel(c50_context *Context, CaseNo WFp,
+                                    CaseNo WLp, CaseCount WCases)
+{
+    std::vector<Attribute> Queue;
+    std::vector<SplitResult> Results;
+    Queue.reserve(Context->splits.waiting_count);
+    Results.reserve(Context->splits.waiting_count);
+    while ( Context->splits.waiting_count > 0 )
+    {
+        Attribute Att = Context->splits.waiting_attributes[
+            --Context->splits.waiting_count];
+        Queue.push_back(Att);
+        Results.push_back(ReadSplitResult(Context, Att));
+    }
+
+    const size_t Workers = std::min<size_t>(Context->split_worker_count,
+                                            Queue.size());
+    std::array<SplitWorkspace *, 8> Workspaces{};
+    std::vector<SplitWorkspacePtr> ExtraWorkspaces;
+    ExtraWorkspaces.reserve(Workers - 1);
+    Workspaces[0] = Context->training.environment.get();
+    for ( size_t Worker = 1; Worker < Workers; ++Worker )
+    {
+        ExtraWorkspaces.push_back(MakeSplitWorkspace(Context));
+        Workspaces[Worker] = ExtraWorkspaces.back().get();
+    }
+
+    auto EvaluateWorker = [&](size_t Worker)
+    {
+        SplitWorkspace &Workspace = *Workspaces[Worker];
+        for ( size_t Index = Worker; Index < Queue.size(); Index += Workers )
+        {
+            Attribute Att = Queue[Index];
+            if ( Discrete(Att) )
+            {
+                EvalDiscrSplit(Context, Workspace, Results[Index], Att, WCases);
+            }
+            else
+            {
+                EvalContinuousAtt(Context, Workspace, Results[Index], Att,
+                                  WFp, WLp);
+            }
+        }
+    };
+
+    std::vector<std::future<void>> Tasks;
+    Tasks.reserve(Workers - 1);
+    for ( size_t Worker = 1; Worker < Workers; ++Worker )
+    {
+        Tasks.push_back(std::async(std::launch::async, EvaluateWorker, Worker));
+    }
+
+    std::exception_ptr Failure;
+    try
+    {
+        EvaluateWorker(0);
+    }
+    catch ( ... )
+    {
+        Failure = std::current_exception();
+    }
+    for ( auto &Task : Tasks )
+    {
+        try
+        {
+            Task.get();
+        }
+        catch ( ... )
+        {
+            if ( ! Failure ) Failure = std::current_exception();
+        }
+    }
+    if ( Failure ) std::rethrow_exception(Failure);
+
+    // Preserve the serial queue order for publication and tie selection.
+    for ( size_t Index = 0; Index < Queue.size(); ++Index )
+    {
+        PublishSplitResult(Context, Queue[Index], Results[Index]);
+    }
+}
+
+
 void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
                   CaseCount WCases)
 {
+    if ( CanEvaluateQueueInParallel(Context, WFp, WLp) )
+    {
+        EvaluateQueueInParallel(Context, WFp, WLp, WCases);
+        return;
+    }
+
     float GR;
 
     for ( ; Context->splits.waiting_count > 0 ; )
