@@ -104,10 +104,10 @@ int	PropValSize=0;
 /*************************************************************************/
 
 
-void CheckFile(String Extension, Boolean Write)
+void CheckFile(const char *Extension, Boolean Write)
 /*   ---------  */
 {
-    static char	*LastExt="";
+    static const char	*LastExt="";
 
     if ( ! TRf || strcmp(LastExt, Extension) )
     {
@@ -139,7 +139,7 @@ void CheckFile(String Extension, Boolean Write)
 /*************************************************************************/
 
 
-void WriteFilePrefix(String Extension)
+void WriteFilePrefix(const char *Extension)
 /*   ---------------  */
 {
     time_t	clock;
@@ -183,7 +183,7 @@ void WriteFilePrefix(String Extension)
 /*************************************************************************/
 
 
-void ReadFilePrefix(String Extension)
+void ReadFilePrefix(const char *Extension)
 /*   --------------  */
 {
     if ( ! (TRf = GetFile(Extension, "r")) ) Error(NOFILE, Fn, "");
@@ -240,7 +240,7 @@ void SaveDiscreteNames()
 /*************************************************************************/
 
 
-void SaveTree(Tree T, String Extension)
+void SaveTree(Tree T, const char *Extension)
 /*   --------  */
 {
     CheckFile(Extension, true);
@@ -335,7 +335,7 @@ void OutTree(Tree T)
 /*************************************************************************/
 
 
-void SaveRules(CRuleSet RS, String Extension)
+void SaveRules(CRuleSet RS, const char *Extension)
 /*   ---------  */
 {
     int		ri, d;
@@ -419,7 +419,7 @@ void SaveRules(CRuleSet RS, String Extension)
 /*************************************************************************/
 
 
-void AsciiOut(String Pre, String S)
+void AsciiOut(const char *Pre, String S)
 /*   --------  */
 {
     fprintf(TRf, "%s\"", Pre);
@@ -527,7 +527,7 @@ void ReadHeader()
 /*************************************************************************/
 
 
-Tree GetTree(String Extension)
+Tree GetTree(const char *Extension)
 /*   -------  */
 {
     CheckFile(Extension, false);
@@ -651,7 +651,7 @@ Tree InTree()
 /*************************************************************************/
 
 
-CRuleSet GetRules(String Extension)
+CRuleSet GetRules(const char *Extension)
 /*	 --------  */
 {
     CheckFile(Extension, false);

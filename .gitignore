@@ -4,7 +4,7 @@
 /c5.0dbg
 /report
 /prediction-probe
-/src/c50gt.c
-/src/predictiongt.c
+/src/c50gt.cpp
+/src/predictiongt.cpp
 /build/
 /cmake-build-*/
