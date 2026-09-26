@@ -25,17 +25,3 @@
 
 
 extern	int		NCPU;
-
-extern	int		LineNo,
-			ErrMsgs,
-			AttExIn,
-			TSBase;
-
-extern	String		FileStem;
-
-extern	int		KRInit;
-
-extern	FILE		*TRf;
-extern	char		Fn[500];
-
-extern	FILE  		*Of;

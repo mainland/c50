@@ -51,9 +51,9 @@ void NotifyStage(c50_context *Context, int Stage)
     Context->progress.stage = Stage;
     if ( Stage == 1 )
     {
-	if ( ! (Context->progress.update_file = GetFile(".tmp", "w")) )
+	if ( ! (Context->progress.update_file = GetFile(Context, ".tmp", "w")) )
 	{
-	    Error(NOFILE, "", E_ForWrite);
+	    Error(Context, NOFILE, "", E_ForWrite);
 	}
     }
 }

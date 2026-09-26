@@ -90,7 +90,7 @@ Boolean ReadNameInput(c50_context *Context, c50_input *f, String s, int n,
     {
 	if ( --n <= 0 )
 	{
-	    if ( Of ) Error(LONGNAME, "", "");
+	    if ( Context->io.output ) Error(Context, LONGNAME, "", "");
 	}
 
 	if ( c == '.' )
@@ -145,7 +145,7 @@ Boolean ReadNameInput(c50_context *Context, c50_input *f, String s, int n,
     {
 	Msg[0] = ( Space(c) ? '.' : c );
 	Msg[1] = '\00';
-	Error(MISSNAME, Fn, Msg);
+	Error(Context, MISSNAME, Context->io.file_name, Msg);
     }
 
     *Sp++ = '\0';
@@ -194,8 +194,8 @@ void GetNames(c50_context *Context, c50_input *Nf)
     Attribute	Att;
     ClassNo	c;
 
-    ErrMsgs = AttExIn = 0;
-    LineNo  = 0;
+    Context->io.error_count = Context->io.attribute_exclusions = 0;
+    Context->io.line_number  = 0;
     Context->line_buffer_position     = Context->line_buffer;
     *Context->line_buffer_position    = 0;
 
@@ -241,13 +241,13 @@ void GetNames(c50_context *Context, c50_input *Nf)
 	    Context->schema.class_thresholds[Context->schema.max_class] = strtod(Buffer, &EndBuff);
 	    if ( EndBuff == Buffer || *EndBuff != '\0' )
 	    {
-		Error(BADCLASSTHRESH, Buffer, Nil);
+		Error(Context, BADCLASSTHRESH, Buffer, Nil);
 	    }
 	    else
 	    if ( Context->schema.max_class > 1 &&
 		 Context->schema.class_thresholds[Context->schema.max_class] <= Context->schema.class_thresholds[Context->schema.max_class-1] )
 	    {
-		Error(LEQCLASSTHRESH, Buffer, Nil);
+		Error(Context, LEQCLASSTHRESH, Buffer, Nil);
 	    }
 	}
 	while ( Context->delimiter == ',' );
@@ -267,7 +267,7 @@ void GetNames(c50_context *Context, c50_input *Nf)
     {
 	if ( Context->delimiter != ':' && Context->delimiter != '=' )
 	{
-	    Error(BADATTNAME, Buffer, "");
+	    Error(Context, BADATTNAME, Buffer, "");
 	}
 
 	/*  Check for attributes included/excluded  */
@@ -276,8 +276,8 @@ void GetNames(c50_context *Context, c50_input *Nf)
 	     ! memcmp(Buffer+1, "ttributes ", 10) &&
 	     ! memcmp(Buffer+strlen(Buffer)-6, "cluded", 6) )
 	{
-	    AttExIn = ( ! memcmp(Buffer+strlen(Buffer)-8, "in", 2) ? 1 : -1 );
-	    if ( AttExIn == 1 )
+	    Context->io.attribute_exclusions = ( ! memcmp(Buffer+strlen(Buffer)-8, "in", 2) ? 1 : -1 );
+	    if ( Context->io.attribute_exclusions == 1 )
 	    {
 		ForEach(Att, 1, Context->schema.max_attribute)
 		{
@@ -290,10 +290,10 @@ void GetNames(c50_context *Context, c50_input *Nf)
 		Att = Which(Buffer, Context->schema.attribute_names, 1, Context->schema.max_attribute);
 		if ( ! Att )
 		{
-		    Error(UNKNOWNATT, Buffer, Nil);
+		    Error(Context, UNKNOWNATT, Buffer, Nil);
 		}
 		else
-		if ( AttExIn == 1 )
+		if ( Context->io.attribute_exclusions == 1 )
 		{
 		    Context->schema.special_status[Att] -= SKIP;
 		}
@@ -308,7 +308,7 @@ void GetNames(c50_context *Context, c50_input *Nf)
 
 	if ( Which(Buffer, Context->schema.attribute_names, 1, Context->schema.max_attribute) > 0 )
 	{
-	    Error(DUPATTNAME, Buffer, Nil);
+	    Error(Context, DUPATTNAME, Buffer, Nil);
 	}
 
 	if ( ++Context->schema.max_attribute >= AttCeiling )
@@ -351,7 +351,7 @@ void GetNames(c50_context *Context, c50_input *Nf)
 
 	    if ( ! Continuous(Context->schema.case_weight_attribute) )
 	    {
-		Error(CWTATTERR, "", "");
+		Error(Context, CWTATTERR, "", "");
 	    }
 	}
     }
@@ -367,20 +367,20 @@ void GetNames(c50_context *Context, c50_input *Nf)
 
 	if ( Context->schema.class_attribute <= 0 || Exclude(Context->schema.class_attribute) )
 	{
-	    Error(NOTARGET, Context->schema.class_names[1], "");
+	    Error(Context, NOTARGET, Context->schema.class_names[1], "");
 	}
 	else
 	if ( Context->schema.class_thresholds &&
 	     ( ! Continuous(Context->schema.class_attribute) ||
 	       StatBit(Context->schema.class_attribute, DATEVAL|STIMEVAL|TSTMPVAL) ) )
 	{
-	    Error(BADCTARGET, Context->schema.class_names[1], "");
+	    Error(Context, BADCTARGET, Context->schema.class_names[1], "");
 	}
 	else
 	if ( ! Context->schema.class_thresholds &&
 	     ( Continuous(Context->schema.class_attribute) || StatBit(Context->schema.class_attribute, DISCRETE) ) )
 	{
-	    Error(BADDTARGET, Context->schema.class_names[1], "");
+	    Error(Context, BADDTARGET, Context->schema.class_names[1], "");
 	}
 
 	Free(Context->schema.class_names[1]);
@@ -431,7 +431,7 @@ void GetNames(c50_context *Context, c50_input *Nf)
 
     Context->schema.class_names[0] = "?";
 
-    if ( ErrMsgs > 0 ) Goodbye(1);
+    if ( Context->io.error_count > 0 ) Goodbye(1);
 }
 
 
@@ -455,7 +455,7 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
 
     if ( ! ( ReadNameInput(Context, Nf, Buffer, 1000, ':') ) )
     {
-	Error(EOFINATT, Context->schema.attribute_names[Context->schema.max_attribute], "");
+	Error(Context, EOFINATT, Context->schema.attribute_names[Context->schema.max_attribute], "");
     }
 
     Context->schema.max_attribute_value[Context->schema.max_attribute] = 0;
@@ -474,11 +474,11 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
 
 	    /*  Set the base date if not done already  */
 
-	    if ( ! TSBase )
+	    if ( ! Context->io.timestamp_base )
 	    {
 		clock = time(0);
 		BaseYear = gmtime(&clock)->tm_year + 1900;
-		SetTSBase(BaseYear);
+		SetTSBase(Context, BaseYear);
 	    }
 	}
 	else
@@ -501,7 +501,7 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
 	    v = atoi(&Buffer[8]);
 	    if ( v < 2 )
 	    {
-		Error(BADDISCRETE, Context->schema.attribute_names[Context->schema.max_attribute], "");
+		Error(Context, BADDISCRETE, Context->schema.attribute_names[Context->schema.max_attribute], "");
 	    }
 
 	    Context->schema.attribute_value_names[Context->schema.max_attribute] = Alloc(v+3, String);
@@ -523,7 +523,7 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
 	{
 	    /*  Cannot have only one discrete value for an attribute  */
 
-	    Error(SINGLEATTVAL, Context->schema.attribute_names[Context->schema.max_attribute], Buffer);
+	    Error(Context, SINGLEATTVAL, Context->schema.attribute_names[Context->schema.max_attribute], Buffer);
 	}
     }
     else
@@ -565,7 +565,7 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
 	{
 	    if ( ! ( ReadNameInput(Context, Nf, Buffer, 1000, ':') ) )
 	    {
-		Error(EOFINATT, Context->schema.attribute_names[Context->schema.max_attribute], "");
+		Error(Context, EOFINATT, Context->schema.attribute_names[Context->schema.max_attribute], "");
 	    }
 
 	    if ( ++Context->schema.max_attribute_value[Context->schema.max_attribute] >= ValCeiling )
@@ -744,7 +744,7 @@ int InChar(c50_context *Context, c50_input *f)
 	    return EOF;
 	}
 
-	LineNo++;
+	Context->io.line_number++;
     }
 	
     return (int) *Context->line_buffer_position++;
