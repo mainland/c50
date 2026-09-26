@@ -966,6 +966,9 @@ void Cleanup(c50_context *Context)
 	FreeUnlessNil(Context->rule_build.log_factorial);				Context->rule_build.log_factorial = Nil;
     }
 
+    FreeVector((void **) Context->pruning.possible_values, 1, Context->schema.max_attribute);
+    Context->pruning.possible_values = Nil;
+
     FreeTreeData(Context);
 
     FreeUnlessNil(Context->evaluation.utility_errors);				Context->evaluation.utility_errors = Nil;

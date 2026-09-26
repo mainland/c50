@@ -78,6 +78,10 @@ int main()
             "red, no\nblue, yes\ngreen, no\nyellow, yes\n";
         c50::options subsets;
         subsets.subset_splits = true;
+        exercise("subset rules", context, [&] {
+            c50::model::train(context, c50::model_kind::rules,
+                              category_names, category_data, subsets);
+        });
         auto rules = c50::model::train(context, c50::model_kind::rules,
                                        category_names, category_data, subsets);
         const auto serialized_rules = rules.serialized_data();
