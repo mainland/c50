@@ -104,7 +104,7 @@ struct dense_dataset {
 /** Move-only owner of mutable operation workspace. */
 class context {
 public:
-    /** Create an independent workspace. */
+    /** Create an independent workspace using one split worker. */
     context();
     /** Release the workspace. Returned models and results remain valid. */
     ~context();
@@ -119,6 +119,9 @@ public:
     context(const context &) = delete;
     /** Copy assignment is disabled. */
     context &operator=(const context &) = delete;
+    /** Set the maximum split worker count.
+     * @param count Maximum workers, from 1 to 8. */
+    void split_workers(unsigned count);
 private:
     friend class model;
     std::unique_ptr<detail::context_state> state_;

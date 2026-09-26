@@ -36,6 +36,13 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+#include <algorithm>
+#include <array>
+#include <exception>
+#include <future>
+#include <limits>
+#include <vector>
+
 
 #define		SAMPLEUNIT	2000
 
@@ -67,14 +74,69 @@ void c50_split_workspace_deleter::operator()(
 /*************************************************************************/
 
 
+using SplitWorkspacePtr =
+    std::unique_ptr<SplitWorkspace, c50_split_workspace_deleter>;
+
+
+static SplitWorkspacePtr MakeSplitWorkspace(c50_context *Context)
+{
+    DiscrValue v;
+    if ( Context->schema.max_discrete_value < 3 ||
+         Context->schema.max_discrete_value >
+             std::numeric_limits<DiscrValue>::max() - 2 ||
+         Context->schema.max_class < 1 ||
+         Context->schema.max_class ==
+             std::numeric_limits<ClassNo>::max() )
+    {
+        Error(Context, NOMEM, "", "");
+    }
+
+    SplitWorkspacePtr Workspace(new SplitWorkspace{});
+    Workspace->MaxDiscrValue = Context->schema.max_discrete_value;
+    DiscrValue vMax = Max(3, Context->schema.max_discrete_value + 1);
+
+    Workspace->Freq = Alloc(vMax + 1, double *);
+    ForEach(v, 0, vMax)
+    {
+        Workspace->Freq[v] = Alloc(Context->schema.max_class + 1, double);
+    }
+    Workspace->ValFreq = Alloc(vMax, double);
+    Workspace->ClassFreq = Alloc(Context->schema.max_class + 1, double);
+
+    size_t NoCases = Context->cases.max_case < 0
+                         ? 0
+                         : static_cast<size_t>(Context->cases.max_case) + 1;
+    if ( NoCases > std::numeric_limits<size_t>::max() / sizeof(SortRec) )
+    {
+        Error(Context, NOMEM, "", "");
+    }
+    Workspace->SRec = Alloc(NoCases, SortRec);
+
+    if ( Context->options.subset_splits )
+    {
+        DiscrValue MaxValue = Context->schema.max_discrete_value;
+        Workspace->SubsetInfo = Alloc(MaxValue + 1, double);
+        Workspace->SubsetEntr = Alloc(MaxValue + 1, double);
+        Workspace->MergeInfo = Alloc(MaxValue + 1, double *);
+        Workspace->MergeEntr = Alloc(MaxValue + 1, double *);
+        Workspace->WSubset = Alloc(MaxValue + 1, Set);
+        ForEach(v, 1, MaxValue)
+        {
+            Workspace->MergeInfo[v] = Alloc(MaxValue + 1, double);
+            Workspace->MergeEntr[v] = Alloc(MaxValue + 1, double);
+            Workspace->WSubset[v] = Alloc((MaxValue >> 3) + 1, Byte);
+        }
+    }
+    return Workspace;
+}
+
+
 void InitialiseTreeData(c50_context *Context)
 /*   ------------------  */
 {
     DiscrValue	v;
     Attribute	Att;
-    DiscrValue	vMax;
     size_t	NoAttributes;
-    size_t	NoCases;
 
     Context->trees.raw	     = AllocZero(Context->options.trials+1, Tree);
     Context->trees.pruned   = AllocZero(Context->options.trials+1, Tree);
@@ -161,40 +223,8 @@ void InitialiseTreeData(c50_context *Context)
 
     /*  Set up environment  */
 
-    Context->training.environment.reset(new SplitWorkspace{});
-    Context->training.environment->MaxDiscrValue = Context->schema.max_discrete_value;
+    Context->training.environment = MakeSplitWorkspace(Context);
     Context->splits.waiting_attributes = Alloc(Context->schema.max_attribute+1, Attribute);
-
-    vMax = Max(3, Context->schema.max_discrete_value+1);
-
-    Context->training.environment->Freq = Alloc(vMax+1, double *);
-    ForEach(v, 0, vMax)
-    {
-	Context->training.environment->Freq[v] = Alloc(Context->schema.max_class+1, double);
-    }
-
-    Context->training.environment->ValFreq = Alloc(vMax, double);
-
-    Context->training.environment->ClassFreq = Alloc(Context->schema.max_class+1, double);
-
-    NoCases = ( Context->cases.max_case < 0 ? 0 : (size_t) Context->cases.max_case + 1 );
-    Context->training.environment->SRec = Alloc(NoCases, SortRec);
-
-    if ( Context->options.subset_splits )
-    {
-	Context->training.environment->SubsetInfo = Alloc(Context->schema.max_discrete_value+1, double);
-	Context->training.environment->SubsetEntr = Alloc(Context->schema.max_discrete_value+1, double);
-
-	Context->training.environment->MergeInfo = Alloc(Context->schema.max_discrete_value+1, double *);
-	Context->training.environment->MergeEntr = Alloc(Context->schema.max_discrete_value+1, double *);
-	Context->training.environment->WSubset   = Alloc(Context->schema.max_discrete_value+1, Set);
-	ForEach(v, 1, Context->schema.max_discrete_value)
-	{
-	    Context->training.environment->MergeInfo[v] = Alloc(Context->schema.max_discrete_value+1, double);
-	    Context->training.environment->MergeEntr[v] = Alloc(Context->schema.max_discrete_value+1, double);
-	    Context->training.environment->WSubset[v]   = Alloc((Context->schema.max_discrete_value>>3)+1, Byte);
-	}
-    }
 }
 
 
@@ -642,46 +672,181 @@ Attribute ChooseSplit(c50_context *Context, CaseNo Fp, CaseNo Lp,
 
 
 
-void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
-		  CaseCount WCases)
-/*   ------------  */
+static SplitResult ReadSplitResult(c50_context *Context, Attribute Att)
 {
-    Attribute	Att;
-    float	GR;
+    SplitResult Result{};
+    Result.Gain = Context->splits.gain[Att];
+    Result.Information = Context->splits.information[Att];
+    Result.EstimatedMaxGR = Context->splits.estimated_max_gain_ratio[Att];
+    Result.Threshold = Context->splits.thresholds[Att];
+    if ( Context->splits.subset_counts )
+    {
+        Result.SubsetCount = Context->splits.subset_counts[Att];
+        Result.Subsets = Context->splits.subsets[Att];
+    }
+    return Result;
+}
+
+
+static void PublishSplitResult(c50_context *Context, Attribute Att,
+                               const SplitResult &Result)
+{
+    Context->splits.gain[Att] = Result.Gain;
+    Context->splits.information[Att] = Result.Information;
+    Context->splits.estimated_max_gain_ratio[Att] = Result.EstimatedMaxGR;
+    Context->splits.thresholds[Att] = Result.Threshold;
+    if ( Context->splits.subset_counts )
+    {
+        Context->splits.subset_counts[Att] = Result.SubsetCount;
+    }
+}
+
+
+static bool CanEvaluateQueueInParallel(c50_context *Context,
+                                       CaseNo WFp, CaseNo WLp)
+{
+    constexpr size_t MinimumCases = 10000;
+    return Context->split_worker_count > 1 &&
+           Context->splits.waiting_count > 1 &&
+           ! Context->splits.sampled &&
+           Context->splits.sample_fraction == 1 &&
+           Context->options.verbosity == 0 &&
+           WFp >= 0 && WLp >= WFp &&
+           static_cast<size_t>(WLp - WFp) + 1 >= MinimumCases;
+}
+
+
+static void EvaluateQueueInParallel(c50_context *Context, CaseNo WFp,
+                                    CaseNo WLp, CaseCount WCases)
+{
+    std::vector<Attribute> Queue;
+    std::vector<SplitResult> Results;
+    Queue.reserve(Context->splits.waiting_count);
+    Results.reserve(Context->splits.waiting_count);
+    while ( Context->splits.waiting_count > 0 )
+    {
+        Attribute Att = Context->splits.waiting_attributes[
+            --Context->splits.waiting_count];
+        Queue.push_back(Att);
+        Results.push_back(ReadSplitResult(Context, Att));
+    }
+
+    const size_t Workers = std::min<size_t>(Context->split_worker_count,
+                                            Queue.size());
+    std::array<SplitWorkspace *, 8> Workspaces{};
+    std::vector<SplitWorkspacePtr> ExtraWorkspaces;
+    ExtraWorkspaces.reserve(Workers - 1);
+    Workspaces[0] = Context->training.environment.get();
+    for ( size_t Worker = 1; Worker < Workers; ++Worker )
+    {
+        ExtraWorkspaces.push_back(MakeSplitWorkspace(Context));
+        Workspaces[Worker] = ExtraWorkspaces.back().get();
+    }
+
+    auto EvaluateWorker = [&](size_t Worker)
+    {
+        SplitWorkspace &Workspace = *Workspaces[Worker];
+        for ( size_t Index = Worker; Index < Queue.size(); Index += Workers )
+        {
+            Attribute Att = Queue[Index];
+            if ( Discrete(Att) )
+            {
+                EvalDiscrSplit(Context, Workspace, Results[Index], Att, WCases);
+            }
+            else
+            {
+                EvalContinuousAtt(Context, Workspace, Results[Index], Att,
+                                  WFp, WLp);
+            }
+        }
+    };
+
+    std::vector<std::future<void>> Tasks;
+    Tasks.reserve(Workers - 1);
+    for ( size_t Worker = 1; Worker < Workers; ++Worker )
+    {
+        Tasks.push_back(std::async(std::launch::async, EvaluateWorker, Worker));
+    }
+
+    std::exception_ptr Failure;
+    try
+    {
+        EvaluateWorker(0);
+    }
+    catch ( ... )
+    {
+        Failure = std::current_exception();
+    }
+    for ( auto &Task : Tasks )
+    {
+        try
+        {
+            Task.get();
+        }
+        catch ( ... )
+        {
+            if ( ! Failure ) Failure = std::current_exception();
+        }
+    }
+    if ( Failure ) std::rethrow_exception(Failure);
+
+    // Preserve the serial queue order for publication and tie selection.
+    for ( size_t Index = 0; Index < Queue.size(); ++Index )
+    {
+        PublishSplitResult(Context, Queue[Index], Results[Index]);
+    }
+}
+
+
+void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
+                  CaseCount WCases)
+{
+    if ( CanEvaluateQueueInParallel(Context, WFp, WLp) )
+    {
+        EvaluateQueueInParallel(Context, WFp, WLp, WCases);
+        return;
+    }
+
+    float GR;
 
     for ( ; Context->splits.waiting_count > 0 ; )
     {
-	Att = Context->splits.waiting_attributes[--Context->splits.waiting_count];
+        Attribute Att =
+            Context->splits.waiting_attributes[--Context->splits.waiting_count];
+        SplitResult Result = ReadSplitResult(Context, Att);
 
-	if ( Discrete(Att) )
-	{
-	    EvalDiscrSplit(Context, Att, WCases);
-	}
-	else
-	if ( Context->splits.sample_fraction < 1 )
-	{
-	    EstimateMaxGR(Context, *Context->training.environment, Att, WFp, WLp);
-	}
-	else
-	if ( Context->splits.sampled )
-	{
-	    Context->splits.information[Att] = -1E16;
+        if ( Discrete(Att) )
+        {
+            EvalDiscrSplit(Context, *Context->training.environment, Result,
+                           Att, WCases);
+        }
+        else if ( Context->splits.sample_fraction < 1 )
+        {
+            EstimateMaxGR(Context, *Context->training.environment, Result,
+                          Att, WFp, WLp);
+        }
+        else if ( Context->splits.sampled )
+        {
+            Result.Information = -1E16;
+            if ( Result.EstimatedMaxGR > Context->splits.value_threshold )
+            {
+                EvalContinuousAtt(Context, *Context->training.environment,
+                                  Result, Att, WFp, WLp);
+                if ( Result.Information > Epsilon &&
+                     (GR = Result.Gain / Result.Information) >
+                         Context->splits.value_threshold )
+                {
+                    Context->splits.value_threshold = GR;
+                }
+            }
+        }
+        else
+        {
+            EvalContinuousAtt(Context, *Context->training.environment, Result,
+                              Att, WFp, WLp);
+        }
 
-	    if ( Context->splits.estimated_max_gain_ratio[Att] > Context->splits.value_threshold )
-	    {
-		EvalContinuousAtt(Context, *Context->training.environment, Att, WFp, WLp);
-
-		if ( Context->splits.information[Att] > Epsilon &&
-		     (GR = Context->splits.gain[Att] / Context->splits.information[Att]) > Context->splits.value_threshold )
-		{
-		    if ( GR > Context->splits.value_threshold ) Context->splits.value_threshold = GR;
-		}
-	    }
-	}
-	else
-	{
-	    EvalContinuousAtt(Context, *Context->training.environment, Att, WFp, WLp);
-	}
+        PublishSplitResult(Context, Att, Result);
     }
 }
 
@@ -769,31 +934,30 @@ Attribute FindBestAtt(c50_context *Context, CaseCount Cases)
 /*************************************************************************/
 
 
-void EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases)
+void EvalDiscrSplit(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Result, Attribute Att, CaseCount Cases)
 /*   --------------  */
 {
-    SplitWorkspace &Workspace = *Context->training.environment;
     DiscrValue	v, NBr;
 
-    Context->splits.gain[Att] = None;
+    Result.Gain = None;
 
     if ( Skip(Att) || Att == Context->schema.class_attribute ) return;
 
     if ( Ordered(Att) )
     {
-	EvalOrderedAtt(Context, Workspace, Att, Cases);
+	EvalOrderedAtt(Context, Workspace, Result, Att, Cases);
 	NBr = ( Workspace.ValFreq[1] > 0.5 ? 3 : 2 );
     }
     else
     if ( Context->options.subset_splits && Context->schema.max_attribute_value[Att] > 3 )
     {
-	EvalSubset(Context, Workspace, Att, Cases);
-	NBr = Context->splits.subset_counts[Att];
+	EvalSubset(Context, Workspace, Result, Att, Cases);
+	NBr = Result.SubsetCount;
     }
     else
     if ( ! Context->splits.tested_attributes[Att] )
     {
-	EvalDiscreteAtt(Context, Workspace, Att, Cases);
+	EvalDiscreteAtt(Context, Workspace, Result, Att, Cases);
 
 	NBr = 0;
 	ForEach(v, 1, Context->schema.max_attribute_value[Att])
@@ -813,8 +977,16 @@ void EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases)
 	Verbosity(2,
 	    fprintf(Context->io.output, "\t(cancelled -- %d leaves, max %d)\n", NBr, Context->splits.max_leaves))
 
-	Context->splits.gain[Att] = None;
+	Result.Gain = None;
     }
+}
+
+
+void EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases)
+{
+    SplitResult Result = ReadSplitResult(Context, Att);
+    EvalDiscrSplit(Context, *Context->training.environment, Result, Att, Cases);
+    PublishSplitResult(Context, Att, Result);
 }
 
 
