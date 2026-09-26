@@ -38,6 +38,9 @@
 #include "c50_api_internal.h"
 
 #include <stdarg.h>
+#include <cerrno>
+#include <memory>
+#include <limits>
 
 static const char PropertyNames[] =
     "null\0att\0class\0cut\0conds\0elts\0entries\0forks\0freq\0id\0"
@@ -84,6 +87,47 @@ static int WhichProperty(const char *Name)
     return 0;
 }
 
+
+static void ValidateNumber(c50_context *Context, int Property)
+{
+    const char *value = Context->property_value + 1;
+    char *end;
+    double low = 0, high = FLT_MAX;
+    bool integer = false;
+    switch (Property)
+    {
+        case TYPEP: integer = true; high = BrSubset; break;
+        case ENTRIESP: integer = true; low = 1; high = 1000; break;
+        case FORKSP: integer = true; low = 1; high = INT_MAX - 1; break;
+        case RULESP: case CONDSP: integer = true; high = INT_MAX - 1; break;
+        case INITP: integer = true; high = 4095; break;
+        case COSTSP: integer = true; low = high = 1; break;
+        case SAMPLEP: high = 1; break;
+        case COVERP: case OKP: case LIFTP: break;
+        case CUTP: case LOWP: case MIDP: case HIGHP:
+            high = std::numeric_limits<ContValue>::max(); low = -high; break;
+        default: return;
+    }
+    errno = 0;
+    const double number = integer ? strtol(value, &end, 10) : strtod(value, &end);
+    if (end == value || *end != '"' || end[1] || errno == ERANGE ||
+        !isfinite(number) || number < low || number > high ||
+        (Property == LIFTP && static_cast<float>(number) <= 0))
+        Error(Context, MODELFILE, "invalid numeric property", Context->property_name);
+}
+
+static unsigned PropertyBit(int property) { return 1u << property; }
+
+static int ReadRecordProperty(c50_context *Context, c50_input *Input,
+                               char *Delim, unsigned &Seen, unsigned Allowed)
+{
+    const int property = ReadProp(Context, Input, Delim);
+    const unsigned bit = PropertyBit(property);
+    if (!(Allowed & bit) || ((Seen & bit) && property != ELTSP))
+        Error(Context, MODELFILE, "unexpected or repeated property", Context->property_name);
+    Seen |= bit;
+    return property;
+}
 
 static void ModelWriteError(c50_context *Context)
 {
@@ -484,7 +528,7 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 			   Boolean AllowFileCosts)
 /*          --------------  */
 {
-    Attribute	Att;
+    Attribute	Att=0;
     DiscrValue	v;
     char	*p, *Unquoted, Dummy;
     int		Year, Month, Day;
@@ -543,12 +587,16 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 		break;
 
 	    case ELTSP:
-		Context->schema.max_attribute_value[Att] = 1;
-		Context->schema.attribute_value_names[Att][1] = strdup("N/A");
+                if (!Att || !StatBit(Att, DISCRETE) ||
+                    Context->schema.max_attribute_value[Att] != 1)
+                    Error(Context, MODELFILE, "invalid dynamic attribute dictionary", "");
 
 		for ( p = Context->property_value ; *p ; )
 		{
 		    p = RemoveQuotes(p);
+                    if (Context->schema.max_attribute_value[Att] >=
+                        reinterpret_cast<intptr_t>(Context->schema.attribute_value_names[Att][0]))
+                        Error(Context, MODELFILE, "too many dynamic attribute values", p);
 		    v = ++Context->schema.max_attribute_value[Att];
 		    Context->schema.attribute_value_names[Att][v] = strdup(p);
 
@@ -566,6 +614,8 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 		sscanf(Context->property_value, "\"%d\"", &Context->options.trials);
 		Context->model_entry = 0;
 		return;
+            default:
+                Error(Context, MODELFILE, "unexpected header property", Context->property_name);
 	}
     }
 }
@@ -629,9 +679,11 @@ Tree InTreeAt(c50_context *Context, c50_input *Input, Tree *Slot)
     T = (Tree) AllocZero(1, TreeRec);
     *Slot = T;
 
+    unsigned Seen = 0;
     do
     {
-	switch ( ReadProp(Context, Input, &Delim) )
+	switch ( ReadRecordProperty(Context, Input, &Delim, Seen,
+                                  PropertyBit(TYPEP) | PropertyBit(CLASSP) | PropertyBit(ATTP) | PropertyBit(CUTP) | PropertyBit(LOWP) | PropertyBit(MIDP) | PropertyBit(HIGHP) | PropertyBit(FORKSP) | PropertyBit(FREQP) | PropertyBit(ELTSP)) )
 	{
 	    case ERRORP:
 		return Nil;
@@ -678,17 +730,28 @@ Tree InTreeAt(c50_context *Context, c50_input *Input, Tree *Slot)
 
 	    case FREQP:
 		T->ClassDist = Alloc(Context->schema.max_class+1, CaseCount);
-		p = Context->property_value+1;
-
-		ForEach(c, 1, Context->schema.max_class)
-		{
-		    T->ClassDist[c] = strtod(p, &p);
-		    T->Cases += T->ClassDist[c];
-		    p++;
-		}
+                p = Context->property_value + 1;
+                ForEach(c, 1, Context->schema.max_class)
+                {
+                    char *end;
+                    const double frequency = strtod(p, &end);
+                    if (end == p || !isfinite(frequency) || frequency < 0 ||
+                        frequency > FLT_MAX ||
+                        *end != (c == Context->schema.max_class ? '"' : ','))
+                        Error(Context, MODELFILE, "invalid class frequencies", "");
+                    T->ClassDist[c] = frequency;
+                    T->Cases += T->ClassDist[c];
+                    p = end + 1;
+                }
+                if (*p || !isfinite(T->Cases))
+                    Error(Context, MODELFILE, "invalid class frequencies", "");
 		break;
 
 	    case ELTSP:
+                if (T->NodeType != BrSubset || !T->Tested || !Discrete(T->Tested) ||
+                    T->Forks < 1 || T->Forks > Context->schema.max_attribute_value[T->Tested] ||
+                    Subset >= T->Forks)
+                    Error(Context, MODELFILE, "invalid subset branch", "");
 		if ( ! Subset++ )
 		{
 		    T->Subset = AllocZero(T->Forks+1, Set);
@@ -700,13 +763,31 @@ Tree InTreeAt(c50_context *Context, c50_input *Input, Tree *Slot)
     }
     while ( Delim == ' ' );
 
+    if (!(Seen & PropertyBit(TYPEP)) || !T->Leaf)
+        Error(Context, MODELFILE, "missing tree type or class", "");
+    if (T->NodeType)
+    {
+        if (T->Cases < Epsilon)
+            Error(Context, MODELFILE, "internal tree node has insufficient class frequencies", "");
+        if (!T->Tested || T->Forks < 1 ||
+            (T->NodeType == BrThresh &&
+             (!Continuous(T->Tested) || T->Forks != 3 || !(Seen & PropertyBit(CUTP)) ||
+              T->Lower > T->Mid || T->Mid > T->Upper)) ||
+            (T->NodeType != BrThresh &&
+             (!Discrete(T->Tested) || T->Forks > Context->schema.max_attribute_value[T->Tested])) ||
+            (T->NodeType == BrSubset && Subset != T->Forks))
+            Error(Context, MODELFILE, "inconsistent tree branches", "");
+    }
+    else if (T->Forks || T->Tested || Subset)
+        Error(Context, MODELFILE, "leaf has split properties", "");
+
     if ( T->ClassDist )
     {
 	T->Errors = T->Cases - T->ClassDist[T->Leaf];
     }
     else
     {
-	T->ClassDist = Alloc(1, CaseCount);
+	T->ClassDist = Alloc(Context->schema.max_class + 1, CaseCount);
     }
 
     if ( T->NodeType )
@@ -761,9 +842,11 @@ CRuleSet InRulesAt(c50_context *Context, c50_input *Input, CRuleSet *Slot)
     RS = Alloc(1, RuleSetRec);
     *Slot = RS;
 
+    unsigned Seen = 0;
     do
     {
-	switch ( ReadProp(Context, Input, &Delim) )
+	switch ( ReadRecordProperty(Context, Input, &Delim, Seen,
+                                  PropertyBit(RULESP) | PropertyBit(DEFAULTP)) )
 	{
 	    case ERRORP:
 		return Nil;
@@ -781,6 +864,9 @@ CRuleSet InRulesAt(c50_context *Context, c50_input *Input, CRuleSet *Slot)
 	}
     }
     while ( Delim == ' ' );
+
+    if (!(Seen & PropertyBit(RULESP)) || !RS->SDefault)
+        Error(Context, MODELFILE, "missing ruleset count or default", "");
 
     /*  Read each rule  */
 
@@ -821,9 +907,11 @@ CRule InRuleAt(c50_context *Context, c50_input *Input, CRule *Slot)
     R = Alloc(1, RuleRec);
     *Slot = R;
 
+    unsigned Seen = 0;
     do
     {
-	switch ( ReadProp(Context, Input, &Delim) )
+	switch ( ReadRecordProperty(Context, Input, &Delim, Seen,
+                                  PropertyBit(CONDSP) | PropertyBit(COVERP) | PropertyBit(OKP) | PropertyBit(LIFTP) | PropertyBit(CLASSP)) )
 	{
 	    case ERRORP:
 		return Nil;
@@ -842,7 +930,6 @@ CRule InRuleAt(c50_context *Context, c50_input *Input, CRule *Slot)
 
 	    case LIFTP:
 		sscanf(Context->property_value, "\"%f\"", &Lift);
-		R->Prior = (R->Correct + 1) / ((R->Cover + 2) * Lift);
 		break;
 
 	    case CLASSP:
@@ -853,6 +940,14 @@ CRule InRuleAt(c50_context *Context, c50_input *Input, CRule *Slot)
 	}
     }
     while ( Delim == ' ' );
+
+    const unsigned required = PropertyBit(CONDSP) | PropertyBit(COVERP) |
+                              PropertyBit(OKP) | PropertyBit(LIFTP) | PropertyBit(CLASSP);
+    if ((Seen & required) != required || R->Correct > R->Cover)
+        Error(Context, MODELFILE, "incomplete or inconsistent rule", "");
+    R->Prior = (R->Correct + 1) / ((R->Cover + 2) * Lift);
+    if (!isfinite(R->Prior) || R->Prior <= 0)
+        Error(Context, MODELFILE, "invalid rule prior", "");
 
     R->Lhs = Alloc(R->Size+1, Condition);
     ForEach(d, 1, R->Size)
@@ -889,9 +984,11 @@ Condition InConditionAt(c50_context *Context, c50_input *Input,
     C = Alloc(1, CondRec);
     *Slot = C;
 
+    unsigned Seen = 0;
     do
     {
-	switch ( ReadProp(Context, Input, &Delim) )
+	switch ( ReadRecordProperty(Context, Input, &Delim, Seen,
+                                  PropertyBit(TYPEP) | PropertyBit(ATTP) | PropertyBit(CUTP) | PropertyBit(RESULTP) | PropertyBit(VALP) | PropertyBit(ELTSP)) )
 	{
 	    case ERRORP:
 		return Nil;
@@ -914,12 +1011,19 @@ Condition InConditionAt(c50_context *Context, c50_input *Input,
 		break;
 
 	    case RESULTP:
+                if (strcmp(Context->property_value, "\"<\"") &&
+                    strcmp(Context->property_value, "\">\""))
+                    Error(Context, MODELFILE, "invalid threshold outcome", "");
 		C->TestValue = ( Context->property_value[1] == '<' ? 2 : 3 );
 		break;
 
 	    case VALP:
+                if (!C->Tested)
+                    Error(Context, MODELFILE, "condition value precedes attribute", "");
 		if ( Continuous(C->Tested) )
 		{
+                    if (strcmp(Context->property_value, "\"N/A\""))
+                        Error(Context, MODELFILE, "invalid not-applicable value", "");
 		    C->TestValue = 1;
 		}
 		else
@@ -933,6 +1037,8 @@ Condition InConditionAt(c50_context *Context, c50_input *Input,
 		break;
 
 	    case ELTSP:
+                if (C->NodeType != BrSubset || C->Subset)
+                    Error(Context, MODELFILE, "invalid condition subset", "");
 		C->Subset = MakeSubset(Context, C->Tested);
 		C->TestValue = 1;
 		break;
@@ -940,6 +1046,14 @@ Condition InConditionAt(c50_context *Context, c50_input *Input,
     }
     while ( Delim == ' ' );
 
+    if (!C->Tested || !C->TestValue ||
+        (C->NodeType == BrDiscr && (!Discrete(C->Tested) || !(Seen & PropertyBit(VALP)))) ||
+        (C->NodeType == BrThresh &&
+         (!Continuous(C->Tested) ||
+          (!(Seen & PropertyBit(VALP)) && !(Seen & PropertyBit(CUTP))))) ||
+        (C->NodeType == BrSubset && (!Discrete(C->Tested) || !C->Subset)) ||
+        C->NodeType < BrDiscr || C->NodeType > BrSubset)
+        Error(Context, MODELFILE, "incomplete or inconsistent condition", "");
     return C;
 }
 
@@ -1033,6 +1147,7 @@ int ReadProp(c50_context *Context, c50_input *Input, char *Delim)
         if (property != ELTSP || *value++ != ',')
             Error(Context, MODELFILE, "invalid property suffix", Context->property_name);
     }
+    ValidateNumber(Context, property);
     return property;
 }
 
@@ -1064,8 +1179,11 @@ Set MakeSubset(c50_context *Context, Attribute Att)
     char	*p;
     Set		S;
 
+    if (Att < 1 || Att > Context->schema.max_attribute || !Discrete(Att))
+        Error(Context, MODELFILE, "subset requires a discrete attribute", "");
     Bytes = (Context->schema.max_attribute_value[Att]>>3) + 1;
     S = AllocZero(Bytes, Byte);
+    std::unique_ptr<Byte, decltype(&free)> owner(S, &free);
 
     for ( p = Context->property_value ; *p ; )
     {
@@ -1080,7 +1198,7 @@ Set MakeSubset(c50_context *Context, Attribute Att)
 	if ( *p == ',' ) p++;
     }
 
-    return S;
+    return owner.release();
 }
 
 

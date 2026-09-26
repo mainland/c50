@@ -320,7 +320,8 @@ ClassNo RuleClassify(c50_context *Context, DataRec Case, CRuleSet RS)
 
     /*  Set confidence to the vote for the most specific rule of class Best  */
 
-    Context->confidence = Context->most_specific_rules[Best]->Vote / 1000.0;
+    Context->confidence = Context->most_specific_rules[Best] ?
+        Context->most_specific_rules[Best]->Vote / 1000.0 : 0.5;
 
     return Best;
 }

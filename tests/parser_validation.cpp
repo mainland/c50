@@ -20,6 +20,80 @@ template<class F> static void rejects(F operation)
     throw std::runtime_error("malformed input accepted");
 }
 
+static void structure(c50::context &context)
+{
+    const auto kind = c50::model_kind::tree;
+    for (const auto &bad : {
+        "type=\"2\" class=\"no\" att=\"x\" forks=\"1\" cut=\"0\" freq=\"1,1\"\n",
+        "type=\"0\" freq=\"1,1\"\n",
+        "class=\"no\" freq=\"1,1\"\n",
+        "type=\"999999999999999999999\" class=\"no\"\n",
+        "type=\"9\" class=\"no\"\n",
+        "type=\"0junk\" class=\"no\"\n",
+        "type=\"0\" type=\"0\" class=\"no\"\n",
+        "type=\"0\" class=\"no\" freq=\"1\"\n",
+        "type=\"0\" class=\"no\" freq=\"1,1,1\"\n",
+        "type=\"0\" class=\"no\" freq=\"nan,1\"\n",
+        "type=\"0\" class=\"no\" freq=\"-1,1\"\n",
+        "type=\"0\" class=\"no\" freq=\"0,0\"\n",
+        "type=\"0\" class=\"no\" freq=\"1e-30,0\"\n",
+        "type=\"0\" class=\"no\" freq=\"1e100,1\"\n",
+        "type=\"2\" class=\"no\" att=\"x\" forks=\"-1\" cut=\"0\"\n",
+        "type=\"2\" class=\"no\" att=\"x\" forks=\"3\" cut=\"inf\"\n",
+        "type=\"2\" class=\"no\" att=\"x\" forks=\"3\" cut=\"1e100\"\n",
+        "type=\"3\" class=\"no\" att=\"x\" forks=\"2\" elts=\"a\"\n"})
+        rejects([&] { c50::model::load(context, kind, names, header + bad); });
+    for (const auto &prefix : {"att=\"x\" elts=\"a\",\"b\"\n",
+                               "elts=\"a\",\"b\"\n", "entries=\"-1\"\n",
+                               "entries=\"1001\"\n", "entries=\"one\"\n"})
+        rejects([&] { c50::model::load(context, kind, names, prefix + header + leaf); });
+    const std::string dynamic_names = "no, yes.\nx: discrete 2.\n";
+    rejects([&] { c50::model::load(context, kind, dynamic_names,
+        "att=\"x\" elts=\"a\",\"b\",\"c\"\n" + header + leaf); });
+    const std::string discrete_names = "no, yes.\nx: a, b.\n";
+    for (const auto &subsets : {"elts=\"a\"", "elts=\"a\" elts=\"unknown\"",
+                               "elts=\"a\" elts=\"b\" elts=\"a\""})
+        rejects([&] { c50::model::load(context, kind, discrete_names,
+            header + "type=\"3\" class=\"no\" att=\"x\" forks=\"2\" freq=\"2,0\" " + subsets + "\n"); });
+    const auto rules = c50::model_kind::rules;
+    for (const auto &bad : {"rules=\"-1\" default=\"no\"\n", "rules=\"1\"\n",
+        "rules=\"1\" default=\"no\"\nconds=\"-1\"\n",
+        "rules=\"1\" default=\"no\"\nconds=\"0\" cover=\"1\" ok=\"1\" class=\"no\"\n",
+        "rules=\"1\" default=\"no\"\nconds=\"0\" cover=\"1\" ok=\"2\" lift=\"1\" class=\"no\"\n",
+        "rules=\"1\" default=\"no\"\nconds=\"0\" cover=\"1\" ok=\"1\" lift=\"0\" class=\"no\"\n"})
+        rejects([&] { c50::model::load(context, rules, names, header + bad); });
+    const std::string rule = header + "rules=\"1\" default=\"no\"\n"
+        "conds=\"1\" cover=\"1\" ok=\"1\" lift=\"1\" class=\"no\"\n";
+    for (const auto &condition : {"type=\"0\" att=\"x\"\n",
+        "type=\"2\" att=\"x\" cut=\"0\" result=\"bad\"\n",
+        "type=\"2\" val=\"N/A\" att=\"x\"\n",
+        "type=\"2\" att=\"x\" val=\"bad\"\n",
+        "type=\"3\" att=\"x\" elts=\"a\"\n"})
+        rejects([&] { c50::model::load(context, rules, names, rule + condition); });
+
+    // Zero-case child nodes are valid legacy output and use their parent.
+    auto empty_child = c50::model::load(context, kind, names, header +
+        "type=\"2\" class=\"no\" att=\"x\" forks=\"3\" cut=\"1\" freq=\"2,0\"\n" +
+        "type=\"0\" class=\"no\"\n" + leaf + "type=\"0\" class=\"no\"\n");
+    if (empty_child.predict(context, "5, ?\n").class_index(0) != 0)
+        throw std::runtime_error("empty child prediction changed");
+
+    rejects([&] { c50::model::load(context, kind, names, header +
+        "type=\"2\" class=\"no\" att=\"x\" cut=\"1\" forks=\"3\" freq=\"2,0\"\n" +
+        "type=\"0\" class=\"no\"\n" +
+        "type=\"2\" class=\"no\" att=\"x\" cut=\"0\" forks=\"3\"\n" +
+        "type=\"0\" class=\"no\"\n" + "type=\"0\" class=\"no\"\n" +
+        "type=\"0\" class=\"no\"\n" + leaf); });
+
+    const auto zero_vote = c50::model::load(context, rules, names, header +
+        "rules=\"1\" default=\"yes\"\n"
+        "conds=\"0\" cover=\"10000\" ok=\"0\" lift=\"1\" class=\"no\"\n");
+    const auto default_prediction = zero_vote.predict(context, "0, ?\n");
+    if (default_prediction.class_index(0) != 1 ||
+        default_prediction.confidence(0) != 0.5)
+        throw std::runtime_error("zero-vote rules did not use the default class");
+}
+
 int main()
 {
     try {
@@ -41,6 +115,7 @@ int main()
         auto short_id = c50::model::load(context, kind, names,
                                          "id=\"x\"\nentries=\"1\"\n" + leaf);
         if (short_id.predict(context, "0, ?\n").class_index(0) != 0) return 1;
+        structure(context);
         if (model.predict(context, "0, ?\n").class_index(0) != 0) return 1;
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
