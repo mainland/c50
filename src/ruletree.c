@@ -129,7 +129,7 @@ void SetTestIndex(Condition C)
 		break;
 
 	    case BrThresh:
-		if ( C->TestValue == 1 && CC->TestValue == 1 ||
+		if ( ( C->TestValue == 1 && CC->TestValue == 1 ) ||
 		     ( C->TestValue != 1 && CC->TestValue != 1 &&
 		       C->Cut == CC->Cut ) )
 		{
@@ -166,9 +166,10 @@ RuleTree GrowRT(RuleNo *RR, int RRN, CRule *Rule)
     RuleTree	Node;
     RuleNo	r, *LR;
     int		FP=0, ri, TI, *Expect, LRN;
+    size_t	FireCount;
     DiscrValue	v;
 
-    if ( ! RRN ) return Nil;
+    if ( RRN <= 0 ) return Nil;
 
     Node = AllocZero(1, RuleTreeRec);
 
@@ -186,11 +187,12 @@ RuleTree GrowRT(RuleNo *RR, int RRN, CRule *Rule)
 	}
     }
 
-    if ( FP )
+    if ( FP > 0 )
     {
-	Node->Fire = Alloc(FP+1, RuleNo);
-	memcpy(Node->Fire, RR, FP * sizeof(RuleNo));
-	Node->Fire[FP] = 0;
+	FireCount = (size_t) FP;
+	Node->Fire = Alloc(FireCount+1, RuleNo);
+	memcpy(Node->Fire, RR, FireCount * sizeof(RuleNo));
+	Node->Fire[FireCount] = 0;
 	RR  += FP;
 	RRN -= FP;
     }
