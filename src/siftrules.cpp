@@ -426,7 +426,10 @@ void CoverClass(c50_context *Context, ClassNo Target)
     RuleNo	r, Best;
     int		j;
 
-    memset(Context->rule_selection.covered_cases, false, Context->cases.max_case+1);
+    if ( Context->cases.max_case >= 0 )
+    {
+	memset(Context->rule_selection.covered_cases, false, Context->cases.max_case+1);
+    }
 
     Remaining = Context->training.class_frequencies[Target];
 
@@ -972,7 +975,10 @@ void SetDefaultClass(c50_context *Context)
     double	*UncoveredWeight, TotUncovered=1E-3;
     CaseNo	i, j;
 
-    memset(Context->rule_selection.covered_cases, false, Context->cases.max_case+1);
+    if ( Context->cases.max_case >= 0 )
+    {
+	memset(Context->rule_selection.covered_cases, false, Context->cases.max_case+1);
+    }
     UncoveredWeight = AllocZero(Context->schema.max_class+1, double);
 
     /*  Check which cases are covered by at least one rule  */
