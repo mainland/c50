@@ -57,6 +57,7 @@ int main(int Argc, char *Argv[])
     Boolean		FirstTime=true, ArgOK;
     double		StartTime;
     FILE		*F;
+    c50_input		NamesInput;
     CaseNo		SaveMaxCase;
     Attribute		Att;
 
@@ -205,7 +206,9 @@ int main(int Argc, char *Argv[])
     /*  Get information on training data  */
 
     if ( ! (F = GetFile(".names", "r")) ) Error(NOFILE, "", "");
-    GetNames(F);
+    c50_input_init_file(&NamesInput, F);
+    GetNames(&NamesInput);
+    fclose(F);
 
     if ( ClassAtt )
     {
