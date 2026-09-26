@@ -39,6 +39,8 @@ c50_status c50_context_create(c50_context **out_context)
 
     context->status = C50_STATUS_OK;
     context->schema.max_discrete_value = 3;
+    snprintf(context->schema.unknown_class_name, sizeof(context->schema.unknown_class_name), "%s", "?");
+    snprintf(context->schema.other_attribute_value_name, sizeof(context->schema.other_attribute_value_name), "%s", "<other>");
     context->cases.max_case = -1;
     context->costs.unit_weights = 1;
     context->options.trials = 1;
