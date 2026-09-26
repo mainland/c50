@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 from scipy import sparse
 from sklearn.base import clone
+from sklearn.metrics import balanced_accuracy_score, f1_score
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -56,6 +57,45 @@ def test_pipeline_and_grid_search() -> None:
 
     assert search.best_estimator_.predict(X).shape == Y.shape
     assert 0 <= search.best_score_ <= 1
+
+
+def test_grid_search_accepts_multiple_evaluation_metrics() -> None:
+    values = np.arange(24, dtype=float).reshape(-1, 1)
+    labels = np.asarray([0] * 17 + [1, 0, 1, 0, 1, 1, 1])
+    folds = list(
+        StratifiedKFold(3, shuffle=True, random_state=11).split(values, labels)
+    )
+    search = GridSearchCV(
+        C50Classifier(),
+        {"minimum_cases": [1, 4]},
+        scoring={"balanced_accuracy": "balanced_accuracy", "f1_macro": "f1_macro"},
+        refit="balanced_accuracy",
+        cv=folds,
+    ).fit(values, labels)
+
+    for index, parameters in enumerate(search.cv_results_["params"]):
+        balanced_scores = []
+        f1_scores = []
+        for training, validation in folds:
+            classifier = C50Classifier(**parameters).fit(
+                values[training], labels[training]
+            )
+            predictions = classifier.predict(values[validation])
+            balanced_scores.append(
+                balanced_accuracy_score(labels[validation], predictions)
+            )
+            f1_scores.append(f1_score(labels[validation], predictions, average="macro"))
+        assert search.cv_results_["mean_test_balanced_accuracy"][index] == pytest.approx(
+            np.mean(balanced_scores)
+        )
+        assert search.cv_results_["mean_test_f1_macro"][index] == pytest.approx(
+            np.mean(f1_scores)
+        )
+    assert search.best_score_ == max(search.cv_results_["mean_test_balanced_accuracy"])
+    assert (
+        search.best_estimator_.get_params()["minimum_cases"]
+        == search.best_params_["minimum_cases"]
+    )
 
 
 def test_clone_and_pickle_preserve_predictions() -> None:
