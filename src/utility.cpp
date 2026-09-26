@@ -120,6 +120,13 @@ void *Pmalloc(c50_context *Context, size_t Bytes)
 
 
 
+char *Pstrdup(c50_context *Context, const char *text)
+{
+    char *copy = strdup(text);
+    if (!copy) Error(Context, NOMEM, "", "");
+    return copy;
+}
+
 void *Prealloc(c50_context *Context, void *Present, size_t Bytes)
 /*    --------  */
 {
@@ -204,10 +211,10 @@ DataRec NewCase(c50_context *Context)
 
 	Prev = Context->cases.memory_blocks;
 	Context->cases.memory_blocks = AllocZero(1, DataBlockRec);
+        Context->cases.memory_blocks->Prev = Prev;
 	Context->cases.memory_blocks->Head =
 	    Alloc(Context->cases.block_size *
 		  (Context->schema.max_attribute+2), AttValue);
-	Context->cases.memory_blocks->Prev = Prev;
     }
 
     return Context->cases.memory_blocks->Head +
