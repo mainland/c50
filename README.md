@@ -50,6 +50,33 @@ to locate inputs such as `<stem>.names`, `<stem>.data`, and optional
 ./c5.0 -f <stem>
 ```
 
+## Tests
+
+Run the CLI regression tests with:
+
+```sh
+make test
+```
+
+The tests compare normalized command output and serialized tree and rule models
+against fixtures captured from the imported GPL implementation.
+
+Run the same regression tests through CTest with:
+
+```sh
+ctest --test-dir build --output-on-failure
+```
+
+Configure an AddressSanitizer and UndefinedBehaviorSanitizer build with:
+
+```sh
+cmake -S . -B build/sanitize \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DC50_ENABLE_SANITIZERS=ON
+cmake --build build/sanitize
+ctest --test-dir build/sanitize --output-on-failure
+```
+
 ## License
 
 The imported C5.0 source is distributed under the GNU General Public License,
