@@ -70,6 +70,8 @@ void InitialiseTreeData()
     DiscrValue	v;
     Attribute	Att;
     DiscrValue	vMax;
+    size_t	NoAttributes;
+    size_t	NoCases;
 
     Raw	     = AllocZero(TRIALS+1, Tree);
     Pruned   = AllocZero(TRIALS+1, Tree);
@@ -103,7 +105,8 @@ void InitialiseTreeData()
 	Subsets = AllocZero(MaxAtt+1, int);
     }
 
-    DList  = Alloc(MaxAtt, Attribute);
+    NoAttributes = ( MaxAtt < 1 ? 0 : (size_t) MaxAtt );
+    DList  = Alloc(NoAttributes, Attribute);
     NDList = 0;
 
     DFreq = AllocZero(MaxAtt+1, double *);
@@ -169,7 +172,8 @@ void InitialiseTreeData()
 
     GEnv.ClassFreq = Alloc(MaxClass+1, double);
 
-    GEnv.SRec = Alloc(MaxCase+1, SortRec);
+    NoCases = ( MaxCase < 0 ? 0 : (size_t) MaxCase + 1 );
+    GEnv.SRec = Alloc(NoCases, SortRec);
 
     if ( SUBSET )
     {
@@ -753,9 +757,9 @@ Attribute FindBestAtt(CaseCount Cases)
 		    SUBSET ? Subsets[Att] : MaxAttVal[Att] );
 
 	    if ( Val > BestVal ||
-		 Val > 0.999 * BestVal &&
-		 ( NBr < BestNBr ||
-		   NBr == BestNBr && Gain[Att] > Gain[BestAtt] ) )
+		 ( Val > 0.999 * BestVal &&
+		   ( NBr < BestNBr ||
+		     ( NBr == BestNBr && Gain[Att] > Gain[BestAtt] ) ) ) )
 	    {
 		BestAtt = Att;
 		BestVal = Val;
