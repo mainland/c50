@@ -41,6 +41,7 @@ typedef struct
     int case_weight_attribute;
     int max_attribute;
     int max_class;
+    int owned_class_names;
     int max_discrete_value;
     char unknown_class_name[2];
     char other_attribute_value_name[8];
