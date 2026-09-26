@@ -5,9 +5,10 @@ project(C50 VERSION 2.07 LANGUAGES C)
 option(C50_ENABLE_SANITIZERS
        "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 
-set(C50_SOURCES
+include(CTest)
+
+set(C50_CORE_SOURCES
     src/attwinnow.c
-    src/c50.c
     src/classify.c
     src/confmat.c
     src/construct.c
@@ -35,25 +36,46 @@ set(C50_SOURCES
     src/xval.c
 )
 
-add_executable(c50_cli ${C50_SOURCES})
+add_executable(c50_cli src/c50.c ${C50_CORE_SOURCES})
 set_target_properties(c50_cli PROPERTIES OUTPUT_NAME c5.0)
 
 add_executable(c50_report src/report.c)
 set_target_properties(c50_report PROPERTIES OUTPUT_NAME report)
 
+set(C50_TARGETS c50_cli c50_report)
+
+if(BUILD_TESTING)
+    add_executable(
+        c50_prediction_probe
+        tests/prediction_probe.c
+        ${C50_CORE_SOURCES}
+    )
+    target_include_directories(
+        c50_prediction_probe
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    set_target_properties(
+        c50_prediction_probe
+        PROPERTIES OUTPUT_NAME prediction-probe
+    )
+    list(APPEND C50_TARGETS c50_prediction_probe)
+endif()
+
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(c50_cli PRIVATE -ffloat-store)
-    target_compile_options(c50_report PRIVATE -ffloat-store)
+    foreach(target IN LISTS C50_TARGETS)
+        target_compile_options(${target} PRIVATE -ffloat-store)
+    endforeach()
 endif()
 
 if(NOT MSVC)
-    target_link_libraries(c50_cli PRIVATE m)
-    target_link_libraries(c50_report PRIVATE m)
+    foreach(target IN LISTS C50_TARGETS)
+        target_link_libraries(${target} PRIVATE m)
+    endforeach()
 endif()
 
 if(C50_ENABLE_SANITIZERS)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-        foreach(target IN ITEMS c50_cli c50_report)
+        foreach(target IN LISTS C50_TARGETS)
             target_compile_options(
                 ${target}
                 PRIVATE
@@ -74,8 +96,6 @@ if(C50_ENABLE_SANITIZERS)
     endif()
 endif()
 
-include(CTest)
-
 if(BUILD_TESTING)
     add_test(
         NAME cli-regression
@@ -90,5 +110,13 @@ if(BUILD_TESTING)
             ${CMAKE_COMMAND} -E env
             "REPORT_BINARY=$<TARGET_FILE:c50_report>"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_report.sh"
+    )
+    add_test(
+        NAME prediction-regression
+        COMMAND
+            ${CMAKE_COMMAND} -E env
+            "C50_BINARY=$<TARGET_FILE:c50_cli>"
+            "C50_PREDICTION_BINARY=$<TARGET_FILE:c50_prediction_probe>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_predictions.sh"
     )
 endif()
