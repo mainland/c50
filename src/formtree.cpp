@@ -642,60 +642,79 @@ Attribute ChooseSplit(c50_context *Context, CaseNo Fp, CaseNo Lp,
 
 
 
-void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
-		  CaseCount WCases)
-/*   ------------  */
+static SplitResult ReadSplitResult(c50_context *Context, Attribute Att)
 {
-    Attribute	Att;
-    float	GR;
-    SplitResult Result;
+    SplitResult Result{};
+    Result.Gain = Context->splits.gain[Att];
+    Result.Information = Context->splits.information[Att];
+    Result.EstimatedMaxGR = Context->splits.estimated_max_gain_ratio[Att];
+    Result.Threshold = Context->splits.thresholds[Att];
+    if ( Context->splits.subset_counts )
+    {
+        Result.SubsetCount = Context->splits.subset_counts[Att];
+        Result.Subsets = Context->splits.subsets[Att];
+    }
+    return Result;
+}
+
+
+static void PublishSplitResult(c50_context *Context, Attribute Att,
+                               const SplitResult &Result)
+{
+    Context->splits.gain[Att] = Result.Gain;
+    Context->splits.information[Att] = Result.Information;
+    Context->splits.estimated_max_gain_ratio[Att] = Result.EstimatedMaxGR;
+    Context->splits.thresholds[Att] = Result.Threshold;
+    if ( Context->splits.subset_counts )
+    {
+        Context->splits.subset_counts[Att] = Result.SubsetCount;
+    }
+}
+
+
+void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
+                  CaseCount WCases)
+{
+    float GR;
 
     for ( ; Context->splits.waiting_count > 0 ; )
     {
-	Att = Context->splits.waiting_attributes[--Context->splits.waiting_count];
-	Result.Gain = Context->splits.gain[Att];
-	Result.Information = Context->splits.information[Att];
-	Result.EstimatedMaxGR = Context->splits.estimated_max_gain_ratio[Att];
-	Result.Threshold = Context->splits.thresholds[Att];
+        Attribute Att =
+            Context->splits.waiting_attributes[--Context->splits.waiting_count];
+        SplitResult Result = ReadSplitResult(Context, Att);
 
-	if ( Discrete(Att) )
-	{
-	    EvalDiscrSplit(Context, Att, WCases);
-	}
-	else
-	if ( Context->splits.sample_fraction < 1 )
-	{
-	    EstimateMaxGR(Context, *Context->training.environment, Result, Att, WFp, WLp);
-	    Context->splits.gain[Att] = Result.Gain;
-	    Context->splits.estimated_max_gain_ratio[Att] = Result.EstimatedMaxGR;
-	}
-	else
-	if ( Context->splits.sampled )
-	{
-	    Context->splits.information[Att] = -1E16;
-	    Result.Information = -1E16;
+        if ( Discrete(Att) )
+        {
+            EvalDiscrSplit(Context, *Context->training.environment, Result,
+                           Att, WCases);
+        }
+        else if ( Context->splits.sample_fraction < 1 )
+        {
+            EstimateMaxGR(Context, *Context->training.environment, Result,
+                          Att, WFp, WLp);
+        }
+        else if ( Context->splits.sampled )
+        {
+            Result.Information = -1E16;
+            if ( Result.EstimatedMaxGR > Context->splits.value_threshold )
+            {
+                EvalContinuousAtt(Context, *Context->training.environment,
+                                  Result, Att, WFp, WLp);
+                if ( Result.Information > Epsilon &&
+                     (GR = Result.Gain / Result.Information) >
+                         Context->splits.value_threshold )
+                {
+                    Context->splits.value_threshold = GR;
+                }
+            }
+        }
+        else
+        {
+            EvalContinuousAtt(Context, *Context->training.environment, Result,
+                              Att, WFp, WLp);
+        }
 
-	    if ( Context->splits.estimated_max_gain_ratio[Att] > Context->splits.value_threshold )
-	    {
-		EvalContinuousAtt(Context, *Context->training.environment, Result, Att, WFp, WLp);
-		Context->splits.gain[Att] = Result.Gain;
-		Context->splits.information[Att] = Result.Information;
-		Context->splits.thresholds[Att] = Result.Threshold;
-
-		if ( Context->splits.information[Att] > Epsilon &&
-		     (GR = Context->splits.gain[Att] / Context->splits.information[Att]) > Context->splits.value_threshold )
-		{
-		    if ( GR > Context->splits.value_threshold ) Context->splits.value_threshold = GR;
-		}
-	    }
-	}
-	else
-	{
-	    EvalContinuousAtt(Context, *Context->training.environment, Result, Att, WFp, WLp);
-	    Context->splits.gain[Att] = Result.Gain;
-	    Context->splits.information[Att] = Result.Information;
-	    Context->splits.thresholds[Att] = Result.Threshold;
-	}
+        PublishSplitResult(Context, Att, Result);
     }
 }
 
@@ -833,27 +852,9 @@ void EvalDiscrSplit(c50_context *Context, SplitWorkspace &Workspace, SplitResult
 
 void EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases)
 {
-    SplitWorkspace &Workspace = *Context->training.environment;
-    SplitResult Result{};
-
-    Result.Gain = Context->splits.gain[Att];
-    Result.Information = Context->splits.information[Att];
-    Result.EstimatedMaxGR = Context->splits.estimated_max_gain_ratio[Att];
-    Result.Threshold = Context->splits.thresholds[Att];
-    if ( Context->splits.subset_counts )
-    {
-        Result.SubsetCount = Context->splits.subset_counts[Att];
-        Result.Subsets = Context->splits.subsets[Att];
-    }
-
-    EvalDiscrSplit(Context, Workspace, Result, Att, Cases);
-    Context->splits.gain[Att] = Result.Gain;
-    Context->splits.information[Att] = Result.Information;
-    Context->splits.thresholds[Att] = Result.Threshold;
-    if ( Context->splits.subset_counts )
-    {
-        Context->splits.subset_counts[Att] = Result.SubsetCount;
-    }
+    SplitResult Result = ReadSplitResult(Context, Att);
+    EvalDiscrSplit(Context, *Context->training.environment, Result, Att, Cases);
+    PublishSplitResult(Context, Att, Result);
 }
 
 
