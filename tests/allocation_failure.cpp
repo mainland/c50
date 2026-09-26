@@ -69,6 +69,23 @@ int main()
         c50::context context;
         exercise("load", context, [&] { c50::model::load(context, c50::model_kind::tree, names, tree); });
         exercise("train", context, [&] { c50::model::train(context, c50::model_kind::tree, names, data); });
+        exercise("rules", context, [&] {
+            c50::model::train(context, c50::model_kind::rules, names, data);
+        });
+        const std::string category_names = "no, yes.\ncolor: red, blue, green, yellow.\n";
+        const std::string category_data =
+            "red, no\nblue, yes\ngreen, no\nyellow, yes\n"
+            "red, no\nblue, yes\ngreen, no\nyellow, yes\n";
+        c50::options subsets;
+        subsets.subset_splits = true;
+        auto rules = c50::model::train(context, c50::model_kind::rules,
+                                       category_names, category_data, subsets);
+        const auto serialized_rules = rules.serialized_data();
+        exercise("load rules", context, [&] {
+            c50::model::load(context, c50::model_kind::rules,
+                             category_names, serialized_rules);
+        });
+        exercise("predict rules", context, [&] { rules.predict(context, category_data); });
         exercise("implicit boolean", context, [&] {
             c50::model::train(context, c50::model_kind::tree,
                 "no, yes.\nx: continuous.\nlarge := x > 1.\n", data);
