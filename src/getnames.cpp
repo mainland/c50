@@ -65,8 +65,8 @@ char	LineBuffer[MAXLINEBUFFER], *LBp=LineBuffer;
 Boolean ReadName(FILE *f, String s, int n, char ColonOpt)
 /*      --------  */
 {
-    register char *Sp=s;
-    register int  c;
+    char *Sp=s;
+    int  c;
     char	  Msg[2];
 
     /*  Skip to first non-space character  */

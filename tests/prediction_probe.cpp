@@ -14,7 +14,7 @@ int main(int argc, char **argv)
     FILE *F;
     ClassNo Actual, Predicted, c;
     CaseNo i;
-    String Extension;
+    const char *Extension;
 
     if ( argc != 3 ||
          ( strcmp(argv[2], "tree") && strcmp(argv[2], "rules") ) )

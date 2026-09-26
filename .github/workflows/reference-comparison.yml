@@ -53,7 +53,7 @@ jobs:
         run: >-
           cmake -S . -B build
           -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_C_FLAGS="$FLAGS"
+          -DCMAKE_CXX_FLAGS="$FLAGS"
       - name: Build this tree's c5.0
         run: cmake --build build --parallel 2 --target c50_cli
       - name: Compare with Release 2.07

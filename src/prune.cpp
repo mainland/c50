@@ -868,12 +868,12 @@ float RawExtraErrs(CaseCount N, CaseCount E)
 
     if ( E < 1E-6 )
     {
-	return N * (1 - exp(log(CF) / N));
+	return N * (1 - exp(log((double) CF) / N));
     }
     else
     if ( N > 1 && E < 0.9999 )
     {
-	Val0 = N * (1 - exp(log(CF) / N));
+	Val0 = N * (1 - exp(log((double) CF) / N));
 	return Val0 + E * (RawExtraErrs(N, 1.0) - Val0);
     }
     else

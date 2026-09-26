@@ -40,7 +40,7 @@
 #define  NAME T_C50
 
 
-void PrintHeader(String Title)
+void PrintHeader(const char *Title)
 /*   -----------  */
 {
     char	TitleLine[80];
@@ -68,7 +68,7 @@ void PrintHeader(String Title)
 String	OptArg, Option;
 
 
-char ProcessOption(int Argc, char *Argv[], char *Options)
+char ProcessOption(int Argc, char *Argv[], const char *Options)
 /*   -------------  */
 {
     int		i;
@@ -315,7 +315,7 @@ void ResetKR(int KRInit)
 /*************************************************************************/
 
 
-void Error(int ErrNo, String S1, String S2)
+void Error(int ErrNo, const char *S1, const char *S2)
 /*   -----  */
 {
     Boolean	Quit=false, WarningOnly=false;
@@ -530,7 +530,7 @@ String CaseLabel(CaseNo N)
 /*************************************************************************/
 
 
-FILE *GetFile(String Extension, String RW)
+FILE *GetFile(const char *Extension, const char *RW)
 /*    --------  */
 {
     strcpy(Fn, FileStem);
@@ -574,12 +574,12 @@ int Denominator(ContValue Val)
     double	RoundErr, Accuracy;
     int		Mult;
 
-    Accuracy = fabs(Val) * 1E-6;	/* approximate */
+    Accuracy = fabs((double) Val) * 1E-6;	/* approximate */
     Val = modf(Val, &RoundErr);
 
     for ( Mult = 100000 ; Mult >= 1 ; Mult /= 10 )
     {
-	RoundErr = fabs(rint(Val * Mult) / Mult - Val);
+	RoundErr = fabs(rint((double) (Val * Mult)) / Mult - Val);
 	if ( RoundErr > 2 * Accuracy )
 	{
 	    return Mult * 10;
@@ -804,9 +804,9 @@ void CValToStr(ContValue CV, Attribute Att, String DS)
 
     if ( TStampVal(Att) )
     {
-	DayToDate(floor(CV / 1440) + TSBase, DS);
+	DayToDate(floor((double) (CV / 1440)) + TSBase, DS);
 	DS[10] = ' ';
-	Mins = rint(CV) - floor(CV / 1440) * 1440;
+	Mins = rint((double) CV) - floor((double) (CV / 1440)) * 1440;
 	SecsToTime(Mins * 60, DS+11);
     }
     else
