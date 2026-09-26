@@ -37,23 +37,7 @@
 #include "c50_api_internal.h"
 
 
-Boolean		MultiVal,	/* all atts have many values */
-		Subsample;	/* use subsampling */
-float		AvGainWt,	/* weight of average gain in gain threshold */
-		MDLWt;		/* weight of MDL threshold ditto */
-
-Attribute	*DList=Nil;	/* list of discrete atts */
-int		NDList;		/* number in list */
-
-DiscrValue	MaxLeaves;	/* target maximum tree size */
-
 #define		SAMPLEUNIT	2000
-
-float		ValThresh;	/* minimum GR when evaluating sampled atts */
-Boolean		Sampled;	/* true if sampling used */
-
-Attribute	*Waiting=Nil,	/* attribute wait list */
-		NWaiting=0;
 
 
 
@@ -107,15 +91,15 @@ void InitialiseTreeData(c50_context *Context)
     }
 
     NoAttributes = ( Context->schema.max_attribute < 1 ? 0 : (size_t) Context->schema.max_attribute );
-    DList  = Alloc(NoAttributes, Attribute);
-    NDList = 0;
+    Context->splits.discrete_attributes  = Alloc(NoAttributes, Attribute);
+    Context->splits.discrete_attribute_count = 0;
 
     Context->splits.discrete_frequencies = AllocZero(Context->schema.max_attribute+1, double *);
     ForEach(Att, 1, Context->schema.max_attribute)
     {
 	if ( Att == Context->schema.class_attribute || Skip(Att) || ! Discrete(Att) ) continue;
 
-	DList[NDList++] = Att;
+	Context->splits.discrete_attributes[Context->splits.discrete_attribute_count++] = Att;
 
 	Context->splits.discrete_frequencies[Att] = Alloc(Context->schema.max_class * (Context->schema.max_attribute_value[Att]+1), double);
     }
@@ -137,21 +121,21 @@ void InitialiseTreeData(c50_context *Context)
 
     /*  Check whether all attributes have many discrete values  */
 
-    MultiVal = true;
+    Context->splits.all_attributes_multi_valued = true;
     if ( ! Context->options.subset_splits )
     {
-	for ( Att = 1 ; MultiVal && Att <= Context->schema.max_attribute ; Att++ )
+	for ( Att = 1 ; Context->splits.all_attributes_multi_valued && Att <= Context->schema.max_attribute ; Att++ )
 	{
 	    if ( ! Skip(Att) && Att != Context->schema.class_attribute )
 	    {
-		MultiVal = Context->schema.max_attribute_value[Att] >= 0.3 * (Context->cases.max_case + 1);
+		Context->splits.all_attributes_multi_valued = Context->schema.max_attribute_value[Att] >= 0.3 * (Context->cases.max_case + 1);
 	    }
 	}
     }
 
     /*  See whether there are continuous attributes for subsampling  */
 
-    Subsample = false;
+    Context->splits.use_subsampling = false;
 
     /*  Set parameters for RawExtraErrs() */
 
@@ -160,7 +144,7 @@ void InitialiseTreeData(c50_context *Context)
     /*  Set up environment  */
 
     Context->training.environment = AllocZero(1, EnvRec);
-    Waiting = Alloc(Context->schema.max_attribute+1, Attribute);
+    Context->splits.waiting_attributes = Alloc(Context->schema.max_attribute+1, Attribute);
 
     vMax = Max(3, Context->schema.max_discrete_value+1);
 
@@ -230,7 +214,7 @@ void FreeTreeData(c50_context *Context)
 	}
     }
 
-    FreeUnlessNil(DList);				DList = Nil;
+    FreeUnlessNil(Context->splits.discrete_attributes);				Context->splits.discrete_attributes = Nil;
 
     if ( Context->splits.discrete_frequencies )
     {
@@ -269,7 +253,7 @@ void FreeTreeData(c50_context *Context)
 	Context->training.environment = Nil;
     }
 
-    FreeUnlessNil(Waiting);				Waiting = Nil;
+    FreeUnlessNil(Context->splits.waiting_attributes);				Context->splits.waiting_attributes = Nil;
 }
 
 
@@ -290,30 +274,30 @@ void SetMinGainThresh(c50_context *Context)
 {
     float	Frac;
 
-    /*  Set AvGainWt and MDLWt  */
+    /*  Set Context->splits.average_gain_weight and Context->splits.mdl_weight  */
 
     if ( Now == WINNOWATTS )
     {
-	AvGainWt = MDLWt = 0.0;
+	Context->splits.average_gain_weight = Context->splits.mdl_weight = 0.0;
     }
     else
     if ( (Context->cases.max_case+1) / Context->schema.max_class <= 500 )
     {
-	AvGainWt = 1.0;
-	MDLWt    = 0.0;
+	Context->splits.average_gain_weight = 1.0;
+	Context->splits.mdl_weight    = 0.0;
     }
     else
     if ( (Context->cases.max_case+1) / Context->schema.max_class >= 1000 )
     {
-	AvGainWt = 0.0;
-	MDLWt    = 0.9;
+	Context->splits.average_gain_weight = 0.0;
+	Context->splits.mdl_weight    = 0.9;
     }
     else
     {
 	Frac = ((Context->cases.max_case+1) / Context->schema.max_class - 500) / 500.0;
 
-	AvGainWt = 1 - Frac;
-	MDLWt    = 0.9 * Frac;
+	Context->splits.average_gain_weight = 1 - Frac;
+	Context->splits.mdl_weight    = 0.9 * Frac;
     }
 }
 
@@ -382,7 +366,7 @@ void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
 	Cases += Context->training.class_frequencies[c];
     }
 
-    MaxLeaves = ( Context->options.leaf_ratio > 0 ? rint(Context->options.leaf_ratio * Cases) : 1E6 );
+    Context->splits.max_leaves = ( Context->options.leaf_ratio > 0 ? rint(Context->options.leaf_ratio * Cases) : 1E6 );
 
     *Result = Node = Leaf(Context, Context->training.class_frequencies, BestLeaf, Cases,
 			 Cases - Context->training.class_frequencies[BestLeaf]);
@@ -401,7 +385,7 @@ void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
 
     if ( Context->training.class_frequencies[BestLeaf] >= 0.999 * Cases  ||
 	 Cases < 2 * Context->options.minimum_cases ||
-	 MaxLeaves < 2 )
+	 Context->splits.max_leaves < 2 )
     {
 	if ( Now == FORMTREE ) Progress(Cases);
 	return;
@@ -414,19 +398,19 @@ void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
     /*  Perform preliminary evaluation if using subsampling.
 	Must expect at least 10 of least prevalent class  */
 
-    ValThresh = 0;
-    if ( Subsample && No(Fp, Lp) > 5 * Context->schema.max_class * SAMPLEUNIT &&
+    Context->splits.value_threshold = 0;
+    if ( Context->splits.use_subsampling && No(Fp, Lp) > 5 * Context->schema.max_class * SAMPLEUNIT &&
 	 (Context->training.class_frequencies[Least] * Context->schema.max_class * SAMPLEUNIT) / No(Fp, Lp) >= 10 )
     {
 	SampleEstimate(Context, Fp, Lp, Cases);
-	Sampled   = true;
+	Context->splits.sampled   = true;
     }
     else
     {
-	Sampled = false;
+	Context->splits.sampled = false;
     }
 
-    BestAtt = ChooseSplit(Context, Fp, Lp, Cases, Sampled);
+    BestAtt = ChooseSplit(Context, Fp, Lp, Cases, Context->splits.sampled);
 
     /*  Decide whether to branch or not  */
 
@@ -523,9 +507,9 @@ void SampleEstimate(c50_context *Context, CaseNo Fp, CaseNo Lp,
 	    EvalDiscrSplit(Context, Att, Cases);
 
 	    if ( Context->splits.information[Att] > Epsilon &&
-		 (GR = Context->splits.gain[Att] / Context->splits.information[Att]) > ValThresh )
+		 (GR = Context->splits.gain[Att] / Context->splits.information[Att]) > Context->splits.value_threshold )
 	    {
-		ValThresh = GR;
+		Context->splits.value_threshold = GR;
 	    }
 	}
     }
@@ -540,13 +524,13 @@ void SampleEstimate(c50_context *Context, CaseNo Fp, CaseNo Lp,
 
     NewCases   = CountCases(Context, Fp, SLp);
     Context->splits.sample_fraction = NewCases / Cases;
-    NWaiting   = 0;
+    Context->splits.waiting_count   = 0;
 
     ForEach(Att, 1, Context->schema.max_attribute)
     { 
 	if ( Continuous(Att) )
 	{
-	    Waiting[NWaiting++] = Att;
+	    Context->splits.waiting_attributes[Context->splits.waiting_count++] = Att;
 	}
     } 
 
@@ -587,14 +571,14 @@ void Sample(c50_context *Context, CaseNo Fp, CaseNo Lp, CaseNo N)
 /*************************************************************************/
 /*								 	 */
 /*	Evaluate splits and choose best attribute to split on.		 */
-/*	If Sampled, Context->splits.gain[] and Context->splits.information[] have been estimated on		 */
+/*	If Context->splits.sampled, Context->splits.gain[] and Context->splits.information[] have been estimated on		 */
 /*	sample and unlikely candidates are not evaluated on all cases	 */
 /*								 	 */
 /*************************************************************************/
 
 
 Attribute ChooseSplit(c50_context *Context, CaseNo Fp, CaseNo Lp,
-		      CaseCount Cases, Boolean Sampled)
+		      CaseCount Cases, Boolean sampled)
 /*        -----------  */
 {
     Attribute	Att;
@@ -603,9 +587,9 @@ Attribute ChooseSplit(c50_context *Context, CaseNo Fp, CaseNo Lp,
 
     /*  For each available attribute, find the information and gain  */
 
-    NWaiting = 0;
+    Context->splits.waiting_count = 0;
 
-    if ( Sampled )
+    if ( sampled )
     {
 	/*  If samples have been used, do not re-evaluate discrete atts
 	    or atts that have low GR  */
@@ -614,22 +598,22 @@ Attribute ChooseSplit(c50_context *Context, CaseNo Fp, CaseNo Lp,
 	{
 	    if ( ! Continuous(Att) ) continue;
 
-	    if ( Context->splits.estimated_max_gain_ratio[Att] >= ValThresh )
+	    if ( Context->splits.estimated_max_gain_ratio[Att] >= Context->splits.value_threshold )
 	    {
 		/*  Add attributes in reverse order of estimated max GR  */
 
 		for ( i = 0 ;
-		      i < NWaiting && Context->splits.estimated_max_gain_ratio[Waiting[i]] < Context->splits.estimated_max_gain_ratio[Att] ;
+		      i < Context->splits.waiting_count && Context->splits.estimated_max_gain_ratio[Context->splits.waiting_attributes[i]] < Context->splits.estimated_max_gain_ratio[Att] ;
 		      i++ )
 		    ;
 
-		for ( j = NWaiting-1 ; j >= i ; j-- )
+		for ( j = Context->splits.waiting_count-1 ; j >= i ; j-- )
 		{
-		    Waiting[j+1] = Waiting[j];
+		    Context->splits.waiting_attributes[j+1] = Context->splits.waiting_attributes[j];
 		}
-		NWaiting++;
+		Context->splits.waiting_count++;
 
-		Waiting[i] = Att;
+		Context->splits.waiting_attributes[i] = Att;
 	    }
 	    else
 	    {
@@ -651,7 +635,7 @@ Attribute ChooseSplit(c50_context *Context, CaseNo Fp, CaseNo Lp,
 		continue;
 	    }
 
-	    Waiting[NWaiting++] = Att;
+	    Context->splits.waiting_attributes[Context->splits.waiting_count++] = Att;
 	}
     }
 
@@ -669,9 +653,9 @@ void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
     Attribute	Att;
     float	GR;
 
-    for ( ; NWaiting > 0 ; )
+    for ( ; Context->splits.waiting_count > 0 ; )
     {
-	Att = Waiting[--NWaiting];
+	Att = Context->splits.waiting_attributes[--Context->splits.waiting_count];
 
 	if ( Discrete(Att) )
 	{
@@ -683,18 +667,18 @@ void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
 	    EstimateMaxGR(Context, Att, WFp, WLp);
 	}
 	else
-	if ( Sampled )
+	if ( Context->splits.sampled )
 	{
 	    Context->splits.information[Att] = -1E16;
 
-	    if ( Context->splits.estimated_max_gain_ratio[Att] > ValThresh )
+	    if ( Context->splits.estimated_max_gain_ratio[Att] > Context->splits.value_threshold )
 	    {
 		EvalContinuousAtt(Context, Att, WFp, WLp);
 
 		if ( Context->splits.information[Att] > Epsilon &&
-		     (GR = Context->splits.gain[Att] / Context->splits.information[Att]) > ValThresh )
+		     (GR = Context->splits.gain[Att] / Context->splits.information[Att]) > Context->splits.value_threshold )
 		{
-		    if ( GR > ValThresh ) ValThresh = GR;
+		    if ( GR > Context->splits.value_threshold ) Context->splits.value_threshold = GR;
 		}
 	    }
 	}
@@ -728,7 +712,7 @@ Attribute FindBestAtt(c50_context *Context, CaseCount Cases)
 	    average gain (unless very many values)  */
 
 	if ( Context->splits.gain[Att] >= Epsilon &&
-	     ( MultiVal || Context->schema.max_attribute_value[Att] < 0.3 * (Context->cases.max_case + 1) ) )
+	     ( Context->splits.all_attributes_multi_valued || Context->schema.max_attribute_value[Att] < 0.3 * (Context->cases.max_case + 1) ) )
 	{
 	    Possible++;
 	    AvGain += Context->splits.gain[Att];
@@ -745,7 +729,7 @@ Attribute FindBestAtt(c50_context *Context, CaseCount Cases)
 
     AvGain /= Possible;
     MDL     = Log(Possible) / Cases;
-    MinGain = AvGain * AvGainWt + MDL * MDLWt;
+    MinGain = AvGain * Context->splits.average_gain_weight + MDL * Context->splits.mdl_weight;
 
     Verbosity(2,
 	fprintf(Of, "\tav gain=%.3f, MDL (%d) = %.3f, min=%.3f\n",
@@ -827,10 +811,10 @@ void EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases)
 
     /*  Check that this test will not give too many leaves  */
 
-    if ( NBr > MaxLeaves + 1 )
+    if ( NBr > Context->splits.max_leaves + 1 )
     {
 	Verbosity(2,
-	    fprintf(Of, "\t(cancelled -- %d leaves, max %d)\n", NBr, MaxLeaves))
+	    fprintf(Of, "\t(cancelled -- %d leaves, max %d)\n", NBr, Context->splits.max_leaves))
 
 	Context->splits.gain[Att] = None;
     }
@@ -1150,9 +1134,9 @@ void FindAllFreq(c50_context *Context, CaseNo Fp, CaseNo Lp)
 	Context->training.class_frequencies[c] = 0;
     }
 
-    for ( a = 0 ; a < NDList ; a++ )
+    for ( a = 0 ; a < Context->splits.discrete_attribute_count ; a++ )
     {
-	Att = DList[a];
+	Att = Context->splits.discrete_attributes[a];
 	for ( x = Context->schema.max_class * (Context->schema.max_attribute_value[Att]+1) - 1 ; x >= 0 ; x-- )
 	{
 	    Context->splits.discrete_frequencies[Att][x] = 0;
@@ -1165,9 +1149,9 @@ void FindAllFreq(c50_context *Context, CaseNo Fp, CaseNo Lp)
     {
 	Context->training.class_frequencies[ (c=Class(Context->cases.records[i])) ] += (w=Weight(Context->cases.records[i]));
 
-	for ( a = 0 ; a < NDList ; a++ )
+	for ( a = 0 ; a < Context->splits.discrete_attribute_count ; a++ )
 	{
-	    Att = DList[a];
+	    Att = Context->splits.discrete_attributes[a];
 	    Context->splits.discrete_frequencies[Att][ Context->schema.max_class * XDVal(Context->cases.records[i], Att) + (c-1) ] += w;
 	}
     }
