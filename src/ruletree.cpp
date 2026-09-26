@@ -38,16 +38,7 @@
 
 #include "defns.i"
 #include "extern.i"
-
-Condition	*Test=Nil;	/* tests that appear in ruleset */
-int		NTest,		/* number of distinct tests */
-		TestSpace,	/* space allocated for tests */
-		*TestOccur,	/* frequency of test occurrence in rules */
-		*RuleCondOK;	/* conditions satisfied by rule */
-
-Boolean		*TestUsed;	/* used in parent nodes */
-
-
+#include "c50_api_internal.h"
 
 /*************************************************************************/
 /*                                                              	 */
@@ -56,14 +47,14 @@ Boolean		*TestUsed;	/* used in parent nodes */
 /*************************************************************************/
 
 
-void ConstructRuleTree(CRuleSet RS)
+void ConstructRuleTree(c50_context *Context, CRuleSet RS)
 /*   -----------------  */
 {
     int		r, c;
     RuleNo	*All;
 
-    Test = Alloc((TestSpace = 1000), Condition);
-    NTest = 0;
+    Context->rule_tree.tests = Alloc((Context->rule_tree.test_capacity = 1000), Condition);
+    Context->rule_tree.test_count = 0;
 
     All = Alloc(RS->SNRules, RuleNo);
     ForEach(r, 1, RS->SNRules)
@@ -72,22 +63,22 @@ void ConstructRuleTree(CRuleSet RS)
 
 	ForEach(c, 1, RS->SRule[r]->Size)
 	{
-	    SetTestIndex(RS->SRule[r]->Lhs[c]);
+	    SetTestIndex(Context, RS->SRule[r]->Lhs[c]);
 	}
     }
 
-    TestOccur = Alloc(NTest, int);
-    TestUsed  = AllocZero(NTest, Boolean);
+    Context->rule_tree.test_occurrences = Alloc(Context->rule_tree.test_count, int);
+    Context->rule_tree.tests_used  = AllocZero(Context->rule_tree.test_count, Boolean);
 
-    RuleCondOK = AllocZero(RS->SNRules+1, int);
+    Context->rule_tree.rule_conditions_satisfied = AllocZero(RS->SNRules+1, int);
 
-    RS->RT = GrowRT(All, RS->SNRules, RS->SRule);
+    RS->RT = GrowRT(Context, All, RS->SNRules, RS->SRule);
 
     Free(All);
-    Free(Test);
-    Free(TestUsed);
-    Free(TestOccur);
-    Free(RuleCondOK);
+    Free(Context->rule_tree.tests);
+    Free(Context->rule_tree.tests_used);
+    Free(Context->rule_tree.test_occurrences);
+    Free(Context->rule_tree.rule_conditions_satisfied);
 }
 
 
@@ -95,12 +86,12 @@ void ConstructRuleTree(CRuleSet RS)
 /*************************************************************************/
 /*                                                              	 */
 /*	Set test number for a condition.  If no existing test matches,	 */
-/*	add new test to Test[]						 */
+/*	add new test to Context->rule_tree.tests[]						 */
 /*                                                              	 */
 /*************************************************************************/
 
 
-void SetTestIndex(Condition C)
+void SetTestIndex(c50_context *Context, Condition C)
 /*   ------------  */
 {
     int		t;
@@ -109,9 +100,9 @@ void SetTestIndex(Condition C)
 
     Att = C->Tested;
 
-    ForEach(t, 0, NTest-1)
+    ForEach(t, 0, Context->rule_tree.test_count-1)
     {
-	CC = Test[t];
+	CC = Context->rule_tree.tests[t];
 	if ( CC->Tested != Att || CC->NodeType != C->NodeType ) continue;
 
 	switch ( C->NodeType )
@@ -121,7 +112,7 @@ void SetTestIndex(Condition C)
 		return;
 
 	    case BrSubset:
-		if ( ! memcmp(C->Subset, CC->Subset, (MaxAttVal[Att]>>3)+1) )
+		if ( ! memcmp(C->Subset, CC->Subset, (Context->schema.max_attribute_value[Att]>>3)+1) )
 		{
 		    C->TestI = t;
 		    return;
@@ -142,13 +133,13 @@ void SetTestIndex(Condition C)
 
     /*  New test -- make sure have enough space  */
 
-    if ( NTest >= TestSpace )
+    if ( Context->rule_tree.test_count >= Context->rule_tree.test_capacity )
     {
-	Realloc(Test, (TestSpace += 1000), Condition);
+	Realloc(Context->rule_tree.tests, (Context->rule_tree.test_capacity += 1000), Condition);
     }
 
-    Test[NTest] = C;
-    C->TestI = NTest++;
+    Context->rule_tree.tests[Context->rule_tree.test_count] = C;
+    C->TestI = Context->rule_tree.test_count++;
 }
 
 
@@ -160,7 +151,7 @@ void SetTestIndex(Condition C)
 /*************************************************************************/
 
 
-RuleTree GrowRT(RuleNo *RR, int RRN, CRule *Rule)
+RuleTree GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule)
 /*       ------  */
 {
     RuleTree	Node;
@@ -179,7 +170,7 @@ RuleTree GrowRT(RuleNo *RR, int RRN, CRule *Rule)
     {
 	r = RR[ri];
 
-	if ( RuleCondOK[r] == Rule[r]->Size )
+	if ( Context->rule_tree.rule_conditions_satisfied[r] == Rule[r]->Size )
 	{
 	    RR[ri] = RR[FP];
 	    RR[FP] = r;
@@ -205,17 +196,17 @@ RuleTree GrowRT(RuleNo *RR, int RRN, CRule *Rule)
 
     /*  Choose test for this node  */
 
-    TI = SelectTest(RR, RRN, Rule);
-    TestUsed[TI] = true;
+    TI = SelectTest(Context, RR, RRN, Rule);
+    Context->rule_tree.tests_used[TI] = true;
 
-    Node->CondTest = Test[TI];
+    Node->CondTest = Context->rule_tree.tests[TI];
 
     /*  Find the desired outcome for each rule  */
 
     Expect = Alloc(RRN, int);
     ForEach(ri, 0, RRN-1)
     {
-	Expect[ri] = DesiredOutcome(Rule[RR[ri]], TI);
+	Expect[ri] = DesiredOutcome(Context, Rule[RR[ri]], TI);
     }
 
     /*  Now construct individual branches.  Rules that do not reference
@@ -224,8 +215,8 @@ RuleTree GrowRT(RuleNo *RR, int RRN, CRule *Rule)
 	goes to branch 0.  */
 
     Node->Forks =
-	( Test[TI]->NodeType == BrDiscr ? MaxAttVal[Test[TI]->Tested] :
-	  Test[TI]->NodeType == BrSubset ? 1 : 3 );
+	( Context->rule_tree.tests[TI]->NodeType == BrDiscr ? Context->schema.max_attribute_value[Context->rule_tree.tests[TI]->Tested] :
+	  Context->rule_tree.tests[TI]->NodeType == BrSubset ? 1 : 3 );
 
     Node->Branch = Alloc(Node->Forks+1, RuleTree);
 
@@ -242,13 +233,13 @@ RuleTree GrowRT(RuleNo *RR, int RRN, CRule *Rule)
 	    {
 		LR[LRN++] = RR[ri];
 
-		if ( Expect[ri] > 0 ) RuleCondOK[RR[ri]]++;
+		if ( Expect[ri] > 0 ) Context->rule_tree.rule_conditions_satisfied[RR[ri]]++;
 	    }
 	}
 
 	/*  LR now contains rules with outcome v  */
 
-	Node->Branch[v] = GrowRT(LR, LRN, Rule);
+	Node->Branch[v] = GrowRT(Context, LR, LRN, Rule);
 
 	if ( v )
 	{
@@ -256,12 +247,12 @@ RuleTree GrowRT(RuleNo *RR, int RRN, CRule *Rule)
 
 	    ForEach(ri, 0, LRN-1)
 	    {
-		RuleCondOK[LR[ri]]--;
+		Context->rule_tree.rule_conditions_satisfied[LR[ri]]--;
 	    }
 	}
     }
 
-    TestUsed[TI] = false;
+    Context->rule_tree.tests_used[TI] = false;
 
     /*  Free local storage  */
 
@@ -275,19 +266,19 @@ RuleTree GrowRT(RuleNo *RR, int RRN, CRule *Rule)
 
 /*************************************************************************/
 /*                                                              	 */
-/*	Check whether rule uses Test[TI].				 */
+/*	Check whether rule uses Context->rule_tree.tests[TI].				 */
 /*	Return 0 (no) or test outcome required for rule			 */
 /*                                                              	 */
 /*************************************************************************/
 
 
-int DesiredOutcome(CRule R, int TI)
+int DesiredOutcome(c50_context *Context, CRule R, int TI)
 /*  --------------  */
 {
     int		c;
     Boolean	ContinTest;
 
-    ContinTest = Continuous(Test[TI]->Tested);	/* test of continuous att */
+    ContinTest = Continuous(Context->rule_tree.tests[TI]->Tested);	/* test of continuous att */
 
     ForEach(c, 1, R->Size)
     {
@@ -301,7 +292,7 @@ int DesiredOutcome(CRule R, int TI)
 	      -2 means "rule can only be matched down branch 2"
 	      -3 means "rule can only be matched down branch 3"  */
 
-	if ( ContinTest && Test[TI]->Tested == R->Lhs[c]->Tested )
+	if ( ContinTest && Context->rule_tree.tests[TI]->Tested == R->Lhs[c]->Tested )
 	{
 	    switch ( R->Lhs[c]->TestValue )
 	    {
@@ -309,11 +300,11 @@ int DesiredOutcome(CRule R, int TI)
 		    return 1;
 
 		case 2:
-		    if ( R->Lhs[c]->Cut < Test[TI]->Cut ) return -2;
+		    if ( R->Lhs[c]->Cut < Context->rule_tree.tests[TI]->Cut ) return -2;
 		    break;
 
 		case 3:
-		    if ( R->Lhs[c]->Cut > Test[TI]->Cut ) return -3;
+		    if ( R->Lhs[c]->Cut > Context->rule_tree.tests[TI]->Cut ) return -3;
 	    }
 	}
     }
@@ -330,7 +321,7 @@ int DesiredOutcome(CRule R, int TI)
 /*************************************************************************/
 
 
-int SelectTest(RuleNo *RR, int RRN, CRule *Rule)
+int SelectTest(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule)
 /*  ----------  */
 {
     int		c, cc, ri;
@@ -338,9 +329,9 @@ int SelectTest(RuleNo *RR, int RRN, CRule *Rule)
 
     /*  Count test occurrences  */
 
-    ForEach(c, 0, NTest-1)
+    ForEach(c, 0, Context->rule_tree.test_count-1)
     {
-	TestOccur[c] = 0;
+	Context->rule_tree.test_occurrences[c] = 0;
     }
 
     ForEach(ri, 0, RRN-1)
@@ -349,16 +340,16 @@ int SelectTest(RuleNo *RR, int RRN, CRule *Rule)
 
 	ForEach(c, 1, Rule[r]->Size)
 	{
-	    TestOccur[Rule[r]->Lhs[c]->TestI]++;
+	    Context->rule_tree.test_occurrences[Rule[r]->Lhs[c]->TestI]++;
 	}
     }
 
     /*  Find most frequently-occurring test  */
 
     cc = -1;
-    ForEach(c, 0, NTest-1)
+    ForEach(c, 0, Context->rule_tree.test_count-1)
     {
-	if ( ! TestUsed[c] && ( cc < 0 || TestOccur[c] > TestOccur[cc] ) )
+	if ( ! Context->rule_tree.tests_used[c] && ( cc < 0 || Context->rule_tree.test_occurrences[c] > Context->rule_tree.test_occurrences[cc] ) )
 	{
 	    cc = c;
 	}
