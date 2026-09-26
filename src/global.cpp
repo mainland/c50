@@ -70,15 +70,6 @@ int		LineNo=0,	/* input line number */
 		AttExIn=0,	/* attribute exclusions/inclusions */
 		TSBase=0;	/* base day for time stamps */
 
-Boolean		*SomeMiss=Nil,	/* att has missing values */
-		*SomeNA=Nil;	/* att has N/A values */
-
-CaseNo		MaxCase=-1;	/* max data case number */
-
-DataRec		*Case=0;	/* data cases */
-
-DataRec		*SaveCase=0;
-
 String		FileStem="undefined";
 
 /*************************************************************************/

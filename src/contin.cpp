@@ -343,32 +343,32 @@ void PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
 
     GEnv.Cases = 0;
 
-    if ( SomeMiss[Att] || SomeNA[Att] )
+    if ( Context->cases.some_missing[Att] || Context->cases.some_not_applicable[Att] )
     {
 	GEnv.Xp = Lp+1;
 
 	ForEach(i, Fp, Lp)
 	{
-	    assert(Class(Case[i]) >= 1 && Class(Case[i]) <= Context->schema.max_class);
+	    assert(Class(Context->cases.records[i]) >= 1 && Class(Context->cases.records[i]) <= Context->schema.max_class);
 
-	    GEnv.Cases += Weight(Case[i]);
+	    GEnv.Cases += Weight(Context->cases.records[i]);
 
-	    if ( Unknown(Case[i], Att) )
+	    if ( Unknown(Context->cases.records[i], Att) )
 	    {
-		GEnv.Freq[ 0 ][ Class(Case[i]) ] += Weight(Case[i]);
+		GEnv.Freq[ 0 ][ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
 	    }
 	    else
-	    if ( NotApplic(Context, Case[i], Att) )
+	    if ( NotApplic(Context, Context->cases.records[i], Att) )
 	    {
-		GEnv.Freq[ 1 ][ Class(Case[i]) ] += Weight(Case[i]);
+		GEnv.Freq[ 1 ][ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
 	    }
 	    else
 	    {
-		GEnv.Freq[ 3 ][ Class(Case[i]) ] += Weight(Case[i]);
+		GEnv.Freq[ 3 ][ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
 		GEnv.Xp--;
-		GEnv.SRec[GEnv.Xp].V = CVal(Case[i], Att);
-		GEnv.SRec[GEnv.Xp].W = Weight(Case[i]);
-		GEnv.SRec[GEnv.Xp].C = Class(Case[i]);
+		GEnv.SRec[GEnv.Xp].V = CVal(Context->cases.records[i], Att);
+		GEnv.SRec[GEnv.Xp].W = Weight(Context->cases.records[i]);
+		GEnv.SRec[GEnv.Xp].C = Class(Context->cases.records[i]);
 	    }
 	}
 
@@ -389,11 +389,11 @@ void PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
 
 	ForEach(i, Fp, Lp)
 	{
-	    GEnv.SRec[i].V = CVal(Case[i], Att);
-	    GEnv.SRec[i].W = Weight(Case[i]);
-	    GEnv.SRec[i].C = Class(Case[i]);
+	    GEnv.SRec[i].V = CVal(Context->cases.records[i], Att);
+	    GEnv.SRec[i].W = Weight(Context->cases.records[i]);
+	    GEnv.SRec[i].C = Class(Context->cases.records[i]);
 
-	    GEnv.Freq[3][Class(Case[i])] += Weight(Case[i]);
+	    GEnv.Freq[3][Class(Context->cases.records[i])] += Weight(Context->cases.records[i]);
 	}
 
 	ForEach(c, 1, Context->schema.max_class)
@@ -547,11 +547,11 @@ void AdjustThresholds(c50_context *Context, Tree T, Attribute Att, CaseNo *Ep)
     {
 	if ( *Ep == -1 )
 	{
-	    ForEach(i, 0, MaxCase)
+	    ForEach(i, 0, Context->cases.max_case)
 	    {
-		if ( ! Unknown(Case[i], Att) && ! NotApplic(Context, Case[i], Att) )
+		if ( ! Unknown(Context->cases.records[i], Att) && ! NotApplic(Context, Context->cases.records[i], Att) )
 		{
-		    (&GEnv)->SRec[++(*Ep)].V = CVal(Case[i], Att);
+		    (&GEnv)->SRec[++(*Ep)].V = CVal(Context->cases.records[i], Att);
 		}
 	    }
 	    Cachesort(0, *Ep, (&GEnv)->SRec);

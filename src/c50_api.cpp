@@ -41,6 +41,7 @@ c50_status c50_context_create(c50_context **out_context)
 
     context->status = C50_STATUS_OK;
     context->schema.max_discrete_value = 3;
+    context->cases.max_case = -1;
     *out_context = context;
     return C50_STATUS_OK;
 }
@@ -134,6 +135,11 @@ c50_status c50_run_operation(c50_context *context,
 void c50_record_error(c50_status status, const char *message)
 {
     SetError(ActiveContext, status, message);
+}
+
+c50_context *c50_active_context(void)
+{
+    return ActiveContext;
 }
 
 c50_status c50_set_context_error(c50_context *context, c50_status status,

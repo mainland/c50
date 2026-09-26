@@ -67,25 +67,25 @@ void CrossVal(c50_context *Context)
 	Free(ConfusionMat);
     }
 
-    if ( FOLDS > MaxCase+1 )
+    if ( FOLDS > Context->cases.max_case+1 )
     {
 	fprintf(Of, T_FoldsReduced);
-	FOLDS = MaxCase+1;
+	FOLDS = Context->cases.max_case+1;
     }
 
     Result	 = AllocZero((SaveFOLDS = FOLDS), float *);
-    Blocked	 = Alloc(MaxCase+1, DataRec);
+    Blocked	 = Alloc(Context->cases.max_case+1, DataRec);
     ConfusionMat = AllocZero((Context->schema.max_class+1)*(Context->schema.max_class+1), CaseNo);
 
     Prepare(Context);
 
-    SaveMaxCase = MaxCase;
+    SaveMaxCase = Context->cases.max_case;
     SaveTRIALS  = TRIALS;
 
     /*  First test blocks may be smaller than the others  */
 
-    SmallTestBlocks = FOLDS - ((MaxCase+1) % FOLDS);
-    Size = (MaxCase + 1) / FOLDS;
+    SmallTestBlocks = FOLDS - ((Context->cases.max_case+1) % FOLDS);
+    Size = (Context->cases.max_case + 1) / FOLDS;
 
     ForEach(f, 0, FOLDS-1)
     {
@@ -93,11 +93,11 @@ void CrossVal(c50_context *Context)
 	Result[f] = AllocZero(3, float);
 
 	if ( f == SmallTestBlocks ) Size++;
-	MaxCase = SaveMaxCase - Size;
+	Context->cases.max_case = SaveMaxCase - Size;
 
-	ForEach(i, 0, MaxCase)
+	ForEach(i, 0, Context->cases.max_case)
 	{
-	    Case[i] = Blocked[Start];
+	    Context->cases.records[i] = Blocked[Start];
 	    Start = (Start + 1) % (SaveMaxCase + 1);
 	}
 
@@ -112,7 +112,7 @@ void CrossVal(c50_context *Context)
 	    Next = Start;
 	    ForEach(i, 0, Size-1)
 	    {
-		Case[i] = Blocked[Next];
+		Context->cases.records[i] = Blocked[Next];
 		c = ( RULES ? RuleClassify(Context, Blocked[Next], RuleSet[0]) :
 			      TreeClassify(Context, Blocked[Next], Pruned[0]) );
 		if ( c != Class(Blocked[Next]) )
@@ -139,7 +139,7 @@ void CrossVal(c50_context *Context)
 		( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
 	    ForEach(i, 0, Size-1)
 	    {
-		Case[i] = Blocked[Next];
+		Context->cases.records[i] = Blocked[Next];
 		c = BoostClassify(Context, Blocked[Next], TRIALS-1);
 		if ( c != Class(Blocked[Next]) )
 		{
@@ -162,7 +162,7 @@ void CrossVal(c50_context *Context)
 	Result[f][2] /= Size;
 
 	fprintf(Of, T_EvalHoldOut, Size);
-	MaxCase = Size-1;
+	Context->cases.max_case = Size-1;
 	Evaluate(Context, 0);
 
 	/*  Free space used by classifiers  */
@@ -178,16 +178,16 @@ void CrossVal(c50_context *Context)
 
     /*  Print summary of crossvalidation  */
 
-    MaxCase = SaveMaxCase;
+    Context->cases.max_case = SaveMaxCase;
 
     Summary();
     PrintConfusionMatrix(Context, ConfusionMat);
 
     /*  Free local storage  */
 
-    ForEach(i, 0, MaxCase)
+    ForEach(i, 0, Context->cases.max_case)
     {
-	Case[i] = Blocked[i];
+	Context->cases.records[i] = Blocked[i];
     }
 
     FreeVector((void **) Result, 0, FOLDS-1);		Result = Nil;
@@ -210,8 +210,8 @@ void Prepare(c50_context *Context)
     CaseNo	i, First=0, Last, *Temp, Hold, Next=0;
     ClassNo	Group;
 
-    Temp = Alloc(MaxCase+1, CaseNo);
-    ForEach(i, 0, MaxCase)
+    Temp = Alloc(Context->cases.max_case+1, CaseNo);
+    ForEach(i, 0, Context->cases.max_case)
     {
 	Temp[i] = i;
     }
@@ -220,14 +220,14 @@ void Prepare(c50_context *Context)
 
     /*  Sort into class groups  */
 
-    while ( First <= MaxCase )
+    while ( First <= Context->cases.max_case )
     {
 	Last = First;
-	Group = Class(Case[Temp[First]]);
+	Group = Class(Context->cases.records[Temp[First]]);
 
-	ForEach(i, First+1, MaxCase)
+	ForEach(i, First+1, Context->cases.max_case)
 	{
-	    if ( Class(Case[Temp[i]]) == Group )
+	    if ( Class(Context->cases.records[Temp[i]]) == Group )
 	    {
 		Last++;
 		Hold = Temp[Last];
@@ -243,9 +243,9 @@ void Prepare(c50_context *Context)
 
     ForEach(First, 0, FOLDS-1)
     {
-	for ( i = First ; i <= MaxCase ; i += FOLDS )
+	for ( i = First ; i <= Context->cases.max_case ; i += FOLDS )
 	{
-	    Blocked[Next++] = Case[Temp[i]];
+	    Blocked[Next++] = Context->cases.records[Temp[i]];
 	}
     }
 
@@ -264,7 +264,7 @@ void Prepare(c50_context *Context)
 void Shuffle(c50_context *Context, int *Vec)
 /*   -------  */
 {
-    int	This=0, Alt, Left=MaxCase+1, Hold;
+    int	This=0, Alt, Left=Context->cases.max_case+1, Hold;
 
     ResetKR(&Context->random, KRInit);
 

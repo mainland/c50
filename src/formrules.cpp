@@ -84,7 +84,7 @@ CRuleSet FormRules(c50_context *Context, Tree T)
     CRuleSet	RS;
 
     NotifyStage(FORMRULES);
-    Progress(-(MaxCase+1.0));
+    Progress(-(Context->cases.max_case+1.0));
 
     Verbosity(2, PrintTree(Context, T, "Pruned tree:"))
 
@@ -106,25 +106,25 @@ CRuleSet FormRules(c50_context *Context, Tree T)
     ForEach(i, 0, MaxDepth+1)
     {
 	Stack[i]	= Alloc(1, CondRec);
-	CondFailedBy[i] = AllocZero(MaxCase+1, Boolean);
+	CondFailedBy[i] = AllocZero(Context->cases.max_case+1, Boolean);
     }
 
-    NFail	 = AllocZero(MaxCase+1, short);
-    LocalNFail	 = AllocZero(MaxCase+1, short);
+    NFail	 = AllocZero(Context->cases.max_case+1, short);
+    LocalNFail	 = AllocZero(Context->cases.max_case+1, short);
 
-    CovBy	 = AllocZero(MaxCase+2, int);
+    CovBy	 = AllocZero(Context->cases.max_case+2, int);
 
-    List	 = Alloc(MaxCase+2, CaseNo);
-    Succ	 = Alloc(MaxCase+1, CaseNo);
+    List	 = Alloc(Context->cases.max_case+2, CaseNo);
+    Succ	 = Alloc(Context->cases.max_case+1, CaseNo);
 
-    CBuffer	 = Alloc(4 + (MaxCase+1) + (MaxCase+1)/128, Byte);
+    CBuffer	 = Alloc(4 + (Context->cases.max_case+1) + (Context->cases.max_case+1)/128, Byte);
 
     NRules = RuleSpace = 0;
-    FindClassFreq(Context, ClassFreq, 0, MaxCase);
+    FindClassFreq(Context, ClassFreq, 0, Context->cases.max_case);
 
     if ( ! BranchBits )
     {
-	GenerateLogs(Max(MaxCase+1, Max(Context->schema.max_attribute, Max(Context->schema.max_class, Context->schema.max_discrete_value))));
+	GenerateLogs(Max(Context->cases.max_case+1, Max(Context->schema.max_attribute, Max(Context->schema.max_class, Context->schema.max_discrete_value))));
 	FindTestCodes(Context);
     }
 
@@ -144,7 +144,7 @@ CRuleSet FormRules(c50_context *Context, Tree T)
     /*  Select final rules  */
 
     SiftRules(Context,
-	      (T->Errors + Context->schema.max_class-1) / (MaxCase+1 + Context->schema.max_class));
+	      (T->Errors + Context->schema.max_class-1) / (Context->cases.max_case+1 + Context->schema.max_class));
 
     FreeVector((void **) NCost, 0, Context->schema.max_class);		NCost = Nil;
 
@@ -207,13 +207,13 @@ void SetupNCost(c50_context *Context)
 	}
 	else
  	{
-	    ProbPred = ClassFreq[Pred] / (MaxCase+1);
+	    ProbPred = ClassFreq[Pred] / (Context->cases.max_case+1);
 	    ForEach(Real, 1, Context->schema.max_class)
 	    {
 		NCost[Pred][Real] = MCost[Pred][Real];
 		if ( Real == Pred ) continue;
 
-		ProbReal = ClassFreq[Real] / (MaxCase+1);
+		ProbReal = ClassFreq[Real] / (Context->cases.max_case+1);
 		AvErrCost +=
 		    ProbPred * (ProbReal / (1 - ProbPred)) * MCost[Pred][Real];
 	    }
@@ -292,7 +292,7 @@ void Scan(c50_context *Context, Tree T)
 
 	    /*  Reset number of failed conditions  */
 
-	    PopCondition();
+	    PopCondition(Context);
 	}
 
 	NCond--;
@@ -303,7 +303,7 @@ void Scan(c50_context *Context, Tree T)
     if ( NCond > 0 && T->Cases >= 1 )
     {
 
-	memcpy(LocalNFail, NFail, (MaxCase + 1) * sizeof(short));
+	memcpy(LocalNFail, NFail, (Context->cases.max_case + 1) * sizeof(short));
 
 	TargetClass = T->Leaf;
 	PruneRule(Context, Stack, T->Leaf);
@@ -326,10 +326,10 @@ void PushCondition(c50_context *Context)
 {
     int i;
 
-    ForEach(i, 0, MaxCase)
+    ForEach(i, 0, Context->cases.max_case)
     {
 	if ( (CondFailedBy[NCond][i] =
-	      ! Satisfies(Context, Case[i], Stack[NCond])) )
+	      ! Satisfies(Context, Context->cases.records[i], Stack[NCond])) )
 	{
 	    NFail[i]++;
 	}
@@ -338,12 +338,12 @@ void PushCondition(c50_context *Context)
 
 
 
-void PopCondition()
+void PopCondition(c50_context *Context)
 /*   -------------  */
 {
     int i;
 
-    ForEach(i, 0, MaxCase)
+    ForEach(i, 0, Context->cases.max_case)
     {
 	if ( CondFailedBy[NCond][i] )
 	{
@@ -386,12 +386,12 @@ void PruneRule(c50_context *Context, Condition Cond[], ClassNo TargetClass)
     }
     Cost -= LogFact[NCond];
 
-    Base = TI(ClassFreq[TargetClass], MaxCase+1 - ClassFreq[TargetClass]);
+    Base = TI(ClassFreq[TargetClass], Context->cases.max_case+1 - ClassFreq[TargetClass]);
 
     /*  Initialise all fail lists  */
 
     Bestd = 0;
-    ProcessLists();
+    ProcessLists(Context);
 
     ForEach(d, 1, NCond)
     {
@@ -413,7 +413,7 @@ void PruneRule(c50_context *Context, Condition Cond[], ClassNo TargetClass)
 
 	Gain = Base - TI(Total[0]-Errors[0], Errors[0])
 		    - TI(ClassFreq[TargetClass]-Total[0]+Errors[0],
-			 MaxCase+1-ClassFreq[TargetClass]-Errors[0]);
+			 Context->cases.max_case+1-ClassFreq[TargetClass]-Errors[0]);
 
 	Verbosity(1,
 	    fprintf(Of, "\n       Err   Used   Pess\tAbsent condition\n"))
@@ -477,12 +477,12 @@ void PruneRule(c50_context *Context, Condition Cond[], ClassNo TargetClass)
 	Total[0]  = Total[Bestd];
 	Errors[0] = Errors[Bestd];
 
-	ProcessLists();
+	ProcessLists(Context);
     }
 
     if ( Remaining && Total[0] > 0.99 && THEORYFRAC * Cost <= Gain )
     {
-	Prior = ClassFreq[TargetClass] / (MaxCase+1.0);
+	Prior = ClassFreq[TargetClass] / (Context->cases.max_case+1.0);
 
 	/*  Find list of cases covered by this rule and adjust coverage
 	    if using costs  */
@@ -507,7 +507,7 @@ void PruneRule(c50_context *Context, Condition Cond[], ClassNo TargetClass)
 	    RealTotal = 0;
 	    for ( i = Fail0 ; i >= 0 ; i = Succ[i] )
 	    {
-		RealTotal += Weight(Case[i]) / WeightMul[Class(Case[i])];
+		RealTotal += Weight(Context->cases.records[i]) / WeightMul[Class(Context->cases.records[i])];
 		List[++LL] = i;
 	    }
 	    RealCorrect = (Total[0] - Errors[0]) / WeightMul[TargetClass];
@@ -520,8 +520,8 @@ void PruneRule(c50_context *Context, Condition Cond[], ClassNo TargetClass)
 	    RealCorrect = 0;
 	    for ( i = Fail0 ; i >= 0 ; i = Succ[i] )
 	    {
-		RealCorrect += Weight(Case[i]) *
-			       (Class(Case[i]) == TargetClass);
+		RealCorrect += Weight(Context->cases.records[i]) *
+			       (Class(Context->cases.records[i]) == TargetClass);
 		List[++LL] = i;
 	    }
 	}
@@ -547,7 +547,7 @@ void PruneRule(c50_context *Context, Condition Cond[], ClassNo TargetClass)
 /*************************************************************************/
 
 
-void ProcessLists()
+void ProcessLists(c50_context *Context)
 /*   ------------  */
 {
     CaseNo	i, iNext, *Prev;
@@ -559,18 +559,18 @@ void ProcessLists()
 
 	Fail0 = Fail1 = FailMany = -1;
 
-	ForEach(i, 0, MaxCase)
+	ForEach(i, 0, Context->cases.max_case)
 	{
 	    if ( ! LocalNFail[i] )
 	    {
-		Increment(0, i, Total, Errors);
+		Increment(Context, 0, i, Total, Errors);
 		AddToList(&Fail0, i);
 	    }
 	    else
 	    if ( LocalNFail[i] == 1 )
 	    {
 		d = SingleFail(i);
-		Increment(d, i, Total, Errors);
+		Increment(Context, d, i, Total, Errors);
 		AddToList(&Fail1, i);
 	    }
 	    else
@@ -612,7 +612,7 @@ void ProcessLists()
 	    if ( CondFailedBy[Bestd][i] && --LocalNFail[i] == 1 )
 	    {
 		d = SingleFail(i);
-		Increment(d, i, Total, Errors);
+		Increment(Context, d, i, Total, Errors);
 
 		DeleteFromList(Prev, i);
 		AddToList(&Fail1, i);
@@ -688,11 +688,12 @@ int SingleFail(CaseNo i)
 /*************************************************************************/
 
 
-void Increment(int d, CaseNo i, double *Total, double *Errors)
+void Increment(c50_context *Context, int d, CaseNo i,
+	       double *Total, double *Errors)
 /*   ---------  */
 {
-    Total[d] += Weight(Case[i]);
-    Errors[d]+= Weight(Case[i]) * NCost[TargetClass][Class(Case[i])];
+    Total[d] += Weight(Context->cases.records[i]);
+    Errors[d]+= Weight(Context->cases.records[i]) * NCost[TargetClass][Class(Context->cases.records[i])];
 }
 
 

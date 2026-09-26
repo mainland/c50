@@ -133,7 +133,7 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
     ForEach(V1, 1, Context->schema.max_attribute_value[Att])
     {
 	if ( GEnv.ValFreq[V1] > Epsilon ||
-	     ( V1 == 1 && SomeNA[Att] ) )
+	     ( V1 == 1 && Context->cases.some_not_applicable[Att] ) )
 	{
 	    if ( ++GEnv.Blocks < V1 )
 	    {
