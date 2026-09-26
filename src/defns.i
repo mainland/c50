@@ -659,8 +659,8 @@ Boolean	    Satisfies(c50_context *Context, DataRec Case,
 
 	/* sort.c */
 
-void	    Quicksort(c50_context *Context, CaseNo Fp, CaseNo Lp,
-		      Attribute Att);
+void	    SortCasesByAttribute(c50_context *Context, CaseNo Fp, CaseNo Lp,
+			 Attribute Att);
 
 	/* trees.c */
 
