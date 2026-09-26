@@ -20,9 +20,11 @@ concurrency:
 jobs:
   # Build C5.0 Release 2.07 from the `main` branch and train generated data
   # with it and with this tree's c5.0. The trees, rules, and console output
-  # must match. Until the tree has a CMake build, `build_reference.sh` builds
-  # the candidate as the imported Makefile does, without its csh steps, and
-  # always with -ffp-contract=off, so both ARM64 entries build it alike.
+  # must match. The script builds the reference with -ffp-contract=off, so it
+  # keeps the x86-64 arithmetic on every runner. The default ARM64 entry then
+  # shows whether this tree's default build matches the x86-64 classifier,
+  # and the entry that builds this tree with -ffp-contract=off shows whether
+  # that flag restores it.
   release-207:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -45,14 +47,14 @@ jobs:
           ref: main
           path: release-207
           persist-credentials: false
-      # The imported sources are under src/. Build them with the source list
-      # of Release 2.07's Makefile.
-      - name: Build this tree's c5.0
+      - name: Configure
         env:
           FLAGS: ${{ matrix.flags }}
-        run: |
-          mkdir stage
-          cp src/*.c src/*.i release-207/Makefile stage/
-          C50_REFERENCE_CFLAGS="$FLAGS" tests/reference/build_reference.sh stage c5.0
+        run: >-
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_FLAGS="$FLAGS"
+      - name: Build this tree's c5.0
+        run: cmake --build build --parallel 2 --target c50_cli
       - name: Compare with Release 2.07
-        run: tests/reference/run.sh ./c5.0 release-207
+        run: tests/reference/run.sh build/c5.0 release-207
