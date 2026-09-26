@@ -22,6 +22,8 @@ SRC_DIR = src
 
 sources =\
 	$(SRC_DIR)/global.cpp\
+	$(SRC_DIR)/c50_api.cpp\
+	$(SRC_DIR)/c50_input.cpp\
 	$(SRC_DIR)/c50.cpp\
 	$(SRC_DIR)/construct.cpp\
 	$(SRC_DIR)/formtree.cpp\
@@ -53,19 +55,11 @@ prediction_sources =\
 	$(filter-out $(SRC_DIR)/c50.cpp,$(sources))\
 	tests/prediction_probe.cpp
 
-objects =\
-	 $(SRC_DIR)/c50.o $(SRC_DIR)/global.o\
-	 $(SRC_DIR)/construct.o $(SRC_DIR)/formtree.o $(SRC_DIR)/info.o\
-	 $(SRC_DIR)/discr.o $(SRC_DIR)/contin.o $(SRC_DIR)/subset.o\
-	 $(SRC_DIR)/prune.o $(SRC_DIR)/p-thresh.o $(SRC_DIR)/trees.o\
-	 $(SRC_DIR)/formrules.o $(SRC_DIR)/siftrules.o $(SRC_DIR)/ruletree.o\
-	 $(SRC_DIR)/rules.o $(SRC_DIR)/xval.o $(SRC_DIR)/getnames.o\
-	 $(SRC_DIR)/getdata.o $(SRC_DIR)/implicitatt.o $(SRC_DIR)/mcost.o\
-	 $(SRC_DIR)/classify.o $(SRC_DIR)/confmat.o $(SRC_DIR)/sort.o\
-	 $(SRC_DIR)/update.o $(SRC_DIR)/utility.o $(SRC_DIR)/modelfiles.o\
-	 $(SRC_DIR)/attwinnow.o
+objects = $(sources:.cpp=.o)
 
 headers =\
+	$(SRC_DIR)/c50_api_internal.h\
+	$(SRC_DIR)/c50_input.h\
 	$(SRC_DIR)/defns.i\
 	$(SRC_DIR)/extern.i\
 	$(SRC_DIR)/text.i
