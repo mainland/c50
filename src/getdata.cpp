@@ -60,6 +60,18 @@ CaseNo	SampleFrom;		/* file count for sampling */
 void GetData(FILE *Df, Boolean Train, Boolean AllowUnknownClass)
 /*   -------  */
 {
+    c50_input Input;
+
+    c50_input_init_file(&Input, Df);
+    GetDataInput(&Input, Train, AllowUnknownClass);
+    fclose(Df);
+}
+
+
+
+void GetDataInput(c50_input *Input, Boolean Train, Boolean AllowUnknownClass)
+/*   ------------  */
+{
     DataRec	DVec;
     CaseNo	CaseSpace, WantTrain, LeftTrain, WantTest, LeftTest;
     Boolean	FirstIgnore=true, SelectTrain;
@@ -84,7 +96,7 @@ void GetData(FILE *Df, Boolean Train, Boolean AllowUnknownClass)
     {
 	if ( Train )
 	{
-	    SampleFrom = CountData(Df);
+	    SampleFrom = CountDataInput(Input);
 	    ResetKR(KRInit);		/* initialise KRandom() */
 	}
 	else
@@ -99,7 +111,7 @@ void GetData(FILE *Df, Boolean Train, Boolean AllowUnknownClass)
 	LeftTest  = SampleFrom - WantTrain;
     }
 
-    while ( (DVec = GetDataRec(Df, Train)) )
+    while ( (DVec = GetDataRecInput(Input, Train)) )
     {
 	/*  Check whether to include if we are sampling */
 
@@ -158,7 +170,6 @@ void GetData(FILE *Df, Boolean Train, Boolean AllowUnknownClass)
 	}
     }
 
-    fclose(Df);
     MaxCase--;
 
 }
@@ -182,6 +193,17 @@ void GetData(FILE *Df, Boolean Train, Boolean AllowUnknownClass)
 DataRec GetDataRec(FILE *Df, Boolean Train)
 /*      ----------  */
 {
+    c50_input Input;
+
+    c50_input_init_file(&Input, Df);
+    return GetDataRecInput(&Input, Train);
+}
+
+
+
+DataRec GetDataRecInput(c50_input *Input, Boolean Train)
+/*      ---------------  */
+{
     Attribute	Att;
     char	Name[1000], *EndName;
     int		Dv, Chars;
@@ -190,7 +212,7 @@ DataRec GetDataRec(FILE *Df, Boolean Train)
     Boolean	FirstValue=true;
 
 
-    if ( ReadName(Df, Name, 1000, '\00') )
+    if ( ReadNameInput(Input, Name, 1000, '\00') )
     {
 	Case[MaxCase] = DVec = NewCase();
 	ForEach(Att, 1, MaxAtt)
@@ -215,7 +237,7 @@ DataRec GetDataRec(FILE *Df, Boolean Train)
 
 	    /*  Get the attribute value if don't already have it  */
 
-	    if ( ! FirstValue && ! ReadName(Df, Name, 1000, '\00') )
+	    if ( ! FirstValue && ! ReadNameInput(Input, Name, 1000, '\00') )
 	    {
 		XError(HITEOF, AttName[Att], "");
 		FreeLastCase(DVec);
@@ -367,7 +389,7 @@ DataRec GetDataRec(FILE *Df, Boolean Train)
 	}
 	else
 	{
-	    if ( ! ReadName(Df, Name, 1000, '\00') )
+	    if ( ! ReadNameInput(Input, Name, 1000, '\00') )
 	    {
 		XError(HITEOF, Fn, "");
 		FreeLastCase(DVec);
@@ -405,22 +427,39 @@ DataRec GetDataRec(FILE *Df, Boolean Train)
 CaseNo CountData(FILE *Df)
 /*     ---------  */
 {
+    c50_input Input;
+
+    c50_input_init_file(&Input, Df);
+    return CountDataInput(&Input);
+}
+
+
+
+CaseNo CountDataInput(c50_input *Input)
+/*     --------------  */
+{
     char        Last=',';
     int         Count=0, Next;
 
     while ( true )
     {
-	if ( (Next = getc(Df)) == EOF )
+	if ( (Next = c50_input_getc(Input)) == EOF )
 	{
 	    if ( Last != ',' ) Count++;
-	    rewind(Df);
+	    c50_input_rewind(Input);
 	    return Count;
 	}
 
 	if ( Next == '|' )
 	{
-	    while ( (Next = getc(Df)) != '\n' )
+	    while ( (Next = c50_input_getc(Input)) != '\n' && Next != EOF )
 		;
+	    if ( Next == EOF )
+	    {
+		if ( Last != ',' ) Count++;
+		c50_input_rewind(Input);
+		return Count;
+	    }
 	}
 
 	if ( Next == '\n' )
@@ -433,7 +472,7 @@ CaseNo CountData(FILE *Df)
 	{
 	    /*  Skip escaped character  */
 
-	    getc(Df);
+	    c50_input_getc(Input);
 	}
 	else
 	if ( Next != '\t' && Next != ' ' )
