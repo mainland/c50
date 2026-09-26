@@ -110,6 +110,10 @@ rule scratch buffers and normalized costs. Allocation failures during rule
 training, loading, and prediction leave the context reusable without leaks.
 These changes do not alter successful rule selection or classifier output.
 
+Subset pruning releases partially allocated per-attribute value sets and local
+scratch arrays if allocation fails. This affects failure cleanup only. Subset
+selection, rule contents, and successful predictions are unchanged.
+
 ## Command-line failure messages
 
 The command-line program exits with status 1 after a failure and prints a
