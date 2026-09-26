@@ -1,0 +1,5 @@
+low, high.
+
+signal: continuous.
+group: alpha, beta, gamma.
+enabled: false, true.

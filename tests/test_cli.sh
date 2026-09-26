@@ -51,11 +51,25 @@ run_case()
         cp "$fixture_dir/$fixture_name.costs" "$case_dir/"
         shift
     fi
+    # A run that stops at the error limit exits 1, so it names that status.
+    expected_status=0
+    if test "${1:-}" = --status; then
+        expected_status=$2
+        shift 2
+    fi
 
+    set +e
     (
         cd "$case_dir"
         "$binary" -f "$fixture_name" "$@" > output.raw
     )
+    actual_status=$?
+    set -e
+    if test "$actual_status" -ne "$expected_status"; then
+        printf '%s %s returned %d, expected %d\n' "$fixture_name" \
+            "$case_name" "$actual_status" "$expected_status" >&2
+        return 1
+    fi
 
     normalize_output "$case_dir/output.raw" > "$case_dir/output.actual"
     diff -u "$expected_dir/$case_name.output" "$case_dir/output.actual"
@@ -121,6 +135,101 @@ run_missing_file_format()
         "$missing_case_dir/output.actual"
 }
 
+# A failure that `Error` does not print, such as a classifier file that cannot
+# be written, reports its message once on the output stream. Release 2.07
+# exits 0 for the same write failure, so the exit status has no reference.
+run_unwritable_classifier()
+{
+    if test ! -c /dev/full; then
+        return 0
+    fi
+    full_case_dir="$test_dir/unwritable-classifier"
+    mkdir "$full_case_dir"
+    cp "$script_dir/fixtures/basic/basic.names" "$full_case_dir/"
+    cp "$script_dir/fixtures/basic/basic.data" "$full_case_dir/"
+    ln -s /dev/full "$full_case_dir/basic.tree"
+
+    set +e
+    (
+        cd "$full_case_dir"
+        "$binary" -f basic > output.raw 2>&1
+    )
+    full_exit_code=$?
+    set -e
+
+    if test "$full_exit_code" -ne 1; then
+        printf 'unwritable classifier returned %d, expected 1\n' \
+            "$full_exit_code" >&2
+        return 1
+    fi
+    full_messages=$(grep -c -F '*** could not' "$full_case_dir/output.raw" || true)
+    if test "$full_messages" -ne 1 ||
+        ! grep -F -x -e '*** could not close classifier' \
+            "$full_case_dir/output.raw" > /dev/null; then
+        printf 'unwritable classifier did not report its failure once\n' >&2
+        cat "$full_case_dir/output.raw" >&2
+        return 1
+    fi
+}
+
+# A bad data value that the run survives must not hide the message of a later
+# failure. Release 2.07 reports neither failure and exits 0, so the exit status
+# has no reference. This project reports the later failure once and exits 1.
+# Reading a directory fails on Linux, macOS, and the BSDs only, so other
+# platforms skip the read cases.
+run_failure_after_bad_values()
+{
+    after_kind=$1
+    after_message=$2
+    case $after_kind in
+        full)
+            if test ! -c /dev/full; then
+                return 0
+            fi
+            ;;
+        *)
+            case $(uname -s) in
+                Linux|Darwin|*BSD) ;;
+                *) return 0 ;;
+            esac
+            ;;
+    esac
+
+    after_dir="$test_dir/bad-values-then-$after_kind"
+    mkdir "$after_dir"
+    cp "$script_dir/fixtures/bad-values/bad-values.names" "$after_dir/"
+    cp "$script_dir/fixtures/bad-values/bad-values.data" "$after_dir/"
+    case $after_kind in
+        full) ln -s /dev/full "$after_dir/bad-values.tree" ;;
+        test) mkdir "$after_dir/bad-values.test" ;;
+        costs) mkdir "$after_dir/bad-values.costs" ;;
+    esac
+
+    set +e
+    (
+        cd "$after_dir"
+        "$binary" -f bad-values > output.raw 2>&1
+    )
+    after_exit_code=$?
+    set -e
+
+    if test "$after_exit_code" -ne 1; then
+        printf 'bad values then %s returned %d, expected 1\n' \
+            "$after_kind" "$after_exit_code" >&2
+        return 1
+    fi
+    after_messages=$(grep -c -E "^\*\*\* could not " \
+        "$after_dir/output.raw" || true)
+    if test "$after_messages" -ne 1 ||
+        ! grep -E -x -e "$after_message" "$after_dir/output.raw" > /dev/null
+    then
+        printf 'bad values then %s did not report its failure once\n' \
+            "$after_kind" >&2
+        cat "$after_dir/output.raw" >&2
+        return 1
+    fi
+}
+
 run_case basic tree tree
 run_case basic rules rules -r
 run_case basic subsets tree -s
@@ -144,7 +253,14 @@ run_case implicit-divide-precision tree tree
 run_case implicit-power tree tree
 run_case multiclass tree tree
 run_case multiclass rules rules -r
+# Bad values in the data. The expected files and statuses come from Release
+# 2.07, which continues with each bad value as unknown and exits 0 below ten
+# errors, and stops with exit 1 at the tenth.
+run_case bad-values tree tree
+run_case error-limit tree - --status 1
 run_invalid_definition
 run_missing_file_format
+run_unwritable_classifier
+run_failure_after_bad_values full '\*\*\* could not close classifier'
 
 printf 'CLI regression tests passed\n'

@@ -10,24 +10,14 @@ static void Usage(void)
     fprintf(stderr, "Usage: prediction-probe <filestem> <tree|rules>\n");
 }
 
-int main(int argc, char **argv)
+static void predict(c50_context *Context, void *arguments)
 {
+    char **argv = static_cast<char **>(arguments);
     FILE *F;
     c50_input NamesInput;
     ClassNo Actual, Predicted, c;
     CaseNo i;
     const char *Extension;
-    c50_context *Context = NULL;
-
-    if ( c50_context_create(&Context) != C50_STATUS_OK ) return 1;
-
-    if ( argc != 3 ||
-         ( strcmp(argv[2], "tree") && strcmp(argv[2], "rules") ) )
-    {
-        Usage();
-        return 1;
-    }
-
     Context->io.output = stderr;
     Context->io.file_stem = argv[1];
     Context->options.rules = ! strcmp(argv[2], "rules");
@@ -49,7 +39,8 @@ int main(int argc, char **argv)
         Context->rules.sets = AllocZero(Context->options.trials+1, CRuleSet);
         ForEach(Context->trees.trial, 0, Context->options.trials-1)
         {
-            Context->rules.sets[Context->trees.trial] = GetRules(Context, Extension);
+            InRulesAt(Context, &Context->classifier_input,
+                      &Context->rules.sets[Context->trees.trial]);
         }
         Context->most_specific_rules = Alloc(Context->schema.max_class+1, CRule);
     }
@@ -58,7 +49,8 @@ int main(int argc, char **argv)
         Context->trees.pruned = AllocZero(Context->options.trials+1, Tree);
         ForEach(Context->trees.trial, 0, Context->options.trials-1)
         {
-            Context->trees.pruned[Context->trees.trial] = GetTree(Context, Extension);
+            InTreeAt(Context, &Context->classifier_input,
+                     &Context->trees.pruned[Context->trees.trial]);
         }
     }
 
@@ -91,7 +83,21 @@ int main(int argc, char **argv)
         putchar('\n');
     }
 
-    Cleanup(Context);
-    c50_context_destroy(Context);
-    return 0;
+
+}
+
+int main(int argc, char **argv)
+{
+    if (argc != 3 || (strcmp(argv[2], "tree") && strcmp(argv[2], "rules"))) {
+        Usage();
+        return 1;
+    }
+    auto context = c50_make_context();
+    try {
+        c50_run_operation(context.get(), predict,
+                          [](c50_context *state, void *) { Cleanup(state); }, argv);
+        return 0;
+    } catch (const std::exception &) {
+        return 1;
+    }
 }

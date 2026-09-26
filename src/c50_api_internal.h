@@ -4,24 +4,15 @@
 #ifndef C50_API_INTERNAL_H
 #define C50_API_INTERNAL_H
 
-
 #include <stdio.h>
 
-typedef struct c50_context c50_context;
-enum c50_status {
-    C50_STATUS_OK, C50_STATUS_INVALID_ARGUMENT, C50_STATUS_OUT_OF_MEMORY,
-    C50_STATUS_IO_ERROR, C50_STATUS_PARSE_ERROR, C50_STATUS_UNSUPPORTED,
-    C50_STATUS_INTERNAL_ERROR
-};
-c50_status c50_context_create(c50_context **out_context);
-void c50_context_destroy(c50_context *context);
-c50_status c50_context_last_status(const c50_context *context);
-const char *c50_context_error_message(const c50_context *context);
-const char *c50_status_message(c50_status status);
-struct c50_operation_abort { int status; };
+#include <memory>
 
+#include <c50/c50.hpp>
+#include <optional>
 
 #include "c50_input.h"
+#include "c50_locale.h"
 #include "c50_output.h"
 #include "c50_rng.h"
 
@@ -52,6 +43,8 @@ typedef struct
     int max_attribute;
     int max_class;
     int max_discrete_value;
+    char unknown_class_name[2];
+    char other_attribute_value_name[8];
     char **class_names;
     char **attribute_names;
     char ***attribute_value_names;
@@ -261,7 +254,7 @@ typedef struct
     int attribute_exclusions;
     int timestamp_base;
     int random_initial_seed;
-    char *file_stem;
+    const char *file_stem;
     char file_name[500];
     FILE *model_file;
     FILE *output;
@@ -271,11 +264,21 @@ typedef struct
     char label_buffer[1000];
 } c50_io_state;
 
-struct c50_context
+using c50_context = c50::detail::context_state;
+
+struct c50::detail::context_state
 {
-    c50_status status;
+    ~context_state();
+
+    std::optional<c50::error_code> error;
     char error_message[C50_ERROR_MESSAGE_CAPACITY];
     int operation_active;
+    /* True once the operation has printed its own diagnostic for the failure
+     * that ends it, so that a front end need not print the message again. */
+    int failure_reported;
+    /* True for the command-line program, which continues past a bad value
+     * as Release 2.07 does. A library operation ends at its first error. */
+    int continue_past_errors;
     int sample_from;
     int suppress_error_messages;
     int delimiter;
@@ -296,6 +299,9 @@ struct c50_context
     c50_cross_validation_state cross_validation;
     c50_progress_state progress;
     c50_io_state io;
+    /* The C locale that every operation of this context selects, so that
+     * results do not depend on the host locale. */
+    c50_c_locale c_locale;
     double average_case_weight;
     char *ignored_values;
     int ignored_values_size;
@@ -328,27 +334,22 @@ typedef void (*c50_operation_fn)(c50_context *context, void *user_data);
 typedef void (*c50_operation_cleanup_fn)(c50_context *context,
                                          void *user_data);
 
-/*
- * Run operation below a C++ exception boundary. Cleanup must not fail or call
- * C50Exit. Nested operations on the same context are rejected.
- */
-c50_status c50_run_operation(c50_context *context,
-                             c50_operation_fn operation,
-                             c50_operation_cleanup_fn cleanup,
-                             void *user_data);
+/* Run an operation and always clean up. Preserve the original exception when
+ * both the operation and its cleanup fail. Nested operations are rejected. */
+void c50_run_operation(c50_context *context, c50_operation_fn operation,
+                       c50_operation_cleanup_fn cleanup, void *user_data);
 
-/* Record the first error raised by an operation. */
-void c50_record_error(c50_context *context, c50_status status,
+/* Record the first parser error, which may be reported after parsing resumes. */
+void c50_record_error(c50_context *context, c50::error_code code,
                       const char *message);
 
-/* Replace the context result without starting an operation. */
-c50_status c50_set_context_error(c50_context *context, c50_status status,
-                                 const char *message);
+/* Exit legacy control flow by unwinding C++ frames. Never terminate the host. */
+[[noreturn]] void c50_abort_operation(c50_context *context, int exit_status);
 
-/* Unwind the context's operation, or return zero when none is active. */
-int c50_abort_active_operation(c50_context *context, int exit_status);
-
-/* Release context-owned prediction workspace. */
+/* Release every allocation that the context still holds. Cleanup, defined in
+ * utility.cpp, frees what operations leave behind and is safe to repeat. */
+void Cleanup(c50_context *Context);
 void c50_clear_prediction_state(c50_context *context);
+std::unique_ptr<c50_context> c50_make_context();
 
 #endif
