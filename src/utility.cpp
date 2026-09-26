@@ -250,60 +250,57 @@ void FreeLastCase(DataRec Case)
 
 #define	Modify(F,S)	if ( (F -= S) < 0 ) F += 1.0
 
-int	KRFp=0, KRSp=0;
-
-double KRandom()
+double KRandom(KRState *State)
 /*     -------  */
 {
-    static double	URD[55];
     double		V1, V2;
     int			i, j;
 
     /*  Initialisation  */
 
-    if ( KRFp == KRSp )
+    if ( State->first == State->second )
     {
-	KRFp = 0;
-	KRSp = 31;
+	State->first = 0;
+	State->second = 31;
 
 	V1 = 1.0;
 	V2 = 0.314159285;
 
 	ForEach(i, 1, 55)
 	{
-	    URD[ j = (i * 21) % 55 ] = V1;
+	    State->values[ j = (i * 21) % 55 ] = V1;
 	    V1 = V2 - V1;
 	    if ( V1 < 0 ) V1 += 1.0;
-	    V2 = URD[j];
+	    V2 = State->values[j];
 	}
 
 	ForEach(j, 0, 5)
 	{
 	    ForEach(i, 0, 54)
 	    {
-		Modify(URD[i], URD[(i+30) % 55]);
+		Modify(State->values[i], State->values[(i+30) % 55]);
 	    }
 	}
     }
 
-    KRFp = (KRFp + 1) % 55;
-    KRSp = (KRSp + 1) % 55;
-    Modify(URD[KRFp], URD[KRSp]);
+    State->first = (State->first + 1) % 55;
+    State->second = (State->second + 1) % 55;
+    Modify(State->values[State->first], State->values[State->second]);
 
-    return URD[KRFp];
+    return State->values[State->first];
 }
 
 
 
-void ResetKR(int KRInit)
+void ResetKR(KRState *State, int Seed)
 /*   -------  */
 {
-    KRFp = KRSp = 0;
+    State->first = State->second = 0;
 
-    KRInit += 1000;
-    while ( KRInit-- )
+    Seed += 1000;
+    while ( Seed-- )
     {
-	KRandom();
+	KRandom(State);
     }
 }
 
@@ -879,8 +876,7 @@ void Cleanup()
 
     extern DataRec	*Blocked;
     extern Tree		*SubDef;
-    extern int		SubSpace, ActiveSpace;
-    extern RuleNo	*Active;
+    extern int		SubSpace;
     extern float	*AttImp;
     extern Boolean	*Split, *Used;
     extern FILE		*Uf;
@@ -948,9 +944,6 @@ void Cleanup()
     }
 
     FreeTreeData();
-
-    FreeUnlessNil(Active);				Active = Nil;
-							ActiveSpace = 0;
 
     FreeUnlessNil(UtilErr);				UtilErr = Nil;
     FreeUnlessNil(UtilBand);				UtilBand = Nil;
