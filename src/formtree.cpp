@@ -783,31 +783,30 @@ Attribute FindBestAtt(c50_context *Context, CaseCount Cases)
 /*************************************************************************/
 
 
-void EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases)
+void EvalDiscrSplit(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Result, Attribute Att, CaseCount Cases)
 /*   --------------  */
 {
-    SplitWorkspace &Workspace = *Context->training.environment;
     DiscrValue	v, NBr;
 
-    Context->splits.gain[Att] = None;
+    Result.Gain = None;
 
     if ( Skip(Att) || Att == Context->schema.class_attribute ) return;
 
     if ( Ordered(Att) )
     {
-	EvalOrderedAtt(Context, Workspace, Att, Cases);
+	EvalOrderedAtt(Context, Workspace, Result, Att, Cases);
 	NBr = ( Workspace.ValFreq[1] > 0.5 ? 3 : 2 );
     }
     else
     if ( Context->options.subset_splits && Context->schema.max_attribute_value[Att] > 3 )
     {
-	EvalSubset(Context, Workspace, Att, Cases);
-	NBr = Context->splits.subset_counts[Att];
+	EvalSubset(Context, Workspace, Result, Att, Cases);
+	NBr = Result.SubsetCount;
     }
     else
     if ( ! Context->splits.tested_attributes[Att] )
     {
-	EvalDiscreteAtt(Context, Workspace, Att, Cases);
+	EvalDiscreteAtt(Context, Workspace, Result, Att, Cases);
 
 	NBr = 0;
 	ForEach(v, 1, Context->schema.max_attribute_value[Att])
@@ -827,7 +826,33 @@ void EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases)
 	Verbosity(2,
 	    fprintf(Context->io.output, "\t(cancelled -- %d leaves, max %d)\n", NBr, Context->splits.max_leaves))
 
-	Context->splits.gain[Att] = None;
+	Result.Gain = None;
+    }
+}
+
+
+void EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases)
+{
+    SplitWorkspace &Workspace = *Context->training.environment;
+    SplitResult Result{};
+
+    Result.Gain = Context->splits.gain[Att];
+    Result.Information = Context->splits.information[Att];
+    Result.EstimatedMaxGR = Context->splits.estimated_max_gain_ratio[Att];
+    Result.Threshold = Context->splits.thresholds[Att];
+    if ( Context->splits.subset_counts )
+    {
+        Result.SubsetCount = Context->splits.subset_counts[Att];
+        Result.Subsets = Context->splits.subsets[Att];
+    }
+
+    EvalDiscrSplit(Context, Workspace, Result, Att, Cases);
+    Context->splits.gain[Att] = Result.Gain;
+    Context->splits.information[Att] = Result.Information;
+    Context->splits.thresholds[Att] = Result.Threshold;
+    if ( Context->splits.subset_counts )
+    {
+        Context->splits.subset_counts[Att] = Result.SubsetCount;
     }
 }
 
