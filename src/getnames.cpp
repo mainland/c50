@@ -1,4 +1,4 @@
-/* Modified 2026 by Geoffrey Mainland: bound names in silent parsing. */
+/* Modified 2026 by Geoffrey Mainland: validate schema bounds and ownership. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -38,6 +38,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 #include <stdint.h>
+#include <cerrno>
+#include <climits>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -407,20 +409,28 @@ void GetNames(c50_context *Context, c50_input *Nf)
 	    Context->schema.max_class++;
             Context->schema.class_names = AllocZero(Context->schema.max_class+1, String);
 
-	    sprintf(Buffer, "%s <= %g", Context->schema.attribute_names[Context->schema.class_attribute], Context->schema.class_thresholds[1]);
+            if (snprintf(Buffer, sizeof(Buffer), "%s <= %g",
+                         Context->schema.attribute_names[Context->schema.class_attribute],
+                         Context->schema.class_thresholds[1]) >= (int) sizeof(Buffer))
+                Error(Context, LONGNAME, "", "");
 	    Context->schema.class_names[1] = Pstrdup(Context, Buffer);
             Context->schema.owned_class_names = 1;
 
 	    ForEach(c, 2, Context->schema.max_class-1)
 	    {
-		sprintf(Buffer, "%g < %s <= %g",
-			Context->schema.class_thresholds[c-1], Context->schema.attribute_names[Context->schema.class_attribute], Context->schema.class_thresholds[c]);
+                if (snprintf(Buffer, sizeof(Buffer), "%g < %s <= %g",
+                             Context->schema.class_thresholds[c-1],
+                             Context->schema.attribute_names[Context->schema.class_attribute],
+                             Context->schema.class_thresholds[c]) >= (int) sizeof(Buffer))
+                    Error(Context, LONGNAME, "", "");
 		Context->schema.class_names[c] = Pstrdup(Context, Buffer);
                 Context->schema.owned_class_names = c;
 	    }
 
-	    sprintf(Buffer, "%s > %g",
-		    Context->schema.attribute_names[Context->schema.class_attribute], Context->schema.class_thresholds[Context->schema.max_class-1]);
+            if (snprintf(Buffer, sizeof(Buffer), "%s > %g",
+                         Context->schema.attribute_names[Context->schema.class_attribute],
+                         Context->schema.class_thresholds[Context->schema.max_class-1]) >= (int) sizeof(Buffer))
+                Error(Context, LONGNAME, "", "");
 	    Context->schema.class_names[Context->schema.max_class] = Pstrdup(Context, Buffer);
             Context->schema.owned_class_names = Context->schema.max_class;
 	}
@@ -510,11 +520,16 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
 
 	    /*  Read max values and reserve space  */
 
-	    v = atoi(&Buffer[8]);
-	    if ( v < 2 )
-	    {
-		Error(Context, BADDISCRETE, Context->schema.attribute_names[Context->schema.max_attribute], "");
-	    }
+            errno = 0;
+            char *end;
+            const long capacity = strtol(&Buffer[8], &end, 10);
+            if (errno == ERANGE || end == &Buffer[8] || *end ||
+                capacity < 2 || capacity > INT_MAX - 3)
+            {
+                Error(Context, BADDISCRETE, Context->schema.attribute_names[Context->schema.max_attribute], "");
+                Goodbye(1);
+            }
+            v = static_cast<DiscrValue>(capacity);
 
 	    Context->schema.attribute_value_names[Context->schema.max_attribute] = Alloc(v+3, String);
 	    Context->schema.attribute_value_names[Context->schema.max_attribute][0] = (String) (intptr_t) (v+1);

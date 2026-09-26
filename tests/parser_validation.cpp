@@ -100,6 +100,12 @@ int main()
         auto short_id = c50::model::load(context, kind, names,
                                          "id=\"x\"\nentries=\"1\"\n" + leaf);
         if (short_id.predict(context, "0, ?\n").class_index(0) != 0) return 1;
+        for (const auto &capacity : {"-1", "1", "2147483647", "999999999999999999999", "2junk"})
+            rejects([&] { c50::model::load(context, kind,
+                std::string("no, yes.\nx: discrete ") + capacity + ".\n", header + leaf); });
+        const std::string target(995, 'x');
+        rejects([&] { c50::model::load(context, kind,
+            target + ": 1, 2.\n" + target + ": continuous.\n", header + leaf); });
         structure(context);
         if (model.predict(context, "0, ?\n").class_index(0) != 0) return 1;
     } catch (const std::exception &error) {
