@@ -28,7 +28,11 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
-      - name: Install pre-commit
-        run: python -m pip install pre-commit==4.7.0
+      # The local hooks run ruff and mypy from `.venv`.
+      - name: Install the pinned checkers
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -U pip
+          .venv/bin/python -m pip install --group dev
       - name: Run the pre-commit hooks
-        run: pre-commit run --all-files --show-diff-on-failure
+        run: .venv/bin/pre-commit run --all-files --show-diff-on-failure
