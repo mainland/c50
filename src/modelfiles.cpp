@@ -457,7 +457,7 @@ void SaveRules(c50_context *Context, CRuleSet RS, const char *Extension)
 /*************************************************************************/
 
 
-void AsciiOut(c50_context *Context, const char *Pre, String S)
+void AsciiOut(c50_context *Context, const char *Pre, const char *S)
 /*   --------  */
 {
     ModelPrintf(Context, "%s\"", Pre);
@@ -555,7 +555,7 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 		    p++;
 		    if ( *p == ',' ) p++;
 		}
-		Context->schema.attribute_value_names[Att][Context->schema.max_attribute_value[Att]+1] = "<other>";
+		Context->schema.attribute_value_names[Att][Context->schema.max_attribute_value[Att]+1] = Context->schema.other_attribute_value_name;
 		Context->schema.max_discrete_value = Max(Context->schema.max_discrete_value, Context->schema.max_attribute_value[Att]+1);
 		break;
 

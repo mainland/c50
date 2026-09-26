@@ -699,12 +699,14 @@ void	    FreeVector(void **V, int First, int Last);
 DataRec	    NewCase(c50_context *Context);
 void	    FreeCases(c50_context *Context);
 void	    FreeLastCase(c50_context *Context, DataRec Case);
-void	    Error(c50_context *Context, int ErrNo, const char *S1, const char *S2);
+void	    Error(c50_context *Context, int ErrNo, const char *S1,
+			 const char *S2);
 void	    ErrorContext(c50_context *Context, int ErrNo, const char *S1,
 			 const char *S2);
 void	    C50Exit(c50_context *Context, int Status);
 String	    CaseLabel(c50_context *Context, CaseNo N);
-FILE *	    GetFile(c50_context *Context, const char *Extension, const char *RW);
+FILE *	    GetFile(c50_context *Context, const char *Extension,
+		    const char *RW);
 double	    ExecTime(void);
 int	    Denominator(ContValue Val);
 int	    GetInt(String S, int N);
@@ -801,14 +803,16 @@ void	    FreeRuleTree(RuleTree RT);
 
 	/* modelfiles.c */
 
-void	    CheckFile(c50_context *Context, const char *Extension, Boolean Write);
+void	    CheckFile(c50_context *Context, const char *Extension,
+		      Boolean Write);
 void	    WriteFilePrefix(c50_context *Context, const char *Extension);
 void	    ReadFilePrefix(c50_context *Context, const char *Extension);
 void	    SaveDiscreteNames(c50_context *Context);
 void	    SaveTree(c50_context *Context, Tree T, const char *Extension);
 void	    OutTree(c50_context *Context, Tree T);
-void	    SaveRules(c50_context *Context, CRuleSet RS, const char *Extension);
-void	    AsciiOut(c50_context *Context, const char *Pre, String S);
+void	    SaveRules(c50_context *Context, CRuleSet RS,
+			      const char *Extension);
+void	    AsciiOut(c50_context *Context, const char *Pre, const char *S);
 void	    ReadHeader(c50_context *Context, c50_input *Input);
 void	    ReadHeaderMemory(c50_context *Context, c50_input *Input,
 			     c50_input *CostsInput);

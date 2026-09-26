@@ -429,7 +429,7 @@ void GetNames(c50_context *Context, c50_input *Nf)
 	}
     }
 
-    Context->schema.class_names[0] = "?";
+    Context->schema.class_names[0] = Context->schema.unknown_class_name;
 
     if ( Context->io.error_count > 0 ) Goodbye(1);
 }
