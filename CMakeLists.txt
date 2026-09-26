@@ -5,6 +5,7 @@ project(C50 VERSION 2.07 LANGUAGES C CXX)
 option(C50_ENABLE_SANITIZERS
        "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(C50_ENABLE_THREAD_SANITIZER "Enable ThreadSanitizer" OFF)
+option(C50_BUILD_PYTHON "Build the Python extension module" OFF)
 option(C50_BUILD_BENCHMARKS "Build native correctness tests and benchmarks" OFF)
 
 if(C50_ENABLE_SANITIZERS AND C50_ENABLE_THREAD_SANITIZER)
@@ -73,6 +74,40 @@ set_target_properties(c50_cpp PROPERTIES EXPORT_NAME cpp)
 target_compile_features(c50_cpp INTERFACE cxx_std_17)
 target_link_libraries(c50_cpp INTERFACE C50::core)
 
+if(C50_BUILD_PYTHON)
+    find_package(Python 3.12 REQUIRED COMPONENTS Interpreter Development.Module)
+    find_package(pybind11 CONFIG REQUIRED)
+    pybind11_add_module(c50_python MODULE python/c50/_c50module.cpp)
+    target_compile_features(c50_python PRIVATE cxx_std_17)
+    target_link_libraries(c50_python PRIVATE C50::cpp)
+    set_target_properties(
+        c50_python
+        PROPERTIES
+            OUTPUT_NAME _c50
+            LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/python/c50
+    )
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/python/c50)
+    configure_file(
+        python/c50/__init__.py
+        ${CMAKE_CURRENT_BINARY_DIR}/python/c50/__init__.py
+        COPYONLY
+    )
+    configure_file(
+        python/c50/_c50.pyi
+        ${CMAKE_CURRENT_BINARY_DIR}/python/c50/_c50.pyi
+        COPYONLY
+    )
+    configure_file(
+        python/c50/py.typed
+        ${CMAKE_CURRENT_BINARY_DIR}/python/c50/py.typed
+        COPYONLY
+    )
+    install(
+        TARGETS c50_python
+        LIBRARY DESTINATION c50 COMPONENT python
+        RUNTIME DESTINATION c50 COMPONENT python
+    )
+endif()
 
 add_executable(c50_cli src/c50.cpp)
 target_link_libraries(c50_cli PRIVATE C50::core)
@@ -83,6 +118,10 @@ set_target_properties(c50_report PROPERTIES OUTPUT_NAME report)
 
 set(C50_COMPILE_TARGETS c50_core c50_cli c50_report)
 set(C50_EXECUTABLE_TARGETS c50_cli c50_report)
+if(C50_BUILD_PYTHON)
+    list(APPEND C50_COMPILE_TARGETS c50_python)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_python)
+endif()
 
 if(BUILD_TESTING)
     add_executable(
@@ -140,14 +179,14 @@ if(BUILD_TESTING)
         list(APPEND C50_EXECUTABLE_TARGETS c50_allocation_failure)
         add_test(NAME allocation-failure COMMAND c50_allocation_failure)
     endif()
-    add_executable(c50_parser_validation tests/parser_validation.cpp)
-    target_link_libraries(c50_parser_validation PRIVATE C50::cpp)
-    list(APPEND C50_COMPILE_TARGETS c50_parser_validation)
-    list(APPEND C50_EXECUTABLE_TARGETS c50_parser_validation)
     add_executable(c50_cost_validation tests/cost_validation.cpp)
     target_link_libraries(c50_cost_validation PRIVATE C50::cpp)
     list(APPEND C50_COMPILE_TARGETS c50_cost_validation)
     list(APPEND C50_EXECUTABLE_TARGETS c50_cost_validation)
+    add_executable(c50_parser_validation tests/parser_validation.cpp)
+    target_link_libraries(c50_parser_validation PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_parser_validation)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_parser_validation)
     add_executable(c50_cpp_validation tests/cpp_validation.cpp)
     target_link_libraries(c50_cpp_validation PRIVATE C50::cpp)
     add_executable(c50_operation_failure tests/operation_failure.cpp)
@@ -330,12 +369,50 @@ if(BUILD_TESTING)
     add_test(NAME output-stream COMMAND c50_output_test)
     add_test(NAME data-input-stream COMMAND c50_data_input_test)
     add_test(NAME reference-compatibility COMMAND c50_reference_compatibility)
-    add_test(NAME parser-validation COMMAND c50_parser_validation)
     add_test(NAME cost-validation COMMAND c50_cost_validation)
+    add_test(NAME parser-validation COMMAND c50_parser_validation)
     add_test(NAME cpp-validation COMMAND c50_cpp_validation)
     add_test(NAME operation-failure COMMAND c50_operation_failure)
     add_test(NAME cpp-api COMMAND c50_cpp_api)
     add_test(NAME cpp-contracts COMMAND c50_cpp_contracts)
+    if(C50_BUILD_PYTHON)
+        add_test(
+            NAME python-api
+            COMMAND ${Python_EXECUTABLE} -m pytest
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/python"
+        )
+        set_tests_properties(
+            python-api
+            PROPERTIES
+                ENVIRONMENT
+                    "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python"
+        )
+        if(NOT C50_ENABLE_SANITIZERS AND NOT C50_ENABLE_THREAD_SANITIZER)
+            add_test(
+                NAME python-typecheck
+                COMMAND ${Python_EXECUTABLE} -m mypy
+            )
+            set_tests_properties(
+                python-typecheck
+                PROPERTIES
+                    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            )
+            add_test(
+                NAME python-stubtest
+                COMMAND
+                    ${Python_EXECUTABLE} -m mypy.stubtest
+                    --allowlist
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/typing/stubtest-allowlist.txt"
+                    c50._c50
+            )
+            set_tests_properties(
+                python-stubtest
+                PROPERTIES
+                    ENVIRONMENT
+                        "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python"
+            )
+        endif()
+    endif()
     if(NOT C50_ENABLE_SANITIZERS AND NOT C50_ENABLE_THREAD_SANITIZER)
         add_test(
             NAME install-consumer
