@@ -137,7 +137,7 @@ void WinnowAtts(c50_context *Context)
 
     ForEach(Att, 1, MaxAtt)
     {
-	if ( Att != ClassAtt && ! Skip(Att) && ! Split[Att] )
+	if ( Att != Context->class_attribute && ! Skip(Att) && ! Split[Att] )
 	{
 	    SpecialStatus[Att] ^= SKIP;
 	    Removed++;
@@ -250,7 +250,7 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 
     Cut = (MaxCase+1) / 2 - 1;
 
-    InitialiseWeights();
+    InitialiseWeights(Context);
     LEAFRATIO = 0;
     VERBOSITY = 0;
     MaxCase   = Cut;
@@ -258,7 +258,7 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
     memset(Tested, 0, MaxAtt+1);		/* reset tested attributes */
 
     SetMinGainThresh();
-    FormTree(0, Cut, 0, &WTree);
+    FormTree(Context, 0, Cut, 0, &WTree);
 
     if ( FirstTime )
     {
@@ -295,7 +295,7 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 	    if ( ! Used[Att] )
 	    {
 		Verbosity(1,
-		    if ( Att != ClassAtt && ! Skip(Att) )
+		    if ( Att != Context->class_attribute && ! Skip(Att) )
 		    {
 			fprintf(Of, "  %s not used\n", AttName[Att]);
 		    })

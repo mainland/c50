@@ -83,7 +83,7 @@ void Prune(c50_context *Context, Tree T)
 			 (UPDATE|REPORTPROGRESS) );
     if ( UnitWeights ) Options |= UNITWEIGHTS;
 
-    EstimateErrs(T, 0, MaxCase, 0, Options);
+    EstimateErrs(Context, T, 0, MaxCase, 0, Options);
 
     if ( MCost )
     {
@@ -145,7 +145,8 @@ void Prune(c50_context *Context, Tree T)
 /*************************************************************************/
 
 
-void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
+void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
+		  int Sh, int Flags)
 /*   ------------  */
 {
     CaseNo	i, Bp, Ep, Missing;
@@ -229,7 +230,7 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
     /*  Estimate errors for each branch  */
 
     Att = T->Tested;
-    Missing = (Ep = Group(0, Fp, Lp, T)) - Fp + 1;
+    Missing = (Ep = Group(Context, 0, Fp, Lp, T)) - Fp + 1;
 
     if ( CostWeights )
     {
@@ -252,7 +253,7 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
 
     ForEach(v, 1, T->Forks)
     {
-	Ep = Group(v, Bp + Missing, Lp, T);
+	Ep = Group(Context, v, Bp + Missing, Lp, T);
 
 	/*  Bp -> first value in missing + remaining values
 	    Ep -> last value in missing + current group  */
@@ -273,7 +274,8 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
 		}
 	    }
 
-	    EstimateErrs(T->Branch[v], Bp, Ep, Sh+1, ((Flags&7) | UnitWeights));
+	    EstimateErrs(Context, T->Branch[v], Bp, Ep, Sh+1,
+			 ((Flags&7) | UnitWeights));
 
 	    /*  Group small branches together for error estimation  */
 
@@ -355,7 +357,7 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
     if ( BestBr )
     {
 	SaveErrs = T->Branch[BestBr]->Errors;
-	EstimateErrs(T->Branch[BestBr], Fp, Lp, -1, 0);
+	EstimateErrs(Context, T->Branch[BestBr], Fp, Lp, -1, 0);
 	BestBrErrs = T->Branch[BestBr]->Errors;
 	T->Branch[BestBr]->Errors = SaveErrs;
     }
@@ -429,10 +431,10 @@ void EstimateErrs(Tree T, CaseNo Fp, CaseNo Lp, int Sh, int Flags)
 
 	    SetGlobalUnitWeights(Flags & UNITWEIGHTS);
 
-	    Divide(T, Fp, Lp, 0);
+	    Divide(Context, T, Fp, Lp, 0);
 	}
 
-	EstimateErrs(T, Fp, Lp, Sh, UPDATE);
+	EstimateErrs(Context, T, Fp, Lp, Sh, UPDATE);
     }
     else
     {

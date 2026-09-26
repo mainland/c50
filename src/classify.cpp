@@ -134,7 +134,7 @@ void FindLeaf(c50_context *Context, DataRec Case, Tree T, Tree PT,
 		FollowAllBranches(Context, Case, T, Fraction);
 	    }
 	    else
-	    if ( NotApplic(Case, T->Tested) )
+	    if ( NotApplic(Context, Case, T->Tested) )
 	    {
 		FindLeaf(Context, Case, T->Branch[1], T, Fraction);
 	    }
@@ -248,7 +248,7 @@ ClassNo RuleClassify(c50_context *Context, DataRec Case, CRuleSet RS)
 	{
 	    R = RS->SRule[r];
 
-	    if ( Matches(R, Case) )
+	    if ( Matches(Context, R, Case) )
 	    {
 		Context->active_rules[Context->active_rule_count++] = r;
 	    }
@@ -335,7 +335,7 @@ ClassNo RuleClassify(c50_context *Context, DataRec Case, CRuleSet RS)
 /*************************************************************************/
 
 
-int FindOutcome(DataRec Case, Condition OneCond)
+int FindOutcome(c50_context *Context, DataRec Case, Condition OneCond)
 /*  -----------  */
 {
     DiscrValue  v, Outcome;
@@ -356,7 +356,7 @@ int FindOutcome(DataRec Case, Condition OneCond)
 	case BrThresh:  /* test of continuous attribute */
 
 	    Outcome = ( Unknown(Case, Att) ? -1 :
-			NotApplic(Case, Att) ? 1 :
+			NotApplic(Context, Case, Att) ? 1 :
 			CVal(Case, Att) <= OneCond->Cut ? 2 : 3 );
 	    break;
 
@@ -379,10 +379,10 @@ int FindOutcome(DataRec Case, Condition OneCond)
 /*************************************************************************/
 
 
-Boolean Satisfies(DataRec Case, Condition OneCond)
+Boolean Satisfies(c50_context *Context, DataRec Case, Condition OneCond)
 /*      ---------  */
 {
-    return ( FindOutcome(Case, OneCond) == OneCond->TestValue );
+    return ( FindOutcome(Context, Case, OneCond) == OneCond->TestValue );
 }
 
 
@@ -394,14 +394,14 @@ Boolean Satisfies(DataRec Case, Condition OneCond)
 /*************************************************************************/
 
 
-Boolean Matches(CRule R, DataRec Case)
+Boolean Matches(c50_context *Context, CRule R, DataRec Case)
 /*      -------  */
 {
     int d;
 
     ForEach(d, 1, R->Size)
     {
-	if ( ! Satisfies(Case, R->Lhs[d]) )
+	if ( ! Satisfies(Context, Case, R->Lhs[d]) )
 	{
 	    return false;
 	}
@@ -461,7 +461,8 @@ void MarkActive(c50_context *Context, RuleTree RT, DataRec Case)
 
     /*  Explore subtree for rules that include condition at this node  */
 
-    if ( (v = FindOutcome(Case, RT->CondTest)) > 0 && v <= RT->Forks )
+    if ( (v = FindOutcome(Context, Case, RT->CondTest)) > 0 &&
+	 v <= RT->Forks )
     {
 	MarkActive(Context, RT->Branch[v], Case);
     }
@@ -538,7 +539,7 @@ void CheckUtilityBand(c50_context *Context, int *u, RuleNo r,
 /*************************************************************************/
 /*									 */
 /*	Classify a case using boosted tree or rule sequence.		 */
-/*	Global variable Default must have been set prior to call	 */
+/*	The context default class must have been set prior to call	 */
 /*									 */
 /*	Note: boosting with costs is complicated.  With trees,		 */
 /*	complete class distributions are accumulated and then a class	 */
@@ -580,7 +581,7 @@ ClassNo BoostClassify(c50_context *Context, DataRec Case, int MaxTrial)
 	Context->class_sum[c] = Context->votes[c] / Total;
     }
 
-    return SelectClass(Context, Default, false);
+    return SelectClass(Context, Context->default_class, false);
 }
 
 

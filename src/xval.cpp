@@ -33,6 +33,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 
 DataRec	*Blocked=Nil;
@@ -134,7 +135,8 @@ void CrossVal(c50_context *Context)
 	{
 	    Result[f][0] = -1;
 	    Next = Start;
-	    Default = ( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
+	    Context->default_class =
+		( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
 	    ForEach(i, 0, Size-1)
 	    {
 		Case[i] = Blocked[Next];

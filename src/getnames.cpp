@@ -199,7 +199,7 @@ void GetNames(c50_context *Context, c50_input *Nf)
     Context->line_buffer_position     = Context->line_buffer;
     *Context->line_buffer_position    = 0;
 
-    MaxClass = ClassAtt = LabelAtt = CWtAtt = 0;
+    MaxClass = Context->class_attribute = Context->label_attribute = Context->case_weight_attribute = 0;
 
     /*  Get class names from names file.  This entry can be:
 	- a list of discrete values separated by commas
@@ -347,9 +347,9 @@ void GetNames(c50_context *Context, c50_input *Nf)
 
 	if (  ! strcmp(AttName[MaxAtt], "case weight") )
 	{
-	    CWtAtt = MaxAtt;
+	    Context->case_weight_attribute = MaxAtt;
 
-	    if ( ! Continuous(CWtAtt) )
+	    if ( ! Continuous(Context->case_weight_attribute) )
 	    {
 		Error(CWTATTERR, "", "");
 	    }
@@ -363,22 +363,22 @@ void GetNames(c50_context *Context, c50_input *Nf)
 	/*  Class attribute must be present and must be either
 	    a discrete attribute or a thresholded continuous attribute  */
 
-	ClassAtt = Which(ClassName[1], AttName, 1, MaxAtt);
+	Context->class_attribute = Which(ClassName[1], AttName, 1, MaxAtt);
 
-	if ( ClassAtt <= 0 || Exclude(ClassAtt) )
+	if ( Context->class_attribute <= 0 || Exclude(Context->class_attribute) )
 	{
 	    Error(NOTARGET, ClassName[1], "");
 	}
 	else
 	if ( ClassThresh &&
-	     ( ! Continuous(ClassAtt) ||
-	       StatBit(ClassAtt, DATEVAL|STIMEVAL|TSTMPVAL) ) )
+	     ( ! Continuous(Context->class_attribute) ||
+	       StatBit(Context->class_attribute, DATEVAL|STIMEVAL|TSTMPVAL) ) )
 	{
 	    Error(BADCTARGET, ClassName[1], "");
 	}
 	else
 	if ( ! ClassThresh &&
-	     ( Continuous(ClassAtt) || StatBit(ClassAtt, DISCRETE) ) )
+	     ( Continuous(Context->class_attribute) || StatBit(Context->class_attribute, DISCRETE) ) )
 	{
 	    Error(BADDTARGET, ClassName[1], "");
 	}
@@ -388,8 +388,8 @@ void GetNames(c50_context *Context, c50_input *Nf)
 	if ( ! ClassThresh )
 	{
 	    Free(ClassName);
-	    MaxClass  = MaxAttVal[ClassAtt];
-	    ClassName = AttValName[ClassAtt];
+	    MaxClass  = MaxAttVal[Context->class_attribute];
+	    ClassName = AttValName[Context->class_attribute];
 	}
 	else
 	{
@@ -398,18 +398,18 @@ void GetNames(c50_context *Context, c50_input *Nf)
 	    MaxClass++;
 	    Realloc(ClassName, MaxClass+1, String);
 
-	    sprintf(Buffer, "%s <= %g", AttName[ClassAtt], ClassThresh[1]);
+	    sprintf(Buffer, "%s <= %g", AttName[Context->class_attribute], ClassThresh[1]);
 	    ClassName[1] = strdup(Buffer);
 
 	    ForEach(c, 2, MaxClass-1)
 	    {
 		sprintf(Buffer, "%g < %s <= %g",
-			ClassThresh[c-1], AttName[ClassAtt], ClassThresh[c]);
+			ClassThresh[c-1], AttName[Context->class_attribute], ClassThresh[c]);
 		ClassName[c] = strdup(Buffer);
 	    }
 
 	    sprintf(Buffer, "%s > %g",
-		    AttName[ClassAtt], ClassThresh[MaxClass-1]);
+		    AttName[Context->class_attribute], ClassThresh[MaxClass-1]);
 	    ClassName[MaxClass] = strdup(Buffer);
 	}
     }
@@ -417,15 +417,15 @@ void GetNames(c50_context *Context, c50_input *Nf)
     /*  Ignore case weight attribute if it is excluded; otherwise,
 	it cannot be used in models  */
 
-    if ( CWtAtt )
+    if ( Context->case_weight_attribute )
     {
-	if ( Skip(CWtAtt) )
+	if ( Skip(Context->case_weight_attribute) )
 	{
-	    CWtAtt = 0;
+	    Context->case_weight_attribute = 0;
 	}
 	else
 	{
-	    SpecialStatus[CWtAtt] |= SKIP;
+	    SpecialStatus[Context->case_weight_attribute] |= SKIP;
 	}
     }
 
@@ -516,7 +516,7 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
 	else
 	if ( ! strcmp(Buffer, "label") )
 	{
-	    LabelAtt = MaxAtt;
+	    Context->label_attribute = MaxAtt;
 	    SpecialStatus[MaxAtt] = EXCLUDE;
 	}
 	else
@@ -684,7 +684,7 @@ void FreeNames()
 
     ForEach(a, 1, MaxAtt)
     {
-	if ( a != ClassAtt && Discrete(a) )
+	if ( AttValName[a] != ClassName && Discrete(a) )
 	{
 	    FreeVector((void **) AttValName[a], 1, MaxAttVal[a]);
 	}
