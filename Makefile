@@ -6,8 +6,10 @@
 #*************************************************************************#
 
 
-CC	= gcc -ffloat-store
-CFLAGS = -g -Wall -DVerbOpt -O0
+CC	= gcc
+CXX	= g++ -ffloat-store
+CXXSTD = -std=c++17
+CXXFLAGS = $(CXXSTD) -g -Wall -DVerbOpt -O0
 LFLAGS = $(S)
 
 .PHONY: all test
@@ -85,7 +87,7 @@ prediction-probe:\
 	$(prediction_sources) $(headers) Makefile
 	cat $(SRC_DIR)/defns.i $(prediction_sources)\
 		| egrep -v 'defns.i|extern.i' >$(SRC_DIR)/predictiongt.c
-	$(CC) $(LFLAGS) -O3 -o $@ $(SRC_DIR)/predictiongt.c -lm
+	$(CXX) $(CXXSTD) $(LFLAGS) -O3 -o $@ $(SRC_DIR)/predictiongt.c -lm
 	rm $(SRC_DIR)/predictiongt.c
 
 
@@ -93,7 +95,7 @@ prediction-probe:\
 
 c5.0dbg:\
 	$(objects) $(headers) Makefile
-	$(CC) -g -o c5.0dbg $(objects) -lm
+	$(CXX) $(CXXSTD) -g -o c5.0dbg $(objects) -lm
 
 
 # production version
@@ -102,7 +104,7 @@ c5.0:\
 	$(sources) $(headers) Makefile
 	cat $(SRC_DIR)/defns.i $(sources)\
 		| egrep -v 'defns.i|extern.i' >$(SRC_DIR)/c50gt.c
-	$(CC) $(LFLAGS) -O3 -o c5.0 $(SRC_DIR)/c50gt.c -lm
+	$(CXX) $(CXXSTD) $(LFLAGS) -O3 -o c5.0 $(SRC_DIR)/c50gt.c -lm
 	strip c5.0
 	rm $(SRC_DIR)/c50gt.c
 
@@ -111,4 +113,4 @@ $(objects):	Makefile $(headers)
 
 
 $(SRC_DIR)/%.o: $(SRC_DIR)/%.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CXX) $(CXXFLAGS) -c -o $@ $<

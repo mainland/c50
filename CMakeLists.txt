@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(C50 VERSION 2.07 LANGUAGES C)
+project(C50 VERSION 2.07 LANGUAGES C CXX)
 
 option(C50_ENABLE_SANITIZERS
        "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
@@ -35,6 +35,10 @@ set(C50_CORE_SOURCES
     src/utility.c
     src/xval.c
 )
+
+set_source_files_properties(${C50_CORE_SOURCES} src/c50.c tests/prediction_probe.c PROPERTIES LANGUAGE CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(c50_cli src/c50.c ${C50_CORE_SOURCES})
 set_target_properties(c50_cli PROPERTIES OUTPUT_NAME c5.0)

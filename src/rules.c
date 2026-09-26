@@ -429,7 +429,7 @@ void FreeRules(CRuleSet RS)
 /*************************************************************************/
 
 
-void PrintRules(CRuleSet RS, String Msg)
+void PrintRules(CRuleSet RS, const char *Msg)
 /*   ----------  */
 {
     int	r;

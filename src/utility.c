@@ -40,7 +40,7 @@
 #define  NAME T_C50
 
 
-void PrintHeader(String Title)
+void PrintHeader(const char *Title)
 /*   -----------  */
 {
     char	TitleLine[80];
@@ -68,7 +68,7 @@ void PrintHeader(String Title)
 String	OptArg, Option;
 
 
-char ProcessOption(int Argc, char *Argv[], char *Options)
+char ProcessOption(int Argc, char *Argv[], const char *Options)
 /*   -------------  */
 {
     int		i;
@@ -315,7 +315,7 @@ void ResetKR(int KRInit)
 /*************************************************************************/
 
 
-void Error(int ErrNo, String S1, String S2)
+void Error(int ErrNo, const char *S1, const char *S2)
 /*   -----  */
 {
     Boolean	Quit=false, WarningOnly=false;
@@ -530,7 +530,7 @@ String CaseLabel(CaseNo N)
 /*************************************************************************/
 
 
-FILE *GetFile(String Extension, String RW)
+FILE *GetFile(const char *Extension, const char *RW)
 /*    --------  */
 {
     strcpy(Fn, FileStem);
