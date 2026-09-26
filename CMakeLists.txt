@@ -9,6 +9,7 @@ include(CTest)
 
 set(C50_CORE_SOURCES
     src/attwinnow.cpp
+    src/c50_api.cpp
     src/classify.cpp
     src/confmat.cpp
     src/construct.cpp
@@ -67,6 +68,24 @@ if(BUILD_TESTING)
     target_link_libraries(c50_prediction_probe PRIVATE C50::core)
     list(APPEND C50_COMPILE_TARGETS c50_prediction_probe)
     list(APPEND C50_EXECUTABLE_TARGETS c50_prediction_probe)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(context_workspace tests/context_workspace.cpp)
+    target_include_directories(context_workspace PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(context_workspace PRIVATE C50::core)
+    list(APPEND C50_COMPILE_TARGETS context_workspace)
+    list(APPEND C50_EXECUTABLE_TARGETS context_workspace)
+    add_test(NAME context_workspace COMMAND context_workspace)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(operation_boundary tests/operation_boundary.cpp)
+    target_include_directories(operation_boundary PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(operation_boundary PRIVATE C50::core)
+    list(APPEND C50_COMPILE_TARGETS operation_boundary)
+    list(APPEND C50_EXECUTABLE_TARGETS operation_boundary)
+    add_test(NAME operation_boundary COMMAND operation_boundary)
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")

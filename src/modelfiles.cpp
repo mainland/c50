@@ -192,7 +192,7 @@ void ReadFilePrefix(const char *Extension)
     if ( memcmp((char *) &TRIALS, "id=", 3) != 0 )
     {
 	printf("\nCannot read old format classifiers\n");
-	exit(1);
+	C50Exit(1);
     }
     else
     {
