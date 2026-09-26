@@ -934,6 +934,9 @@ void Cleanup(c50_context *Context)
 
     FreeData(Context);
 
+    FreeVector((void **) Context->costs.normalized_matrix, 0, Context->schema.max_class);
+    Context->costs.normalized_matrix = Nil;
+
     if ( Context->costs.matrix )
     {
 	FreeVector((void **) Context->costs.matrix, 1, Context->schema.max_class);	Context->costs.matrix = Nil;
@@ -962,6 +965,9 @@ void Cleanup(c50_context *Context)
 	FreeUnlessNil(Context->rule_build.log_case_count);			Context->rule_build.log_case_count = Nil;
 	FreeUnlessNil(Context->rule_build.log_factorial);				Context->rule_build.log_factorial = Nil;
     }
+
+    FreeVector((void **) Context->pruning.possible_values, 1, Context->schema.max_attribute);
+    Context->pruning.possible_values = Nil;
 
     FreeTreeData(Context);
 

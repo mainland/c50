@@ -40,6 +40,7 @@
 #include <stdint.h>
 #include <cerrno>
 #include <climits>
+#include <memory>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -650,11 +651,11 @@ void ListAttsUsed(c50_context *Context)
 /*   ------------  */
 {
     Attribute	Att;
-    Boolean	*DefUses;
     Definition	D;
     int		e, NUsed=0;
 
-    DefUses = AllocZero(Context->schema.max_attribute+1, Boolean);
+    std::unique_ptr<Boolean[], decltype(&free)> DefUses(
+        AllocZero(Context->schema.max_attribute+1, Boolean), &free);
 
     D = Context->schema.attribute_definitions[Context->schema.max_attribute];
 
@@ -690,8 +691,6 @@ void ListAttsUsed(c50_context *Context)
 	    }
 	}
     }
-
-    Free(DefUses);
 }
 
 

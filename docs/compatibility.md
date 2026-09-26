@@ -96,3 +96,26 @@ produced invalid weights or unusable classifiers now raise a parse error.
 Cost-based prediction now compares all finite expected costs, including values
 above the former `1e38` initial bound. Such models select the least-cost class
 instead of accidentally retaining the default class.
+
+Implicit-attribute parsing keeps scratch buffers and pending string literals
+owned during exception unwinding. Partially constructed definitions always
+have a terminator, including when an allocation fails. Allocation failures
+therefore raise `std::bad_alloc` without invalid cleanup reads or leaks, and
+the context remains reusable. Accepted expressions and classifier output are
+unchanged.
+
+Rule construction retains ownership of incomplete conditions, rulesets, and
+rule-tree nodes until publication. Cleanup also releases partially allocated
+rule scratch buffers and normalized costs. Allocation failures during rule
+training, loading, and prediction leave the context reusable without leaks.
+These changes do not alter successful rule selection or classifier output.
+
+Subset pruning releases partially allocated per-attribute value sets and local
+scratch arrays if allocation fails. This affects failure cleanup only. Subset
+selection, rule contents, and successful predictions are unchanged.
+
+Branch compression completes its replacement-array allocations before changing
+child ownership or branch counts. Allocation failure previously let cleanup
+scan a smaller array using the original count and leaked recursive scratch.
+The repaired failure path raises `std::bad_alloc` and permits context reuse.
+The merge order and floating-point arithmetic of successful runs are unchanged.
