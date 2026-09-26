@@ -83,7 +83,8 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 
     if ( Train || ! Case )
     {
-	MaxCase = MaxLabel = CaseSpace = 0;
+	MaxCase = CaseSpace = 0;
+	Context->max_label = 0;
 	Case = Alloc(1, DataRec);	/* for error reporting */
     }
     else
@@ -97,11 +98,11 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 	if ( Train )
 	{
 	    Context->sample_from = CountDataInput(Input);
-	    ResetKR(KRInit);		/* initialise KRandom() */
+	    ResetKR(&Context->random, KRInit);	/* initialise KRandom() */
 	}
 	else
 	{
-	    ResetKR(KRInit);		/* restore  KRandom() */
+	    ResetKR(&Context->random, KRInit);	/* restore  KRandom() */
 	}
 
 	WantTrain = Context->sample_from * SAMPLE + 0.5;
@@ -118,7 +119,8 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 
 	if ( SAMPLE )
 	{
-	    SelectTrain = KRandom() < WantTrain / (float) LeftTrain--;
+	    SelectTrain =
+		KRandom(&Context->random) < WantTrain / (float) LeftTrain--;
 
 	    /*  Include if
 		 * Select and this is the training set
@@ -403,10 +405,11 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 	    }
 	}
 
-	if ( LabelAtt &&
-	     (Chars = strlen(IgnoredVals + SVal(DVec, LabelAtt))) > MaxLabel )
-	{
-	    MaxLabel = Chars;
+    if ( LabelAtt &&
+	     (Chars = strlen(IgnoredVals + SVal(DVec, LabelAtt))) >
+		 Context->max_label )
+    {
+	Context->max_label = Chars;
 	}
 	return DVec;
     }

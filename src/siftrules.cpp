@@ -37,6 +37,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 
 float	*DeltaErrs=Nil,	/* DeltaErrs[r]	 = change attributable to rule r or
@@ -68,7 +69,7 @@ RuleNo	*LastCovBy=Nil; /* Last rule covering case i  */
 /*************************************************************************/
 
 
-void SiftRules(float EstErrRate)
+void SiftRules(c50_context *Context, float EstErrRate)
 /*   ---------  */
 {
     RuleNo	r;
@@ -164,7 +165,7 @@ void SiftRules(float EstErrRate)
 
     /*  Determine default class and reorder rules  */
 
-    SetDefaultClass();
+    SetDefaultClass(Context);
     OrderRules();
 
     /*  Deallocate storage  */
@@ -976,7 +977,7 @@ void PruneSubsets()
 /*************************************************************************/
 
 
-void SetDefaultClass()
+void SetDefaultClass(c50_context *Context)
 /*   ---------------  */
 {
     RuleNo	r;
@@ -1021,11 +1022,12 @@ void SetDefaultClass()
 			    ClassName[c], ClassFreq[c] / (MaxCase + 1.0),
 			    UncoveredWeight[c]));
 
-	ClassSum[c] = (UncoveredWeight[c] + 1) / (TotUncovered + 2.0) +
+	Context->class_sum[c] = (UncoveredWeight[c] + 1) / (TotUncovered + 2.0) +
 		      ClassFreq[c] / (MaxCase + 1.0);
     }
 
-    Default = SelectClass(1, (Boolean) (MCost && ! CostWeights));
+    Default = SelectClass(Context, 1,
+			  (Boolean) (MCost && ! CostWeights));
 
     Free(UncoveredWeight);
 }

@@ -34,6 +34,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 float		*AttImp=Nil;		/* att importance */
 Boolean		*Split=Nil,		/* atts used in unpruned tree */
@@ -50,7 +51,7 @@ Boolean		*Split=Nil,		/* atts used in unpruned tree */
 /*************************************************************************/
 
 
-void WinnowAtts()
+void WinnowAtts(c50_context *Context)
 /*   ----------  */
 {
     Attribute	Att, Removed=0, Best;
@@ -60,6 +61,8 @@ void WinnowAtts()
     ClassNo	c;
     extern Attribute	*DList;
     extern int		NDList;
+
+    Context->attributes_winnowed = false;
 
     /*  Save original case order  */
 
@@ -100,7 +103,7 @@ void WinnowAtts()
     Split  = AllocZero(MaxAtt+1, Boolean);
     Used   = AllocZero(MaxAtt+1, Boolean);
 
-    Base = TrialTreeCost(true);
+    Base = TrialTreeCost(Context, true);
 
     /*  Remove attributes when doing so would reduce error cost  */
 
@@ -115,7 +118,7 @@ void WinnowAtts()
 
     /*  If any removed, rebuild tree and reinstate if error increases  */
 
-    if ( Removed && TrialTreeCost(false) > Base )
+    if ( Removed && TrialTreeCost(Context, false) > Base )
     {
 	ForEach(Att, 1, MaxAtt)
 	{
@@ -185,10 +188,10 @@ void WinnowAtts()
 	}
     }
 
+    Context->attributes_winnowed = Removed != 0;
+
     if ( Removed )
     {
-	Winnowed = true;
-
 	/*  Reset DList  */
 
 	NDList = 0;
@@ -227,7 +230,7 @@ void WinnowAtts()
 /*************************************************************************/
 
 
-float TrialTreeCost(Boolean FirstTime)
+float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 /*    -------------  */
 {
     Attribute	Att;
@@ -264,7 +267,7 @@ float TrialTreeCost(Boolean FirstTime)
 	ScanTree(WTree, Split);
     }
 
-    Prune(WTree);
+    Prune(Context, WTree);
 
     VERBOSITY = SaveVERBOSITY;
     MaxCase   = SaveMaxCase;
@@ -272,9 +275,10 @@ float TrialTreeCost(Boolean FirstTime)
 
     Verbosity(2,
 	PrintTree(WTree, "Winnowing tree:");
-	fprintf(Of, "\n  training error cost %g\n", ErrCost(WTree, 0, Cut)))
+	fprintf(Of, "\n  training error cost %g\n",
+		ErrCost(Context, WTree, 0, Cut)))
 
-    Base = ErrCost(WTree, Cut+1, MaxCase);
+    Base = ErrCost(Context, WTree, Cut+1, MaxCase);
 
     Verbosity(1,
 	fprintf(Of, "  initial error cost %g\n", Base))
@@ -308,7 +312,7 @@ float TrialTreeCost(Boolean FirstTime)
 
 	    SpecialStatus[Att] ^= SKIP;
 
-	    Cost = ErrCost(WTree, Cut+1, MaxCase);
+	    Cost = ErrCost(Context, WTree, Cut+1, MaxCase);
 
 	    AttImp[Att] = ( Cost < Base ? -1 : Cost / Base );
 	    Verbosity(1,
@@ -337,7 +341,7 @@ float TrialTreeCost(Boolean FirstTime)
 /*************************************************************************/
 
 
-float ErrCost(Tree T, CaseNo Fp, CaseNo Lp)
+float ErrCost(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 /*    -------  */
 {
     CaseNo	i;
@@ -348,7 +352,7 @@ float ErrCost(Tree T, CaseNo Fp, CaseNo Lp)
     {
 	ForEach(i, Fp, Lp)
 	{
-	    if ( (Pred = TreeClassify(Case[i], T)) != Class(Case[i]) )
+	    if ( (Pred = TreeClassify(Context, Case[i], T)) != Class(Case[i]) )
 	    {
 		ErrCost += MCost[Pred][Class(Case[i])];
 	    }
@@ -358,7 +362,7 @@ float ErrCost(Tree T, CaseNo Fp, CaseNo Lp)
     {
 	ForEach(i, Fp, Lp)
 	{
-	    if ( TreeClassify(Case[i], T) != Class(Case[i]) )
+	    if ( TreeClassify(Context, Case[i], T) != Class(Case[i]) )
 	    {
 		ErrCost += 1.0;
 	    }
