@@ -11,6 +11,7 @@ set(C50_CORE_SOURCES
     src/attwinnow.cpp
     src/c50_api.cpp
     src/c50_input.cpp
+    src/c50_output.cpp
     src/classify.cpp
     src/confmat.cpp
     src/construct.cpp
@@ -105,6 +106,15 @@ if(BUILD_TESTING)
     list(APPEND C50_COMPILE_TARGETS c50_data_input)
     list(APPEND C50_EXECUTABLE_TARGETS c50_data_input)
     add_test(NAME c50_data_input COMMAND c50_data_input)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(c50_output tests/c50_output.cpp)
+    target_include_directories(c50_output PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(c50_output PRIVATE C50::core)
+    list(APPEND C50_COMPILE_TARGETS c50_output)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_output)
+    add_test(NAME c50_output COMMAND c50_output)
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")

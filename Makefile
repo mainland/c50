@@ -24,6 +24,7 @@ sources =\
 	$(SRC_DIR)/global.cpp\
 	$(SRC_DIR)/c50_api.cpp\
 	$(SRC_DIR)/c50_input.cpp\
+	$(SRC_DIR)/c50_output.cpp\
 	$(SRC_DIR)/c50.cpp\
 	$(SRC_DIR)/construct.cpp\
 	$(SRC_DIR)/formtree.cpp\
@@ -60,6 +61,7 @@ objects = $(sources:.cpp=.o)
 headers =\
 	$(SRC_DIR)/c50_api_internal.h\
 	$(SRC_DIR)/c50_input.h\
+	$(SRC_DIR)/c50_output.h\
 	$(SRC_DIR)/c50_rng.h\
 	$(SRC_DIR)/defns.i\
 	$(SRC_DIR)/extern.i\
