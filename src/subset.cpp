@@ -50,16 +50,16 @@ void InitialiseBellNumbers(c50_context *Context)
 {
     DiscrValue	 n, k;
 
-    /*  Table of Bell numbers (used for subset test penalties)  */
+    /*  Table of Context->splits.bell_numbers numbers (used for subset test penalties)  */
 
-    Bell = AllocZero(Context->schema.max_discrete_value+1, double *);
+    Context->splits.bell_numbers = AllocZero(Context->schema.max_discrete_value+1, double *);
     ForEach(n, 1, Context->schema.max_discrete_value)
     {
-	Bell[n] = AllocZero(n+1, double);
+	Context->splits.bell_numbers[n] = AllocZero(n+1, double);
 	ForEach(k, 1, n)
 	{
-	    Bell[n][k] = ( k == 1 || k == n ? 1 :
-			   Bell[n-1][k-1] + k * Bell[n-1][k] );
+	    Context->splits.bell_numbers[n][k] = ( k == 1 || k == n ? 1 :
+			   Context->splits.bell_numbers[n-1][k-1] + k * Context->splits.bell_numbers[n-1][k] );
 	}
     }
 }
@@ -69,8 +69,8 @@ void InitialiseBellNumbers(c50_context *Context)
 /*************************************************************************/
 /*									 */
 /*	Evaluate subsetting a discrete attribute and form the chosen	 */
-/*	subsets Subset[Att][], setting Subsets[Att] to the number of	 */
-/*	subsets, and the Info[] and Gain[] of a test on the attribute	 */
+/*	subsets Context->splits.subsets[Att][], setting Context->splits.subset_counts[Att] to the number of	 */
+/*	subsets, and the Context->splits.information[] and Context->splits.gain[] of a test on the attribute	 */
 /*									 */
 /*************************************************************************/
 
@@ -91,13 +91,13 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 
     SetDiscrFreq(Context, Att);
 
-    GEnv.ReasonableSubsets = 0;
+    Context->training.environment->ReasonableSubsets = 0;
     ForEach(c, 1, Context->schema.max_attribute_value[Att])
     {
-	if ( GEnv.ValFreq[c] >= Context->options.minimum_cases ) GEnv.ReasonableSubsets++;
+	if ( Context->training.environment->ValFreq[c] >= Context->options.minimum_cases ) Context->training.environment->ReasonableSubsets++;
     }
 
-    if ( ! GEnv.ReasonableSubsets )
+    if ( ! Context->training.environment->ReasonableSubsets )
     {
 	Verbosity(2,
 	    fprintf(Of, "\tAtt %s: poor initial split\n", Context->schema.attribute_names[Att]))
@@ -105,19 +105,19 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 	return;
     }
 
-    KnownCases  = Cases - GEnv.ValFreq[0];
-    UnknownRate = GEnv.ValFreq[0] / Cases;
+    KnownCases  = Cases - Context->training.environment->ValFreq[0];
+    UnknownRate = Context->training.environment->ValFreq[0] / Cases;
 
-    BaseInfo = ( ! GEnv.ValFreq[0] ? GlobalBaseInfo :
+    BaseInfo = ( ! Context->training.environment->ValFreq[0] ? Context->splits.base_information :
 		     DiscrKnownBaseInfo(Context, KnownCases, Context->schema.max_attribute_value[Att]) );
 
     PrevGain = ComputeGain(Context, BaseInfo, UnknownRate, Context->schema.max_attribute_value[Att], KnownCases);
-    PrevInfo = TotalInfo(GEnv.ValFreq, 0, Context->schema.max_attribute_value[Att]) / Cases;
+    PrevInfo = TotalInfo(Context->training.environment->ValFreq, 0, Context->schema.max_attribute_value[Att]) / Cases;
     BestVal  = PrevGain / PrevInfo;
 
     Verbosity(2, fprintf(Of, "\tAtt %s", Context->schema.attribute_names[Att]))
-    Verbosity(3, PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], GEnv.Freq,
-				   GEnv.ValFreq, true))
+    Verbosity(3, PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], Context->training.environment->Freq,
+				   Context->training.environment->ValFreq, true))
     Verbosity(2,
 	fprintf(Of, "\tinitial inf %.3f, gain %.3f, val=%.3f\n",
 		PrevInfo, PrevGain, BestVal))
@@ -126,27 +126,27 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 	and form a separate subset for each represented attribute value.
 	Unrepresented N/A values are ignored  */
 
-    GEnv.Bytes = (Context->schema.max_attribute_value[Att]>>3) + 1;
-    ClearBits(GEnv.Bytes, Subset[Att][0]);
+    Context->training.environment->Bytes = (Context->schema.max_attribute_value[Att]>>3) + 1;
+    ClearBits(Context->training.environment->Bytes, Context->splits.subsets[Att][0]);
 
-    GEnv.Blocks = 0;
+    Context->training.environment->Blocks = 0;
     ForEach(V1, 1, Context->schema.max_attribute_value[Att])
     {
-	if ( GEnv.ValFreq[V1] > Epsilon ||
+	if ( Context->training.environment->ValFreq[V1] > Epsilon ||
 	     ( V1 == 1 && Context->cases.some_not_applicable[Att] ) )
 	{
-	    if ( ++GEnv.Blocks < V1 )
+	    if ( ++Context->training.environment->Blocks < V1 )
 	    {
-		GEnv.ValFreq[GEnv.Blocks] = GEnv.ValFreq[V1];
+		Context->training.environment->ValFreq[Context->training.environment->Blocks] = Context->training.environment->ValFreq[V1];
 		ForEach(c, 1, Context->schema.max_class)
 		{
-		    GEnv.Freq[GEnv.Blocks][c] = GEnv.Freq[V1][c];
+		    Context->training.environment->Freq[Context->training.environment->Blocks][c] = Context->training.environment->Freq[V1][c];
 		}
 	    }
-	    ClearBits(GEnv.Bytes, GEnv.WSubset[GEnv.Blocks]);
-	    SetBit(V1, GEnv.WSubset[GEnv.Blocks]);
-	    CopyBits(GEnv.Bytes, GEnv.WSubset[GEnv.Blocks],
-		     Subset[Att][GEnv.Blocks]);
+	    ClearBits(Context->training.environment->Bytes, Context->training.environment->WSubset[Context->training.environment->Blocks]);
+	    SetBit(V1, Context->training.environment->WSubset[Context->training.environment->Blocks]);
+	    CopyBits(Context->training.environment->Bytes, Context->training.environment->WSubset[Context->training.environment->Blocks],
+		     Context->splits.subsets[Att][Context->training.environment->Blocks]);
 
 	    /*  Cannot merge N/A values with other blocks  */
 
@@ -155,22 +155,22 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 	else
 	if ( V1 != 1 )
 	{
-	    SetBit(V1, Subset[Att][0]);
+	    SetBit(V1, Context->splits.subsets[Att][0]);
 	    MissingValues++;
 	}
     }
 
     /*  Set n-way branch as initial test  */
 
-    Gain[Att]    = PrevGain;
-    Info[Att]    = PrevInfo;
-    Subsets[Att] = InitialBlocks = GEnv.Blocks;
+    Context->splits.gain[Att]    = PrevGain;
+    Context->splits.information[Att]    = PrevInfo;
+    Context->splits.subset_counts[Att] = InitialBlocks = Context->training.environment->Blocks;
 
     /*  As a preliminary step, merge values with identical distributions  */
 
-    ForEach(V1, First, GEnv.Blocks-1)
+    ForEach(V1, First, Context->training.environment->Blocks-1)
     {
-	ForEach(V2, V1+1, GEnv.Blocks)
+	ForEach(V2, V1+1, Context->training.environment->Blocks)
 	{
 	    if ( SameDistribution(Context, V1, V2) )
 	    {
@@ -185,28 +185,28 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 	{
 	    V3 = V1;
 
-	    ForEach(V2, V1+1, GEnv.Blocks)
+	    ForEach(V2, V1+1, Context->training.environment->Blocks)
 	    {
-		if ( GEnv.ValFreq[V2] && ++V3 != V2 )
+		if ( Context->training.environment->ValFreq[V2] && ++V3 != V2 )
 		{
 		    MoveBlock(Context, V3, V2);
 		}
 	    }
 
-	    GEnv.Blocks = V3;
+	    Context->training.environment->Blocks = V3;
 	}
     }
 
     if ( Prelim )
     {
-	PrevInfo = TotalInfo(GEnv.ValFreq, 0, GEnv.Blocks) / Cases;
+	PrevInfo = TotalInfo(Context->training.environment->ValFreq, 0, Context->training.environment->Blocks) / Cases;
 
-	Penalty  = ( finite(Bell[InitialBlocks][GEnv.Blocks]) ?
-			Log(Bell[InitialBlocks][GEnv.Blocks]) :
-			(InitialBlocks-GEnv.Blocks+1) * Log(GEnv.Blocks) );
+	Penalty  = ( finite(Context->splits.bell_numbers[InitialBlocks][Context->training.environment->Blocks]) ?
+			Log(Context->splits.bell_numbers[InitialBlocks][Context->training.environment->Blocks]) :
+			(InitialBlocks-Context->training.environment->Blocks+1) * Log(Context->training.environment->Blocks) );
 
 	Val = (PrevGain - Penalty / Cases) / PrevInfo;
-	Better = ( GEnv.Blocks >= 2 && GEnv.ReasonableSubsets >= 2 &&
+	Better = ( Context->training.environment->Blocks >= 2 && Context->training.environment->ReasonableSubsets >= 2 &&
 		   Val >= BestVal );
 
 	Verbosity(2,
@@ -215,36 +215,36 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 			PrevInfo, PrevGain, Val,
 		        ( Better ? " **" : "" ),
 			(Context->options.verbosity > 2 ? "" : "\n" ));
-	    Verbosity(3, PrintDistribution(Context, Att, 0, GEnv.Blocks, GEnv.Freq,
-					   GEnv.ValFreq, false))
+	    Verbosity(3, PrintDistribution(Context, Att, 0, Context->training.environment->Blocks, Context->training.environment->Freq,
+					   Context->training.environment->ValFreq, false))
 	})
 
 	if ( Better )
 	{
-	    Subsets[Att] = GEnv.Blocks;
+	    Context->splits.subset_counts[Att] = Context->training.environment->Blocks;
 
-	    ForEach(V1, 1, GEnv.Blocks)
+	    ForEach(V1, 1, Context->training.environment->Blocks)
 	    {
-		CopyBits(GEnv.Bytes, GEnv.WSubset[V1], Subset[Att][V1]);
+		CopyBits(Context->training.environment->Bytes, Context->training.environment->WSubset[V1], Context->splits.subsets[Att][V1]);
 	    }
 
-	    Info[Att] = PrevInfo;
-	    Gain[Att] = PrevGain - Penalty / KnownCases;
+	    Context->splits.information[Att] = PrevInfo;
+	    Context->splits.gain[Att] = PrevGain - Penalty / KnownCases;
 	    BestVal   = Val;
 	}
     }
 		
     /*  Determine initial information and entropy values  */
 
-    ForEach(V1, 1, GEnv.Blocks)
+    ForEach(V1, 1, Context->training.environment->Blocks)
     {
-	GEnv.SubsetInfo[V1] = -GEnv.ValFreq[V1] * Log(GEnv.ValFreq[V1] / Cases);
-	GEnv.SubsetEntr[V1] = TotalInfo(GEnv.Freq[V1], 1, Context->schema.max_class);
+	Context->training.environment->SubsetInfo[V1] = -Context->training.environment->ValFreq[V1] * Log(Context->training.environment->ValFreq[V1] / Cases);
+	Context->training.environment->SubsetEntr[V1] = TotalInfo(Context->training.environment->Freq[V1], 1, Context->schema.max_class);
     }
 
-    ForEach(V1, First, GEnv.Blocks-1)
+    ForEach(V1, First, Context->training.environment->Blocks-1)
     {
-	ForEach(V2, V1+1, GEnv.Blocks)
+	ForEach(V2, V1+1, Context->training.environment->Blocks)
 	{
 	    EvaluatePair(Context, V1, V2, Cases);
 	}
@@ -252,7 +252,7 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 
     /*  Examine possible pair mergers and hill-climb  */
 
-    while ( GEnv.Blocks > 2 )
+    while ( Context->training.environment->Blocks > 2 )
     {
 	BestV1 = 0;
 	BestGain = -Epsilon;
@@ -261,23 +261,23 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 	    total info of a split in which they are treated as one.
 	    Keep track of the pair with the best gain.  */
 
-	ForEach(V1, First, GEnv.Blocks-1)
+	ForEach(V1, First, Context->training.environment->Blocks-1)
 	{
-	    ForEach(V2, V1+1, GEnv.Blocks)
+	    ForEach(V2, V1+1, Context->training.environment->Blocks)
 	    {
-		if ( GEnv.ReasonableSubsets == 2 &&
-		     GEnv.ValFreq[V1] >= Context->options.minimum_cases-Epsilon &&
-		     GEnv.ValFreq[V2] >= Context->options.minimum_cases-Epsilon )
+		if ( Context->training.environment->ReasonableSubsets == 2 &&
+		     Context->training.environment->ValFreq[V1] >= Context->options.minimum_cases-Epsilon &&
+		     Context->training.environment->ValFreq[V2] >= Context->options.minimum_cases-Epsilon )
 		{
 		    continue;
 		}
 
 		ThisGain = PrevGain -
 			   ((1-UnknownRate) / KnownCases) *
-			     (GEnv.MergeEntr[V1][V2] -
-			       (GEnv.SubsetEntr[V1] + GEnv.SubsetEntr[V2]));
-		ThisInfo = PrevInfo + (GEnv.MergeInfo[V1][V2] -
-			   (GEnv.SubsetInfo[V1] + GEnv.SubsetInfo[V2])) / Cases;
+			     (Context->training.environment->MergeEntr[V1][V2] -
+			       (Context->training.environment->SubsetEntr[V1] + Context->training.environment->SubsetEntr[V2]));
+		ThisInfo = PrevInfo + (Context->training.environment->MergeInfo[V1][V2] -
+			   (Context->training.environment->SubsetInfo[V1] + Context->training.environment->SubsetInfo[V2])) / Cases;
 		Verbosity(3,
 		    fprintf(Of, "\t    combine %d %d info %.3f gain %.3f\n",
 			    V1, V2, ThisInfo, ThisGain))
@@ -299,12 +299,12 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 	PrevGain = BestGain;
 	PrevInfo = BestInfo;
 
-	/*  Determine penalty as log of Bell number.  If number is too
+	/*  Determine penalty as log of Context->splits.bell_numbers number.  If number is too
 	    large, use an approximation of log  */
 
-	Penalty  = ( finite(Bell[InitialBlocks][GEnv.Blocks-1]) ?
-			Log(Bell[InitialBlocks][GEnv.Blocks-1]) :
-			(InitialBlocks-GEnv.Blocks+1) * Log(GEnv.Blocks-1) );
+	Penalty  = ( finite(Context->splits.bell_numbers[InitialBlocks][Context->training.environment->Blocks-1]) ?
+			Log(Context->splits.bell_numbers[InitialBlocks][Context->training.environment->Blocks-1]) :
+			(InitialBlocks-Context->training.environment->Blocks+1) * Log(Context->training.environment->Blocks-1) );
 
 	Val = (BestGain - Penalty / Cases) / BestInfo;
 
@@ -312,26 +312,26 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 
 	Verbosity(2,
 	    fprintf(Of, "\tform subset ");
-	    PrintSubset(Context, Att, GEnv.WSubset[BestV1]);
+	    PrintSubset(Context, Att, Context->training.environment->WSubset[BestV1]);
 	    fprintf(Of, ": %d subsets, inf %.3f, gain %.3f, val %.3f%s\n",
-		   GEnv.Blocks, BestInfo, BestGain, Val,
+		   Context->training.environment->Blocks, BestInfo, BestGain, Val,
 		   ( Val > BestVal ? " **" : "" ));
 	    Verbosity(3,
-		PrintDistribution(Context, Att, 0, GEnv.Blocks, GEnv.Freq, GEnv.ValFreq,
+		PrintDistribution(Context, Att, 0, Context->training.environment->Blocks, Context->training.environment->Freq, Context->training.environment->ValFreq,
 				  false))
 	    )
 
 	if ( Val >= BestVal )
 	{
-	    Subsets[Att] = GEnv.Blocks;
+	    Context->splits.subset_counts[Att] = Context->training.environment->Blocks;
 
-	    ForEach(V1, 1, GEnv.Blocks)
+	    ForEach(V1, 1, Context->training.environment->Blocks)
 	    {
-		CopyBits(GEnv.Bytes, GEnv.WSubset[V1], Subset[Att][V1]);
+		CopyBits(Context->training.environment->Bytes, Context->training.environment->WSubset[V1], Context->splits.subsets[Att][V1]);
 	    }
 
-	    Info[Att] = BestInfo;
-	    Gain[Att] = BestGain - Penalty / KnownCases;
+	    Context->splits.information[Att] = BestInfo;
+	    Context->splits.gain[Att] = BestGain - Penalty / KnownCases;
 	    BestVal   = Val;
 	}
     }
@@ -340,13 +340,13 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 
     if ( MissingValues )
     {
-	Subsets[Att]++;
-	CopyBits(GEnv.Bytes, Subset[Att][0], Subset[Att][Subsets[Att]]);
+	Context->splits.subset_counts[Att]++;
+	CopyBits(Context->training.environment->Bytes, Context->splits.subsets[Att][0], Context->splits.subsets[Att][Context->splits.subset_counts[Att]]);
     }
 
     Verbosity(2,
 	fprintf(Of, "\tfinal inf %.3f, gain %.3f, val=%.3f\n",
-		Info[Att], Gain[Att], Gain[Att] / (Info[Att] + 1E-3)))
+		Context->splits.information[Att], Context->splits.gain[Att], Context->splits.gain[Att] / (Context->splits.information[Att] + 1E-3)))
 }
 
 
@@ -373,42 +373,42 @@ void Merge(c50_context *Context, DiscrValue x, DiscrValue y,
 
     ForEach(c, 1, Context->schema.max_class)
     {
-	Entr -= GEnv.Freq[x][c] * Log(GEnv.Freq[x][c]);
-	KnownCases += GEnv.Freq[x][c];
+	Entr -= Context->training.environment->Freq[x][c] * Log(Context->training.environment->Freq[x][c]);
+	KnownCases += Context->training.environment->Freq[x][c];
     }
 
-    GEnv.SubsetInfo[x] = - GEnv.ValFreq[x] * Log(GEnv.ValFreq[x] / Cases);
-    GEnv.SubsetEntr[x] = Entr + KnownCases * Log(KnownCases);
+    Context->training.environment->SubsetInfo[x] = - Context->training.environment->ValFreq[x] * Log(Context->training.environment->ValFreq[x] / Cases);
+    Context->training.environment->SubsetEntr[x] = Entr + KnownCases * Log(KnownCases);
 
     /*  Eliminate y from working blocks  */
 
-    ForEach(R, y, GEnv.Blocks-1)
+    ForEach(R, y, Context->training.environment->Blocks-1)
     {
 	MoveBlock(Context, R, R+1);
 
-	GEnv.SubsetInfo[R] = GEnv.SubsetInfo[R+1];
-	GEnv.SubsetEntr[R] = GEnv.SubsetEntr[R+1];
+	Context->training.environment->SubsetInfo[R] = Context->training.environment->SubsetInfo[R+1];
+	Context->training.environment->SubsetEntr[R] = Context->training.environment->SubsetEntr[R+1];
 
-	ForEach(C, 1, GEnv.Blocks)
+	ForEach(C, 1, Context->training.environment->Blocks)
 	{
-	    GEnv.MergeInfo[R][C] = GEnv.MergeInfo[R+1][C];
-	    GEnv.MergeEntr[R][C] = GEnv.MergeEntr[R+1][C];
+	    Context->training.environment->MergeInfo[R][C] = Context->training.environment->MergeInfo[R+1][C];
+	    Context->training.environment->MergeEntr[R][C] = Context->training.environment->MergeEntr[R+1][C];
 	}
     }
 
-    ForEach(C, y, GEnv.Blocks-1)
+    ForEach(C, y, Context->training.environment->Blocks-1)
     {
-	ForEach(R, 1, GEnv.Blocks-1)
+	ForEach(R, 1, Context->training.environment->Blocks-1)
 	{
-	    GEnv.MergeInfo[R][C] = GEnv.MergeInfo[R][C+1];
-	    GEnv.MergeEntr[R][C] = GEnv.MergeEntr[R][C+1];
+	    Context->training.environment->MergeInfo[R][C] = Context->training.environment->MergeInfo[R][C+1];
+	    Context->training.environment->MergeEntr[R][C] = Context->training.environment->MergeEntr[R][C+1];
 	}
     }
-    GEnv.Blocks--;
+    Context->training.environment->Blocks--;
 
     /*  Update information for newly-merged block  */
 
-    ForEach(C, 1, GEnv.Blocks)
+    ForEach(C, 1, Context->training.environment->Blocks)
     {
 	if ( C != x ) EvaluatePair(Context, x, C, Cases);
     }
@@ -438,16 +438,16 @@ void EvaluatePair(c50_context *Context, DiscrValue x, DiscrValue y,
 	x = c;
     }
 
-    F = GEnv.ValFreq[x] + GEnv.ValFreq[y];
-    GEnv.MergeInfo[x][y] = - F * Log(F / Cases);
+    F = Context->training.environment->ValFreq[x] + Context->training.environment->ValFreq[y];
+    Context->training.environment->MergeInfo[x][y] = - F * Log(F / Cases);
 
     ForEach(c, 1, Context->schema.max_class)
     {
-	F = GEnv.Freq[x][c] + GEnv.Freq[y][c];
+	F = Context->training.environment->Freq[x][c] + Context->training.environment->Freq[y][c];
 	Entr -= F * Log(F);
 	KnownCases += F;
     }
-    GEnv.MergeEntr[x][y] = Entr + KnownCases * Log(KnownCases);
+    Context->training.environment->MergeEntr[x][y] = Entr + KnownCases * Log(KnownCases);
 }
 
 
@@ -466,12 +466,12 @@ Boolean SameDistribution(c50_context *Context, DiscrValue V1,
     ClassNo	c;
     CaseCount	D1, D2;
 
-    D1 = GEnv.ValFreq[V1];
-    D2 = GEnv.ValFreq[V2];
+    D1 = Context->training.environment->ValFreq[V1];
+    D2 = Context->training.environment->ValFreq[V2];
 
     ForEach(c, 1, Context->schema.max_class)
     {
-	if ( fabs(GEnv.Freq[V1][c] / D1 - GEnv.Freq[V2][c] / D2) > 0.001 )
+	if ( fabs(Context->training.environment->Freq[V1][c] / D1 - Context->training.environment->Freq[V2][c] / D2) > 0.001 )
 	{
 	    return false;
 	}
@@ -495,28 +495,28 @@ void AddBlock(c50_context *Context, DiscrValue V1, DiscrValue V2)
     ClassNo	c;
     int		b;
 
-    if ( GEnv.ValFreq[V1] >= Context->options.minimum_cases-Epsilon &&
-	 GEnv.ValFreq[V2] >= Context->options.minimum_cases-Epsilon )
+    if ( Context->training.environment->ValFreq[V1] >= Context->options.minimum_cases-Epsilon &&
+	 Context->training.environment->ValFreq[V2] >= Context->options.minimum_cases-Epsilon )
     {
-	GEnv.ReasonableSubsets--;
+	Context->training.environment->ReasonableSubsets--;
     }
     else
-    if ( GEnv.ValFreq[V1] < Context->options.minimum_cases-Epsilon &&
-	 GEnv.ValFreq[V2] < Context->options.minimum_cases-Epsilon &&
-	 GEnv.ValFreq[V1] + GEnv.ValFreq[V2] >= Context->options.minimum_cases-Epsilon )
+    if ( Context->training.environment->ValFreq[V1] < Context->options.minimum_cases-Epsilon &&
+	 Context->training.environment->ValFreq[V2] < Context->options.minimum_cases-Epsilon &&
+	 Context->training.environment->ValFreq[V1] + Context->training.environment->ValFreq[V2] >= Context->options.minimum_cases-Epsilon )
     {
-	GEnv.ReasonableSubsets++;
+	Context->training.environment->ReasonableSubsets++;
     }
 
     ForEach(c, 1, Context->schema.max_class)
     {
-	GEnv.Freq[V1][c] += GEnv.Freq[V2][c];
+	Context->training.environment->Freq[V1][c] += Context->training.environment->Freq[V2][c];
     }
-    GEnv.ValFreq[V1] += GEnv.ValFreq[V2];
-    GEnv.ValFreq[V2] = 0;
-    ForEach(b, 0, GEnv.Bytes-1)
+    Context->training.environment->ValFreq[V1] += Context->training.environment->ValFreq[V2];
+    Context->training.environment->ValFreq[V2] = 0;
+    ForEach(b, 0, Context->training.environment->Bytes-1)
     {
-	GEnv.WSubset[V1][b] |= GEnv.WSubset[V2][b];
+	Context->training.environment->WSubset[V1][b] |= Context->training.environment->WSubset[V2][b];
     }
 }
 
@@ -536,10 +536,10 @@ void MoveBlock(c50_context *Context, DiscrValue V1, DiscrValue V2)
 
     ForEach(c, 1, Context->schema.max_class)
     {
-	GEnv.Freq[V1][c] = GEnv.Freq[V2][c];
+	Context->training.environment->Freq[V1][c] = Context->training.environment->Freq[V2][c];
     }
-    GEnv.ValFreq[V1] = GEnv.ValFreq[V2];
-    CopyBits(GEnv.Bytes, GEnv.WSubset[V2], GEnv.WSubset[V1]);
+    Context->training.environment->ValFreq[V1] = Context->training.environment->ValFreq[V2];
+    CopyBits(Context->training.environment->Bytes, Context->training.environment->WSubset[V2], Context->training.environment->WSubset[V1]);
 }
 
 
@@ -589,16 +589,16 @@ void SubsetTest(c50_context *Context, Tree Node, Attribute Att)
 {
     int	S, Bytes;
 
-    Sprout(Node, Subsets[Att]);
+    Sprout(Node, Context->splits.subset_counts[Att]);
 
     Node->NodeType = BrSubset;
     Node->Tested   = Att;
 
     Bytes = (Context->schema.max_attribute_value[Att]>>3) + 1;
-    Node->Subset = AllocZero(Subsets[Att]+1, Set);
+    Node->Subset = AllocZero(Context->splits.subset_counts[Att]+1, Set);
     ForEach(S, 1, Node->Forks)
     {
 	Node->Subset[S] = Alloc(Bytes, Byte);
-	CopyBits(Bytes, Subset[Att][S], Node->Subset[S]);
+	CopyBits(Bytes, Context->splits.subsets[Att][S], Node->Subset[S]);
     }
 }

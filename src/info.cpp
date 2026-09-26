@@ -60,7 +60,7 @@ double ComputeGain(c50_context *Context, double BaseInfo, float UnknFrac,
 
     ForEach(v, 1, MaxVal)
     {
-	ThisInfo += TotalInfo(GEnv.Freq[v], 1, Context->schema.max_class);
+	ThisInfo += TotalInfo(Context->training.environment->Freq[v], 1, Context->schema.max_class);
     }
     ThisInfo /= TotalCases;
 
