@@ -69,13 +69,13 @@ void InitialiseBellNumbers(c50_context *Context)
 /*************************************************************************/
 /*									 */
 /*	Evaluate subsetting a discrete attribute and form the chosen	 */
-/*	subsets Context->splits.subsets[Att][], setting Context->splits.subset_counts[Att] to the number of	 */
+/*	subsets in the per-attribute result, setting its subset count to the number of	 */
 /*	subsets, and the Context->splits.information[] and Context->splits.gain[] of a test on the attribute	 */
 /*									 */
 /*************************************************************************/
 
 
-void EvalSubset(c50_context *Context, SplitWorkspace &Workspace, Attribute Att, CaseCount Cases)
+void EvalSubset(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Result, Attribute Att, CaseCount Cases)
 /*   ----------  */
 {
     DiscrValue	V1, V2, V3, BestV1, BestV2, InitialBlocks, First=1, Prelim=0;
@@ -127,7 +127,7 @@ void EvalSubset(c50_context *Context, SplitWorkspace &Workspace, Attribute Att, 
 	Unrepresented N/A values are ignored  */
 
     Workspace.Bytes = (Context->schema.max_attribute_value[Att]>>3) + 1;
-    ClearBits(Workspace.Bytes, Context->splits.subsets[Att][0]);
+    ClearBits(Workspace.Bytes, Result.Subsets[0]);
 
     Workspace.Blocks = 0;
     ForEach(V1, 1, Context->schema.max_attribute_value[Att])
@@ -146,7 +146,7 @@ void EvalSubset(c50_context *Context, SplitWorkspace &Workspace, Attribute Att, 
 	    ClearBits(Workspace.Bytes, Workspace.WSubset[Workspace.Blocks]);
 	    SetBit(V1, Workspace.WSubset[Workspace.Blocks]);
 	    CopyBits(Workspace.Bytes, Workspace.WSubset[Workspace.Blocks],
-		     Context->splits.subsets[Att][Workspace.Blocks]);
+		     Result.Subsets[Workspace.Blocks]);
 
 	    /*  Cannot merge N/A values with other blocks  */
 
@@ -155,16 +155,16 @@ void EvalSubset(c50_context *Context, SplitWorkspace &Workspace, Attribute Att, 
 	else
 	if ( V1 != 1 )
 	{
-	    SetBit(V1, Context->splits.subsets[Att][0]);
+	    SetBit(V1, Result.Subsets[0]);
 	    MissingValues++;
 	}
     }
 
     /*  Set n-way branch as initial test  */
 
-    Context->splits.gain[Att]    = PrevGain;
-    Context->splits.information[Att]    = PrevInfo;
-    Context->splits.subset_counts[Att] = InitialBlocks = Workspace.Blocks;
+    Result.Gain    = PrevGain;
+    Result.Information    = PrevInfo;
+    Result.SubsetCount = InitialBlocks = Workspace.Blocks;
 
     /*  As a preliminary step, merge values with identical distributions  */
 
@@ -221,15 +221,15 @@ void EvalSubset(c50_context *Context, SplitWorkspace &Workspace, Attribute Att, 
 
 	if ( Better )
 	{
-	    Context->splits.subset_counts[Att] = Workspace.Blocks;
+	    Result.SubsetCount = Workspace.Blocks;
 
 	    ForEach(V1, 1, Workspace.Blocks)
 	    {
-		CopyBits(Workspace.Bytes, Workspace.WSubset[V1], Context->splits.subsets[Att][V1]);
+		CopyBits(Workspace.Bytes, Workspace.WSubset[V1], Result.Subsets[V1]);
 	    }
 
-	    Context->splits.information[Att] = PrevInfo;
-	    Context->splits.gain[Att] = PrevGain - Penalty / KnownCases;
+	    Result.Information = PrevInfo;
+	    Result.Gain = PrevGain - Penalty / KnownCases;
 	    BestVal   = Val;
 	}
     }
@@ -323,15 +323,15 @@ void EvalSubset(c50_context *Context, SplitWorkspace &Workspace, Attribute Att, 
 
 	if ( Val >= BestVal )
 	{
-	    Context->splits.subset_counts[Att] = Workspace.Blocks;
+	    Result.SubsetCount = Workspace.Blocks;
 
 	    ForEach(V1, 1, Workspace.Blocks)
 	    {
-		CopyBits(Workspace.Bytes, Workspace.WSubset[V1], Context->splits.subsets[Att][V1]);
+		CopyBits(Workspace.Bytes, Workspace.WSubset[V1], Result.Subsets[V1]);
 	    }
 
-	    Context->splits.information[Att] = BestInfo;
-	    Context->splits.gain[Att] = BestGain - Penalty / KnownCases;
+	    Result.Information = BestInfo;
+	    Result.Gain = BestGain - Penalty / KnownCases;
 	    BestVal   = Val;
 	}
     }
@@ -340,13 +340,13 @@ void EvalSubset(c50_context *Context, SplitWorkspace &Workspace, Attribute Att, 
 
     if ( MissingValues )
     {
-	Context->splits.subset_counts[Att]++;
-	CopyBits(Workspace.Bytes, Context->splits.subsets[Att][0], Context->splits.subsets[Att][Context->splits.subset_counts[Att]]);
+	Result.SubsetCount++;
+	CopyBits(Workspace.Bytes, Result.Subsets[0], Result.Subsets[Result.SubsetCount]);
     }
 
     Verbosity(2,
 	fprintf(Context->io.output, "\tfinal inf %.3f, gain %.3f, val=%.3f\n",
-		Context->splits.information[Att], Context->splits.gain[Att], Context->splits.gain[Att] / (Context->splits.information[Att] + 1E-3)))
+		Result.Information, Result.Gain, Result.Gain / (Result.Information + 1E-3)))
 }
 
 

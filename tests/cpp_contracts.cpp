@@ -110,11 +110,58 @@ static void reused_context_matches_fresh()
     }
 }
 
+static void parallel_equivalence()
+{
+    constexpr std::size_t rows = 10001;
+    constexpr std::size_t columns = 6;
+    std::vector<double> values(rows * columns);
+    std::vector<std::size_t> classes(rows);
+    std::string schema = "a, b, c.\n";
+    for (std::size_t column = 0; column < columns; ++column)
+        schema += "x" + std::to_string(column) +
+                  (column == 5 ? ": red, green, blue.\n" : ": continuous.\n");
+    for (std::size_t row = 0; row < rows; ++row) {
+        for (std::size_t column = 0; column < columns; ++column)
+            values[row * columns + column] = column == 5 ? row % 3 :
+                (row * (column * 16 + 17) % 997) / 997.0;
+        classes[row] = values[row * columns] < 0.3 ? 0 :
+                       values[row * columns + 1] < 0.6 ? 1 : 2;
+    }
+    const c50::dense_dataset training(values.data(), rows, columns, classes.data());
+    const c50::dense_dataset cases(values.data(), rows, columns);
+    for (auto kind : {c50::model_kind::tree, c50::model_kind::rules}) {
+        c50::options options;
+        options.trials = 3;
+        options.subset_splits = true;
+        options.minimum_cases = 10;
+        c50::context context;
+        auto reference = c50::model::train(context, kind, schema, training, options);
+        auto expected = reference.predict(context, cases);
+        for (unsigned count : {2u, 4u, 8u}) {
+            context.split_workers(count);
+            auto model = c50::model::train(context, kind, schema, training, options);
+            require(model_body(model) == model_body(reference), "parallel classifier");
+            auto actual = model.predict(context, cases);
+            require(actual.size() == rows && actual.class_count() == 3,
+                    "parallel result shape");
+            for (std::size_t row = 0; row < rows; ++row) {
+                require(actual.class_index(row) == expected.class_index(row) &&
+                        actual.confidence(row) == expected.confidence(row),
+                        "parallel prediction");
+                for (std::size_t column = 0; column < 3; ++column)
+                    require(actual.score(row, column) == expected.score(row, column),
+                            "parallel score");
+            }
+        }
+    }
+}
+
 int main()
 {
     try {
         ownership_and_recovery();
         concurrency();
+        parallel_equivalence();
         reused_context_matches_fresh();
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';

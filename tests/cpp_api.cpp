@@ -32,6 +32,18 @@ int main()
     c50::context context;
     c50::options options;
 
+    context.split_workers(2);
+    try
+    {
+        context.split_workers(0);
+        return 1;
+    }
+    catch ( const c50::exception &error )
+    {
+        if ( error.code() != c50::error_code::invalid_argument ) return 1;
+    }
+    context.split_workers(1);
+
     options.trials = 1;
     options.subset_splits = true;
     options.winnow = false;
