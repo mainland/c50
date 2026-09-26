@@ -772,6 +772,7 @@ Attribute FindBestAtt(c50_context *Context, CaseCount Cases)
 void EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases)
 /*   --------------  */
 {
+    SplitWorkspace &Workspace = *Context->training.environment;
     DiscrValue	v, NBr;
 
     Context->splits.gain[Att] = None;
@@ -780,24 +781,24 @@ void EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases)
 
     if ( Ordered(Att) )
     {
-	EvalOrderedAtt(Context, Att, Cases);
-	NBr = ( Context->training.environment->ValFreq[1] > 0.5 ? 3 : 2 );
+	EvalOrderedAtt(Context, Workspace, Att, Cases);
+	NBr = ( Workspace.ValFreq[1] > 0.5 ? 3 : 2 );
     }
     else
     if ( Context->options.subset_splits && Context->schema.max_attribute_value[Att] > 3 )
     {
-	EvalSubset(Context, Att, Cases);
+	EvalSubset(Context, Workspace, Att, Cases);
 	NBr = Context->splits.subset_counts[Att];
     }
     else
     if ( ! Context->splits.tested_attributes[Att] )
     {
-	EvalDiscreteAtt(Context, Att, Cases);
+	EvalDiscreteAtt(Context, Workspace, Att, Cases);
 
 	NBr = 0;
 	ForEach(v, 1, Context->schema.max_attribute_value[Att])
 	{
-	    if ( Context->training.environment->ValFreq[v] > 0.5 ) NBr++;
+	    if ( Workspace.ValFreq[v] > 0.5 ) NBr++;
 	}
     }
     else

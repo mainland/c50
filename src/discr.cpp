@@ -43,7 +43,7 @@
 /*************************************************************************/
 
 
-void EvalDiscreteAtt(c50_context *Context, Attribute Att, CaseCount Cases)
+void EvalDiscreteAtt(c50_context *Context, SplitWorkspace &Workspace, Attribute Att, CaseCount Cases)
 /*   ---------------  */
 {
     CaseCount	KnownCases;
@@ -51,14 +51,14 @@ void EvalDiscreteAtt(c50_context *Context, Attribute Att, CaseCount Cases)
     DiscrValue	v;
     double	BaseInfo;
 
-    SetDiscrFreq(Context, Att);
-    KnownCases = Cases - Context->training.environment->ValFreq[0];
+    SetDiscrFreq(Context, Workspace, Att);
+    KnownCases = Cases - Workspace.ValFreq[0];
 
     /*  Check reasonable subsets  */
 
     ForEach(v, 1, Context->schema.max_attribute_value[Att])
     {
-	if ( Context->training.environment->ValFreq[v] >= Context->options.minimum_cases ) ReasonableSubsets++;
+	if ( Workspace.ValFreq[v] >= Context->options.minimum_cases ) ReasonableSubsets++;
     }
 
     if ( ReasonableSubsets < 2 )
@@ -67,18 +67,18 @@ void EvalDiscreteAtt(c50_context *Context, Attribute Att, CaseCount Cases)
 	return;
     }
 
-    BaseInfo = ( ! Context->training.environment->ValFreq[0] ? Context->splits.base_information :
-		     DiscrKnownBaseInfo(Context, KnownCases, Context->schema.max_attribute_value[Att]) );
+    BaseInfo = ( ! Workspace.ValFreq[0] ? Context->splits.base_information :
+		     DiscrKnownBaseInfo(Context, Workspace, KnownCases, Context->schema.max_attribute_value[Att]) );
 
-    Context->splits.gain[Att] = ComputeGain(Context, BaseInfo, Context->training.environment->ValFreq[0] / Cases, Context->schema.max_attribute_value[Att],
+    Context->splits.gain[Att] = ComputeGain(Context, Workspace, BaseInfo, Workspace.ValFreq[0] / Cases, Context->schema.max_attribute_value[Att],
 			    KnownCases);
-    Context->splits.information[Att] = TotalInfo(Context->training.environment->ValFreq, 0, Context->schema.max_attribute_value[Att]) / Cases;
+    Context->splits.information[Att] = TotalInfo(Workspace.ValFreq, 0, Context->schema.max_attribute_value[Att]) / Cases;
 
     Verbosity(2,
     {
 	fprintf(Context->io.output, "\tAtt %s", Context->schema.attribute_names[Att]);
 	Verbosity(3,
-	    PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], Context->training.environment->Freq, Context->training.environment->ValFreq,
+	    PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], Workspace.Freq, Workspace.ValFreq,
 			      true))
 	fprintf(Context->io.output, "\tinf %.3f, gain %.3f\n",
 		Context->splits.information[Att], Context->splits.gain[Att]);
@@ -94,7 +94,7 @@ void EvalDiscreteAtt(c50_context *Context, Attribute Att, CaseCount Cases)
 /*************************************************************************/
 
 
-void EvalOrderedAtt(c50_context *Context, Attribute Att, CaseCount Cases)
+void EvalOrderedAtt(c50_context *Context, SplitWorkspace &Workspace, Attribute Att, CaseCount Cases)
 /*   --------------  */
 {
     CaseCount	KnownCases;
@@ -104,51 +104,51 @@ void EvalOrderedAtt(c50_context *Context, Attribute Att, CaseCount Cases)
     DiscrValue	v, BestV;
     double	BaseInfo, ThisGain, BestInfo, BestGain=None;
 
-    SetDiscrFreq(Context, Att);
-    KnownCases = Cases - Context->training.environment->ValFreq[0];
+    SetDiscrFreq(Context, Workspace, Att);
+    KnownCases = Cases - Workspace.ValFreq[0];
 
-    BaseInfo = ( ! Context->training.environment->ValFreq[0] ? Context->splits.base_information :
-		     DiscrKnownBaseInfo(Context, KnownCases, Context->schema.max_attribute_value[Att]) );
+    BaseInfo = ( ! Workspace.ValFreq[0] ? Context->splits.base_information :
+		     DiscrKnownBaseInfo(Context, Workspace, KnownCases, Context->schema.max_attribute_value[Att]) );
 
     Verbosity(2, fprintf(Context->io.output, "\tAtt %s", Context->schema.attribute_names[Att]))
-    Verbosity(3, PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], Context->training.environment->Freq,
-				   Context->training.environment->ValFreq, true))
+    Verbosity(3, PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], Workspace.Freq,
+				   Workspace.ValFreq, true))
 
     /*  Move elts of Freq[] starting with the third up one place
 	and aggregate class frequencies  */
 
-    HoldFreqRow = Context->training.environment->Freq[Context->schema.max_attribute_value[Att]+1];
+    HoldFreqRow = Workspace.Freq[Context->schema.max_attribute_value[Att]+1];
     ForEach(c, 1, Context->schema.max_class)
     {
 	HoldFreqRow[c] = 0;
     }
-    SplitFreq[0] = Context->training.environment->ValFreq[0];
-    SplitFreq[1] = Context->training.environment->ValFreq[1];
-    SplitFreq[2] = Context->training.environment->ValFreq[2];
+    SplitFreq[0] = Workspace.ValFreq[0];
+    SplitFreq[1] = Workspace.ValFreq[1];
+    SplitFreq[2] = Workspace.ValFreq[2];
     SplitFreq[3] = 0;
 
     for ( v = Context->schema.max_attribute_value[Att] ; v > 2 ; v-- )
     {
-	Context->training.environment->Freq[v+1] = Context->training.environment->Freq[v];
+	Workspace.Freq[v+1] = Workspace.Freq[v];
 	ForEach(c, 1, Context->schema.max_class)
 	{
-	    HoldFreqRow[c] += Context->training.environment->Freq[v][c];
+	    HoldFreqRow[c] += Workspace.Freq[v][c];
 	}
-	SplitFreq[3] += Context->training.environment->ValFreq[v];
+	SplitFreq[3] += Workspace.ValFreq[v];
     }
 
-    Context->training.environment->Freq[3] = HoldFreqRow;
+    Workspace.Freq[3] = HoldFreqRow;
 
     /*  Try various cuts, saving the one with maximum gain  */
 
     ForEach(v, 3, Context->schema.max_attribute_value[Att])
     {
-	if ( Context->training.environment->ValFreq[v] > 0 &&
+	if ( Workspace.ValFreq[v] > 0 &&
 	     SplitFreq[2] >= Context->options.minimum_cases && SplitFreq[3] >= Context->options.minimum_cases )
 	{
 	    Tries++;
 	    ThisGain =
-		ComputeGain(Context, BaseInfo, Context->training.environment->ValFreq[0] / Cases, 3, KnownCases);
+		ComputeGain(Context, Workspace, BaseInfo, Workspace.ValFreq[0] / Cases, 3, KnownCases);
 
 	    if ( ThisGain > BestGain )
 	    {
@@ -160,7 +160,7 @@ void EvalOrderedAtt(c50_context *Context, Attribute Att, CaseCount Cases)
 	    Verbosity(3,
 	    {   fprintf(Context->io.output, "\t\tFrom %s (gain %.3f)",
 			Context->schema.attribute_value_names[Att][v], ThisGain);
-		PrintDistribution(Context, Att, 0, 3, Context->training.environment->Freq, Context->training.environment->ValFreq, false);
+		PrintDistribution(Context, Att, 0, 3, Workspace.Freq, Workspace.ValFreq, false);
 	    })
 	}
 
@@ -168,11 +168,11 @@ void EvalOrderedAtt(c50_context *Context, Attribute Att, CaseCount Cases)
 
 	ForEach(c, 1, Context->schema.max_class)
 	{
-	    Context->training.environment->Freq[2][c] += Context->training.environment->Freq[v+1][c];
-	    Context->training.environment->Freq[3][c] -= Context->training.environment->Freq[v+1][c];
+	    Workspace.Freq[2][c] += Workspace.Freq[v+1][c];
+	    Workspace.Freq[3][c] -= Workspace.Freq[v+1][c];
 	}
-	SplitFreq[2] += Context->training.environment->ValFreq[v];
-	SplitFreq[3] -= Context->training.environment->ValFreq[v];
+	SplitFreq[2] += Workspace.ValFreq[v];
+	SplitFreq[3] -= Workspace.ValFreq[v];
     }
 
     if ( Tries > 1 ) BestGain -= Log(Tries) / Cases;
@@ -206,7 +206,7 @@ void EvalOrderedAtt(c50_context *Context, Attribute Att, CaseCount Cases)
 /*************************************************************************/
 
 
-void SetDiscrFreq(c50_context *Context, Attribute Att)
+void SetDiscrFreq(c50_context *Context, SplitWorkspace &Workspace, Attribute Att)
 /*   ------------  */
 {
     ClassNo	c;
@@ -218,12 +218,12 @@ void SetDiscrFreq(c50_context *Context, Attribute Att)
 
     ForEach(v, 0, Context->schema.max_attribute_value[Att])
     {
-	Context->training.environment->ValFreq[v] = 0;
+	Workspace.ValFreq[v] = 0;
 
 	x = v * Context->schema.max_class;
 	ForEach(c, 1, Context->schema.max_class)
 	{
-	    Context->training.environment->ValFreq[v] += (Context->training.environment->Freq[v][c] = Context->splits.discrete_frequencies[Att][x + (c-1)]);
+	    Workspace.ValFreq[v] += (Workspace.Freq[v][c] = Context->splits.discrete_frequencies[Att][x + (c-1)]);
 	}
     }
 }
@@ -238,7 +238,7 @@ void SetDiscrFreq(c50_context *Context, Attribute Att)
 /*************************************************************************/
 
 
-double DiscrKnownBaseInfo(c50_context *Context, CaseCount KnownCases,
+double DiscrKnownBaseInfo(c50_context *Context, SplitWorkspace &Workspace, CaseCount KnownCases,
 			  DiscrValue MaxVal)
 /*     ------------------  */
 {
@@ -253,12 +253,12 @@ double DiscrKnownBaseInfo(c50_context *Context, CaseCount KnownCases,
 	ClassCount = 0;
 	ForEach(v, 1, MaxVal)
 	{
-	    ClassCount += Context->training.environment->Freq[v][c];
+	    ClassCount += Workspace.Freq[v][c];
 	}
-	Context->training.environment->ClassFreq[c] = ClassCount;
+	Workspace.ClassFreq[c] = ClassCount;
     }
 
-    return TotalInfo(Context->training.environment->ClassFreq, 1, Context->schema.max_class) / KnownCases;
+    return TotalInfo(Workspace.ClassFreq, 1, Context->schema.max_class) / KnownCases;
 }
 
 
