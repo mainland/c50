@@ -269,3 +269,21 @@ manual dispatch, and a weekly schedule. Sanitizer failures fail the job.
 The thread job disables address randomization for the test process to avoid
 GCC TSan's Linux shadow-memory mapping conflict. The ordinary local test target
 does not run these additional builds.
+
+## Allocation-failure regression tests
+
+On Linux with GCC or Clang, `allocation-failure` fails each allocation in turn
+while training, loading, or predicting trees and rules. Its cases cover
+three-classifier boosted ensembles, dense input with missing values, implicit
+expressions, growing schemas, subset pruning, and branch compression. Each
+failure must propagate as `std::bad_alloc`, and the same context must accept a
+subsequent successful operation. Run this test with leak detection to check
+exception-path ownership:
+
+```sh
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+    ctest --test-dir build/sanitize -R allocation-failure --output-on-failure
+```
+
+The harness uses GNU linker allocation wrappers. It does not establish
+allocation-failure coverage on other platforms or cover every learner path.

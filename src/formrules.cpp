@@ -43,6 +43,7 @@
 #include "defns.i"
 #include "extern.i"
 #include "c50_api_internal.h"
+#include <memory>
 
 
 /*************************************************************************/
@@ -56,7 +57,6 @@ CRuleSet FormRules(c50_context *Context, Tree T)
     /*	 ---------  */
 {
     int		i;
-    CRuleSet	RS;
 
     NotifyStage(Context, FORMRULES);
     Progress(Context, -(Context->cases.max_case+1.0));
@@ -130,7 +130,9 @@ CRuleSet FormRules(c50_context *Context, Tree T)
 
     CheckActiveSpace(Context, Context->rules.count);
 
-    RS = Alloc(1, RuleSetRec);
+    std::unique_ptr<RuleSetRec, decltype(&FreeRules)> Owner(
+        Alloc(1, RuleSetRec), &FreeRules);
+    CRuleSet RS = Owner.get();
 
     RS->SNRules  = Context->rules.count;
     RS->SRule    = Context->rules.rules;				Context->rules.rules = Nil;
@@ -138,7 +140,7 @@ CRuleSet FormRules(c50_context *Context, Tree T)
 
     ConstructRuleTree(Context, RS);
 
-    return RS;
+    return Owner.release();
 }
 
 
@@ -695,8 +697,6 @@ void Increment(c50_context *Context, int d, CaseNo i,
 void FreeFormRuleData(c50_context *Context)
 /*   ----------------  */
 {
-    if ( ! Context->rule_build.condition_failed_by ) return;
-
     FreeVector((void **) Context->rule_build.condition_failed_by, 0, Context->rule_build.max_rule_depth+1);	Context->rule_build.condition_failed_by = Nil;
     FreeVector((void **) Context->rule_build.condition_stack, 0, Context->rule_build.max_rule_depth+1);		Context->rule_build.condition_stack = Nil;
     Free(Context->rule_build.deleted_conditions);					Context->rule_build.deleted_conditions = Nil;
