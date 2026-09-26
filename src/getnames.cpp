@@ -194,6 +194,11 @@ void GetNames(c50_context *Context, c50_input *Nf)
     Attribute	Att;
     ClassNo	c;
 
+    /* The timestamp base belongs to the schema and to the model read
+       with it, so it starts again with each schema.  A prepared predictor
+       keeps its model's base across the operations that follow.  */
+
+    Context->io.timestamp_base = 0;
     Context->io.error_count = Context->io.attribute_exclusions = 0;
     Context->io.line_number  = 0;
     Context->line_buffer_position     = Context->line_buffer;

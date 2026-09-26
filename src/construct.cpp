@@ -1,4 +1,4 @@
-/* Modified 2026 by Geoffrey Mainland: remove unused bookkeeping. */
+/* Modified 2026 by Geoffrey Mainland: native C++ library integration and warning cleanup. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -378,7 +378,7 @@ void ConstructClassifiers(c50_context *Context)
 	{
 	    if ( c50_output_close(&Context->classifier_output) )
 	    {
-		c50_record_error(Context, C50_STATUS_IO_ERROR,
+		c50_record_error(Context, c50::error_code::io_error,
 				 "could not close classifier");
 		C50Exit(Context, 1);
 	    }

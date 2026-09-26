@@ -1,0 +1,6 @@
+low, mid, high.
+
+x: continuous.
+u := x = ?.
+v := x = N/A.
+attributes excluded: x.
