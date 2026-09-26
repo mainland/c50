@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: compare all finite expected costs. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -599,7 +600,7 @@ ClassNo SelectClass(c50_context *Context, ClassNo Default, Boolean UseCosts)
 /*      -----------  */
 {
     ClassNo	c, cc, BestClass;
-    float	ExpCost, BestCost=1E38, TotCost=0;
+    float	ExpCost, BestCost=INFINITY, TotCost=0;
 
     BestClass = Default;
 
