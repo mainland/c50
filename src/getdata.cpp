@@ -298,7 +298,8 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 			    {
 				Dv = ++Context->schema.max_attribute_value[Att];
 				Context->schema.attribute_value_names[Att][Dv]   = strdup(Name);
-				Context->schema.attribute_value_names[Att][Dv+1] = "<other>"; /* no free */
+				Context->schema.attribute_value_names[Att][Dv+1] =
+				    Context->schema.other_attribute_value_name; /* no free */
 			    }
 			    if ( Dv > Context->schema.max_discrete_value )
 			    {
