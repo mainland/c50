@@ -648,10 +648,15 @@ void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
 {
     Attribute	Att;
     float	GR;
+    SplitResult Result;
 
     for ( ; Context->splits.waiting_count > 0 ; )
     {
 	Att = Context->splits.waiting_attributes[--Context->splits.waiting_count];
+	Result.Gain = Context->splits.gain[Att];
+	Result.Information = Context->splits.information[Att];
+	Result.EstimatedMaxGR = Context->splits.estimated_max_gain_ratio[Att];
+	Result.Threshold = Context->splits.thresholds[Att];
 
 	if ( Discrete(Att) )
 	{
@@ -660,16 +665,22 @@ void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
 	else
 	if ( Context->splits.sample_fraction < 1 )
 	{
-	    EstimateMaxGR(Context, *Context->training.environment, Att, WFp, WLp);
+	    EstimateMaxGR(Context, *Context->training.environment, Result, Att, WFp, WLp);
+	    Context->splits.gain[Att] = Result.Gain;
+	    Context->splits.estimated_max_gain_ratio[Att] = Result.EstimatedMaxGR;
 	}
 	else
 	if ( Context->splits.sampled )
 	{
 	    Context->splits.information[Att] = -1E16;
+	    Result.Information = -1E16;
 
 	    if ( Context->splits.estimated_max_gain_ratio[Att] > Context->splits.value_threshold )
 	    {
-		EvalContinuousAtt(Context, *Context->training.environment, Att, WFp, WLp);
+		EvalContinuousAtt(Context, *Context->training.environment, Result, Att, WFp, WLp);
+		Context->splits.gain[Att] = Result.Gain;
+		Context->splits.information[Att] = Result.Information;
+		Context->splits.thresholds[Att] = Result.Threshold;
 
 		if ( Context->splits.information[Att] > Epsilon &&
 		     (GR = Context->splits.gain[Att] / Context->splits.information[Att]) > Context->splits.value_threshold )
@@ -680,7 +691,10 @@ void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
 	}
 	else
 	{
-	    EvalContinuousAtt(Context, *Context->training.environment, Att, WFp, WLp);
+	    EvalContinuousAtt(Context, *Context->training.environment, Result, Att, WFp, WLp);
+	    Context->splits.gain[Att] = Result.Gain;
+	    Context->splits.information[Att] = Result.Information;
+	    Context->splits.thresholds[Att] = Result.Threshold;
 	}
     }
 }

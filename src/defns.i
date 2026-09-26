@@ -393,6 +393,16 @@ typedef	 struct _split_workspace
 	 }
 	 SplitWorkspace;
 
+/* One attribute's scalar evaluation result before serial publication. */
+typedef struct _split_result
+     {
+	float Gain;
+	float Information;
+	float EstimatedMaxGR;
+	ContValue Threshold;
+     }
+     SplitResult;
+
 
 typedef  int	RuleNo;			/* rule number */
 
@@ -569,10 +579,10 @@ void	    DiscreteTest(c50_context *Context, Tree Node, Attribute Att);
 
 	/* contin.c */
 
-void	    EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace,
+void	    EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Result,
 			      Attribute Att,
 			      CaseNo Fp, CaseNo Lp);
-void	    EstimateMaxGR(c50_context *Context, SplitWorkspace &Workspace,
+void	    EstimateMaxGR(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Result,
 			  Attribute Att, CaseNo Fp,
 			  CaseNo Lp);
 void	    PrepareForContin(c50_context *Context, SplitWorkspace &Workspace,
