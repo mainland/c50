@@ -57,8 +57,8 @@ CRuleSet FormRules(c50_context *Context, Tree T)
     int		i;
     CRuleSet	RS;
 
-    NotifyStage(FORMRULES);
-    Progress(-(Context->cases.max_case+1.0));
+    NotifyStage(Context, FORMRULES);
+    Progress(Context, -(Context->cases.max_case+1.0));
 
     Verbosity(2, PrintTree(Context, T, "Context->trees.pruned tree:"))
 
@@ -287,7 +287,7 @@ void Scan(c50_context *Context, Tree T)
 	Context->rule_build.target_class = T->Leaf;
 	PruneRule(Context, Context->rule_build.condition_stack);
 
-	if ( ! T->NodeType ) Progress(T->Cases);
+	if ( ! T->NodeType ) Progress(Context, T->Cases);
     }
 }
 

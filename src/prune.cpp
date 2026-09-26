@@ -61,12 +61,12 @@ void Prune(c50_context *Context, Tree T)
 
     Verbosity(2, fprintf(Of, "\n"))
 
-    Regrow = ( Context->trees.trial == 0 || Now == WINNOWATTS );
+    Regrow = ( Context->trees.trial == 0 || Context->progress.stage == WINNOWATTS );
 
     /*  Local pruning phase  */
 
 
-    Options = ( Now == WINNOWATTS ? (UPDATE|REGROW) :
+    Options = ( Context->progress.stage == WINNOWATTS ? (UPDATE|REGROW) :
 		Regrow ? (UPDATE|REGROW|REPORTPROGRESS) :
 			 (UPDATE|REPORTPROGRESS) );
     if ( Context->costs.unit_weights ) Options |= UNITWEIGHTS;
@@ -89,7 +89,7 @@ void Prune(c50_context *Context, Tree T)
 
 	/*  Possible global pruning phase  */
 
-	if ( Context->options.global_pruning && Now != WINNOWATTS )
+	if ( Context->options.global_pruning && Context->progress.stage != WINNOWATTS )
 	{
 	    GlobalPrune(Context, T);
 	}
@@ -193,10 +193,10 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
     if ( ! T->NodeType )	/*  leaf  */
     {
 	if ( (Flags & UPDATE) && (Flags & REPORTPROGRESS) &&
-	     Now == SIMPLIFYTREE &&
+	     Context->progress.stage == SIMPLIFYTREE &&
 	     T->Cases > 0 )
 	{
-	    Progress(T->Cases);
+	    Progress(Context, T->Cases);
 	}
 
 	T->Errors = LeafErrs + ExtraLeafErrs;

@@ -70,8 +70,7 @@ String		FileStem="undefined";
 /*									 */
 /*************************************************************************/
 
-int		KRInit=0,	/* KRandom initializer for Context->options.sample_fraction */
-		Now=0;		/* current stage */
+int		KRInit=0;	/* KRandom initializer for Context->options.sample_fraction */
 
 FILE		*TRf=0;		/* file pointer for tree and rule i/o */
 char		Fn[500];	/* file name */
