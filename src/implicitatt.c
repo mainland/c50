@@ -1,6 +1,7 @@
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
+/*  Modifications Copyright 2026 Geoffrey Mainland.			 */
 /*									 */
 /*  This file is part of C5.0 GPL Edition, a single-threaded version	 */
 /*  of C5.0 release 2.07.						 */
@@ -35,6 +36,7 @@
 #include "defns.i"
 #include "extern.i"
 #include <ctype.h>
+#include <stdint.h>
 
 
 char	*Buff;			/* buffer for input characters */
@@ -117,7 +119,9 @@ void ImplicitAtt(FILE *Nf)
 	if ( DN == 1 && DefOp(AttDef[MaxAtt][0]) == OP_ATT &&
 	     strcmp(AttName[MaxAtt], "case weight") )
 	{
-	    Error(SAMEATT, AttName[ (long) DefSVal(AttDef[MaxAtt][0]) ], Nil);
+	    Error(SAMEATT,
+		  AttName[ (Attribute) (intptr_t) DefSVal(AttDef[MaxAtt][0]) ],
+		  Nil);
 	}
 
 	if ( TStack[0].Type == 'B' )
@@ -175,7 +179,7 @@ void ReadDefinition(FILE *f)
 
 	if ( c == '|' ) SkipComment;
 
-	if ( c == EOF || c == '\n' && LastWasPeriod )
+	if ( c == EOF || ( c == '\n' && LastWasPeriod ) )
 	{
 	    /*  The definition is complete.  Add a period if it's
 		not there already and terminate the string  */
@@ -448,15 +452,15 @@ Boolean Atom()
     {
 	BN += strlen(AttName[Att]);
 
-	Dump(OP_ATT, 0, (String) (long) Att, Fi);
+	Dump(OP_ATT, 0, (String) (intptr_t) Att, Fi);
     }
     else
     if ( isdigit(Buff[BN]) )
     {
 	/*  Check for date or time first  */
 
-	if ( ( Buff[BN+4] == '/' && Buff[BN+7] == '/' ||
-	       Buff[BN+4] == '-' && Buff[BN+7] == '-' )&&
+	if ( ( ( Buff[BN+4] == '/' && Buff[BN+7] == '/' ) ||
+	       ( Buff[BN+4] == '-' && Buff[BN+7] == '-' ) ) &&
 	     isdigit(Buff[BN+1]) && isdigit(Buff[BN+2]) &&
 		isdigit(Buff[BN+3]) &&
 	     isdigit(Buff[BN+5]) && isdigit(Buff[BN+6]) &&
@@ -669,7 +673,7 @@ void DefSyntaxError(String Msg)
 void DefSemanticsError(int Fi, String Msg, int OpCode)
 /*   -----------------  */
 {
-    char	Exp[1000], XMsg[1000], Op[1000];
+    char	Exp[1000], XMsg[1008], Op[1000];
 
     if ( ! PreviousError )
     {
@@ -677,41 +681,42 @@ void DefSemanticsError(int Fi, String Msg, int OpCode)
 
 	if ( BN - Fi > 23 )
 	{
-	    sprintf(Exp, "%.10s...%.10s", Buff+Fi, Buff+BN-10);
+	    snprintf(Exp, sizeof(Exp), "%.10s...%.10s",
+		     Buff+Fi, Buff+BN-10);
 	}
 	else
 	{
-	    sprintf(Exp, "%.*s", BN - Fi, Buff+Fi);
+	    snprintf(Exp, sizeof(Exp), "%.*s", BN - Fi, Buff+Fi);
 	}
 
 	switch ( OpCode )
 	{
-	    case OP_AND:	sprintf(Op, "%s", "and"); break;
-	    case OP_OR:		sprintf(Op, "%s", "or"); break;
+	    case OP_AND:	snprintf(Op, sizeof(Op), "%s", "and"); break;
+	    case OP_OR:		snprintf(Op, sizeof(Op), "%s", "or"); break;
 	    case OP_SEQ:
-	    case OP_EQ:		sprintf(Op, "%s", "="); break;
+	    case OP_EQ:		snprintf(Op, sizeof(Op), "%s", "="); break;
 	    case OP_SNE:
-	    case OP_NE:		sprintf(Op, "%s", "<>"); break;
-	    case OP_GT:		sprintf(Op, "%s", ">"); break;
-	    case OP_GE:		sprintf(Op, "%s", ">="); break;
-	    case OP_LT:		sprintf(Op, "%s", "<"); break;
-	    case OP_LE:		sprintf(Op, "%s", "<="); break;
-	    case OP_PLUS:	sprintf(Op, "%s", "+"); break;
-	    case OP_MINUS:	sprintf(Op, "%s", "-"); break;
-	    case OP_UMINUS:	sprintf(Op, "%s", "unary -"); break;
-	    case OP_MULT:	sprintf(Op, "%s", "*"); break;
-	    case OP_DIV:	sprintf(Op, "%s", "/"); break;
-	    case OP_MOD:	sprintf(Op, "%s", "%"); break;
-	    case OP_POW:	sprintf(Op, "%s", "^"); break;
-	    case OP_SIN:	sprintf(Op, "%s", "sin"); break;
-	    case OP_COS:	sprintf(Op, "%s", "cos"); break;
-	    case OP_TAN:	sprintf(Op, "%s", "tan"); break;
-	    case OP_LOG:	sprintf(Op, "%s", "log"); break;
-	    case OP_EXP:	sprintf(Op, "%s", "exp"); break;
-	    case OP_INT:	sprintf(Op, "%s", "int");
+	    case OP_NE:		snprintf(Op, sizeof(Op), "%s", "<>"); break;
+	    case OP_GT:		snprintf(Op, sizeof(Op), "%s", ">"); break;
+	    case OP_GE:		snprintf(Op, sizeof(Op), "%s", ">="); break;
+	    case OP_LT:		snprintf(Op, sizeof(Op), "%s", "<"); break;
+	    case OP_LE:		snprintf(Op, sizeof(Op), "%s", "<="); break;
+	    case OP_PLUS:	snprintf(Op, sizeof(Op), "%s", "+"); break;
+	    case OP_MINUS:	snprintf(Op, sizeof(Op), "%s", "-"); break;
+	    case OP_UMINUS:	snprintf(Op, sizeof(Op), "%s", "unary -"); break;
+	    case OP_MULT:	snprintf(Op, sizeof(Op), "%s", "*"); break;
+	    case OP_DIV:	snprintf(Op, sizeof(Op), "%s", "/"); break;
+	    case OP_MOD:	snprintf(Op, sizeof(Op), "%s", "%"); break;
+	    case OP_POW:	snprintf(Op, sizeof(Op), "%s", "^"); break;
+	    case OP_SIN:	snprintf(Op, sizeof(Op), "%s", "sin"); break;
+	    case OP_COS:	snprintf(Op, sizeof(Op), "%s", "cos"); break;
+	    case OP_TAN:	snprintf(Op, sizeof(Op), "%s", "tan"); break;
+	    case OP_LOG:	snprintf(Op, sizeof(Op), "%s", "log"); break;
+	    case OP_EXP:	snprintf(Op, sizeof(Op), "%s", "exp"); break;
+	    case OP_INT:	snprintf(Op, sizeof(Op), "%s", "int");
 	}
 
-	sprintf(XMsg, "%s with '%s'", Msg, Op);
+	snprintf(XMsg, sizeof(XMsg), "%s with '%s'", Msg, Op);
 	Error(BADDEF2, Exp, XMsg);
 	PreviousError = true;
     }
@@ -768,6 +773,8 @@ void DumpOp(char OpCode, int Fi)
 Boolean UpdateTStack(char OpCode, ContValue F, String S, int Fi)
 /*      ------------  */
 {
+    (void) F;
+
     if ( TSN >= TStackSize )
     {
 	Realloc(TStack, TStackSize += 50, EltRec);
@@ -776,7 +783,8 @@ Boolean UpdateTStack(char OpCode, ContValue F, String S, int Fi)
     switch ( OpCode )
     {
 	case OP_ATT:
-		TStack[TSN].Type = ( Continuous((long) S) ? 'N' : 'S' );
+		TStack[TSN].Type =
+		    ( Continuous((Attribute) (intptr_t) S) ? 'N' : 'S' );
 		break;
 
 	case OP_NUM:
@@ -903,7 +911,7 @@ AttValue EvaluateDef(Definition D, DataRec Case)
 	switch ( DefOp((DElt = D[DN])) )
 	{
 	    case OP_ATT:
-		    Att = (long) DefSVal(DElt);
+		    Att = (Attribute) (intptr_t) DefSVal(DElt);
 
 		    if ( Continuous(Att) )
 		    {

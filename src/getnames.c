@@ -1,6 +1,7 @@
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
+/*  Modifications Copyright 2026 Geoffrey Mainland.			 */
 /*									 */
 /*  This file is part of C5.0 GPL Edition, a single-threaded version	 */
 /*  of C5.0 release 2.07.						 */
@@ -34,6 +35,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include <stdint.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -487,7 +489,7 @@ void ExplicitAtt(FILE *Nf)
 	    }
 
 	    AttValName[MaxAtt] = Alloc(v+3, String);
-	    AttValName[MaxAtt][0] = (char *) (long) v+1;
+	    AttValName[MaxAtt][0] = (String) (intptr_t) (v+1);
 	    AttValName[MaxAtt][(MaxAttVal[MaxAtt]=1)] = strdup("N/A");
 	}
 	else
@@ -616,7 +618,7 @@ void ListAttsUsed()
     {
 	if ( DefOp(D[e]) == OP_ATT )
 	{
-	    Att = (Attribute) DefSVal(D[e]);
+	    Att = (Attribute) (intptr_t) DefSVal(D[e]);
 	    if ( ! DefUses[Att] )
 	    {
 		DefUses[Att] = true;

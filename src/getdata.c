@@ -1,6 +1,7 @@
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
+/*  Modifications Copyright 2026 Geoffrey Mainland.			 */
 /*									 */
 /*  This file is part of C5.0 GPL Edition, a single-threaded version	 */
 /*  of C5.0 release 2.07.						 */
@@ -34,6 +35,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include <stdint.h>
 
 
 #define Inc 2048
@@ -260,7 +262,8 @@ DataRec GetDataRec(FILE *Df, Boolean Train)
 			{
 			    /*  Add value to list  */
 
-			    if ( MaxAttVal[Att] >= (long) AttValName[Att][0] )
+			    if ( MaxAttVal[Att] >=
+				 (intptr_t) AttValName[Att][0] )
 			    {
 				XError(TOOMANYVALS, AttName[Att],
 					 (char *) AttValName[Att][0] - 1);
