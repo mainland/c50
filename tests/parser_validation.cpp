@@ -31,6 +31,16 @@ int main()
         rejects([&] { model.predict(context, std::string(2000, '1') + ", ?\n"); });
         rejects([&] { c50::model::load(context, kind, names,
             header + "type=\"0\" class=\"" + std::string(30000, 'x') + "\" freq=\"2,0\"\n"); });
+        for (const auto &bad : {
+            "type=\"0\" class=no freq=\"2,0\"\n",
+            "type=\"0\" class=\"no\"junk freq=\"2,0\"\n",
+            "type=\"0\" class=\"no\",\"yes\" freq=\"2,0\"\n",
+            "type=\"0\" class=\"no\\",
+            "type=\"0\" class=\"no\n"})
+            rejects([&] { c50::model::load(context, kind, names, header + bad); });
+        auto short_id = c50::model::load(context, kind, names,
+                                         "id=\"x\"\nentries=\"1\"\n" + leaf);
+        if (short_id.predict(context, "0, ?\n").class_index(0) != 0) return 1;
         if (model.predict(context, "0, ?\n").class_index(0) != 0) return 1;
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
