@@ -44,12 +44,12 @@
 /*	values 0 (unknown), 1 (not applicable), 2 (less than cut) and	 */
 /*	3 (greater than cut).						 */
 /*	This routine finds the best cut for cases Fp through Lp and	 */
-/*	sets Context->splits.information[], Context->splits.gain[] and Context->splits.thresholds[]					 */
+/*	sets the per-attribute result before serial publication					 */
 /*								  	 */
 /*************************************************************************/
 
 
-void EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace,
+void EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Result,
 		       Attribute Att, CaseNo Fp,
 		       CaseNo Lp)
 /*   -----------------  */
@@ -62,7 +62,7 @@ void EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace,
 
     Verbosity(3, fprintf(Context->io.output, "\tAtt %s\n", Context->schema.attribute_names[Att]))
 
-    Context->splits.gain[Att] = None;
+    Result.Gain = None;
     PrepareForContin(Context, Workspace, Att, Fp, Lp);
 
     /*  Special case when very few known values  */
@@ -187,8 +187,8 @@ void EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace,
     }
     else
     {
-	Context->splits.gain[Att] = BestGain;
-	Context->splits.information[Att] = BestInfo;
+	Result.Gain = BestGain;
+	Result.Information = BestInfo;
 
 	Workspace.LowVal  = Workspace.SRec[BestI].V;
 	Workspace.HighVal = Workspace.SRec[BestI+1].V;
@@ -196,15 +196,15 @@ void EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace,
 	/*  Set threshold, making sure that rounding problems do not
 	    cause it to reach upper value  */
 
-	if ( (Context->splits.thresholds[Att] = (ContValue) (0.5 * (Workspace.LowVal + Workspace.HighVal)))
+	if ( (Result.Threshold = (ContValue) (0.5 * (Workspace.LowVal + Workspace.HighVal)))
 	     >= Workspace.HighVal )
 	{
-	    Context->splits.thresholds[Att] = Workspace.LowVal;
+	    Result.Threshold = Workspace.LowVal;
 	}
 
 	Verbosity(2,
 	    fprintf(Context->io.output, "\tAtt %s\tcut=%.3f, inf %.3f, gain %.3f\n",
-		   Context->schema.attribute_names[Att], Context->splits.thresholds[Att], Context->splits.information[Att], Context->splits.gain[Att]))
+		   Context->schema.attribute_names[Att], Result.Threshold, Result.Information, Result.Gain))
     }
 }
 
@@ -218,7 +218,7 @@ void EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace,
 /*************************************************************************/
 
 
-void EstimateMaxGR(c50_context *Context, SplitWorkspace &Workspace,
+void EstimateMaxGR(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Result,
 		   Attribute Att, CaseNo Fp, CaseNo Lp)
 /*   -------------  */
 {
@@ -226,7 +226,7 @@ void EstimateMaxGR(c50_context *Context, SplitWorkspace &Workspace,
     double	LHInfo, w, SplitInfo, ThisGain, GR;
     ClassNo	c;
 
-    Context->splits.estimated_max_gain_ratio[Att] = 0;
+    Result.EstimatedMaxGR = 0;
 
     if ( Skip(Att) || Att == Context->schema.class_attribute ) return;
 
@@ -285,14 +285,14 @@ void EstimateMaxGR(c50_context *Context, SplitWorkspace &Workspace,
 
 		ThisGain = (1 - Workspace.UnknownRate) *
 			   (Workspace.BaseInfo - (Workspace.NAInfo + LHInfo) / Workspace.KnownCases);
-		if ( ThisGain > Context->splits.gain[Att] ) Context->splits.gain[Att] = ThisGain;
+		if ( ThisGain > Result.Gain ) Result.Gain = ThisGain;
 
 		/*  Adjust GR to make it more conservative upper bound  */
 
 		GR = (ThisGain + 1E-5) / SplitInfo;
-		if ( GR > Context->splits.estimated_max_gain_ratio[Att] )
+		if ( GR > Result.EstimatedMaxGR )
 		{
-		    Context->splits.estimated_max_gain_ratio[Att] = GR;
+		    Result.EstimatedMaxGR = GR;
 		}
 
 		Verbosity(3,
@@ -309,7 +309,7 @@ void EstimateMaxGR(c50_context *Context, SplitWorkspace &Workspace,
 
     Verbosity(2,
 	fprintf(Context->io.output, "\tAtt %s: max GR estimate %.3f\n",
-		    Context->schema.attribute_names[Att], Context->splits.estimated_max_gain_ratio[Att]))
+		    Context->schema.attribute_names[Att], Result.EstimatedMaxGR))
 }
 
 

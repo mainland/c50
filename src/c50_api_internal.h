@@ -285,6 +285,7 @@ struct c50::detail::context_state
     /* True for the command-line program, which continues past a bad value
      * as Release 2.07 does. A library operation ends at its first error. */
     int continue_past_errors;
+    unsigned int split_worker_count;
     int sample_from;
     int suppress_error_messages;
     int delimiter;
@@ -305,8 +306,8 @@ struct c50::detail::context_state
     c50_cross_validation_state cross_validation;
     c50_progress_state progress;
     c50_io_state io;
-    /* The C locale that every operation of this context selects, so that
-     * results do not depend on the host locale. */
+    /* The C locale that every operation and worker thread of this context
+     * selects, so that results do not depend on the host locale. */
     c50_c_locale c_locale;
     double average_case_weight;
     char *ignored_values;

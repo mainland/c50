@@ -393,6 +393,18 @@ typedef	 struct _split_workspace
 	 }
 	 SplitWorkspace;
 
+/* One attribute's scalar evaluation result before serial publication. */
+typedef struct _split_result
+     {
+	float Gain;
+	float Information;
+	float EstimatedMaxGR;
+	ContValue Threshold;
+	int SubsetCount;
+	Set *Subsets; /* borrowed per-attribute output buffer */
+     }
+     SplitResult;
+
 
 typedef  int	RuleNo;			/* rule number */
 
@@ -546,8 +558,9 @@ Attribute   ChooseSplit(c50_context *Context, CaseNo Fp, CaseNo Lp,
 void	    ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
 			 CaseCount WCases);
 Attribute   FindBestAtt(c50_context *Context, CaseCount Cases);
-void	    EvalDiscrSplit(c50_context *Context, Attribute Att,
+void	    EvalDiscrSplit(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Result, Attribute Att,
 			   CaseCount Cases);
+void	    EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases);
 CaseNo	    Group(c50_context *Context, DiscrValue, CaseNo, CaseNo, Tree);
 CaseCount   SumWeights(c50_context *Context, CaseNo, CaseNo);
 CaseCount   SumNocostWeights(c50_context *Context, CaseNo, CaseNo);
@@ -558,9 +571,9 @@ void	    Divide(c50_context *Context, Tree Node, CaseNo Fp, CaseNo Lp,
 
 	/* discr.c */
 
-void	    EvalDiscreteAtt(c50_context *Context, SplitWorkspace &Workspace, Attribute Att,
+void	    EvalDiscreteAtt(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Result, Attribute Att,
 			    CaseCount Cases);
-void	    EvalOrderedAtt(c50_context *Context, SplitWorkspace &Workspace, Attribute Att,
+void	    EvalOrderedAtt(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Result, Attribute Att,
 			   CaseCount Cases);
 void	    SetDiscrFreq(c50_context *Context, SplitWorkspace &Workspace, Attribute Att);
 double	    DiscrKnownBaseInfo(c50_context *Context, SplitWorkspace &Workspace, CaseCount KnownCases,
@@ -569,10 +582,10 @@ void	    DiscreteTest(c50_context *Context, Tree Node, Attribute Att);
 
 	/* contin.c */
 
-void	    EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace,
+void	    EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Result,
 			      Attribute Att,
 			      CaseNo Fp, CaseNo Lp);
-void	    EstimateMaxGR(c50_context *Context, SplitWorkspace &Workspace,
+void	    EstimateMaxGR(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Result,
 			  Attribute Att, CaseNo Fp,
 			  CaseNo Lp);
 void	    PrepareForContin(c50_context *Context, SplitWorkspace &Workspace,
@@ -598,7 +611,7 @@ void	    PrintDistribution(c50_context *Context, Attribute Att,
 	/* subset.c */
 
 void	    InitialiseBellNumbers(c50_context *Context);
-void	    EvalSubset(c50_context *Context, SplitWorkspace &Workspace, Attribute Att, CaseCount Cases);
+void	    EvalSubset(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Result, Attribute Att, CaseCount Cases);
 void	    Merge(c50_context *Context, SplitWorkspace &Workspace, DiscrValue x, DiscrValue y,
 		  CaseCount Cases);
 void	    EvaluatePair(c50_context *Context, SplitWorkspace &Workspace, DiscrValue x, DiscrValue y,
