@@ -361,8 +361,9 @@ typedef  struct _treerec
 	 TreeRec;
 
 
-typedef	 struct _environment
+typedef	 struct _split_workspace
 	 {
+	    DiscrValue MaxDiscrValue;	/* allocation extent for cleanup */
 	    CaseNo	Xp, Ep;			/* start and end of scan  */
 	    double	Cases,			/* total cases */
 			KnownCases,		/* ditto less missing values */
@@ -390,7 +391,7 @@ typedef	 struct _environment
 			**MergeInfo,		/* info of merged subsets i,j */
 			**MergeEntr;		/* entropy ditto */
 	 }
-	 EnvRec;
+	 SplitWorkspace;
 
 
 typedef  int	RuleNo;			/* rule number */
@@ -557,24 +558,27 @@ void	    Divide(c50_context *Context, Tree Node, CaseNo Fp, CaseNo Lp,
 
 	/* discr.c */
 
-void	    EvalDiscreteAtt(c50_context *Context, Attribute Att,
+void	    EvalDiscreteAtt(c50_context *Context, SplitWorkspace &Workspace, Attribute Att,
 			    CaseCount Cases);
-void	    EvalOrderedAtt(c50_context *Context, Attribute Att,
+void	    EvalOrderedAtt(c50_context *Context, SplitWorkspace &Workspace, Attribute Att,
 			   CaseCount Cases);
-void	    SetDiscrFreq(c50_context *Context, Attribute Att);
-double	    DiscrKnownBaseInfo(c50_context *Context, CaseCount KnownCases,
+void	    SetDiscrFreq(c50_context *Context, SplitWorkspace &Workspace, Attribute Att);
+double	    DiscrKnownBaseInfo(c50_context *Context, SplitWorkspace &Workspace, CaseCount KnownCases,
 			       DiscrValue MaxVal);
 void	    DiscreteTest(c50_context *Context, Tree Node, Attribute Att);
 
 	/* contin.c */
 
-void	    EvalContinuousAtt(c50_context *Context, Attribute Att,
+void	    EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace,
+			      Attribute Att,
 			      CaseNo Fp, CaseNo Lp);
-void	    EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp,
+void	    EstimateMaxGR(c50_context *Context, SplitWorkspace &Workspace,
+			  Attribute Att, CaseNo Fp,
 			  CaseNo Lp);
-void	    PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
+void	    PrepareForContin(c50_context *Context, SplitWorkspace &Workspace,
+			     Attribute Att, CaseNo Fp,
 			     CaseNo Lp);
-CaseNo	    PrepareForScan(c50_context *Context, CaseNo Lp);
+CaseNo	    PrepareForScan(c50_context *Context, SplitWorkspace &Workspace, CaseNo Lp);
 void	    ContinTest(c50_context *Context, Tree Node, Attribute Att);
 void	    AdjustAllThresholds(c50_context *Context, Tree T);
 void	    AdjustThresholds(c50_context *Context, Tree T, Attribute Att,
@@ -584,7 +588,7 @@ ContValue   GreatestValueBelow(c50_context *Context, ContValue Th,
 
 	/* info.c */
 
-double	    ComputeGain(c50_context *Context, double BaseInfo, float UnknFrac,
+double	    ComputeGain(c50_context *Context, SplitWorkspace &Workspace, double BaseInfo, float UnknFrac,
 			DiscrValue MaxVal, CaseCount TotalCases);
 double	    TotalInfo(double V[], DiscrValue MinVal, DiscrValue MaxVal);
 void	    PrintDistribution(c50_context *Context, Attribute Att,
@@ -594,17 +598,17 @@ void	    PrintDistribution(c50_context *Context, Attribute Att,
 	/* subset.c */
 
 void	    InitialiseBellNumbers(c50_context *Context);
-void	    EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases);
-void	    Merge(c50_context *Context, DiscrValue x, DiscrValue y,
+void	    EvalSubset(c50_context *Context, SplitWorkspace &Workspace, Attribute Att, CaseCount Cases);
+void	    Merge(c50_context *Context, SplitWorkspace &Workspace, DiscrValue x, DiscrValue y,
 		  CaseCount Cases);
-void	    EvaluatePair(c50_context *Context, DiscrValue x, DiscrValue y,
+void	    EvaluatePair(c50_context *Context, SplitWorkspace &Workspace, DiscrValue x, DiscrValue y,
 			 CaseCount Cases);
 void	    PrintSubset(c50_context *Context, Attribute Att, Set Ss);
 void	    SubsetTest(c50_context *Context, Tree Node, Attribute Att);
-Boolean	    SameDistribution(c50_context *Context, DiscrValue V1,
+Boolean	    SameDistribution(c50_context *Context, SplitWorkspace &Workspace, DiscrValue V1,
 			     DiscrValue V2);
-void	    AddBlock(c50_context *Context, DiscrValue V1, DiscrValue V2);
-void	    MoveBlock(c50_context *Context, DiscrValue V1, DiscrValue V2);
+void	    AddBlock(c50_context *Context, SplitWorkspace &Workspace, DiscrValue V1, DiscrValue V2);
+void	    MoveBlock(c50_context *Context, SplitWorkspace &Workspace, DiscrValue V1, DiscrValue V2);
 
 	/* prune.c */
 
