@@ -38,7 +38,7 @@
 
 #define	TabSize		4
 #define Utility		ClassDist[0]
-#define Digits(n)	((n) < 10 ? 3 : (int)(3 + log(n-1) / log(10.0)))
+#define Digits(n)	((n) < 10 ? 3 : (int)(3 + log((double) ((n)-1)) / log(10.0)))
 
 
 	/*  If lines look like getting too long while a tree is being
@@ -89,7 +89,7 @@ void FindDepth(Tree T)
 /*************************************************************************/
 
 
-void PrintTree(Tree T, String Title)
+void PrintTree(Tree T, const char *Title)
 /*   ---------  */
 {
     int s;

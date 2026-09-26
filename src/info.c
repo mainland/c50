@@ -112,7 +112,7 @@ void PrintDistribution(Attribute Att, DiscrValue MinVal, DiscrValue MaxVal,
 {
     DiscrValue v;
     ClassNo c;
-    String Val;
+    const char *Val;
 
     (void) ValFreq;
 
