@@ -544,7 +544,7 @@ void	    SampleEstimate(c50_context *Context, CaseNo Fp, CaseNo Lp,
 			   CaseCount Cases);
 void	    Sample(c50_context *Context, CaseNo Fp, CaseNo Lp, CaseNo N);
 Attribute   ChooseSplit(c50_context *Context, CaseNo Fp, CaseNo Lp,
-			CaseCount Cases, Boolean Sampled);
+			CaseCount Cases, Boolean sampled);
 void	    ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
 			 CaseCount WCases);
 Attribute   FindBestAtt(c50_context *Context, CaseCount Cases);
@@ -615,7 +615,7 @@ void	    Prune(c50_context *Context, Tree T);
 void	    EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 			 int Sh, int Flags);
 void	    GlobalPrune(c50_context *Context, Tree T);
-void	    FindMinCC(Tree T);
+void	    FindMinCC(c50_context *Context, Tree T);
 void	    InsertParents(c50_context *Context, Tree T, Tree P);
 void	    CheckSubsets(c50_context *Context, Tree T, Boolean);
 void	    InitialiseExtraErrs(c50_context *Context);
@@ -676,7 +676,7 @@ void	    ShowBranch(c50_context *Context, int Sh, Tree T, DiscrValue v,
 DiscrValue  Elements(c50_context *Context, Attribute Att, Set S,
 		     DiscrValue *Last);
 int	    MaxLine(c50_context *Context, Tree SubTree);
-void	    Indent(int Sh, int BrNo);
+void	    Indent(c50_context *Context, int Sh, int BrNo);
 void	    FreeTree(Tree T);
 Tree	    Leaf(c50_context *Context, double *Freq, ClassNo NodeClass,
 		 CaseCount Cases, CaseCount Errors);
