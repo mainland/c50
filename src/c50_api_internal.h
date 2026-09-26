@@ -278,6 +278,7 @@ struct c50::detail::context_state
     std::optional<c50::error_code> error;
     char error_message[C50_ERROR_MESSAGE_CAPACITY];
     int operation_active;
+    unsigned int split_worker_count;
     int sample_from;
     int suppress_error_messages;
     int delimiter;
