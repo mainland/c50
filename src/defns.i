@@ -317,13 +317,7 @@ typedef  union  _attribute_value
 	 }
 	 AttValue, *DataRec;
 
-typedef	 struct _sort_rec
-	 {
-	    ContValue	V;
-	    ClassNo	C;
-	    float	W;
-	 }
-	 SortRec;
+#include "c50_sort.h"
 
 #define  CVal(Case,Att)		Case[Att]._cont_val
 #define  DVal(Case,Att)		Case[Att]._discr_val
@@ -665,9 +659,8 @@ Boolean	    Satisfies(c50_context *Context, DataRec Case,
 
 	/* sort.c */
 
-void	    Quicksort(c50_context *Context, CaseNo Fp, CaseNo Lp,
-		      Attribute Att);
-void	    Cachesort(CaseNo Fp, CaseNo Lp, SortRec *SRec);
+void	    SortCasesByAttribute(c50_context *Context, CaseNo Fp, CaseNo Lp,
+			 Attribute Att);
 
 	/* trees.c */
 

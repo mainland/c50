@@ -193,7 +193,7 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 
 	Ap = Group(Context, 1, Kp, Lp, T) + 1;
 
-	Quicksort(Context, Ap, Lp, Att);
+	SortCasesByAttribute(Context, Ap, Lp, Att);
 
 	/*  Locate cut point and overall errors of the LE and GT branches  */
 

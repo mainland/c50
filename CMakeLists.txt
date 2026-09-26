@@ -5,6 +5,7 @@ project(C50 VERSION 2.07 LANGUAGES C CXX)
 option(C50_ENABLE_SANITIZERS
        "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(C50_ENABLE_THREAD_SANITIZER "Enable ThreadSanitizer" OFF)
+option(C50_BUILD_BENCHMARKS "Build native correctness tests and benchmarks" OFF)
 
 if(C50_ENABLE_SANITIZERS AND C50_ENABLE_THREAD_SANITIZER)
     message(FATAL_ERROR "AddressSanitizer and ThreadSanitizer cannot be combined")
@@ -170,6 +171,57 @@ if(BUILD_TESTING)
     )
 endif()
 
+if(C50_BUILD_BENCHMARKS)
+    find_package(Catch2 3 CONFIG REQUIRED)
+
+    add_executable(c50_native_workload benchmarks/native_workload.cpp)
+    target_compile_features(c50_native_workload PRIVATE cxx_std_17)
+    target_link_libraries(c50_native_workload PRIVATE C50::core)
+    set_target_properties(
+        c50_native_workload
+        PROPERTIES OUTPUT_NAME c50-native-workload
+    )
+
+    add_executable(c50_native_benchmarks benchmarks/native_benchmarks.cpp)
+    target_compile_features(c50_native_benchmarks PRIVATE cxx_std_17)
+    target_include_directories(
+        c50_native_benchmarks
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(
+        c50_native_benchmarks
+        PRIVATE C50::core Catch2::Catch2WithMain
+    )
+    set_target_properties(
+        c50_native_benchmarks
+        PROPERTIES OUTPUT_NAME c50-native-benchmarks
+    )
+
+    list(
+        APPEND C50_COMPILE_TARGETS
+        c50_native_workload
+        c50_native_benchmarks
+    )
+    list(
+        APPEND C50_EXECUTABLE_TARGETS
+        c50_native_workload
+        c50_native_benchmarks
+    )
+
+    if(BUILD_TESTING)
+        add_test(
+            NAME native-sort-properties
+            COMMAND c50_native_benchmarks "[sort][property]"
+        )
+        add_test(
+            NAME native-workload-smoke
+            COMMAND c50_native_workload
+                    --rows 2000
+                    --features 12
+                    --categorical-features 2
+        )
+    endif()
+endif()
 
 install(
     TARGETS c50_core c50_cpp

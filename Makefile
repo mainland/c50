@@ -67,6 +67,7 @@ headers =\
 	$(SRC_DIR)/c50_input.h\
 	$(SRC_DIR)/c50_output.h\
 	$(SRC_DIR)/c50_rng.h\
+	$(SRC_DIR)/c50_sort.h\
 	$(SRC_DIR)/defns.i\
 	$(SRC_DIR)/extern.i\
 	$(SRC_DIR)/text.i
