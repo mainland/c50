@@ -36,6 +36,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+#include <limits>
+
 
 #define		SAMPLEUNIT	2000
 
@@ -67,14 +69,67 @@ void c50_split_workspace_deleter::operator()(
 /*************************************************************************/
 
 
+static auto MakeSplitWorkspace(c50_context *Context)
+{
+    using WorkspacePtr =
+        std::unique_ptr<SplitWorkspace, c50_split_workspace_deleter>;
+    DiscrValue v;
+    if ( Context->schema.max_discrete_value < 3 ||
+         Context->schema.max_discrete_value >
+             std::numeric_limits<DiscrValue>::max() - 2 ||
+         Context->schema.max_class < 1 ||
+         Context->schema.max_class ==
+             std::numeric_limits<ClassNo>::max() )
+    {
+        Error(Context, NOMEM, "", "");
+    }
+
+    WorkspacePtr Workspace(new SplitWorkspace{});
+    Workspace->MaxDiscrValue = Context->schema.max_discrete_value;
+    DiscrValue vMax = Max(3, Context->schema.max_discrete_value + 1);
+
+    Workspace->Freq = Alloc(vMax + 1, double *);
+    ForEach(v, 0, vMax)
+    {
+        Workspace->Freq[v] = Alloc(Context->schema.max_class + 1, double);
+    }
+    Workspace->ValFreq = Alloc(vMax, double);
+    Workspace->ClassFreq = Alloc(Context->schema.max_class + 1, double);
+
+    size_t NoCases = Context->cases.max_case < 0
+                         ? 0
+                         : static_cast<size_t>(Context->cases.max_case) + 1;
+    if ( NoCases > std::numeric_limits<size_t>::max() / sizeof(SortRec) )
+    {
+        Error(Context, NOMEM, "", "");
+    }
+    Workspace->SRec = Alloc(NoCases, SortRec);
+
+    if ( Context->options.subset_splits )
+    {
+        DiscrValue MaxValue = Context->schema.max_discrete_value;
+        Workspace->SubsetInfo = Alloc(MaxValue + 1, double);
+        Workspace->SubsetEntr = Alloc(MaxValue + 1, double);
+        Workspace->MergeInfo = Alloc(MaxValue + 1, double *);
+        Workspace->MergeEntr = Alloc(MaxValue + 1, double *);
+        Workspace->WSubset = Alloc(MaxValue + 1, Set);
+        ForEach(v, 1, MaxValue)
+        {
+            Workspace->MergeInfo[v] = Alloc(MaxValue + 1, double);
+            Workspace->MergeEntr[v] = Alloc(MaxValue + 1, double);
+            Workspace->WSubset[v] = Alloc((MaxValue >> 3) + 1, Byte);
+        }
+    }
+    return Workspace;
+}
+
+
 void InitialiseTreeData(c50_context *Context)
 /*   ------------------  */
 {
     DiscrValue	v;
     Attribute	Att;
-    DiscrValue	vMax;
     size_t	NoAttributes;
-    size_t	NoCases;
 
     Context->trees.raw	     = AllocZero(Context->options.trials+1, Tree);
     Context->trees.pruned   = AllocZero(Context->options.trials+1, Tree);
@@ -161,40 +216,8 @@ void InitialiseTreeData(c50_context *Context)
 
     /*  Set up environment  */
 
-    Context->training.environment.reset(new SplitWorkspace{});
-    Context->training.environment->MaxDiscrValue = Context->schema.max_discrete_value;
+    Context->training.environment = MakeSplitWorkspace(Context);
     Context->splits.waiting_attributes = Alloc(Context->schema.max_attribute+1, Attribute);
-
-    vMax = Max(3, Context->schema.max_discrete_value+1);
-
-    Context->training.environment->Freq = Alloc(vMax+1, double *);
-    ForEach(v, 0, vMax)
-    {
-	Context->training.environment->Freq[v] = Alloc(Context->schema.max_class+1, double);
-    }
-
-    Context->training.environment->ValFreq = Alloc(vMax, double);
-
-    Context->training.environment->ClassFreq = Alloc(Context->schema.max_class+1, double);
-
-    NoCases = ( Context->cases.max_case < 0 ? 0 : (size_t) Context->cases.max_case + 1 );
-    Context->training.environment->SRec = Alloc(NoCases, SortRec);
-
-    if ( Context->options.subset_splits )
-    {
-	Context->training.environment->SubsetInfo = Alloc(Context->schema.max_discrete_value+1, double);
-	Context->training.environment->SubsetEntr = Alloc(Context->schema.max_discrete_value+1, double);
-
-	Context->training.environment->MergeInfo = Alloc(Context->schema.max_discrete_value+1, double *);
-	Context->training.environment->MergeEntr = Alloc(Context->schema.max_discrete_value+1, double *);
-	Context->training.environment->WSubset   = Alloc(Context->schema.max_discrete_value+1, Set);
-	ForEach(v, 1, Context->schema.max_discrete_value)
-	{
-	    Context->training.environment->MergeInfo[v] = Alloc(Context->schema.max_discrete_value+1, double);
-	    Context->training.environment->MergeEntr[v] = Alloc(Context->schema.max_discrete_value+1, double);
-	    Context->training.environment->WSubset[v]   = Alloc((Context->schema.max_discrete_value>>3)+1, Byte);
-	}
-    }
 }
 
 
