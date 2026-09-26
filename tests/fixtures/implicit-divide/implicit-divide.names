@@ -1,0 +1,5 @@
+low, high, bad.
+
+x: continuous.
+r := 1 / x.
+attributes excluded: x.

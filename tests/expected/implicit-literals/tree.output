@@ -1,0 +1,44 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `implicit-literals'
+
+Read 16 cases (3 attributes) from implicit-literals.data
+
+Attributes excluded:
+    x
+
+Decision tree:
+
+u = t: high (5)
+u = f:
+:...v = t: mid (4)
+    v = f: low (7)
+
+
+Evaluation on training data (16 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     3    0( 0.0%)   <<
+
+
+	   (a)   (b)   (c)    <-classified as
+	  ----  ----  ----
+	     7                (a): class low
+	           4          (b): class mid
+	                 5    (c): class high
+
+
+	Attribute usage:
+
+	    100%  u
+	     69%  x
+	     69%  v
+
+
+Time: <elapsed> secs

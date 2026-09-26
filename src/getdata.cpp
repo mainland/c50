@@ -35,15 +35,13 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 #include <stdint.h>
 
 
 #define Inc 2048
 
-Boolean SuppressErrorMessages=false;
-#define XError(a,b,c)	if (! SuppressErrorMessages) Error(a,b,c)
-
-CaseNo	SampleFrom;		/* file count for sampling */
+#define XError(a,b,c)	if (! Context->suppress_error_messages) Error(Context, a,b,c)
 
 
 /*************************************************************************/
@@ -51,73 +49,78 @@ CaseNo	SampleFrom;		/* file count for sampling */
 /*	Read raw cases from file with given extension.			 */
 /*									 */
 /*	On completion, cases are stored in array Case in the form	 */
-/*	of vectors of attribute values, and MaxCase is set to the	 */
+/*	of vectors of attribute values, and Context->cases.max_case is set to the	 */
 /*	number of data cases.						 */
 /*									 */
 /*************************************************************************/
 
 
-void GetData(FILE *Df, Boolean Train, Boolean AllowUnknownClass)
+void GetData(c50_context *Context, FILE *Df, Boolean Train,
+	     Boolean AllowUnknownClass)
 /*   -------  */
 {
     c50_input Input;
 
     c50_input_init_file(&Input, Df);
-    GetDataInput(&Input, Train, AllowUnknownClass);
+    GetDataInput(Context, &Input, Train, AllowUnknownClass);
     fclose(Df);
 }
 
 
 
-void GetDataInput(c50_input *Input, Boolean Train, Boolean AllowUnknownClass)
+void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
+		  Boolean AllowUnknownClass)
 /*   ------------  */
 {
     DataRec	DVec;
     CaseNo	CaseSpace, WantTrain, LeftTrain, WantTest, LeftTest;
     Boolean	FirstIgnore=true, SelectTrain;
 
-    LineNo = 0;
-    SuppressErrorMessages = SAMPLE && ! Train;
+    Context->io.line_number = 0;
+    Context->suppress_error_messages = Context->options.sample_fraction && ! Train;
 
     /*  Don't reset case count if appending data for xval  */
 
-    if ( Train || ! Case )
+    if ( Train || ! Context->cases.records )
     {
-	MaxCase = MaxLabel = CaseSpace = 0;
-	Case = Alloc(1, DataRec);	/* for error reporting */
+	Context->cases.max_case = CaseSpace = 0;
+	Context->max_label = 0;
+	Context->cases.records = Alloc(1, DataRec);	/* for error reporting */
     }
     else
     {
-	CaseSpace = MaxCase + 1;
-	MaxCase++;
+	CaseSpace = Context->cases.max_case + 1;
+	Context->cases.max_case++;
     }
 
-    if ( SAMPLE )
+    if ( Context->options.sample_fraction )
     {
 	if ( Train )
 	{
-	    SampleFrom = CountDataInput(Input);
-	    ResetKR(KRInit);		/* initialise KRandom() */
+	    Context->sample_from = CountDataInput(Input);
+	    ResetKR(&Context->random, Context->io.random_initial_seed);	/* initialise KRandom() */
 	}
 	else
 	{
-	    ResetKR(KRInit);		/* restore  KRandom() */
+	    ResetKR(&Context->random, Context->io.random_initial_seed);	/* restore  KRandom() */
 	}
 
-	WantTrain = SampleFrom * SAMPLE + 0.5;
-	LeftTrain = SampleFrom;
+	WantTrain = Context->sample_from * Context->options.sample_fraction + 0.5;
+	LeftTrain = Context->sample_from;
 
-	WantTest  = ( SAMPLE < 0.5 ? WantTrain : SampleFrom - WantTrain );
-	LeftTest  = SampleFrom - WantTrain;
+	WantTest  = ( Context->options.sample_fraction < 0.5 ? WantTrain :
+		      Context->sample_from - WantTrain );
+	LeftTest  = Context->sample_from - WantTrain;
     }
 
-    while ( (DVec = GetDataRecInput(Input, Train)) )
+    while ( (DVec = GetDataRecInput(Context, Input, Train)) )
     {
 	/*  Check whether to include if we are sampling */
 
-	if ( SAMPLE )
+	if ( Context->options.sample_fraction )
 	{
-	    SelectTrain = KRandom() < WantTrain / (float) LeftTrain--;
+	    SelectTrain =
+		KRandom(&Context->random) < WantTrain / (float) LeftTrain--;
 
 	    /*  Include if
 		 * Select and this is the training set
@@ -133,7 +136,7 @@ void GetDataInput(c50_input *Input, Boolean Train, Boolean AllowUnknownClass)
 	    if ( SelectTrain != Train ||
 		 ( ! Train && AltRandom >= WantTest / (float) LeftTest-- ) )
 	    {
-		FreeLastCase(DVec);
+		FreeLastCase(Context, DVec);
 		continue;
 	    }
 
@@ -145,32 +148,32 @@ void GetDataInput(c50_input *Input, Boolean Train, Boolean AllowUnknownClass)
 
 	/*  Make sure there is room for another case  */
 
-	if ( MaxCase >= CaseSpace )
+	if ( Context->cases.max_case >= CaseSpace )
 	{
 	    CaseSpace += Inc;
-	    Realloc(Case, CaseSpace+1, DataRec);
+	    Realloc(Context->cases.records, CaseSpace+1, DataRec);
 	}
 
 	/*  Ignore cases with unknown class  */
 
 	if ( AllowUnknownClass || (Class(DVec) & 077777777) > 0 )
 	{
-	    Case[MaxCase] = DVec;
-	    MaxCase++;
+	    Context->cases.records[Context->cases.max_case] = DVec;
+	    Context->cases.max_case++;
 	}
 	else
 	{
-	    if ( FirstIgnore && Of )
+	    if ( FirstIgnore && Context->io.output )
 	    {
-		fprintf(Of, T_IgnoreBadClass);
+		fprintf(Context->io.output, T_IgnoreBadClass);
 		FirstIgnore = false;
 	    }
 
-	    FreeLastCase(DVec);
+	    FreeLastCase(Context, DVec);
 	}
     }
 
-    MaxCase--;
+    Context->cases.max_case--;
 
 }
 
@@ -190,18 +193,18 @@ void GetDataInput(c50_input *Input, Boolean Train, Boolean AllowUnknownClass)
 /*************************************************************************/
 
 
-DataRec GetDataRec(FILE *Df, Boolean Train)
+DataRec GetDataRec(c50_context *Context, FILE *Df, Boolean Train)
 /*      ----------  */
 {
     c50_input Input;
 
     c50_input_init_file(&Input, Df);
-    return GetDataRecInput(&Input, Train);
+    return GetDataRecInput(Context, &Input, Train);
 }
 
 
 
-DataRec GetDataRecInput(c50_input *Input, Boolean Train)
+DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 /*      ---------------  */
 {
     Attribute	Att;
@@ -212,24 +215,24 @@ DataRec GetDataRecInput(c50_input *Input, Boolean Train)
     Boolean	FirstValue=true;
 
 
-    if ( ReadNameInput(Input, Name, 1000, '\00') )
+    if ( ReadNameInput(Context, Input, Name, 1000, '\00') )
     {
-	Case[MaxCase] = DVec = NewCase();
-	ForEach(Att, 1, MaxAtt)
+	Context->cases.records[Context->cases.max_case] = DVec = NewCase(Context);
+	ForEach(Att, 1, Context->schema.max_attribute)
 	{
-	    if ( AttDef[Att] )
+	    if ( Context->schema.attribute_definitions[Att] )
 	    {
-		DVec[Att] = EvaluateDef(AttDef[Att], DVec);
+		DVec[Att] = EvaluateDef(Context, Context->schema.attribute_definitions[Att], DVec);
 
 		if ( Continuous(Att) )
 		{
-		    CheckValue(DVec, Att);
+		    CheckValue(Context, DVec, Att);
 		}
 
-		if ( SomeMiss )
+		if ( Context->cases.some_missing )
 		{
-		    SomeMiss[Att] |= Unknown(DVec, Att);
-		    SomeNA[Att]   |= NotApplic(DVec, Att);
+		    Context->cases.some_missing[Att] |= Unknown(DVec, Att);
+		    Context->cases.some_not_applicable[Att]   |= NotApplic(Context, DVec, Att);
 		}
 
 		continue;
@@ -237,21 +240,21 @@ DataRec GetDataRecInput(c50_input *Input, Boolean Train)
 
 	    /*  Get the attribute value if don't already have it  */
 
-	    if ( ! FirstValue && ! ReadNameInput(Input, Name, 1000, '\00') )
+	    if ( ! FirstValue && ! ReadNameInput(Context, Input, Name, 1000, '\00') )
 	    {
-		XError(HITEOF, AttName[Att], "");
-		FreeLastCase(DVec);
+		XError(HITEOF, Context->schema.attribute_names[Att], "");
+		FreeLastCase(Context, DVec);
 		return Nil;
 	    }
 	    FirstValue = false;
 
 	    if ( Exclude(Att) )
 	    {
-		if ( Att == LabelAtt )
+		if ( Att == Context->schema.label_attribute )
 		{
 		    /*  Record the value as a string  */
 
-		    SVal(DVec,Att) = StoreIVal(Name);
+		    SVal(DVec,Att) = StoreIVal(Context, Name);
 		}
 	    }
 	    else
@@ -260,58 +263,58 @@ DataRec GetDataRecInput(c50_input *Input, Boolean Train)
 		/*  Set marker to indicate missing value  */
 
 		DVal(DVec, Att) = UNKNOWN;
-		if ( SomeMiss ) SomeMiss[Att] = true;
+		if ( Context->cases.some_missing ) Context->cases.some_missing[Att] = true;
 	    }
 	    else
-	    if ( Att != ClassAtt && ! strcmp(Name, "N/A") )
+	    if ( Att != Context->schema.class_attribute && ! strcmp(Name, "N/A") )
 	    {
 		/*  Set marker to indicate not applicable  */
 
 		DVal(DVec, Att) = NA;
-		if ( SomeNA ) SomeNA[Att] = true;
+		if ( Context->cases.some_not_applicable ) Context->cases.some_not_applicable[Att] = true;
 	    }
 	    else
 	    if ( Discrete(Att) )
 	    {
 		/*  Discrete attribute  */
 
-		Dv = Which(Name, AttValName[Att], 1, MaxAttVal[Att]);
+		Dv = Which(Name, Context->schema.attribute_value_names[Att], 1, Context->schema.max_attribute_value[Att]);
 		if ( ! Dv )
 		{
 		    if ( StatBit(Att, DISCRETE) )
 		    {
-			if ( Train || XVAL )
+			if ( Train || Context->options.cross_validation )
 			{
 			    /*  Add value to list  */
 
-			    if ( MaxAttVal[Att] >=
-				 (intptr_t) AttValName[Att][0] )
+			    if ( Context->schema.max_attribute_value[Att] >=
+				 (intptr_t) Context->schema.attribute_value_names[Att][0] )
 			    {
-				XError(TOOMANYVALS, AttName[Att],
-					 (char *) AttValName[Att][0] - 1);
-				Dv = MaxAttVal[Att];
+				XError(TOOMANYVALS, Context->schema.attribute_names[Att],
+					 (char *) Context->schema.attribute_value_names[Att][0] - 1);
+				Dv = Context->schema.max_attribute_value[Att];
 			    }
 			    else
 			    {
-				Dv = ++MaxAttVal[Att];
-				AttValName[Att][Dv]   = strdup(Name);
-				AttValName[Att][Dv+1] = "<other>"; /* no free */
+				Dv = ++Context->schema.max_attribute_value[Att];
+				Context->schema.attribute_value_names[Att][Dv]   = strdup(Name);
+				Context->schema.attribute_value_names[Att][Dv+1] = "<other>"; /* no free */
 			    }
-			    if ( Dv > MaxDiscrVal )
+			    if ( Dv > Context->schema.max_discrete_value )
 			    {
-				MaxDiscrVal = Dv;
+				Context->schema.max_discrete_value = Dv;
 			    }
 			}
 			else
 			{
 			    /*  Set value to "<other>"  */
 
-			    Dv = MaxAttVal[Att] + 1;
+			    Dv = Context->schema.max_attribute_value[Att] + 1;
 			}
 		    }
 		    else
 		    {
-			XError(BADATTVAL, AttName[Att], Name);
+			XError(BADATTVAL, Context->schema.attribute_names[Att], Name);
 			Dv = UNKNOWN;
 		    }
 		}
@@ -323,10 +326,10 @@ DataRec GetDataRecInput(c50_input *Input, Boolean Train)
 
 		if ( TStampVal(Att) )
 		{
-		    CVal(DVec, Att) = Cv = TStampToMins(Name);
+		    CVal(DVec, Att) = Cv = TStampToMins(Context, Name);
 		    if ( Cv >= 1E9 )	/* long time in future */
 		    {
-			XError(BADTSTMP, AttName[Att], Name);
+			XError(BADTSTMP, Context->schema.attribute_names[Att], Name);
 			DVal(DVec, Att) = UNKNOWN;
 		    }
 		}
@@ -336,7 +339,7 @@ DataRec GetDataRecInput(c50_input *Input, Boolean Train)
 		    CVal(DVec, Att) = Cv = DateToDay(Name);
 		    if ( Cv < 1 )
 		    {
-			XError(BADDATE, AttName[Att], Name);
+			XError(BADDATE, Context->schema.attribute_names[Att], Name);
 			DVal(DVec, Att) = UNKNOWN;
 		    }
 		}
@@ -346,7 +349,7 @@ DataRec GetDataRecInput(c50_input *Input, Boolean Train)
 		    CVal(DVec, Att) = Cv = TimeToSecs(Name);
 		    if ( Cv < 0 )
 		    {
-			XError(BADTIME, AttName[Att], Name);
+			XError(BADTIME, Context->schema.attribute_names[Att], Name);
 			DVal(DVec, Att) = UNKNOWN;
 		    }
 		}
@@ -355,23 +358,23 @@ DataRec GetDataRecInput(c50_input *Input, Boolean Train)
 		    CVal(DVec, Att) = strtod(Name, &EndName);
 		    if ( EndName == Name || *EndName != '\0' )
 		    {
-			XError(BADATTVAL, AttName[Att], Name);
+			XError(BADATTVAL, Context->schema.attribute_names[Att], Name);
 			DVal(DVec, Att) = UNKNOWN;
 		    }
 		}
 
-		CheckValue(DVec, Att);
+		CheckValue(Context, DVec, Att);
 	    }
 	}
 
-	if ( ClassAtt )
+	if ( Context->schema.class_attribute )
 	{
-	    if ( Discrete(ClassAtt) )
+	    if ( Discrete(Context->schema.class_attribute) )
 	    {
-		Class(DVec) = XDVal(DVec, ClassAtt);
+		Class(DVec) = XDVal(DVec, Context->schema.class_attribute);
 	    }
 	    else
-	    if ( Unknown(DVec, ClassAtt) || NotApplic(DVec, ClassAtt) )
+	    if ( Unknown(DVec, Context->schema.class_attribute) || NotApplic(Context, DVec, Context->schema.class_attribute) )
 	    {
 		Class(DVec) = 0;
 	    }
@@ -379,9 +382,9 @@ DataRec GetDataRecInput(c50_input *Input, Boolean Train)
 	    {
 		/*  Find appropriate segment using class thresholds  */
 
-		Cv = CVal(DVec, ClassAtt);
+		Cv = CVal(DVec, Context->schema.class_attribute);
 
-		for ( Dv = 1 ; Dv < MaxClass && Cv > ClassThresh[Dv] ; Dv++ )
+		for ( Dv = 1 ; Dv < Context->schema.max_class && Cv > Context->schema.class_thresholds[Dv] ; Dv++ )
 		    ;
 
 		Class(DVec) = Dv;
@@ -389,23 +392,25 @@ DataRec GetDataRecInput(c50_input *Input, Boolean Train)
 	}
 	else
 	{
-	    if ( ! ReadNameInput(Input, Name, 1000, '\00') )
+	    if ( ! ReadNameInput(Context, Input, Name, 1000, '\00') )
 	    {
-		XError(HITEOF, Fn, "");
-		FreeLastCase(DVec);
+		XError(HITEOF, Context->io.file_name, "");
+		FreeLastCase(Context, DVec);
 		return Nil;
 	    }
 
-	    if ( (Class(DVec) = Dv = Which(Name, ClassName, 1, MaxClass)) == 0 )
+	    if ( (Class(DVec) = Dv = Which(Name, Context->schema.class_names, 1, Context->schema.max_class)) == 0 )
 	    {
 		if ( strcmp(Name, "?") ) XError(BADCLASS, "", Name);
 	    }
 	}
 
-	if ( LabelAtt &&
-	     (Chars = strlen(IgnoredVals + SVal(DVec, LabelAtt))) > MaxLabel )
-	{
-	    MaxLabel = Chars;
+    if ( Context->schema.label_attribute &&
+	     (Chars = strlen(Context->ignored_values +
+			     SVal(DVec, Context->schema.label_attribute))) >
+		 Context->max_label )
+    {
+	Context->max_label = Chars;
 	}
 	return DVec;
     }
@@ -491,28 +496,32 @@ CaseNo CountDataInput(c50_input *Input)
 /*************************************************************************/
 
 
-int StoreIVal(String S)
+int StoreIVal(c50_context *Context, String S)
 /*  ---------  */
 {
     int		StartIx, Length;
 
-    if ( (Length=strlen(S) + 1) + IValsOffset > IValsSize )
+    if ( (Length=strlen(S) + 1) + Context->ignored_values_offset >
+	 Context->ignored_values_size )
     {
-	if ( IgnoredVals )
+	if ( Context->ignored_values )
 	{
-	    Realloc(IgnoredVals, IValsSize += 32768, char);
+	    Context->ignored_values_size += 32768;
+	    Realloc(Context->ignored_values, Context->ignored_values_size,
+		    char);
 	}
 	else
 	{
-	    IValsSize   = 32768;
-	    IValsOffset = 0;
-	    IgnoredVals = Alloc(IValsSize, char);
+	    Context->ignored_values_size   = 32768;
+	    Context->ignored_values_offset = 0;
+	    Context->ignored_values = Alloc(Context->ignored_values_size,
+					    char);
 	}
     }
 
-    StartIx = IValsOffset;
-    strcpy(IgnoredVals + StartIx, S);
-    IValsOffset += Length;
+    StartIx = Context->ignored_values_offset;
+    strcpy(Context->ignored_values + StartIx, S);
+    Context->ignored_values_offset += Length;
 
     return StartIx;
 }
@@ -526,17 +535,18 @@ int StoreIVal(String S)
 /*************************************************************************/
 
 
-void FreeData()
+void FreeData(c50_context *Context)
 /*   --------  */
 {
-    FreeCases();
+    FreeCases(Context);
 
-    FreeUnlessNil(IgnoredVals);				IgnoredVals = Nil;
-							IValsSize = 0;
+    FreeUnlessNil(Context->ignored_values);
+    Context->ignored_values = Nil;
+    Context->ignored_values_size = Context->ignored_values_offset = 0;
 
-    Free(Case);						Case = Nil;
+    Free(Context->cases.records);		Context->cases.records = Nil;
 
-    MaxCase = -1;
+    Context->cases.max_case = -1;
 }
 
 
@@ -548,7 +558,7 @@ void FreeData()
 /*************************************************************************/
 
 
-void CheckValue(DataRec DVec, Attribute Att)
+void CheckValue(c50_context *Context, DataRec DVec, Attribute Att)
 /*   ----------  */
 {
     ContValue	Cv;
@@ -556,7 +566,7 @@ void CheckValue(DataRec DVec, Attribute Att)
     Cv = CVal(DVec, Att);
     if ( ! finite(Cv) )
     {
-	Error(BADNUMBER, AttName[Att], "");
+	Error(Context, BADNUMBER, Context->schema.attribute_names[Att], "");
 
 	CVal(DVec, Att) = UNKNOWN;
     }

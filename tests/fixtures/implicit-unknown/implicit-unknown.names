@@ -1,0 +1,5 @@
+low, high.
+
+x: continuous.
+z := x + 1.
+attributes excluded: x.
