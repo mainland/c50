@@ -32,12 +32,86 @@
 /*************************************************************************/
 
 
+#include <algorithm>
+#include <utility>
+
 #include "defns.i"
 #include "extern.i"
 #include "c50_api_internal.h"
 
-#define SwapSRec(a,b)	{Xab=SRec[a]; SRec[a]=SRec[b]; SRec[b]=Xab;}
 
+
+/*************************************************************************/
+/*									 */
+/*	Sort Records[Fp..Lp] by Key with the RuleQuest three-way	 */
+/*	partition.  Equal keys may be reordered, and later floating-	 */
+/*	point sums depend on that order, so every comparison and swap	 */
+/*	must match the original algorithm.  Only the order in which	 */
+/*	the disjoint outer groups are sorted differs: recursing into	 */
+/*	the smaller group bounds the stack depth by log2 of the range	 */
+/*	without changing the result.					 */
+/*									 */
+/*************************************************************************/
+
+
+template <class Record, class KeyFn>
+static void PartitionSort(Record *Records, CaseNo Fp, CaseNo Lp, KeyFn Key)
+/*          -------------  */
+{
+    CaseNo	i, Middle, High;
+    ContValue	Thresh, Val;
+
+    while ( Fp < Lp )
+    {
+	/*  Equal to (Fp+Lp) / 2 for nonnegative bounds, without overflow  */
+
+	Thresh = Key(Records[Fp + (Lp-Fp) / 2]);
+
+	/*  Divide elements into three groups:
+		Fp .. Middle-1: values < Thresh
+		Middle .. High: values = Thresh
+		High+1 .. Lp:   values > Thresh  */
+
+	for ( Middle = Fp ; Key(Records[Middle]) < Thresh ; Middle++ )
+	    ;
+
+	for ( High = Lp ; Key(Records[High]) > Thresh ; High-- )
+	    ;
+
+	for ( i = Middle ; i <= High ; )
+	{
+	    if ( (Val = Key(Records[i])) < Thresh )
+	    {
+		std::swap(Records[Middle], Records[i]);
+		Middle++;
+		i++;
+	    }
+	    else
+	    if ( Val > Thresh )
+	    {
+		std::swap(Records[High], Records[i]);
+		High--;
+	    }
+	    else
+	    {
+		i++;
+	    }
+	}
+
+	/*  Sort the smaller outer group, then continue with the other  */
+
+	if ( Middle - Fp < Lp - High )
+	{
+	    PartitionSort(Records, Fp, Middle-1, Key);
+	    Fp = High+1;
+	}
+	else
+	{
+	    PartitionSort(Records, High+1, Lp, Key);
+	    Lp = Middle-1;
+	}
+    }
+}
 
 /*************************************************************************/
 /*									 */
@@ -49,54 +123,8 @@
 void Cachesort(CaseNo Fp, CaseNo Lp, SortRec *SRec)
 /*   ---------  */
 {
-    CaseNo	i, Middle, High;
-    ContValue	Thresh, Val;
-    SortRec	Xab;
-
-
-    while ( Fp < Lp )
-    {
-	Thresh = SRec[(Fp+Lp) / 2].V;
-
-	/*  Divide elements into three groups:
-		Fp .. Middle-1: values < Thresh
-		Middle .. High: values = Thresh
-		High+1 .. Lp:   values > Thresh  */
-
-	for ( Middle = Fp ; SRec[Middle].V < Thresh ; Middle++ )
-	    ;
-
-	for ( High = Lp ; SRec[High].V > Thresh ; High-- )
-	    ;
-
-	for ( i = Middle ; i <= High ; )
-	{
-	    if ( (Val = SRec[i].V) < Thresh )
-	    {
-		SwapSRec(Middle, i);
-		Middle++;
-		i++;
-	    }
-	    else
-	    if ( Val > Thresh )
-	    {
-		SwapSRec(High, i);
-		High--;
-	    }
-	    else
-	    {
-		i++;
-	    }
-	}
-
-	/*  Sort the first group  */
-
-	Cachesort(Fp, Middle-1, SRec);
-
-	/*  Continue with the last group  */
-
-	Fp = High+1;
-    }
+    PartitionSort(SRec, Fp, Lp,
+		  [](const SortRec &Record) { return Record.V; });
 }
 
 
