@@ -500,7 +500,8 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 	    case IDP:
 		/*  Recover year run and set base date for timestamps  */
 
-		if ( sscanf(Context->property_value + strlen(Context->property_value) - 11,
+		if ( strlen(Context->property_value) >= 11 &&
+                     sscanf(Context->property_value + strlen(Context->property_value) - 11,
 			    "%d-%d-%d\"", &Year, &Month, &Day) == 3 )
 		{
 		    SetTSBase(Context, Year);
@@ -987,6 +988,8 @@ int ReadProp(c50_context *Context, c50_input *Input, char *Delim)
 	    return 0;
 	}
 
+	if ( p - Context->property_value >= INT_MAX - 10003 )
+            throw std::bad_alloc();
 	if ( (i = p - Context->property_value) >= Context->property_value_size )
 	{
 	    Realloc(Context->property_value, (Context->property_value_size += 10000) + 3, char);
@@ -996,7 +999,9 @@ int ReadProp(c50_context *Context, c50_input *Input, char *Delim)
 	*p++ = c;
 	if ( c == '\\' )
 	{
-	    *p++ = c50_input_getc(Input);
+            c = c50_input_getc(Input);
+            if (c == EOF) Error(Context, MODELFILE, E_MFEOF, "");
+	    *p++ = c;
 	}
 	else
 	if ( c == '"' )
@@ -1007,7 +1012,28 @@ int ReadProp(c50_context *Context, c50_input *Input, char *Delim)
     *p = '\00';
     *Delim = c;
 
-    return WhichProperty(Context->property_name);
+    const int property = WhichProperty(Context->property_name);
+    if (!property) Error(Context, MODELFILE, "unknown property", Context->property_name);
+
+    // All scalar properties are quoted. Only elts permits a quoted list.
+    // Validate before the legacy unquoting helpers modify this buffer.
+    for (const char *value = Context->property_value; ; )
+    {
+        if (*value++ != '"')
+            Error(Context, MODELFILE, "expected quoted property", Context->property_name);
+        while (*value && *value != '"')
+        {
+            if (*value == '\\' && !*++value)
+                Error(Context, MODELFILE, "incomplete escape", Context->property_name);
+            ++value;
+        }
+        if (*value++ != '"')
+            Error(Context, MODELFILE, "unterminated property", Context->property_name);
+        if (!*value) break;
+        if (property != ELTSP || *value++ != ',')
+            Error(Context, MODELFILE, "invalid property suffix", Context->property_name);
+    }
+    return property;
 }
 
 
