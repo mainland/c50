@@ -425,8 +425,8 @@ void CheckActiveSpace(c50_context *Context, int N)
 {
     if ( Context->active_rule_capacity <= N )
     {
-	Realloc(Context->active_rules,
-		(Context->active_rule_capacity = N + 1), RuleNo);
+        Realloc(Context->active_rules, N + 1, RuleNo);
+        Context->active_rule_capacity = N + 1;
     }
 }
 
