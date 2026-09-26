@@ -6,6 +6,7 @@
 #include <cmath>
 #include <future>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -83,6 +84,22 @@ static std::string model_body(const c50::model &model)
     return bytes.substr(bytes.find('\n') + 1); // The first line contains the date.
 }
 
+static void require_predictions_equal(const c50::predictions &actual,
+                                      const c50::predictions &expected)
+{
+    require(actual.size() == expected.size() &&
+            actual.class_count() == expected.class_count(), "parallel result shape");
+    for (std::size_t column = 0; column < actual.class_count(); ++column)
+        require(std::string(actual.class_name(column)) == expected.class_name(column),
+                "parallel class names");
+    for (std::size_t row = 0; row < actual.size(); ++row) {
+        require(actual.class_index(row) == expected.class_index(row) &&
+                actual.confidence(row) == expected.confidence(row), "parallel prediction");
+        for (std::size_t column = 0; column < actual.class_count(); ++column)
+            require(actual.score(row, column) == expected.score(row, column), "parallel score");
+    }
+}
+
 static void reused_context_matches_fresh()
 {
     // Winnowing reads state that the previous training on a context left
@@ -110,6 +127,54 @@ static void reused_context_matches_fresh()
     }
 }
 
+static void parallel_schema_equivalence()
+{
+    constexpr std::size_t rows = 20001;
+    std::string schema = "a, b, c.\n";
+    for (unsigned column = 0; column < 5; ++column)
+        schema += "x" + std::to_string(column) + ": continuous.\n";
+    schema += "rank: [ordered] low, medium, high.\n"
+              "color: red, green, blue, yellow.\ncase weight: continuous.\n";
+    const char *ranks[] = {"low", "medium", "high"};
+    const char *colors[] = {"red", "green", "blue", "yellow"};
+    const char *labels[] = {"a", "b", "c"};
+    const std::string costs = "a, b: 3\nb, c: 2\nc, a: 4\n";
+    std::string cases;
+    for (std::size_t row = 0; row < rows; ++row) {
+        for (unsigned column = 0; column < 5; ++column) {
+            const auto value = row * (column * 16 + 17) % 997;
+            cases += (row + column) % 37 == 0 ? "?, " :
+                     (row + column) % 53 == 0 ? "N/A, " : std::to_string(value) + ", ";
+        }
+        cases += row % 29 == 0 ? "?, " : std::string(ranks[row % 3]) + ", ";
+        cases += row % 31 == 0 ? "N/A, " : std::string(colors[row % 4]) + ", ";
+        cases += std::to_string(row % 5 + 1) + ", ";
+        cases += labels[row * 17 % 997 < 300 ? 0 : row * 33 % 997 < 600 ? 1 : 2];
+        cases += '\n';
+    }
+    for (auto kind : {c50::model_kind::tree, c50::model_kind::rules}) {
+        for (double sample : {0.0, 0.75}) {
+            c50::options options;
+            options.subset_splits = true;
+            options.minimum_cases = 20;
+            options.sample_fraction = sample;
+            options.random_seed = 73;
+            c50::context context;
+            auto reference = c50::model::train(context, kind, schema, cases, options, costs);
+            auto expected = reference.predict(context, cases);
+            for (unsigned workers : {2u, 4u, 8u}) {
+                context.split_workers(workers);
+                auto model = c50::model::train(context, kind, schema, cases, options, costs);
+                require(model_body(model) == model_body(reference), "mixed-schema classifier");
+                require_predictions_equal(model.predict(context, cases), expected);
+                auto loaded = c50::model::load(context, kind, model.names_data(),
+                                               model.serialized_data(), model.costs_data());
+                require_predictions_equal(loaded.predict(context, cases), expected);
+            }
+        }
+    }
+}
+
 static void parallel_equivalence()
 {
     constexpr std::size_t rows = 10001;
@@ -126,6 +191,10 @@ static void parallel_equivalence()
                 (row * (column * 16 + 17) % 997) / 997.0;
         classes[row] = values[row * columns] < 0.3 ? 0 :
                        values[row * columns + 1] < 0.6 ? 1 : 2;
+    }
+    for (std::size_t row = 0; row < rows; ++row) {
+        if (row % 23 == 0) values[row * columns + 4] = std::numeric_limits<double>::quiet_NaN();
+        if (row % 31 == 0) values[row * columns + 5] = std::numeric_limits<double>::quiet_NaN();
     }
     const c50::dense_dataset training(values.data(), rows, columns, classes.data());
     const c50::dense_dataset cases(values.data(), rows, columns);
@@ -162,6 +231,7 @@ int main()
         ownership_and_recovery();
         concurrency();
         parallel_equivalence();
+        parallel_schema_equivalence();
         reused_context_matches_fresh();
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
