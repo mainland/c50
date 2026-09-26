@@ -1,0 +1,85 @@
+[build-system]
+requires = [
+    "scikit-build-core>=0.10",
+    "setuptools-scm>=9",
+    "pybind11>=2.13",
+]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "c50"
+dynamic = ["version"]
+description = "Python bindings for the C5.0 Release 2.07 GPL Edition core"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "GPL-3.0-or-later"
+license-files = ["gpl.txt"]
+authors = [
+    {name = "Geoffrey Mainland"},
+]
+classifiers = [
+    "Programming Language :: C",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/mainland/c50"
+Repository = "https://github.com/mainland/c50"
+Issues = "https://github.com/mainland/c50/issues"
+
+[project.optional-dependencies]
+sklearn = [
+    "numpy>=1.26",
+    "scikit-learn>=1.6",
+]
+test = [
+    "hypothesis>=6.112",
+    "mypy>=1.11",
+    "numpy>=1.26",
+    "pytest>=8",
+    "setuptools-scm>=9",
+    "scikit-learn>=1.6",
+]
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+wheel.packages = ["python/c50"]
+wheel.exclude = ["**/_c50module.cpp"]
+install.components = ["python"]
+sdist.exclude = [
+    "AGENTS.md",
+    "build*/**",
+    "docs/_build/**",
+    "notes/**",
+    "python/*.egg-info/**",
+]
+
+[tool.scikit-build.cmake.define]
+C50_BUILD_PYTHON = true
+BUILD_TESTING = false
+
+[tool.scikit-build.metadata.version]
+provider = "scikit_build_core.metadata.setuptools_scm"
+
+[tool.setuptools_scm]
+
+[tool.setuptools_scm.scm.git]
+describe_command = [
+    "git", "describe", "--dirty", "--tags", "--long", "--match", "v[0-9]*",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/python"]
+
+[tool.mypy]
+files = ["python/c50", "tests/typing"]
+mypy_path = "python"
+python_version = "3.12"
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["sklearn", "sklearn.*"]
+ignore_missing_imports = true
