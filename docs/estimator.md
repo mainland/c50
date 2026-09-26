@@ -80,6 +80,44 @@ are supported in multiclass matrices whose columns satisfy this requirement.
 `ignore_costs=True` ignores costs during both training and prediction. The
 model retains no costs data in this mode.
 
+## Split selection and evaluation scoring
+
+`C50Classifier` uses the native C5.0 split-selection policy: gain ratio with
+minimum-gain filtering, the native MDL adjustment, and C5.0 tie handling. It has
+no `criterion` parameter. The C++ and Python interfaces use the same learner
+and preserve the reference classifier behavior.
+
+Scikit-learn compatibility does not require the parameters accepted by
+`DecisionTreeClassifier`. Alternative split criteria would define different
+training modes. A future alternative must be implemented and validated in the
+C++ core before it is exposed through Python. Reference C5.0 behavior must
+remain the default. No alternative criterion is implemented.
+
+Choose an evaluation metric through scikit-learn's `scoring` interface. For
+example, reuse `X` and `y` from the example above to select native training
+parameters by balanced accuracy while also recording macro-averaged F1:
+
+```python
+from sklearn.model_selection import GridSearchCV
+
+search = GridSearchCV(
+    C50Classifier(),
+    {"minimum_cases": [1, 2], "confidence_factor": [0.1, 0.25]},
+    scoring={"balanced_accuracy": "balanced_accuracy", "f1_macro": "f1_macro"},
+    refit="balanced_accuracy",
+    cv=2,
+)
+search.fit(X, y)
+classifier = search.best_estimator_
+```
+
+The scores evaluate predictions on held-out folds. `refit` chooses the metric
+used to select the parameters and refit the estimator on all supplied data.
+These settings do not change split selection within a fit. Without an explicit
+scorer, the estimator's `score` method reports classification accuracy. See
+[scikit-learn's scoring documentation](https://scikit-learn.org/stable/modules/model_evaluation.html#scoring-parameter)
+for named metrics and custom scorers.
+
 ## Ownership and concurrency
 
 `fit` stores the low-level immutable model in `model_`. Prediction delegates to
