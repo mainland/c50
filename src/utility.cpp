@@ -334,153 +334,153 @@ void ErrorContext(c50_context *Context, int ErrNo, const char *S1,
 
     if ( ErrNo == NOFILE || ErrNo == NOMEM || ErrNo == MODELFILE )
     {
-	sprintf(Msg, "*** ");
+	snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), "*** ");
     }
     else
     {
-	sprintf(Msg, TX_Line(Context->io.line_number, Context->io.file_name));
+	snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), TX_Line(Context->io.line_number, Context->io.file_name));
     }
     Msg += strlen(Buffer);
 
     switch ( ErrNo )
     {
 	case NOFILE:
-	    sprintf(Msg, E_NOFILE(Context->io.file_name, S2));
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_NOFILE(Context->io.file_name, S2));
 	    Quit = true;
 	    break;
 
 	case BADCLASSTHRESH:
-	    sprintf(Msg, E_BADCLASSTHRESH, S1);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADCLASSTHRESH, S1);
 	    break;
 
 	case LEQCLASSTHRESH:
-	    sprintf(Msg, E_LEQCLASSTHRESH, S1);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_LEQCLASSTHRESH, S1);
 	    break;
 
 	case BADATTNAME:
-	    sprintf(Msg, E_BADATTNAME, S1);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADATTNAME, S1);
 	    break;
 
 	case EOFINATT:
-	    sprintf(Msg, E_EOFINATT, S1);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_EOFINATT, S1);
 	    break;
 
 	case SINGLEATTVAL:
-	    sprintf(Msg, E_SINGLEATTVAL(S1, S2));
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_SINGLEATTVAL(S1, S2));
 	    break;
 
 	case DUPATTNAME:
-	    sprintf(Msg, E_DUPATTNAME, S1);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_DUPATTNAME, S1);
 	    break;
 
 	case CWTATTERR:
-	    sprintf(Msg, E_CWTATTERR);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_CWTATTERR);
 	    break;
 
 	case BADATTVAL:
-	    sprintf(Msg, E_BADATTVAL(S2, S1));
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADATTVAL(S2, S1));
 	    break;
 
 	case BADNUMBER:
-	    sprintf(Msg, E_BADNUMBER(S1));
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADNUMBER(S1));
 	    break;
 
 	case BADCLASS:
-	    sprintf(Msg, E_BADCLASS, S2);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADCLASS, S2);
 	    break;
 
 	case BADCOSTCLASS:
-	    sprintf(Msg, E_BADCOSTCLASS, S1);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADCOSTCLASS, S1);
 	    Quit = true;
 	    break;
 
 	case BADCOST:
-	    sprintf(Msg, E_BADCOST, S1);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADCOST, S1);
 	    Quit = true;
 	    break;
 
 	case NOMEM:
-	    sprintf(Msg, E_NOMEM);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_NOMEM);
 	    Quit = true;
 	    break;
 
 	case TOOMANYVALS:
-	    sprintf(Msg, E_TOOMANYVALS(S1, (int) (intptr_t) S2));
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_TOOMANYVALS(S1, (int) (intptr_t) S2));
 	    break;
 
 	case BADDISCRETE:
-	    sprintf(Msg, E_BADDISCRETE, S1);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADDISCRETE, S1);
 	    break;
 
 	case NOTARGET:
-	    sprintf(Msg, E_NOTARGET, S1);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_NOTARGET, S1);
 	    Quit = true;
 	    break;
 
 	case BADCTARGET:
-	    sprintf(Msg, E_BADCTARGET, S1);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADCTARGET, S1);
 	    Quit = true;
 	    break;
 
 	case BADDTARGET:
-	    sprintf(Msg, E_BADDTARGET, S1);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADDTARGET, S1);
 	    Quit = true;
 	    break;
 
 	case LONGNAME:
-	    sprintf(Msg, E_LONGNAME);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_LONGNAME);
 	    Quit = true;
 	    break;
 
 	case HITEOF:
-	    sprintf(Msg, E_HITEOF);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_HITEOF);
 	    break;
 
 	case MISSNAME:
-	    sprintf(Msg, E_MISSNAME, S2);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_MISSNAME, S2);
 	    break;
 
 	case BADTSTMP:
-	    sprintf(Msg, E_BADTSTMP(S2, S1));
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADTSTMP(S2, S1));
 	    break;
 
 	case BADDATE:
-	    sprintf(Msg, E_BADDATE(S2, S1));
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADDATE(S2, S1));
 	    break;
 
 	case BADTIME:
-	    sprintf(Msg, E_BADTIME(S2, S1));
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADTIME(S2, S1));
 	    break;
 
 	case UNKNOWNATT:
-	    sprintf(Msg, E_UNKNOWNATT, S1);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_UNKNOWNATT, S1);
 	    break;
 
 	case BADDEF1:
-	    sprintf(Msg, E_BADDEF1(Context->schema.attribute_names[Context->schema.max_attribute], S1, S2));
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADDEF1(Context->schema.attribute_names[Context->schema.max_attribute], S1, S2));
 	    break;
 
 	case BADDEF2:
-	    sprintf(Msg, E_BADDEF2(Context->schema.attribute_names[Context->schema.max_attribute], S1, S2));
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADDEF2(Context->schema.attribute_names[Context->schema.max_attribute], S1, S2));
 	    break;
 
 	case SAMEATT:
-	    sprintf(Msg, E_SAMEATT(Context->schema.attribute_names[Context->schema.max_attribute], S1));
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_SAMEATT(Context->schema.attribute_names[Context->schema.max_attribute], S1));
 	    WarningOnly = true;
 	    break;
 
 	case BADDEF3:
-	    sprintf(Msg, E_BADDEF3, Context->schema.attribute_names[Context->schema.max_attribute]);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADDEF3, Context->schema.attribute_names[Context->schema.max_attribute]);
 	    break;
 
 	case BADDEF4:
-	    sprintf(Msg, E_BADDEF4, Context->schema.attribute_names[Context->schema.max_attribute]);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADDEF4, Context->schema.attribute_names[Context->schema.max_attribute]);
 	    WarningOnly = true;
 	    break;
 
 	case MODELFILE:
-	    sprintf(Msg, EX_MODELFILE(Context->io.file_name));
-	    sprintf(Msg, "    (%s `%s')\n", S1, S2);
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), EX_MODELFILE(Context->io.file_name));
+	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), "    (%s `%s')\n", S1, S2);
 	    Quit = true;
 	    break;
     }

@@ -36,6 +36,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+#include <limits>
+
 /*************************************************************************/
 /*									 */
 /*	Winnow attributes by constructing a tree from half the data.	 */
@@ -168,9 +170,19 @@ void WinnowAtts(c50_context *Context)
 	    }
 	    if ( Context->training.attribute_importance[Best] >= 1.005 )
 	    {
-		fprintf(Context->io.output, "%7d%%  %s\n",
-			    (int) ((Context->training.attribute_importance[Best] - 1) * 100 + 0.5),
+		double Percentage =
+		    (Context->training.attribute_importance[Best] - 1) * 100.0;
+		if ( Percentage <= std::numeric_limits<int>::max() )
+		{
+		    fprintf(Context->io.output, "%7d%%  %s\n",
+			    (int) (Percentage + 0.5),
 			    Context->schema.attribute_names[Best]);
+		}
+		else
+		{
+		    fprintf(Context->io.output, "%7s%%  %s\n", "inf",
+			    Context->schema.attribute_names[Best]);
+		}
 	    }
 	    else
 	    {
@@ -306,7 +318,10 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 
 	    Cost = ErrCost(Context, Context->trees.winnow, Cut+1, Context->cases.max_case);
 
-	    Context->training.attribute_importance[Att] = ( Cost < Base ? -1 : Cost / Base );
+	    Context->training.attribute_importance[Att] =
+		( Cost < Base ? -1 :
+		  Base > 0 ? Cost / Base :
+		  Cost > 0 ? std::numeric_limits<float>::infinity() : 1 );
 	    Verbosity(1,
 		fprintf(Context->io.output, "  error cost without %s = %g%s\n",
 			    Context->schema.attribute_names[Att], Cost,

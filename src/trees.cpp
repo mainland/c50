@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: release partially parsed trees. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -500,21 +501,12 @@ void FreeTree(Tree T)
 
     if ( ! T ) return;
 
-    if ( T->NodeType )
+    if (T->Branch)
     {
-	ForEach(v, 1, T->Forks)
-	{
-	    FreeTree(T->Branch[v]);
-	}
-
-	Free(T->Branch);
-
-	if ( T->NodeType == BrSubset )
-	{
-	    FreeVector((void **) T->Subset, 1, T->Forks);
-	}
-
+        ForEach(v, 1, T->Forks) FreeTree(T->Branch[v]);
+        Free(T->Branch);
     }
+    if (T->Subset) FreeVector((void **) T->Subset, 1, T->Forks);
 
     Free(T->ClassDist);
     Free(T);
