@@ -33,8 +33,7 @@ extern	int		LineNo,
 
 extern	String		FileStem;
 
-extern	int		KRInit,
-			Now;
+extern	int		KRInit;
 
 extern	FILE		*TRf;
 extern	char		Fn[500];

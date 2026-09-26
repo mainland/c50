@@ -276,7 +276,7 @@ void SetMinGainThresh(c50_context *Context)
 
     /*  Set Context->splits.average_gain_weight and Context->splits.mdl_weight  */
 
-    if ( Now == WINNOWATTS )
+    if ( Context->progress.stage == WINNOWATTS )
     {
 	Context->splits.average_gain_weight = Context->splits.mdl_weight = 0.0;
     }
@@ -387,7 +387,7 @@ void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
 	 Cases < 2 * Context->options.minimum_cases ||
 	 Context->splits.max_leaves < 2 )
     {
-	if ( Now == FORMTREE ) Progress(Cases);
+	if ( Context->progress.stage == FORMTREE ) Progress(Context, Cases);
 	return;
     }
 
@@ -417,7 +417,7 @@ void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
     if ( BestAtt == None )
     {
 	Verbosity(1, fprintf(Of, "\tno sensible splits\n"))
-	if ( Now == FORMTREE ) Progress(Cases);
+	if ( Context->progress.stage == FORMTREE ) Progress(Context, Cases);
     }
     else
     {
