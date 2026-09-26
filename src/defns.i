@@ -170,7 +170,7 @@
 #define	 EmptyNA(T)	(T->Branch[1]->Cases < 0.01)
 
 #define  Before(n1,n2)  (n1->Tested < n2->Tested ||\
-			n1->Tested == n2->Tested && n1->Cut < n2->Cut)
+			(n1->Tested == n2->Tested && n1->Cut < n2->Cut))
 
 #define	 Swap(a,b)	{DataRec xab;\
 			 assert(a >= 0 && a <= MaxCase &&\
@@ -783,6 +783,3 @@ void	    Prepare(void);
 void	    Shuffle(int *Vec);
 void	    Summary(void);
 float	    SE(float sum, float sumsq, int no);
-
-
-
