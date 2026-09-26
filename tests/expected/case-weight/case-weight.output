@@ -1,0 +1,45 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `case-weight'
+
+Read 6 cases (2 attributes) from case-weight.data
+Using relative case weighting
+
+Decision tree:
+ high (6/2)
+
+
+Evaluation on training data (6 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     1    4(66.7%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	           4    (a): class low
+	           2    (b): class high
+
+
+Evaluation on test data (2 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     1    1(50.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	           1    (a): class low
+	           1    (b): class high
+
+
+Time: <elapsed> secs

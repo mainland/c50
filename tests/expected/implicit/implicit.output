@@ -1,0 +1,36 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `implicit'
+
+Read 10 cases (2 attributes) from implicit.data
+
+Decision tree:
+
+x <= 5: low (5)
+x > 5: high (5)
+
+
+Evaluation on training data (10 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2    0( 0.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     5          (a): class low
+	           5    (b): class high
+
+
+	Attribute usage:
+
+	    100%  x
+
+
+Time: <elapsed> secs

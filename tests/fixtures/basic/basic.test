@@ -1,0 +1,7 @@
+1.25,alpha,true,low
+2.25,gamma,false,high
+4.25,beta,false,low
+5.75,alpha,false,high
+7.25,gamma,true,high
+?,beta,true,low
+N/A,gamma,false,high

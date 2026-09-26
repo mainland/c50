@@ -1,0 +1,84 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `multiclass'
+	Rule-based classifiers
+
+Read 24 cases (2 attributes) from multiclass.data
+
+Rules:
+
+Rule 1: (4, lift 2.5)
+	value <= 4
+	shape = circle
+	->  class red  [0.833]
+
+Rule 2: (4, lift 2.5)
+	value > 4
+	shape = triangle
+	->  class red  [0.833]
+
+Rule 3: (4, lift 2.5)
+	value <= 4
+	shape = square
+	->  class green  [0.833]
+
+Rule 4: (4, lift 2.5)
+	value > 4
+	shape = circle
+	->  class green  [0.833]
+
+Rule 5: (4, lift 2.5)
+	value > 4
+	shape = square
+	->  class blue  [0.833]
+
+Rule 6: (4, lift 2.5)
+	value <= 4
+	shape = triangle
+	->  class blue  [0.833]
+
+Default class: red
+
+
+Evaluation on training data (24 cases):
+
+	        Rules
+	  ----------------
+	    No      Errors
+
+	     6    0( 0.0%)   <<
+
+
+	   (a)   (b)   (c)    <-classified as
+	  ----  ----  ----
+	     8                (a): class red
+	           8          (b): class green
+	                 8    (c): class blue
+
+
+	Attribute usage:
+
+	    100%  value
+	    100%  shape
+
+
+Evaluation on test data (6 cases):
+
+	        Rules
+	  ----------------
+	    No      Errors
+
+	     6    0( 0.0%)   <<
+
+
+	   (a)   (b)   (c)    <-classified as
+	  ----  ----  ----
+	     2                (a): class red
+	           2          (b): class green
+	                 2    (c): class blue
+
+
+Time: <elapsed> secs
