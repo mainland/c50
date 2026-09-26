@@ -35,15 +35,13 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 #include <stdint.h>
 
 
 #define Inc 2048
 
-Boolean SuppressErrorMessages=false;
-#define XError(a,b,c)	if (! SuppressErrorMessages) Error(a,b,c)
-
-CaseNo	SampleFrom;		/* file count for sampling */
+#define XError(a,b,c)	if (! Context->suppress_error_messages) Error(a,b,c)
 
 
 /*************************************************************************/
@@ -57,19 +55,21 @@ CaseNo	SampleFrom;		/* file count for sampling */
 /*************************************************************************/
 
 
-void GetData(FILE *Df, Boolean Train, Boolean AllowUnknownClass)
+void GetData(c50_context *Context, FILE *Df, Boolean Train,
+	     Boolean AllowUnknownClass)
 /*   -------  */
 {
     c50_input Input;
 
     c50_input_init_file(&Input, Df);
-    GetDataInput(&Input, Train, AllowUnknownClass);
+    GetDataInput(Context, &Input, Train, AllowUnknownClass);
     fclose(Df);
 }
 
 
 
-void GetDataInput(c50_input *Input, Boolean Train, Boolean AllowUnknownClass)
+void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
+		  Boolean AllowUnknownClass)
 /*   ------------  */
 {
     DataRec	DVec;
@@ -77,7 +77,7 @@ void GetDataInput(c50_input *Input, Boolean Train, Boolean AllowUnknownClass)
     Boolean	FirstIgnore=true, SelectTrain;
 
     LineNo = 0;
-    SuppressErrorMessages = SAMPLE && ! Train;
+    Context->suppress_error_messages = SAMPLE && ! Train;
 
     /*  Don't reset case count if appending data for xval  */
 
@@ -96,7 +96,7 @@ void GetDataInput(c50_input *Input, Boolean Train, Boolean AllowUnknownClass)
     {
 	if ( Train )
 	{
-	    SampleFrom = CountDataInput(Input);
+	    Context->sample_from = CountDataInput(Input);
 	    ResetKR(KRInit);		/* initialise KRandom() */
 	}
 	else
@@ -104,14 +104,15 @@ void GetDataInput(c50_input *Input, Boolean Train, Boolean AllowUnknownClass)
 	    ResetKR(KRInit);		/* restore  KRandom() */
 	}
 
-	WantTrain = SampleFrom * SAMPLE + 0.5;
-	LeftTrain = SampleFrom;
+	WantTrain = Context->sample_from * SAMPLE + 0.5;
+	LeftTrain = Context->sample_from;
 
-	WantTest  = ( SAMPLE < 0.5 ? WantTrain : SampleFrom - WantTrain );
-	LeftTest  = SampleFrom - WantTrain;
+	WantTest  = ( SAMPLE < 0.5 ? WantTrain :
+		      Context->sample_from - WantTrain );
+	LeftTest  = Context->sample_from - WantTrain;
     }
 
-    while ( (DVec = GetDataRecInput(Input, Train)) )
+    while ( (DVec = GetDataRecInput(Context, Input, Train)) )
     {
 	/*  Check whether to include if we are sampling */
 
@@ -190,18 +191,18 @@ void GetDataInput(c50_input *Input, Boolean Train, Boolean AllowUnknownClass)
 /*************************************************************************/
 
 
-DataRec GetDataRec(FILE *Df, Boolean Train)
+DataRec GetDataRec(c50_context *Context, FILE *Df, Boolean Train)
 /*      ----------  */
 {
     c50_input Input;
 
     c50_input_init_file(&Input, Df);
-    return GetDataRecInput(&Input, Train);
+    return GetDataRecInput(Context, &Input, Train);
 }
 
 
 
-DataRec GetDataRecInput(c50_input *Input, Boolean Train)
+DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 /*      ---------------  */
 {
     Attribute	Att;
@@ -212,7 +213,7 @@ DataRec GetDataRecInput(c50_input *Input, Boolean Train)
     Boolean	FirstValue=true;
 
 
-    if ( ReadNameInput(Input, Name, 1000, '\00') )
+    if ( ReadNameInput(Context, Input, Name, 1000, '\00') )
     {
 	Case[MaxCase] = DVec = NewCase();
 	ForEach(Att, 1, MaxAtt)
@@ -237,7 +238,7 @@ DataRec GetDataRecInput(c50_input *Input, Boolean Train)
 
 	    /*  Get the attribute value if don't already have it  */
 
-	    if ( ! FirstValue && ! ReadNameInput(Input, Name, 1000, '\00') )
+	    if ( ! FirstValue && ! ReadNameInput(Context, Input, Name, 1000, '\00') )
 	    {
 		XError(HITEOF, AttName[Att], "");
 		FreeLastCase(DVec);
@@ -389,7 +390,7 @@ DataRec GetDataRecInput(c50_input *Input, Boolean Train)
 	}
 	else
 	{
-	    if ( ! ReadNameInput(Input, Name, 1000, '\00') )
+	    if ( ! ReadNameInput(Context, Input, Name, 1000, '\00') )
 	    {
 		XError(HITEOF, Fn, "");
 		FreeLastCase(DVec);
