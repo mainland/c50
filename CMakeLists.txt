@@ -353,6 +353,15 @@ if(BUILD_TESTING)
             "C50_BINARY=$<TARGET_FILE:c50_cli>"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli.sh"
     )
+    if(CMAKE_CXX_FLAGS MATCHES "(^|[ ;])-DVerbOpt($|[ ;])")
+        add_test(
+            NAME cli-verbose-regression
+            COMMAND
+                ${CMAKE_COMMAND} -E env
+                "C50_BINARY=$<TARGET_FILE:c50_cli>"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_verbose.sh"
+        )
+    endif()
     add_test(
         NAME report-regression
         COMMAND
