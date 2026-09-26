@@ -660,7 +660,7 @@ void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
 	else
 	if ( Context->splits.sample_fraction < 1 )
 	{
-	    EstimateMaxGR(Context, Att, WFp, WLp);
+	    EstimateMaxGR(Context, *Context->training.environment, Att, WFp, WLp);
 	}
 	else
 	if ( Context->splits.sampled )
@@ -669,7 +669,7 @@ void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
 
 	    if ( Context->splits.estimated_max_gain_ratio[Att] > Context->splits.value_threshold )
 	    {
-		EvalContinuousAtt(Context, Att, WFp, WLp);
+		EvalContinuousAtt(Context, *Context->training.environment, Att, WFp, WLp);
 
 		if ( Context->splits.information[Att] > Epsilon &&
 		     (GR = Context->splits.gain[Att] / Context->splits.information[Att]) > Context->splits.value_threshold )
@@ -680,7 +680,7 @@ void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
 	}
 	else
 	{
-	    EvalContinuousAtt(Context, Att, WFp, WLp);
+	    EvalContinuousAtt(Context, *Context->training.environment, Att, WFp, WLp);
 	}
     }
 }
