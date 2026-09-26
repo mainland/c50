@@ -131,7 +131,8 @@ void EvalSubset(Attribute Att, CaseCount Cases)
     GEnv.Blocks = 0;
     ForEach(V1, 1, MaxAttVal[Att])
     {
-	if ( GEnv.ValFreq[V1] > Epsilon || V1 == 1 && SomeNA[Att] )
+	if ( GEnv.ValFreq[V1] > Epsilon ||
+	     ( V1 == 1 && SomeNA[Att] ) )
 	{
 	    if ( ++GEnv.Blocks < V1 )
 	    {
