@@ -64,15 +64,6 @@ String		FileStem="undefined";
 /*									 */
 /*************************************************************************/
 
-Byte		**Fires=Nil,	/* Fires[r][*] = cases covered by rule r */
-		*CBuffer=Nil;	/* buffer for compressing lists */
-
-int		*CovBy=Nil,	/* entry numbers for Fires inverse */
-		*List=Nil;	/* temporary list of cases or rules */
-
-double		*LogCaseNo=0,	/* LogCaseNo[i] = log2(i) */
-		*LogFact=0;	/* LogFact[i] = log2(i!) */
-
 /*************************************************************************/
 /*									 */
 /*		Misc							 */
