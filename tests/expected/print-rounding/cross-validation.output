@@ -1,0 +1,246 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `print-rounding'
+	Cross-validate using 3 folds
+	Boosted classifiers
+	Random seed 3
+
+Class specified by attribute `class'
+
+Read 47 cases (5 attributes) from print-rounding.data
+Using relative case weighting
+
+
+[ Fold 1 ]
+
+-----  Trial 0:  -----
+
+Decision tree:
+
+c0 <= 0: k0 (11.9/4.4)
+c0 > 0:
+:...d0 = v0: k2 (6.6/1.9)
+    d0 = v1:
+    :...c1 <= 0.5: k2 (2.2)
+    :   c1 > 0.5: k1 (5.7/2.4)
+    d0 = v2:
+    :...c1 <= 0.5: k1 (2.6/0.4)
+        c1 > 0.5: k2 (3.1/1.2)
+
+-----  Trial 1:  -----
+
+Decision tree:
+
+c0 > 2.5: k2 (8.1/3.9)
+c0 <= 2.5:
+:...c1 <= 3.5: k0 (19.7/9.1)
+    c1 > 3.5: k2 (4.3/1.7)
+
+-----  Trial 2:  -----
+
+Decision tree:
+
+c0 <= 2.5: k0 (23.9/13.6)
+c0 > 2.5: k2 (8.1/4)
+
+*** boosting reduced to 2 trials since last classifier is very inaccurate
+
+*** boosting abandoned (too few classifiers)
+
+Evaluation on hold-out data (15 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     6   10(66.7%)   <<
+
+
+[ Fold 2 ]
+
+-----  Trial 0:  -----
+
+Decision tree:
+
+c1 > 3.5: k2 (6/0.5)
+c1 <= 3.5:
+:...c0 <= 1: k0 (13.6/2.9)
+    c0 > 1: k1 (11.5/4.8)
+
+-----  Trial 1:  -----
+
+Decision tree:
+
+c1 <= 3.5: k0 (25.4/13.3)
+c1 > 3.5: k2 (5.6/0.8)
+
+-----  Trial 2:  -----
+
+Decision tree:
+
+c1 <= 3.5: k0 (25.5/13.8)
+c1 > 3.5: k2 (5.5/0.9)
+
+-----  Trial 3:  -----
+
+Decision tree:
+
+c1 <= 3.5: k0 (25.6/14)
+c1 > 3.5: k2 (5.4/0.9)
+
+*** boosting reduced to 3 trials since last classifier is very inaccurate
+
+Evaluation on hold-out data (16 cases):
+
+Trial	    Decision Tree
+-----	  ----------------
+	  Size      Errors
+
+   0	     3    9(56.2%)
+   1	     2    9(56.2%)
+   2	     2    9(56.2%)
+boost	          9(56.2%)   <<
+
+
+[ Fold 3 ]
+
+-----  Trial 0:  -----
+
+Decision tree:
+
+c1 > 3.5: k2 (6.6/1.6)
+c1 <= 3.5:
+:...c0 <= 1.5: k0 (10.5/2.6)
+    c0 > 1.5: k1 (13.9/6.1)
+
+-----  Trial 1:  -----
+
+Decision tree:
+
+c1 > 3.5: k2 (6.8/2.4)
+c1 <= 3.5:
+:...d0 = v0: k2 (7.1/2.8)
+    d0 = v1: k1 (12.5/6)
+    d0 = v2: k0 (4.7/1.5)
+
+-----  Trial 2:  -----
+
+Decision tree:
+
+c1 > 7: k3 (2.1/0.1)
+c1 <= 7:
+:...d0 = v0: k2 (9/3.1)
+    d0 = v1: k1 (13.2/6.7)
+    d0 = v2: k0 (6.7/3.7)
+
+-----  Trial 3:  -----
+
+Decision tree:
+
+c1 > 3.5: k2 (6.6/2.5)
+c1 <= 3.5:
+:...c0 <= 1.5: k0 (10.8/2.7)
+    c0 > 1.5: k1 (13.6/7)
+
+-----  Trial 4:  -----
+
+Decision tree:
+
+c1 > 7: k3 (2.4/0.1)
+c1 <= 7:
+:...d0 = v0: k2 (9/3.1)
+    d0 = v1: k1 (13.1/7)
+    d0 = v2: k0 (6.5/3.5)
+
+-----  Trial 5:  -----
+
+Decision tree:
+
+c1 > 7: k3 (2.3/0.1)
+c1 <= 7:
+:...d0 = v0: k2 (8.9/3.3)
+    d0 = v1: k1 (13.3/7.4)
+    d0 = v2: k0 (6.5/3.7)
+
+-----  Trial 6:  -----
+
+Decision tree:
+
+c1 > 7: k3 (2.2/0.1)
+c1 <= 7:
+:...d0 = v0: k2 (8.8/3.5)
+    d0 = v1: k1 (13.5/7.9)
+    d0 = v2: k0 (6.6/3.9)
+
+-----  Trial 7:  -----
+
+Decision tree:
+
+c1 > 2: k2 (14.6/7.2)
+c1 <= 2:
+:...c0 <= 1.5: k0 (10.1/1.7)
+    c0 > 1.5: k1 (5.3/0.8)
+
+-----  Trial 8:  -----
+
+Decision tree:
+
+c1 > 7: k3 (2.7/0.2)
+c1 <= 7:
+:...d0 = v0: k2 (8.3/3.5)
+    d0 = v1: k1 (11.8/5.6)
+    d0 = v2: k0 (7.2/3.8)
+
+-----  Trial 9:  -----
+
+Decision tree:
+
+d0 = v0: k2 (5.5/1.1)
+d0 = v1: k0 (13.2/5.4)
+d0 = v2: k0 (7.3/4.2)
+
+Evaluation on hold-out data (16 cases):
+
+Trial	    Decision Tree
+-----	  ----------------
+	  Size      Errors
+
+   0	     3    9(56.2%)
+   1	     4    9(56.2%)
+   2	     4   10(62.5%)
+   3	     3    9(56.2%)
+   4	     4   10(62.5%)
+   5	     4   10(62.5%)
+   6	     4   10(62.5%)
+   7	     3   10(62.5%)
+   8	     4   10(62.5%)
+   9	     3   10(62.5%)
+boost	          9(56.2%)   <<
+
+
+[ Summary ]
+
+Fold	    Decision Tree
+----	  ----------------
+	  Size      Errors
+
+   1	     *       66.7%
+   2	     *       56.2%
+   3	     *       56.2%
+
+  Mean	             59.7%
+  SE	              3.5%
+
+
+	   (a)   (b)   (c)   (d)    <-classified as
+	  ----  ----  ----  ----
+	    10     1     7          (a): class k0
+	     5     4     3          (b): class k1
+	     9           5          (c): class k2
+	     1           2          (d): class k3
+
+
+Time: <elapsed> secs
