@@ -54,9 +54,6 @@ void WinnowAtts(c50_context *Context)
     float	Base;
     Boolean	First=true, *Upper;
     ClassNo	c;
-    extern Attribute	*DList;
-    extern int		NDList;
-
     Context->attributes_winnowed = false;
 
     /*  Save original case order  */
@@ -187,14 +184,14 @@ void WinnowAtts(c50_context *Context)
 
     if ( Removed )
     {
-	/*  Reset DList  */
+	/*  Reset Context->splits.discrete_attributes  */
 
-	NDList = 0;
+	Context->splits.discrete_attribute_count = 0;
 	ForEach(Att, 1, Context->schema.max_attribute)
 	{
 	    if ( Context->splits.discrete_frequencies[Att] && ! Skip(Att) )
 	    {
-		DList[NDList++] = Att;
+		Context->splits.discrete_attributes[Context->splits.discrete_attribute_count++] = Att;
 	    }
 	}
     }

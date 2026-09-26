@@ -36,13 +36,6 @@
 #include "c50_api_internal.h"
 
 
-DataRec	*Blocked=Nil;
-float	**Result=Nil;	/* Result[f][0] = tree/ruleset size
-				    [1] = tree/ruleset errors
-				    [2] = tree/ruleset cost  */
-
-
-
 /*************************************************************************/
 /*									 */
 /*	Outer function (differs from xval script)			 */
@@ -56,15 +49,12 @@ void CrossVal(c50_context *Context)
     CaseNo	i, Size, Start=0, Next, SaveMaxCase;
     int		f, SmallTestBlocks, t, SaveTRIALS;
     ClassNo	c;
-    static CaseNo *ConfusionMat=Nil;
-    static int    SaveFOLDS=0;
-
     /*  Check for left-overs after interrupt  */
 
-    if ( Result )
+    if ( Context->cross_validation.results )
     {
-	FreeVector((void **) Result, 0, SaveFOLDS-1);
-	Free(ConfusionMat);
+	FreeVector((void **) Context->cross_validation.results, 0, Context->cross_validation.saved_folds-1);
+	Free(Context->cross_validation.confusion_matrix);
     }
 
     if ( Context->options.folds > Context->cases.max_case+1 )
@@ -73,9 +63,9 @@ void CrossVal(c50_context *Context)
 	Context->options.folds = Context->cases.max_case+1;
     }
 
-    Result	 = AllocZero((SaveFOLDS = Context->options.folds), float *);
-    Blocked	 = Alloc(Context->cases.max_case+1, DataRec);
-    ConfusionMat = AllocZero((Context->schema.max_class+1)*(Context->schema.max_class+1), CaseNo);
+    Context->cross_validation.results	 = AllocZero((Context->cross_validation.saved_folds = Context->options.folds), float *);
+    Context->cross_validation.blocked_cases	 = Alloc(Context->cases.max_case+1, DataRec);
+    Context->cross_validation.confusion_matrix = AllocZero((Context->schema.max_class+1)*(Context->schema.max_class+1), CaseNo);
 
     Prepare(Context);
 
@@ -90,14 +80,14 @@ void CrossVal(c50_context *Context)
     ForEach(f, 0, Context->options.folds-1)
     {
 	fprintf(Of, "\n\n[ " T_Fold " %d ]\n", f+1);
-	Result[f] = AllocZero(3, float);
+	Context->cross_validation.results[f] = AllocZero(3, float);
 
 	if ( f == SmallTestBlocks ) Size++;
 	Context->cases.max_case = SaveMaxCase - Size;
 
 	ForEach(i, 0, Context->cases.max_case)
 	{
-	    Context->cases.records[i] = Blocked[Start];
+	    Context->cases.records[i] = Context->cross_validation.blocked_cases[Start];
 	    Start = (Start + 1) % (SaveMaxCase + 1);
 	}
 
@@ -107,59 +97,59 @@ void CrossVal(c50_context *Context)
 
 	if ( Context->options.trials == 1 )
 	{
-	    Result[f][0] = ( Context->options.rules ? Context->rules.sets[0]->SNRules :
+	    Context->cross_validation.results[f][0] = ( Context->options.rules ? Context->rules.sets[0]->SNRules :
 				     TreeSize(Context->trees.pruned[0]) );
 	    Next = Start;
 	    ForEach(i, 0, Size-1)
 	    {
-		Context->cases.records[i] = Blocked[Next];
-		c = ( Context->options.rules ? RuleClassify(Context, Blocked[Next], Context->rules.sets[0]) :
-			      TreeClassify(Context, Blocked[Next], Context->trees.pruned[0]) );
-		if ( c != Class(Blocked[Next]) )
+		Context->cases.records[i] = Context->cross_validation.blocked_cases[Next];
+		c = ( Context->options.rules ? RuleClassify(Context, Context->cross_validation.blocked_cases[Next], Context->rules.sets[0]) :
+			      TreeClassify(Context, Context->cross_validation.blocked_cases[Next], Context->trees.pruned[0]) );
+		if ( c != Class(Context->cross_validation.blocked_cases[Next]) )
 		{
-		    Result[f][1] += 1.0;
+		    Context->cross_validation.results[f][1] += 1.0;
 		    if ( Context->costs.matrix )
 		    {
-			Result[f][2] += Context->costs.matrix[c][Class(Blocked[Next])];
+			Context->cross_validation.results[f][2] += Context->costs.matrix[c][Class(Context->cross_validation.blocked_cases[Next])];
 		    }
 		}
 
 		/*  Add to confusion matrix for target classifier  */
 
-		ConfusionMat[ Class(Blocked[Next])*(Context->schema.max_class+1)+c ]++;
+		Context->cross_validation.confusion_matrix[ Class(Context->cross_validation.blocked_cases[Next])*(Context->schema.max_class+1)+c ]++;
 
 		Next = (Next + 1) % (SaveMaxCase + 1);
 	    }
 	}
 	else
 	{
-	    Result[f][0] = -1;
+	    Context->cross_validation.results[f][0] = -1;
 	    Next = Start;
 	    Context->default_class =
 		( Context->options.rules ? Context->rules.sets[0]->SDefault : Context->trees.pruned[0]->Leaf );
 	    ForEach(i, 0, Size-1)
 	    {
-		Context->cases.records[i] = Blocked[Next];
-		c = BoostClassify(Context, Blocked[Next], Context->options.trials-1);
-		if ( c != Class(Blocked[Next]) )
+		Context->cases.records[i] = Context->cross_validation.blocked_cases[Next];
+		c = BoostClassify(Context, Context->cross_validation.blocked_cases[Next], Context->options.trials-1);
+		if ( c != Class(Context->cross_validation.blocked_cases[Next]) )
 		{
-		    Result[f][1] += 1.0;
+		    Context->cross_validation.results[f][1] += 1.0;
 		    if ( Context->costs.matrix )
 		    {
-			Result[f][2] += Context->costs.matrix[c][Class(Blocked[Next])];
+			Context->cross_validation.results[f][2] += Context->costs.matrix[c][Class(Context->cross_validation.blocked_cases[Next])];
 		    }
 		}
 
 		/*  Add to confusion matrix for target classifier  */
 
-		ConfusionMat[ Class(Blocked[Next])*(Context->schema.max_class+1)+c ]++;
+		Context->cross_validation.confusion_matrix[ Class(Context->cross_validation.blocked_cases[Next])*(Context->schema.max_class+1)+c ]++;
 
 		Next = (Next + 1) % (SaveMaxCase + 1);
 	    }
 	}
 
-	Result[f][1] = (100.0 * Result[f][1]) / Size;
-	Result[f][2] /= Size;
+	Context->cross_validation.results[f][1] = (100.0 * Context->cross_validation.results[f][1]) / Size;
+	Context->cross_validation.results[f][2] /= Size;
 
 	fprintf(Of, T_EvalHoldOut, Size);
 	Context->cases.max_case = Size-1;
@@ -181,18 +171,18 @@ void CrossVal(c50_context *Context)
     Context->cases.max_case = SaveMaxCase;
 
     Summary(Context);
-    PrintConfusionMatrix(Context, ConfusionMat);
+    PrintConfusionMatrix(Context, Context->cross_validation.confusion_matrix);
 
     /*  Free local storage  */
 
     ForEach(i, 0, Context->cases.max_case)
     {
-	Context->cases.records[i] = Blocked[i];
+	Context->cases.records[i] = Context->cross_validation.blocked_cases[i];
     }
 
-    FreeVector((void **) Result, 0, Context->options.folds-1);		Result = Nil;
-    Free(Blocked);					Blocked = Nil;
-    Free(ConfusionMat);					ConfusionMat = Nil;
+    FreeVector((void **) Context->cross_validation.results, 0, Context->options.folds-1);		Context->cross_validation.results = Nil;
+    Free(Context->cross_validation.blocked_cases);					Context->cross_validation.blocked_cases = Nil;
+    Free(Context->cross_validation.confusion_matrix);					Context->cross_validation.confusion_matrix = Nil;
 }
 
 
@@ -245,7 +235,7 @@ void Prepare(c50_context *Context)
     {
 	for ( i = First ; i <= Context->cases.max_case ; i += Context->options.folds )
 	{
-	    Blocked[Next++] = Context->cases.records[Temp[i]];
+	    Context->cross_validation.blocked_cases[Next++] = Context->cases.records[Temp[i]];
 	}
     }
 
@@ -287,15 +277,13 @@ void Shuffle(c50_context *Context, int *Vec)
 /*************************************************************************/
 
 
-char
-     *FoldHead[] = { F_Fold, F_UFold, "" };
-
 void Summary(c50_context *Context)
 /*   -------  */
 {
     int		i, f, t;
     Boolean	PrintSize=true;
     float	Sum[3], SumSq[3];
+    const char	*FoldHead[] = { F_Fold, F_UFold, "" };
     extern char	*StdP[], *StdPC[], *Extra[], *ExtraC[];
 
     for ( i = 0 ; i < 3 ; i++ )
@@ -305,7 +293,7 @@ void Summary(c50_context *Context)
 
     ForEach(f, 0, Context->options.folds-1)
     {
-	if ( Result[f][0] < 1 ) PrintSize = false;
+	if ( Context->cross_validation.results[f][0] < 1 ) PrintSize = false;
     }
 
     fprintf(Of, "\n\n[ " T_Summary " ]\n\n");
@@ -332,24 +320,24 @@ void Summary(c50_context *Context)
 
 	if ( PrintSize )
 	{
-	    fprintf(Of, " %5g", Result[f][0]);
+	    fprintf(Of, " %5g", Context->cross_validation.results[f][0]);
 	}
 	else
 	{
 	    fprintf(Of, "     *");
 	}
-	fprintf(Of, " %10.1f%%", Result[f][1]);
+	fprintf(Of, " %10.1f%%", Context->cross_validation.results[f][1]);
 
 	if ( Context->costs.matrix )
 	{
-	    fprintf(Of, "%7.2f", Result[f][2]);
+	    fprintf(Of, "%7.2f", Context->cross_validation.results[f][2]);
 	}
 	fprintf(Of, "\n");
 
 	for ( i = 0 ; i < 3 ; i++ )
 	{
-	    Sum[i] += Result[f][i];
-	    SumSq[i] += Result[f][i] * Result[f][i];
+	    Sum[i] += Context->cross_validation.results[f][i];
+	    SumSq[i] += Context->cross_validation.results[f][i] * Context->cross_validation.results[f][i];
 	}
     }
 
