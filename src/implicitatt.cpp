@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: check string allocation failures. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -130,9 +131,9 @@ void ImplicitAtt(c50_context *Context, c50_input *Nf)
 
 	    Context->schema.max_attribute_value[Context->schema.max_attribute] = 3;
 	    Context->schema.attribute_value_names[Context->schema.max_attribute] = AllocZero(4, String);
-	    Context->schema.attribute_value_names[Context->schema.max_attribute][1] = strdup("??");
-	    Context->schema.attribute_value_names[Context->schema.max_attribute][2] = strdup("t");
-	    Context->schema.attribute_value_names[Context->schema.max_attribute][3] = strdup("f");
+	    Context->schema.attribute_value_names[Context->schema.max_attribute][1] = Pstrdup(Context, "??");
+	    Context->schema.attribute_value_names[Context->schema.max_attribute][2] = Pstrdup(Context, "t");
+	    Context->schema.attribute_value_names[Context->schema.max_attribute][3] = Pstrdup(Context, "f");
 	}
 	else
 	{
@@ -447,7 +448,7 @@ Boolean Atom(c50_context *Context)
 	/*  Make a copy of the string without double quotes  */
 
 	Context->implicit_state->buffer[Context->implicit_state->buffer_position] = '\00';
-	Str = strdup(Context->implicit_state->buffer + FirstBN);
+	Str = Pstrdup(Context, Context->implicit_state->buffer + FirstBN);
 
 	Context->implicit_state->buffer[Context->implicit_state->buffer_position++] = '"';
 	Dump(Context, OP_STR, 0, Str, Fi);
@@ -549,7 +550,7 @@ Boolean Atom(c50_context *Context)
 	}
 	else
 	{
-	    Dump(Context, OP_STR, 0, strdup("N/A"), Fi);
+	    Dump(Context, OP_STR, 0, Pstrdup(Context, "N/A"), Fi);
 	}
     }
     else

@@ -706,6 +706,7 @@ void	    PrintHeader(c50_context *Context, const char *Title);
 char	    ProcessOption(c50_context *Context, int Argc, char **Argv,
 			  const char *Str);
 void	    *Pmalloc(c50_context *Context, size_t Bytes);
+char *Pstrdup(c50_context *Context, const char *text);
 void	    *Prealloc(c50_context *Context, void *Present, size_t Bytes);
 void	    *Pcalloc(c50_context *Context, size_t Number, unsigned int Size);
 void	    FreeVector(void **V, int First, int Last);

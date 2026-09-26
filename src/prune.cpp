@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: own pruning scratch during unwinding. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -34,6 +35,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include <memory>
 #include "c50_api_internal.h"
 
 
@@ -240,7 +242,9 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
     }
 
     SmallBranches = AllocZero(Context->schema.max_class+1, CaseCount);
+    std::unique_ptr<CaseCount, decltype(&free)> small_owner(SmallBranches, &free);
     BranchCases   = Alloc(T->Forks+1, CaseCount);
+    std::unique_ptr<CaseCount, decltype(&free)> branch_owner(BranchCases, &free);
 
     if ( Missing ) UnitWeightFlag = 0;
 
@@ -323,8 +327,8 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 	TreeErrs += Errs +
 	    ExtraErrs(Context, SmallBranchCases, Errs, BestClass);
     }
-    Free(SmallBranches);
-    Free(BranchCases);
+    small_owner.reset();
+    branch_owner.reset();
 
     if ( ! (Flags & UPDATE) )
     {

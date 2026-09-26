@@ -598,7 +598,7 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
                         reinterpret_cast<intptr_t>(Context->schema.attribute_value_names[Att][0]))
                         Error(Context, MODELFILE, "too many dynamic attribute values", p);
 		    v = ++Context->schema.max_attribute_value[Att];
-		    Context->schema.attribute_value_names[Att][v] = strdup(p);
+		    Context->schema.attribute_value_names[Att][v] = Pstrdup(Context, p);
 
 		    for ( p += strlen(p) ; *p != '"' ; p++ )
 			;
@@ -1104,7 +1104,9 @@ int ReadProp(c50_context *Context, c50_input *Input, char *Delim)
             throw std::bad_alloc();
 	if ( (i = p - Context->property_value) >= Context->property_value_size )
 	{
-	    Realloc(Context->property_value, (Context->property_value_size += 10000) + 3, char);
+            const int capacity = Context->property_value_size + 10000;
+            Realloc(Context->property_value, capacity + 3, char);
+            Context->property_value_size = capacity;
 	    p = Context->property_value + i;
 	}
 
