@@ -46,6 +46,14 @@ test = [
     "setuptools-scm>=9",
     "scikit-learn>=1.6",
 ]
+docs = [
+    "breathe",
+    "furo",
+    "myst-parser",
+    "numpy>=1.26",
+    "scikit-learn>=1.6",
+    "sphinx>=7",
+]
 
 [dependency-groups]
 # Contributor tools. The lint environment installs them with
@@ -114,6 +122,7 @@ files = [
     "python/c50",
     "tests/typing",
     "benchmarks",
+    "docs/conf.py",
     "tests/benchmark_smoke.py",
     "tests/reference",
 ]
