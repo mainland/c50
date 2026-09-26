@@ -40,6 +40,24 @@
 #define		SAMPLEUNIT	2000
 
 
+void c50_split_workspace_deleter::operator()(
+    SplitWorkspace *Workspace) const noexcept
+{
+    if ( ! Workspace ) return;
+
+    const DiscrValue MaxValue = Workspace->MaxDiscrValue;
+    FreeVector((void **) Workspace->Freq, 0, Max(3, MaxValue+1));
+    free(Workspace->ValFreq);
+    free(Workspace->ClassFreq);
+    free(Workspace->SRec);
+    free(Workspace->SubsetInfo);
+    free(Workspace->SubsetEntr);
+    FreeVector((void **) Workspace->MergeInfo, 1, MaxValue);
+    FreeVector((void **) Workspace->MergeEntr, 1, MaxValue);
+    FreeVector((void **) Workspace->WSubset, 1, MaxValue);
+    delete Workspace;
+}
+
 
 
 /*************************************************************************/
@@ -143,7 +161,8 @@ void InitialiseTreeData(c50_context *Context)
 
     /*  Set up environment  */
 
-    Context->training.environment = AllocZero(1, EnvRec);
+    Context->training.environment.reset(new SplitWorkspace{});
+    Context->training.environment->MaxDiscrValue = Context->schema.max_discrete_value;
     Context->splits.waiting_attributes = Alloc(Context->schema.max_attribute+1, Attribute);
 
     vMax = Max(3, Context->schema.max_discrete_value+1);
@@ -183,7 +202,6 @@ void FreeTreeData(c50_context *Context)
 /*   ------------  */
 {
     Attribute	Att;
-    DiscrValue	vMax;
 
     FreeUnlessNil(Context->trees.raw);					Context->trees.raw = Nil;
     FreeUnlessNil(Context->trees.pruned);				Context->trees.pruned = Nil;
@@ -229,29 +247,7 @@ void FreeTreeData(c50_context *Context)
     FreeUnlessNil(Context->training.class_frequencies);				Context->training.class_frequencies = Nil;
     FreeUnlessNil(Context->splits.possible_cuts);			Context->splits.possible_cuts = Nil;
 
-    if ( Context->training.environment )
-    {
-	vMax = Max(3, Context->schema.max_discrete_value+1);
-	FreeVector((void **) Context->training.environment->Freq, 0, vMax);
-	Free(Context->training.environment->ValFreq);
-	Free(Context->training.environment->ClassFreq);
-	FreeUnlessNil(Context->training.environment->SRec);
-
-	if ( Context->training.environment->SubsetInfo )
-	{
-	    Free(Context->training.environment->SubsetInfo);
-	    Free(Context->training.environment->SubsetEntr);
-	    FreeVector((void **) Context->training.environment->MergeInfo,
-		       1, Context->schema.max_discrete_value);
-	    FreeVector((void **) Context->training.environment->MergeEntr,
-		       1, Context->schema.max_discrete_value);
-	    FreeVector((void **) Context->training.environment->WSubset,
-		       1, Context->schema.max_discrete_value);
-	}
-
-	Free(Context->training.environment);
-	Context->training.environment = Nil;
-    }
+    Context->training.environment.reset();
 
     FreeUnlessNil(Context->splits.waiting_attributes);				Context->splits.waiting_attributes = Nil;
 }
