@@ -1,0 +1,40 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `implicit-unknown'
+
+Read 15 cases (2 attributes) from implicit-unknown.data
+
+Attributes excluded:
+    x
+
+Decision tree:
+
+z <= 6: low (7.5/0.5)
+z > 6: high (7.5/2)
+
+
+Evaluation on training data (15 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2    1( 6.7%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     9          (a): class low
+	     1     5    (b): class high
+
+
+	Attribute usage:
+
+	     67%  x
+	     67%  z
+
+
+Time: <elapsed> secs

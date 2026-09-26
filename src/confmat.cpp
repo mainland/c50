@@ -33,28 +33,29 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 
-void PrintConfusionMatrix(CaseNo *ConfusionMat)
+void PrintConfusionMatrix(c50_context *Context, CaseNo *ConfusionMat)
 /*   --------------------  */
 {
     int		Row, Col, Entry, EntryWidth=10000;
 
     /*  For more than 20 classes, use summary instead  */
 
-    if ( MaxClass > 20 )
+    if ( Context->schema.max_class > 20 )
     {
-	PrintErrorBreakdown(ConfusionMat);
+	PrintErrorBreakdown(Context, ConfusionMat);
 	return;
     }
 
     /*  Find maximum entry width in chars  */
 
-    ForEach(Row, 1, MaxClass)
+    ForEach(Row, 1, Context->schema.max_class)
     {
-	ForEach(Col, 1, MaxClass)
+	ForEach(Col, 1, Context->schema.max_class)
 	{
-	    EntryWidth = Max(EntryWidth, ConfusionMat[Row*(MaxClass+1) + Col]);
+	    EntryWidth = Max(EntryWidth, ConfusionMat[Row*(Context->schema.max_class+1) + Col]);
 	}
     }
 
@@ -62,55 +63,55 @@ void PrintConfusionMatrix(CaseNo *ConfusionMat)
 
     /*  Print the heading, then each row  */
 
-    fprintf(Of, "\n\n\t");
-    ForEach(Col, 1, MaxClass)
+    fprintf(Context->io.output, "\n\n\t");
+    ForEach(Col, 1, Context->schema.max_class)
     {
-	fprintf(Of, "%*s(%c)", EntryWidth-3, " ", 'a' + Col-1);
+	fprintf(Context->io.output, "%*s(%c)", EntryWidth-3, " ", 'a' + Col-1);
     }
 
-    fprintf(Of, "    <-" T_classified_as "\n\t");
-    ForEach(Col, 1, MaxClass)
+    fprintf(Context->io.output, "    <-" T_classified_as "\n\t");
+    ForEach(Col, 1, Context->schema.max_class)
     {
-	fprintf(Of, "%*.*s", EntryWidth, EntryWidth-2, "----------");
+	fprintf(Context->io.output, "%*.*s", EntryWidth, EntryWidth-2, "----------");
     }
-    fprintf(Of, "\n");
+    fprintf(Context->io.output, "\n");
 
-    ForEach(Row, 1, MaxClass)
+    ForEach(Row, 1, Context->schema.max_class)
     {
-	fprintf(Of, "\t");
-	ForEach(Col, 1, MaxClass)
+	fprintf(Context->io.output, "\t");
+	ForEach(Col, 1, Context->schema.max_class)
 	{
-	    if ( (Entry = ConfusionMat[Row*(MaxClass+1) + Col]) )
+	    if ( (Entry = ConfusionMat[Row*(Context->schema.max_class+1) + Col]) )
 	    {
-		fprintf(Of, " %*d", EntryWidth-1, Entry);
+		fprintf(Context->io.output, " %*d", EntryWidth-1, Entry);
 	    }
 	    else
 	    {
-		fprintf(Of, "%*s", EntryWidth, " ");
+		fprintf(Context->io.output, "%*s", EntryWidth, " ");
 	    }
 	}
-	fprintf(Of, "    (%c): " T_class " %s\n", 'a' + Row-1, ClassName[Row]);
+	fprintf(Context->io.output, "    (%c): " T_class " %s\n", 'a' + Row-1, Context->schema.class_names[Row]);
     }
 }
 
 
 
-void PrintErrorBreakdown(CaseNo *ConfusionMat)
+void PrintErrorBreakdown(c50_context *Context, CaseNo *ConfusionMat)
 /*   -------------------  */
 {
     CaseNo	*TruePos, *FalsePos, *FalseNeg, Entry;
     int		Row, Col, EntryWidth=100000, ClassWidth=5;
     size_t	NameWidth;
 
-    TruePos  = AllocZero(MaxClass+1, CaseNo);
-    FalsePos = AllocZero(MaxClass+1, CaseNo);
-    FalseNeg = AllocZero(MaxClass+1, CaseNo);
+    TruePos  = AllocZero(Context->schema.max_class+1, CaseNo);
+    FalsePos = AllocZero(Context->schema.max_class+1, CaseNo);
+    FalseNeg = AllocZero(Context->schema.max_class+1, CaseNo);
 
-    ForEach(Row, 1, MaxClass)
+    ForEach(Row, 1, Context->schema.max_class)
     {
-	ForEach(Col, 1, MaxClass)
+	ForEach(Col, 1, Context->schema.max_class)
 	{
-	    Entry = ConfusionMat[Row*(MaxClass+1) + Col];
+	    Entry = ConfusionMat[Row*(Context->schema.max_class+1) + Col];
 
 	    if ( Col == Row )
 	    {
@@ -124,8 +125,8 @@ void PrintErrorBreakdown(CaseNo *ConfusionMat)
 	}
 
 	EntryWidth = Max(EntryWidth, TruePos[Row] + FalseNeg[Row]);
-	NameWidth = strlen(ClassName[Row]);
-	if ( NameWidth > INT_MAX ) Error(LONGNAME, "", "");
+	NameWidth = strlen(Context->schema.class_names[Row]);
+	if ( NameWidth > INT_MAX ) Error(Context, LONGNAME, "", "");
 	ClassWidth = Max(ClassWidth, (int) NameWidth);
     }
 
@@ -133,7 +134,7 @@ void PrintErrorBreakdown(CaseNo *ConfusionMat)
 
     /*  Print heading (tricky spacing) */
 
-    fprintf(Of, "\n\n\t  %-*s %*s %*s %*s\n\t  %*s %*s %*s %*s\n",
+    fprintf(Context->io.output, "\n\n\t  %-*s %*s %*s %*s\n\t  %*s %*s %*s %*s\n",
 		ClassWidth, "Class",
 		EntryWidth, "Cases",
 		EntryWidth, "False",
@@ -142,16 +143,16 @@ void PrintErrorBreakdown(CaseNo *ConfusionMat)
 		EntryWidth, "",
 		EntryWidth, "Pos",
 		EntryWidth, "Neg");
-    fprintf(Of, "\t  %-*s %*s %*s %*s\n",
+    fprintf(Context->io.output, "\t  %-*s %*s %*s %*s\n",
 		ClassWidth, "-----",
 		EntryWidth, "-----",
 		EntryWidth, "-----",
 		EntryWidth, "-----");
 
-    ForEach(Row, 1, MaxClass)
+    ForEach(Row, 1, Context->schema.max_class)
     {
-	fprintf(Of, "\t  %-*s %*d %*d %*d\n",
-		ClassWidth, ClassName[Row],
+	fprintf(Context->io.output, "\t  %-*s %*d %*d %*d\n",
+		ClassWidth, Context->schema.class_names[Row],
 		EntryWidth, TruePos[Row] + FalseNeg[Row],
 		EntryWidth, FalsePos[Row],
 		EntryWidth, FalseNeg[Row]);
@@ -164,20 +165,20 @@ void PrintErrorBreakdown(CaseNo *ConfusionMat)
 
 
 
-void PrintUsageInfo(CaseNo *Usage)
+void PrintUsageInfo(c50_context *Context, CaseNo *Usage)
 /*   --------------  */
 {
     Attribute	Att, Best;
     float	Tests;
     Boolean	First=true;
 
-    Tests = Max(1, MaxCase+1);
+    Tests = Max(1, Context->cases.max_case+1);
 
     while ( true )
     {
 	Best = 0;
 
-	ForEach(Att, 1, MaxAtt)
+	ForEach(Att, 1, Context->schema.max_attribute)
 	{
 	    if ( Usage[Att] > Usage[Best] ) Best = Att;
 	}
@@ -186,12 +187,12 @@ void PrintUsageInfo(CaseNo *Usage)
 
 	if ( First )
 	{
-	    fprintf(Of, T_Usage);
+	    fprintf(Context->io.output, T_Usage);
 	    First = false;
 	}
 
-	fprintf(Of, "\t%7d%%  %s\n",
-	    (int) ((100 * Usage[Best]) / Tests + 0.5), AttName[Best]);
+	fprintf(Context->io.output, "\t%7d%%  %s\n",
+	    (int) ((100 * Usage[Best]) / Tests + 0.5), Context->schema.attribute_names[Best]);
 
 	Usage[Best] = 0;
     }
