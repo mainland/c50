@@ -38,6 +38,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 Condition	*Test=Nil;	/* tests that appear in ruleset */
 int		NTest,		/* number of distinct tests */
@@ -56,7 +57,7 @@ Boolean		*TestUsed;	/* used in parent nodes */
 /*************************************************************************/
 
 
-void ConstructRuleTree(CRuleSet RS)
+void ConstructRuleTree(c50_context *Context, CRuleSet RS)
 /*   -----------------  */
 {
     int		r, c;
@@ -72,7 +73,7 @@ void ConstructRuleTree(CRuleSet RS)
 
 	ForEach(c, 1, RS->SRule[r]->Size)
 	{
-	    SetTestIndex(RS->SRule[r]->Lhs[c]);
+	    SetTestIndex(Context, RS->SRule[r]->Lhs[c]);
 	}
     }
 
@@ -81,7 +82,7 @@ void ConstructRuleTree(CRuleSet RS)
 
     RuleCondOK = AllocZero(RS->SNRules+1, int);
 
-    RS->RT = GrowRT(All, RS->SNRules, RS->SRule);
+    RS->RT = GrowRT(Context, All, RS->SNRules, RS->SRule);
 
     Free(All);
     Free(Test);
@@ -100,7 +101,7 @@ void ConstructRuleTree(CRuleSet RS)
 /*************************************************************************/
 
 
-void SetTestIndex(Condition C)
+void SetTestIndex(c50_context *Context, Condition C)
 /*   ------------  */
 {
     int		t;
@@ -121,7 +122,7 @@ void SetTestIndex(Condition C)
 		return;
 
 	    case BrSubset:
-		if ( ! memcmp(C->Subset, CC->Subset, (MaxAttVal[Att]>>3)+1) )
+		if ( ! memcmp(C->Subset, CC->Subset, (Context->schema.max_attribute_value[Att]>>3)+1) )
 		{
 		    C->TestI = t;
 		    return;
@@ -160,7 +161,7 @@ void SetTestIndex(Condition C)
 /*************************************************************************/
 
 
-RuleTree GrowRT(RuleNo *RR, int RRN, CRule *Rule)
+RuleTree GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule)
 /*       ------  */
 {
     RuleTree	Node;
@@ -215,7 +216,7 @@ RuleTree GrowRT(RuleNo *RR, int RRN, CRule *Rule)
     Expect = Alloc(RRN, int);
     ForEach(ri, 0, RRN-1)
     {
-	Expect[ri] = DesiredOutcome(Rule[RR[ri]], TI);
+	Expect[ri] = DesiredOutcome(Context, Rule[RR[ri]], TI);
     }
 
     /*  Now construct individual branches.  Rules that do not reference
@@ -224,7 +225,7 @@ RuleTree GrowRT(RuleNo *RR, int RRN, CRule *Rule)
 	goes to branch 0.  */
 
     Node->Forks =
-	( Test[TI]->NodeType == BrDiscr ? MaxAttVal[Test[TI]->Tested] :
+	( Test[TI]->NodeType == BrDiscr ? Context->schema.max_attribute_value[Test[TI]->Tested] :
 	  Test[TI]->NodeType == BrSubset ? 1 : 3 );
 
     Node->Branch = Alloc(Node->Forks+1, RuleTree);
@@ -248,7 +249,7 @@ RuleTree GrowRT(RuleNo *RR, int RRN, CRule *Rule)
 
 	/*  LR now contains rules with outcome v  */
 
-	Node->Branch[v] = GrowRT(LR, LRN, Rule);
+	Node->Branch[v] = GrowRT(Context, LR, LRN, Rule);
 
 	if ( v )
 	{
@@ -281,7 +282,7 @@ RuleTree GrowRT(RuleNo *RR, int RRN, CRule *Rule)
 /*************************************************************************/
 
 
-int DesiredOutcome(CRule R, int TI)
+int DesiredOutcome(c50_context *Context, CRule R, int TI)
 /*  --------------  */
 {
     int		c;

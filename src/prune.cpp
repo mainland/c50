@@ -110,29 +110,29 @@ void Prune(c50_context *Context, Tree T)
     /*  Remove impossible values from subsets and ordered splits.
 	First record possible values for discrete attributes  */
 
-    PossibleValues = AllocZero(MaxAtt+1, Set);
-    ForEach(Att, 1, MaxAtt)
+    PossibleValues = AllocZero(Context->schema.max_attribute+1, Set);
+    ForEach(Att, 1, Context->schema.max_attribute)
     {
 	if ( Ordered(Att) || ( Discrete(Att) && SUBSET ) )
 	{
-	    PossibleValues[Att] = AllocZero((MaxAttVal[Att]>>3)+1, Byte);
-	    ForEach(i, 1, MaxAttVal[Att])
+	    PossibleValues[Att] = AllocZero((Context->schema.max_attribute_value[Att]>>3)+1, Byte);
+	    ForEach(i, 1, Context->schema.max_attribute_value[Att])
 	    {
 		SetBit(i, PossibleValues[Att]);
 	    }
 	}
     }
 
-    CheckSubsets(T, true);
+    CheckSubsets(Context, T, true);
 
-    FreeVector((void **) PossibleValues, 1, MaxAtt);	PossibleValues = Nil;
+    FreeVector((void **) PossibleValues, 1, Context->schema.max_attribute);	PossibleValues = Nil;
 
     /*  For multibranch splits, merge non-occurring values.  For trees
 	(first boosting trial only), also merge leaves of same class  */
 
     if ( ! SUBSET )
     {
-	CompressBranches(T);
+	CompressBranches(Context, T);
     }
 }
 
@@ -165,15 +165,15 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 
     UnitWeights = (Flags & UNITWEIGHTS);
 
-    LocalClassDist = Alloc(MaxClass+1, double);
+    LocalClassDist = Alloc(Context->schema.max_class+1, double);
 
-    FindClassFreq(LocalClassDist, Fp, Lp);
+    FindClassFreq(Context, LocalClassDist, Fp, Lp);
 
     /*  Record new class distribution if updating the tree  */
 
     if ( (Flags & UPDATE) )
     {
-	ForEach(c, 1, MaxClass)
+	ForEach(c, 1, Context->schema.max_class)
 	{
 	    T->ClassDist[c] = LocalClassDist[c];
 	    Cases += LocalClassDist[c];
@@ -183,7 +183,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
     }
     else
     {
-	ForEach(c, 1, MaxClass)
+	ForEach(c, 1, Context->schema.max_class)
 	{
 	    Cases += LocalClassDist[c];
 
@@ -219,7 +219,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 	    {
 		LocalVerbosity(3,
 		    Intab(Sh);
-		    fprintf(Of, "%s (%.2f:%.2f/%.2f)\n", ClassName[T->Leaf],
+		    fprintf(Of, "%s (%.2f:%.2f/%.2f)\n", Context->schema.class_names[T->Leaf],
 			    T->Cases, LeafErrs, T->Errors))
 	    }
 	}
@@ -243,7 +243,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 	KnownCases   = Cases - MissingCases;
     }
 
-    SmallBranches = AllocZero(MaxClass+1, CaseCount);
+    SmallBranches = AllocZero(Context->schema.max_class+1, CaseCount);
     BranchCases   = Alloc(T->Forks+1, CaseCount);
 
     if ( Missing ) UnitWeights = 0;
@@ -317,7 +317,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
     if ( SmallBranchCases )
     {
 	BestClass = 1;
-	ForEach(c, 2, MaxClass)
+	ForEach(c, 2, Context->schema.max_class)
 	{
 	    if ( SmallBranches[c] > SmallBranches[BestClass] ) BestClass = c;
 	}
@@ -369,7 +369,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
     LocalVerbosity(2,
 	Intab(Sh);
 	fprintf(Of, "%s:  [%d%%  N=%.2f  tree=%.2f  leaf=%.2f+%.2f",
-		AttName[T->Tested],
+		Context->schema.attribute_names[T->Tested],
 		(int) ((TreeErrs * 100) / (T->Cases + 0.001)),
 		T->Cases, TreeErrs, LeafErrs, ExtraLeafErrs);
 	if ( BestBr )
@@ -385,7 +385,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
     {
 	LocalVerbosity(2,
 	    Intab(Sh);
-	    fprintf(Of, "Replaced with leaf %s\n", ClassName[T->Leaf]))
+	    fprintf(Of, "Replaced with leaf %s\n", Context->schema.class_names[T->Leaf]))
 
 	UnSprout(T);
 	T->Errors = LeafErrs + ExtraLeafErrs;
@@ -656,7 +656,7 @@ void InsertParents(Tree T, Tree P)
 /*************************************************************************/
 
 
-void CheckSubsets(Tree T, Boolean PruneDefaults)
+void CheckSubsets(c50_context *Context, Tree T, Boolean PruneDefaults)
 /*   ------------  */
 {
     Set		HoldValues;
@@ -669,7 +669,7 @@ void CheckSubsets(Tree T, Boolean PruneDefaults)
     {
 	A = T->Tested;
 
-	Bytes = (MaxAttVal[A]>>3) + 1;
+	Bytes = (Context->schema.max_attribute_value[A]>>3) + 1;
 	HoldValues = Alloc(Bytes, Byte);
 
 	/*  For non-ordered attributes the last (default) branch contains
@@ -702,7 +702,7 @@ void CheckSubsets(Tree T, Boolean PruneDefaults)
 
 	    if ( Ordered(A) )
 	    {
-		ForEach(vv, 1, MaxAttVal[A])
+		ForEach(vv, 1, Context->schema.max_attribute_value[A])
 		{
 		    if ( In(vv, T->Subset[v]) && ! In(vv, HoldValues) )
 		    {
@@ -713,7 +713,7 @@ void CheckSubsets(Tree T, Boolean PruneDefaults)
 
 	    CopyBits(Bytes, T->Subset[v], PossibleValues[A]);
 
-	    CheckSubsets(T->Branch[v], PruneDefaults);
+	    CheckSubsets(Context, T->Branch[v], PruneDefaults);
 	}
 
 	CopyBits(Bytes, HoldValues, PossibleValues[A]);
@@ -747,7 +747,7 @@ void CheckSubsets(Tree T, Boolean PruneDefaults)
 			    /*  Add class distribution from branch vv,
 				or replace if branch v has no cases  */
 
-			    ForEach(c, 1, MaxClass)
+			    ForEach(c, 1, Context->schema.max_class)
 			    {
 				if ( ! LeafBr->Cases )
 				{
@@ -793,7 +793,7 @@ void CheckSubsets(Tree T, Boolean PruneDefaults)
     {
 	ForEach(v, 1, T->Forks)
 	{
-	    CheckSubsets(T->Branch[v], PruneDefaults);
+	    CheckSubsets(Context, T->Branch[v], PruneDefaults);
 	}
     }
 }
@@ -923,7 +923,7 @@ void RestoreDistribs(c50_context *Context, Tree T)
 	if ( CostWeights )
 	{
 	    T->Cases = 0;
-	    ForEach(c, 1, MaxClass)
+	    ForEach(c, 1, Context->schema.max_class)
 	    {
 		Context->class_sum[c] = (T->ClassDist[c] /= WeightMul[c]);
 		T->Cases += T->ClassDist[c];
@@ -931,7 +931,7 @@ void RestoreDistribs(c50_context *Context, Tree T)
 	}
 	else
 	{
-	    ForEach(c, 1, MaxClass)
+	    ForEach(c, 1, Context->schema.max_class)
 	    {
 		Context->class_sum[c] = T->ClassDist[c];
 	    }
@@ -953,7 +953,7 @@ void RestoreDistribs(c50_context *Context, Tree T)
 /*************************************************************************/
 
 
-void CompressBranches(Tree T)
+void CompressBranches(c50_context *Context, Tree T)
 /*   ----------------  */
 {
     DiscrValue	v, vv, S=0, *LocalSet;
@@ -973,7 +973,7 @@ void CompressBranches(Tree T)
 	ForEach(v, 1, T->Forks)
 	{
 	    Br = T->Branch[v];
-	    CompressBranches(Br);
+	    CompressBranches(Context, Br);
 
 	    /*  Don't check if compression impossible  */
 
@@ -1015,7 +1015,7 @@ void CompressBranches(Tree T)
 	    OldBranch   = T->Branch;
 	    T->Branch	= Alloc(S+1, Tree);
 
-	    Bytes = (MaxAttVal[T->Tested]>>3) + 1;
+	    Bytes = (Context->schema.max_attribute_value[T->Tested]>>3) + 1;
 	    S = 0;
 
 	    ForEach(v, 1, T->Forks)
@@ -1026,7 +1026,7 @@ void CompressBranches(Tree T)
 		    Br = T->Branch[S] = OldBranch[v];
 		    if ( ! Br->ClassDist )
 		    {
-			Br->ClassDist = AllocZero(MaxClass+1, CaseCount);
+			Br->ClassDist = AllocZero(Context->schema.max_class+1, CaseCount);
 		    }
 		    T->Subset[S] = AllocZero(Bytes, Byte);
 
@@ -1043,7 +1043,7 @@ void CompressBranches(Tree T)
 
 			    Br->Cases  += OldBranch[vv]->Cases;
 			    Br->Errors += OldBranch[vv]->Errors;
-			    ForEach(c, 1, MaxClass)
+			    ForEach(c, 1, Context->schema.max_class)
 			    {
 				Br->ClassDist[c] += OldBranch[vv]->ClassDist[c];
 			    }
