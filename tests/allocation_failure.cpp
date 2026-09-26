@@ -4,6 +4,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <iterator>
+#include <limits>
 #include <new>
 #include <stdexcept>
 #include <string>
@@ -63,9 +66,19 @@ template<class F> static void exercise(const char *label, c50::context &context,
     }
 }
 
-int main()
+static std::string read_file(const std::string &path)
+{
+    std::ifstream stream(path);
+    if (!stream) throw std::runtime_error("cannot open fixture: " + path);
+    return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+}
+
+int main(int argc, char **argv)
 {
     try {
+        if (argc != 2) throw std::runtime_error("expected boosting fixture directory");
+        const auto boost_names = read_file(std::string(argv[1]) + "/boost.names");
+        const auto boost_data = read_file(std::string(argv[1]) + "/boost.data");
         c50::context context;
         exercise("load", context, [&] { c50::model::load(context, c50::model_kind::tree, names, tree); });
         exercise("train", context, [&] { c50::model::train(context, c50::model_kind::tree, names, data); });
@@ -93,6 +106,31 @@ int main()
                              category_names, serialized_rules);
         });
         exercise("predict rules", context, [&] { rules.predict(context, category_data); });
+        c50::options boosted;
+        boosted.trials = 3;
+        for (auto kind : {c50::model_kind::tree, c50::model_kind::rules}) {
+            auto ensemble = c50::model::train(context, kind, boost_names, boost_data, boosted);
+            const auto serialized = ensemble.serialized_data();
+            if (serialized.find("entries=\"3\"") == std::string::npos)
+                throw std::runtime_error("boosting fixture did not build three classifiers");
+            exercise(kind == c50::model_kind::tree ? "boosted tree" : "boosted rules", context, [&] {
+                c50::model::train(context, kind, boost_names, boost_data, boosted);
+            });
+            exercise("load ensemble", context, [&] {
+                c50::model::load(context, kind, boost_names, serialized);
+            });
+            exercise("predict ensemble", context, [&] { ensemble.predict(context, boost_data); });
+        }
+        const std::string dense_names = "no, yes.\nx: continuous.\ncolor: red, blue.\n";
+        const double missing = std::numeric_limits<double>::quiet_NaN();
+        const double values[] = {0, 0, 1, 0, 2, 1, 3, 1, missing, 1, 0, missing};
+        const std::size_t dense_classes[] = {0, 0, 1, 1, 1, 0};
+        const c50::dense_dataset dense(values, 6, 2, dense_classes);
+        exercise("dense train", context, [&] {
+            c50::model::train(context, c50::model_kind::tree, dense_names, dense);
+        });
+        auto dense_model = c50::model::train(context, c50::model_kind::tree, dense_names, dense);
+        exercise("dense predict", context, [&] { dense_model.predict(context, dense); });
         exercise("implicit boolean", context, [&] {
             c50::model::train(context, c50::model_kind::tree,
                 "no, yes.\nx: continuous.\nlarge := x > 1.\n", data);
