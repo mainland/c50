@@ -1,0 +1,7 @@
+case,actual,predicted,confidence,score(red),score(green),score(blue)
+1,red,red,0.833,0.833,0,0
+2,green,green,0.833,0,0.833,0
+3,green,green,0.833,0,0.833,0
+4,blue,blue,0.833,0,0,0.833
+5,blue,blue,0.833,0,0,0.833
+6,red,red,0.833,0.833,0,0

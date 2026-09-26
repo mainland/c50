@@ -1,0 +1,54 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `basic'
+	Use 70% of data for training
+	Random seed 17
+
+Read 14 cases (3 attributes) from basic.data
+
+Decision tree:
+
+signal = N/A: low (2.3/1.2)
+signal <= 4.5: low (5.8/0.4)
+signal > 4.5: high (5.8/0.4)
+
+
+Evaluation on training data (14 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     3    2(14.3%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     7          (a): class low
+	     2     5    (b): class high
+
+
+	Attribute usage:
+
+	     86%  signal
+
+
+Evaluation on test data (6 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     3    2(33.3%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     1          (a): class low
+	     2     3    (b): class high
+
+
+Time: <elapsed> secs

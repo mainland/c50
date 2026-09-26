@@ -1,0 +1,143 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `basic'
+	Cross-validate using 5 folds
+	Random seed 17
+
+Read 20 cases (3 attributes) from basic.data
+Read 7 cases from basic.test
+
+
+[ Fold 1 ]
+
+Decision tree:
+
+group = gamma: high (8)
+group = alpha:
+:...signal <= 4.5: low (4.6)
+:   signal > 4.5: high (3.4/0.4)
+group = beta:
+:...signal <= 5: low (3.6)
+    signal > 5: high (2.4/0.4)
+
+Evaluation on hold-out data (5 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     5    0( 0.0%)   <<
+
+
+[ Fold 2 ]
+
+Decision tree:
+
+group = gamma: high (7)
+group = alpha:
+:...signal = N/A: low (1.1)
+:   signal <= 4.5: low (2.3)
+:   signal > 4.5: high (4.6/0.6)
+group = beta:
+:...signal <= 4.5: low (4.7)
+    signal > 4.5: high (2.3/0.3)
+
+Evaluation on hold-out data (5 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     6    0( 0.0%)   <<
+
+
+[ Fold 3 ]
+
+Decision tree:
+
+group = gamma: high (8)
+group = alpha:
+:...signal = N/A: low (1.2)
+:   signal <= 3: low (2.3)
+:   signal > 3: high (3.5/0.5)
+group = beta:
+:...signal <= 5: low (4.7)
+    signal > 5: high (2.3/0.3)
+
+Evaluation on hold-out data (5 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     6    1(20.0%)   <<
+
+
+[ Fold 4 ]
+
+Decision tree:
+
+group = gamma: high (9)
+group = alpha:
+:...signal = N/A: low (1)
+:   signal <= 4.25: low (4)
+:   signal > 4.25: high (2)
+group = beta:
+:...signal <= 5: low (2.5)
+    signal > 5: high (2.5/0.5)
+
+Evaluation on hold-out data (6 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     6    0( 0.0%)   <<
+
+
+[ Fold 5 ]
+
+Decision tree:
+
+group = beta: low (3)
+group = gamma: high (8)
+group = alpha:
+:...signal = N/A: low (1.1)
+    signal <= 4.5: low (4.4)
+    signal > 4.5: high (4.4/0.4)
+
+Evaluation on hold-out data (6 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     5    2(33.3%)   <<
+
+
+[ Summary ]
+
+Fold	    Decision Tree
+----	  ----------------
+	  Size      Errors
+
+   1	     5        0.0%
+   2	     6        0.0%
+   3	     6       20.0%
+   4	     6        0.0%
+   5	     5       33.3%
+
+  Mean	   5.6       10.7%
+  SE	   0.2        6.9%
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	    10     1    (a): class low
+	     2    14    (b): class high
+
+
+Time: <elapsed> secs
