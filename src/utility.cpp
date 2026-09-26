@@ -911,7 +911,7 @@ void Cleanup(c50_context *Context)
 
     if ( Context->options.rules )
     {
-	FreeFormRuleData();
+	FreeFormRuleData(Context);
 	FreeSiftRuleData(Context);
     }
 
@@ -951,8 +951,8 @@ void Cleanup(c50_context *Context)
 	}						
 
 	FreeUnlessNil(Context->rules.sets);				Context->rules.sets = Nil;
-	FreeUnlessNil(LogCaseNo);			LogCaseNo = Nil;
-	FreeUnlessNil(LogFact);				LogFact = Nil;
+	FreeUnlessNil(Context->rule_build.log_case_count);			Context->rule_build.log_case_count = Nil;
+	FreeUnlessNil(Context->rule_build.log_factorial);				Context->rule_build.log_factorial = Nil;
     }
 
     FreeTreeData(Context);
