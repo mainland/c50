@@ -32,7 +32,6 @@
 /*************************************************************************/
 
 
-#include <algorithm>
 #include <utility>
 
 #include "defns.i"
@@ -136,50 +135,10 @@ void Cachesort(CaseNo Fp, CaseNo Lp, SortRec *SRec)
 /*************************************************************************/
 
 
-void Quicksort(c50_context *Context, CaseNo Fp, CaseNo Lp, Attribute Att)
-/*   ---------  */
+void SortCasesByAttribute(c50_context *Context, CaseNo Fp, CaseNo Lp,
+			  Attribute Att)
+/*   --------------------  */
 {
-    CaseNo	i, Middle, High;
-    ContValue	Thresh, Val;
-
-    if ( Fp < Lp )
-    {
-	Thresh = CVal(Context->cases.records[(Fp+Lp) / 2], Att);
-
-	/*  Divide cases into three groups:
-		Fp .. Middle-1: values < Thresh
-		Middle .. High: values = Thresh
-		High+1 .. Lp:   values > Thresh  */
-
-	for ( Middle = Fp ; CVal(Context->cases.records[Middle], Att) < Thresh ; Middle++ )
-	    ;
-
-	for ( High = Lp ; CVal(Context->cases.records[High], Att) > Thresh ; High-- )
-	    ;
-
-	for ( i = Middle ; i <= High ; )
-	{
-	    if ( (Val = CVal(Context->cases.records[i], Att)) < Thresh )
-	    {
-		Swap(Middle, i);
-		Middle++;
-		i++;
-	    }
-	    else
-	    if ( Val > Thresh )
-	    {
-		Swap(High, i);
-		High--;
-	    }
-	    else
-	    {
-		i++;
-	    }
-	}
-
-	/*  Sort the first and third groups  */
-
-	Quicksort(Context, Fp, Middle-1, Att);
-	Quicksort(Context, High+1, Lp, Att);
-    }
+    PartitionSort(Context->cases.records, Fp, Lp,
+		  [Att](DataRec Case) { return CVal(Case, Att); });
 }

@@ -126,6 +126,7 @@ run_case basic rules rules -r
 run_case basic subsets tree -s
 run_case basic winnow tree -w
 run_case basic soft-thresholds tree -p
+run_case soft-threshold-ties soft-thresholds tree -p
 run_case basic sample tree -S 70 -I 17
 run_case basic costs tree --with-costs
 run_case basic cross-validation - -X 5 -I 17
