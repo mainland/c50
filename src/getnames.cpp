@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: bound names in silent parsing. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -90,7 +91,7 @@ Boolean ReadNameInput(c50_context *Context, c50_input *f, String s, int n,
     {
 	if ( --n <= 0 )
 	{
-	    if ( Context->io.output ) Error(Context, LONGNAME, "", "");
+	    Error(Context, LONGNAME, "", "");
 	}
 
 	if ( c == '.' )
