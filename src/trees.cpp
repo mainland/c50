@@ -35,6 +35,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include <memory>
 #include "c50_api_internal.h"
 
 
@@ -529,6 +530,7 @@ Tree Leaf(c50_context *Context, double *Freq, ClassNo NodeClass,
     ClassNo	c;
 
     Node = AllocZero(1, TreeRec);
+    std::unique_ptr<TreeRec, decltype(&FreeTree)> owner(Node, &FreeTree);
 
     Node->ClassDist = AllocZero(Context->schema.max_class+1, CaseCount);
     if ( Freq )
@@ -544,7 +546,7 @@ Tree Leaf(c50_context *Context, double *Freq, ClassNo NodeClass,
     Node->Cases		= Cases;
     Node->Errors	= Errors;
 
-    return Node;
+    return owner.release();
 }
 
 
@@ -702,6 +704,10 @@ Tree CopyTree(c50_context *Context, Tree T)
 
     New = Alloc(1, TreeRec);
     memcpy(New, T, sizeof(TreeRec));
+    New->ClassDist = Nil;
+    New->Subset = Nil;
+    New->Branch = Nil;
+    std::unique_ptr<TreeRec, decltype(&FreeTree)> owner(New, &FreeTree);
 
     New->ClassDist = Alloc(Context->schema.max_class+1, CaseCount);
     memcpy(New->ClassDist, T->ClassDist, (Context->schema.max_class + 1) * sizeof(CaseCount));
@@ -727,5 +733,5 @@ Tree CopyTree(c50_context *Context, Tree T)
 	}
     }
 
-    return New;
+    return owner.release();
 }
