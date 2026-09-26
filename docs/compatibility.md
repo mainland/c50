@@ -109,3 +109,7 @@ rule-tree nodes until publication. Cleanup also releases partially allocated
 rule scratch buffers and normalized costs. Allocation failures during rule
 training, loading, and prediction leave the context reusable without leaks.
 These changes do not alter successful rule selection or classifier output.
+
+Subset pruning releases partially allocated per-attribute value sets and local
+scratch arrays if allocation fails. This affects failure cleanup only. Subset
+selection, rule contents, and successful predictions are unchanged.

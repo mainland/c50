@@ -1,4 +1,4 @@
-/* Modified 2026 by Geoffrey Mainland: remove unused bookkeeping. */
+/* Modified 2026 by Geoffrey Mainland: exception-safe subset pruning and warning cleanup. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -38,6 +38,7 @@
 #include "defns.i"
 #include "extern.i"
 #include "c50_api_internal.h"
+#include <memory>
 
 
 /*************************************************************************/
@@ -871,19 +872,23 @@ CaseCount CalculateDeltaErrs(c50_context *Context)
 void PruneSubsets(c50_context *Context)
 /*   ------------  */
 {
-    Set		*PossibleValues;
-    Attribute	Att, *Atts, Last;
-    int		*Bytes, d, NAtts, j, b;
+    Attribute	Att, Last;
+    int		d, NAtts, j, b;
     CaseNo	i;
     CRule	R;
     RuleNo	r;
 
     /*  Allocate subsets for possible values  */
 
-    Atts  = Alloc(Context->schema.max_attribute+1, Attribute);
-    Bytes = Alloc(Context->schema.max_attribute+1, int);
-
-    PossibleValues = AllocZero(Context->schema.max_attribute+1, Set);
+    std::unique_ptr<Attribute[], decltype(&free)> Atts(
+        Alloc(Context->schema.max_attribute+1, Attribute), &free);
+    std::unique_ptr<int[], decltype(&free)> Bytes(
+        Alloc(Context->schema.max_attribute+1, int), &free);
+    auto FreeValues = [Context](Set *Values) {
+        FreeVector((void **) Values, 1, Context->schema.max_attribute);
+    };
+    std::unique_ptr<Set[], decltype(FreeValues)> PossibleValues(
+        AllocZero(Context->schema.max_attribute+1, Set), FreeValues);
     ForEach(Att, 1, Context->schema.max_attribute)
     {
 	if ( Context->schema.max_attribute_value[Att] > 3 )
@@ -948,10 +953,6 @@ void PruneSubsets(c50_context *Context)
 	    }
 	}
     }
-
-    FreeVector((void **) PossibleValues, 1, Context->schema.max_attribute);
-    Free(Bytes);
-    Free(Atts);
 }
 
 
