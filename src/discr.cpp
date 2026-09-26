@@ -38,12 +38,12 @@
 
 /*************************************************************************/
 /*									 */
-/*	Set Context->splits.information[] and Context->splits.gain[] for discrete partition of cases		 */
+/*	Set result information and gain for a discrete partition of cases		 */
 /*									 */
 /*************************************************************************/
 
 
-void EvalDiscreteAtt(c50_context *Context, SplitWorkspace &Workspace, Attribute Att, CaseCount Cases)
+void EvalDiscreteAtt(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Result, Attribute Att, CaseCount Cases)
 /*   ---------------  */
 {
     CaseCount	KnownCases;
@@ -70,9 +70,9 @@ void EvalDiscreteAtt(c50_context *Context, SplitWorkspace &Workspace, Attribute 
     BaseInfo = ( ! Workspace.ValFreq[0] ? Context->splits.base_information :
 		     DiscrKnownBaseInfo(Context, Workspace, KnownCases, Context->schema.max_attribute_value[Att]) );
 
-    Context->splits.gain[Att] = ComputeGain(Context, Workspace, BaseInfo, Workspace.ValFreq[0] / Cases, Context->schema.max_attribute_value[Att],
+    Result.Gain = ComputeGain(Context, Workspace, BaseInfo, Workspace.ValFreq[0] / Cases, Context->schema.max_attribute_value[Att],
 			    KnownCases);
-    Context->splits.information[Att] = TotalInfo(Workspace.ValFreq, 0, Context->schema.max_attribute_value[Att]) / Cases;
+    Result.Information = TotalInfo(Workspace.ValFreq, 0, Context->schema.max_attribute_value[Att]) / Cases;
 
     Verbosity(2,
     {
@@ -81,7 +81,7 @@ void EvalDiscreteAtt(c50_context *Context, SplitWorkspace &Workspace, Attribute 
 	    PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], Workspace.Freq, Workspace.ValFreq,
 			      true))
 	fprintf(Context->io.output, "\tinf %.3f, gain %.3f\n",
-		Context->splits.information[Att], Context->splits.gain[Att]);
+		Result.Information, Result.Gain);
     })
 }
 
@@ -89,12 +89,12 @@ void EvalDiscreteAtt(c50_context *Context, SplitWorkspace &Workspace, Attribute 
 
 /*************************************************************************/
 /*									 */
-/*	Set Context->splits.information[] and Context->splits.gain[] for ordered split on cases		 */
+/*	Set result information and gain for an ordered split on cases		 */
 /*									 */
 /*************************************************************************/
 
 
-void EvalOrderedAtt(c50_context *Context, SplitWorkspace &Workspace, Attribute Att, CaseCount Cases)
+void EvalOrderedAtt(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Result, Attribute Att, CaseCount Cases)
 /*   --------------  */
 {
     CaseCount	KnownCases;
@@ -186,13 +186,13 @@ void EvalOrderedAtt(c50_context *Context, SplitWorkspace &Workspace, Attribute A
     }
     else
     {
-	Context->splits.gain[Att] = BestGain;
-	Context->splits.information[Att] = BestInfo;
-	Context->splits.thresholds[Att]  = BestV;
+	Result.Gain = BestGain;
+	Result.Information = BestInfo;
+	Result.Threshold  = BestV;
 
 	Verbosity(2,
 	    fprintf(Context->io.output, "\tcut=%g, inf %.3f, gain %.3f\n",
-		   Context->splits.thresholds[Att], Context->splits.information[Att], Context->splits.gain[Att]))
+		   Result.Threshold, Result.Information, Result.Gain))
     }
 }
 
