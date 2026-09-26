@@ -61,8 +61,8 @@ Boolean ReadNameInput(c50_context *Context, c50_input *f, String s, int n,
 		      char ColonOpt)
 /*      -------------  */
 {
-    register char *Sp=s;
-    register int  c;
+    char *Sp=s;
+    int  c;
     char	  Msg[2];
 
     /*  Skip to first non-space character  */
@@ -429,7 +429,7 @@ void GetNames(c50_context *Context, c50_input *Nf)
 	}
     }
 
-    Context->schema.class_names[0] = "?";
+    Context->schema.class_names[0] = Context->schema.unknown_class_name;
 
     if ( Context->io.error_count > 0 ) Goodbye(1);
 }

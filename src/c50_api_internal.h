@@ -52,6 +52,8 @@ typedef struct
     int max_attribute;
     int max_class;
     int max_discrete_value;
+    char unknown_class_name[2];
+    char other_attribute_value_name[8];
     char **class_names;
     char **attribute_names;
     char ***attribute_value_names;
@@ -261,7 +263,7 @@ typedef struct
     int attribute_exclusions;
     int timestamp_base;
     int random_initial_seed;
-    char *file_stem;
+    const char *file_stem;
     char file_name[500];
     FILE *model_file;
     FILE *output;
