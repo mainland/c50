@@ -142,6 +142,28 @@ if(BUILD_TESTING)
     add_test(NAME cpp-validation COMMAND c50_cpp_validation)
 endif()
 
+if(BUILD_TESTING)
+    add_executable(c50_reference_compatibility tests/reference_compatibility.cpp)
+    target_include_directories(c50_reference_compatibility PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(c50_reference_compatibility PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_reference_compatibility)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_reference_compatibility)
+    add_test(NAME reference-compatibility COMMAND c50_reference_compatibility)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(c50_api_prediction_probe tests/api_prediction_probe.cpp)
+    target_link_libraries(c50_api_prediction_probe PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_api_prediction_probe)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_api_prediction_probe)
+    if(CMAKE_NM AND UNIX)
+        add_test(NAME writable-global-inventory COMMAND
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_writable_globals.sh"
+            "${CMAKE_NM}" "$<TARGET_FILE:c50_core>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/expected/writable-globals.txt")
+    endif()
+endif()
+
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     foreach(target IN LISTS C50_COMPILE_TARGETS)
         target_compile_options(${target} PRIVATE -ffloat-store)
@@ -199,6 +221,7 @@ if(BUILD_TESTING)
             ${CMAKE_COMMAND} -E env
             "C50_BINARY=$<TARGET_FILE:c50_cli>"
             "C50_PREDICTION_BINARY=$<TARGET_FILE:c50_prediction_probe>"
+            "C50_API_PREDICTION_BINARY=$<TARGET_FILE:c50_api_prediction_probe>"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_predictions.sh"
     )
 endif()
