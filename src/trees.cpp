@@ -89,7 +89,7 @@ void FindDepth(Tree T)
 /*************************************************************************/
 
 
-void PrintTree(Tree T, String Title)
+void PrintTree(Tree T, const char *Title)
 /*   ---------  */
 {
     int s;

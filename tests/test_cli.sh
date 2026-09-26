@@ -129,6 +129,7 @@ run_case basic soft-thresholds tree -p
 run_case basic sample tree -S 70 -I 17
 run_case basic costs tree --with-costs
 run_case basic cross-validation - -X 5 -I 17
+run_case print-rounding cross-validation - -X 3 -b -I 3
 run_case boost boost tree -t 5
 run_case case-weight case-weight tree
 run_case implicit implicit tree

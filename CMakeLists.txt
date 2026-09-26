@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(C50 VERSION 2.07 LANGUAGES C)
+project(C50 VERSION 2.07 LANGUAGES C CXX)
 
 option(C50_ENABLE_SANITIZERS
        "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
@@ -8,47 +8,53 @@ option(C50_ENABLE_SANITIZERS
 include(CTest)
 
 set(C50_CORE_SOURCES
-    src/attwinnow.c
-    src/classify.c
-    src/confmat.c
-    src/construct.c
-    src/contin.c
-    src/discr.c
-    src/formrules.c
-    src/formtree.c
-    src/getdata.c
-    src/getnames.c
-    src/global.c
-    src/implicitatt.c
-    src/info.c
-    src/mcost.c
-    src/modelfiles.c
-    src/p-thresh.c
-    src/prune.c
-    src/rules.c
-    src/ruletree.c
-    src/siftrules.c
-    src/sort.c
-    src/subset.c
-    src/trees.c
-    src/update.c
-    src/utility.c
-    src/xval.c
+    src/attwinnow.cpp
+    src/classify.cpp
+    src/confmat.cpp
+    src/construct.cpp
+    src/contin.cpp
+    src/discr.cpp
+    src/formrules.cpp
+    src/formtree.cpp
+    src/getdata.cpp
+    src/getnames.cpp
+    src/global.cpp
+    src/implicitatt.cpp
+    src/info.cpp
+    src/mcost.cpp
+    src/modelfiles.cpp
+    src/p-thresh.cpp
+    src/prune.cpp
+    src/rules.cpp
+    src/ruletree.cpp
+    src/siftrules.cpp
+    src/sort.cpp
+    src/subset.cpp
+    src/trees.cpp
+    src/update.cpp
+    src/utility.cpp
+    src/xval.cpp
 )
 
-add_executable(c50_cli src/c50.c ${C50_CORE_SOURCES})
+add_library(c50_core STATIC ${C50_CORE_SOURCES})
+add_library(C50::core ALIAS c50_core)
+target_compile_features(c50_core PUBLIC cxx_std_17)
+set_target_properties(c50_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+add_executable(c50_cli src/c50.cpp)
+target_link_libraries(c50_cli PRIVATE C50::core)
 set_target_properties(c50_cli PROPERTIES OUTPUT_NAME c5.0)
 
 add_executable(c50_report src/report.c)
 set_target_properties(c50_report PROPERTIES OUTPUT_NAME report)
 
-set(C50_TARGETS c50_cli c50_report)
+set(C50_COMPILE_TARGETS c50_core c50_cli c50_report)
+set(C50_EXECUTABLE_TARGETS c50_cli c50_report)
 
 if(BUILD_TESTING)
     add_executable(
         c50_prediction_probe
-        tests/prediction_probe.c
-        ${C50_CORE_SOURCES}
+        tests/prediction_probe.cpp
     )
     target_include_directories(
         c50_prediction_probe
@@ -58,24 +64,25 @@ if(BUILD_TESTING)
         c50_prediction_probe
         PROPERTIES OUTPUT_NAME prediction-probe
     )
-    list(APPEND C50_TARGETS c50_prediction_probe)
+    target_link_libraries(c50_prediction_probe PRIVATE C50::core)
+    list(APPEND C50_COMPILE_TARGETS c50_prediction_probe)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_prediction_probe)
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    foreach(target IN LISTS C50_TARGETS)
+    foreach(target IN LISTS C50_COMPILE_TARGETS)
         target_compile_options(${target} PRIVATE -ffloat-store)
     endforeach()
 endif()
 
 if(NOT MSVC)
-    foreach(target IN LISTS C50_TARGETS)
-        target_link_libraries(${target} PRIVATE m)
-    endforeach()
+    target_link_libraries(c50_core PUBLIC m)
+    target_link_libraries(c50_report PRIVATE m)
 endif()
 
 if(C50_ENABLE_SANITIZERS)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-        foreach(target IN LISTS C50_TARGETS)
+        foreach(target IN LISTS C50_COMPILE_TARGETS)
             target_compile_options(
                 ${target}
                 PRIVATE
@@ -83,6 +90,8 @@ if(C50_ENABLE_SANITIZERS)
                     -fno-omit-frame-pointer
                     -fno-sanitize-recover=all
             )
+        endforeach()
+        foreach(target IN LISTS C50_EXECUTABLE_TARGETS)
             target_link_options(
                 ${target}
                 PRIVATE

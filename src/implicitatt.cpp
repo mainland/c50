@@ -640,7 +640,7 @@ Attribute FindAttName()
 /*************************************************************************/
 
 
-void DefSyntaxError(String Msg)
+void DefSyntaxError(const char *Msg)
 /*   --------------  */
 {
     String	RestOfText;
@@ -670,7 +670,7 @@ void DefSyntaxError(String Msg)
 
 
 
-void DefSemanticsError(int Fi, String Msg, int OpCode)
+void DefSemanticsError(int Fi, const char *Msg, int OpCode)
 /*   -----------------  */
 {
     char	Exp[1000], XMsg[1008], Op[1000];

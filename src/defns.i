@@ -93,8 +93,6 @@
 #define	 THEORYFRAC	0.23	/* discount rate for estimated coding cost */
 
 #define	 Nil	   0		/* null pointer */
-#define	 false	   0
-#define	 true	   1
 #define	 None	   -1
 #define	 Epsilon   1E-4
 #define	 MinLeaf   0.05		/* minimum weight for non-null leaf */
@@ -163,7 +161,7 @@
 #define  Space(s)	(s == ' ' || s == '\n' || s == '\r' || s == '\t')
 #define  SkipComment	while ( ( c = InChar(f) ) != '\n' && c != EOF )
 
-#define	 P1(x)		(rint((x)*10) / 10)
+#define	 P1(x)		(rint((double) ((x) * 10)) / 10)
 
 #define	 No(f,l)	((l)-(f)+1)
 
@@ -492,8 +490,8 @@ Boolean	    Atom(void);
 Boolean	    Find(String S);
 int	    FindOne(String *Alt);
 Attribute   FindAttName(void);
-void	    DefSyntaxError(String Msg);
-void	    DefSemanticsError(int Fi, String Msg, int OpCode);
+void	    DefSyntaxError(const char *Msg);
+void	    DefSemanticsError(int Fi, const char *Msg, int OpCode);
 void	    Dump(char OpCode, ContValue F, String S, int Fi);
 void	    DumpOp(char OpCode, int Fi);
 Boolean	    UpdateTStack(char OpCode, ContValue F, String S, int Fi);
@@ -629,7 +627,7 @@ void	    Cachesort(CaseNo Fp, CaseNo Lp, SortRec *SRec);
 	/* trees.c */
 
 void	    FindDepth(Tree T);
-void	    PrintTree(Tree T, String Title);
+void	    PrintTree(Tree T, const char *Title);
 void	    Show(Tree T, int Sh);
 void	    ShowBranch(int Sh, Tree T, DiscrValue v, DiscrValue BrNo);
 DiscrValue  Elements(Attribute Att, Set S, DiscrValue *Last);
@@ -647,8 +645,8 @@ Tree	    CopyTree(Tree T);
 
 	/* utility.c */
 
-void	    PrintHeader(String Title);
-char	    ProcessOption(int Argc, char **Argv, char *Str);
+void	    PrintHeader(const char *Title);
+char	    ProcessOption(int Argc, char **Argv, const char *Str);
 void	    *Pmalloc(size_t Bytes);
 void	    *Prealloc(void *Present, size_t Bytes);
 void	    *Pcalloc(size_t Number, unsigned int Size);
@@ -658,9 +656,9 @@ void	    FreeCases(void);
 void	    FreeLastCase(DataRec Case);
 double	    KRandom(void);
 void	    ResetKR(int KRInit);
-void	    Error(int ErrNo, String S1, String S2);
+void	    Error(int ErrNo, const char *S1, const char *S2);
 String	    CaseLabel(CaseNo N);
-FILE *	    GetFile(String Extension, String RW);
+FILE *	    GetFile(const char *Extension, const char *RW);
 double	    ExecTime(void);
 int	    Denominator(ContValue Val);
 int	    GetInt(String S, int N);
@@ -713,7 +711,7 @@ Boolean	    SameRule(RuleNo r, Condition Cond[], int NConds,
 		     ClassNo TargetClass);
 void	    FreeRule(CRule R);
 void	    FreeRules(CRuleSet RS);
-void	    PrintRules(CRuleSet, String);
+void	    PrintRules(CRuleSet, const char *);
 void	    PrintRule(CRule R);
 void	    PrintCondition(Condition C);
 
@@ -751,18 +749,18 @@ void	    FreeRuleTree(RuleTree RT);
 
 	/* modelfiles.c */
 
-void	    CheckFile(String Extension, Boolean Write);
-void	    WriteFilePrefix(String Extension);
-void	    ReadFilePrefix(String Extension);
+void	    CheckFile(const char *Extension, Boolean Write);
+void	    WriteFilePrefix(const char *Extension);
+void	    ReadFilePrefix(const char *Extension);
 void	    SaveDiscreteNames(void);
-void	    SaveTree(Tree T, String Extension);
+void	    SaveTree(Tree T, const char *Extension);
 void	    OutTree(Tree T);
-void	    SaveRules(CRuleSet RS, String Extension);
-void	    AsciiOut(String Pre, String S);
+void	    SaveRules(CRuleSet RS, const char *Extension);
+void	    AsciiOut(const char *Pre, String S);
 void	    ReadHeader(void);
-Tree	    GetTree(String Extension);
+Tree	    GetTree(const char *Extension);
 Tree	    InTree(void);
-CRuleSet    GetRules(String Extension);
+CRuleSet    GetRules(const char *Extension);
 CRuleSet    InRules(void);
 CRule	    InRule(void);
 Condition   InCondition(void);
