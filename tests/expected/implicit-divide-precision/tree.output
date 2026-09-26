@@ -1,0 +1,42 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `implicit-divide-precision'
+
+Read 40 cases (3 attributes) from implicit-divide-precision.data
+
+Attributes excluded:
+    a
+    b
+
+Decision tree:
+
+r <= 0.1662537: low (20)
+r > 0.1662537: high (20)
+
+
+Evaluation on training data (40 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2    0( 0.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	    20          (a): class low
+	          20    (b): class high
+
+
+	Attribute usage:
+
+	    100%  a
+	    100%  b
+	    100%  r
+
+
+Time: <elapsed> secs
