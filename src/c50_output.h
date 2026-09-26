@@ -4,6 +4,7 @@
 #ifndef C50_OUTPUT_H
 #define C50_OUTPUT_H
 
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -30,6 +31,8 @@ void c50_output_init_file(c50_output *output, FILE *file, int owns_file);
 void c50_output_init_memory(c50_output *output);
 
 int c50_output_printf(c50_output *output, const char *format, ...);
+int c50_output_vprintf(c50_output *output, const char *format,
+                       va_list arguments);
 int c50_output_putc(int c, c50_output *output);
 
 /*

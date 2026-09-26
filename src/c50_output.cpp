@@ -50,15 +50,24 @@ void c50_output_init_memory(c50_output *output)
 
 int c50_output_printf(c50_output *output, const char *format, ...)
 {
-    int length, result;
-    va_list arguments, copy;
+    int result;
+    va_list arguments;
 
     va_start(arguments, format);
+    result = c50_output_vprintf(output, format, arguments);
+    va_end(arguments);
+    return result;
+}
+
+int c50_output_vprintf(c50_output *output, const char *format,
+                       va_list arguments)
+{
+    int length, result;
+    va_list copy;
+
     if ( output->kind == C50_OUTPUT_FILE )
     {
-        result = vfprintf(output->file, format, arguments);
-        va_end(arguments);
-        return result;
+        return vfprintf(output->file, format, arguments);
     }
 
     va_copy(copy, arguments);
@@ -66,13 +75,11 @@ int c50_output_printf(c50_output *output, const char *format, ...)
     va_end(copy);
     if ( length < 0 || ! Reserve(output, (size_t) length) )
     {
-        va_end(arguments);
         return -1;
     }
 
     result = vsnprintf((char *) output->data + output->size,
                        output->capacity - output->size, format, arguments);
-    va_end(arguments);
     if ( result < 0 ) return -1;
     output->size += (size_t) result;
     return result;
