@@ -14,15 +14,21 @@ typedef enum c50_output_kind
     C50_OUTPUT_MEMORY
 } c50_output_kind;
 
-typedef struct c50_output
+struct c50_output
 {
+    c50_output() noexcept;
+    ~c50_output();
+
+    c50_output(const c50_output &) = delete;
+    c50_output &operator=(const c50_output &) = delete;
+
     c50_output_kind kind;
     FILE *file;
     unsigned char *data;
     size_t size;
     size_t capacity;
     int owns_file;
-} c50_output;
+};
 
 /* Initialize an output that writes to file. */
 void c50_output_init_file(c50_output *output, FILE *file, int owns_file);

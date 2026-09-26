@@ -1,0 +1,28 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `error-limit'
+
+*** line 1 of `error-limit.data': bad value of `zeta' for attribute `group'
+
+*** line 2 of `error-limit.data': bad value of `zeta' for attribute `group'
+
+*** line 3 of `error-limit.data': bad value of `zeta' for attribute `group'
+
+*** line 4 of `error-limit.data': bad value of `zeta' for attribute `group'
+
+*** line 5 of `error-limit.data': bad value of `zeta' for attribute `group'
+
+*** line 6 of `error-limit.data': bad value of `zeta' for attribute `group'
+
+*** line 7 of `error-limit.data': bad value of `zeta' for attribute `group'
+
+*** line 8 of `error-limit.data': bad value of `zeta' for attribute `group'
+
+*** line 9 of `error-limit.data': bad value of `zeta' for attribute `group'
+
+*** line 10 of `error-limit.data': bad value of `zeta' for attribute `group'
+
+Error limit exceeded
