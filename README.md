@@ -35,6 +35,13 @@ This builds:
 - `c5.0`, the classifier training and evaluation program.
 - `report`, the cross-validation report generator.
 
+CMake is also supported:
+
+```sh
+cmake -S . -B build
+cmake --build build
+```
+
 Run `./c5.0 -h` to see the available command-line options. C5.0 uses a file stem
 to locate inputs such as `<stem>.names`, `<stem>.data`, and optional
 `<stem>.test` and `<stem>.costs` files:

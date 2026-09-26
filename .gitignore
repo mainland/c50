@@ -4,3 +4,5 @@
 /c5.0dbg
 /report
 /src/c50gt.c
+/build/
+/cmake-build-*/
