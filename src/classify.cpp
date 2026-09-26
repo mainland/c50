@@ -33,14 +33,7 @@
 
 #include "defns.i"
 #include "extern.i"
-
-
-	/* Local data used by MarkActive and RuleClassify.
-	   Note: Active is never deallocated, just grows as required */
-
-RuleNo	*Active=Nil,	/* rules that fire while classifying case */
-	NActive,	/* number ditto */
-	ActiveSpace=0;	/* space allocated */
+#include "c50_api_internal.h"
 
 
 
@@ -51,19 +44,19 @@ RuleNo	*Active=Nil,	/* rules that fire while classifying case */
 /*************************************************************************/
 
 
-ClassNo TreeClassify(DataRec Case, Tree DecisionTree)
+ClassNo TreeClassify(c50_context *Context, DataRec Case, Tree DecisionTree)
 /*      ------------  */
 {
     ClassNo	c;
 
     ForEach(c, 0, MaxClass)
     {
-	ClassSum[c] = 0;
+	Context->class_sum[c] = 0;
     }
 
-    FindLeaf(Case, DecisionTree, Nil, 1.0);
+    FindLeaf(Context, Case, DecisionTree, Nil, 1.0);
 
-    return SelectClass(1, (Boolean)(MCost != Nil));
+    return SelectClass(Context, 1, (Boolean)(MCost != Nil));
 }
 
 
@@ -71,12 +64,13 @@ ClassNo TreeClassify(DataRec Case, Tree DecisionTree)
 /*************************************************************************/
 /*                                                              	 */
 /*	Classify a case using the given subtree.			 */
-/*	Adjust the value ClassSum for each class			 */
+/*	Adjust the class sum for each class				 */
 /*                                                              	 */
 /*************************************************************************/
 
 
-void FindLeaf(DataRec Case, Tree T, Tree PT, float Fraction)
+void FindLeaf(c50_context *Context, DataRec Case, Tree T, Tree PT,
+	      float Fraction)
 /*   --------  */
 {
     DiscrValue	v, Dv;
@@ -87,7 +81,7 @@ void FindLeaf(DataRec Case, Tree T, Tree PT, float Fraction)
 
     if ( T->NodeType && Skip(T->Tested) )
     {
-	FollowAllBranches(Case, T, Fraction);
+	FollowAllBranches(Context, Case, T, Fraction);
 	return;
     }
 
@@ -113,7 +107,7 @@ void FindLeaf(DataRec Case, Tree T, Tree PT, float Fraction)
 
 	    ForEach(c, 1, MaxClass)
 	    {
-		ClassSum[c] += Fraction * T->ClassDist[c] / T->Cases;
+		Context->class_sum[c] += Fraction * T->ClassDist[c] / T->Cases;
 	    }
 
 	    return;
@@ -124,11 +118,11 @@ void FindLeaf(DataRec Case, Tree T, Tree PT, float Fraction)
 
 	    if ( Dv <= T->Forks )	/*  Make sure not new discrete value  */
 	    {
-		FindLeaf(Case, T->Branch[Dv], T, Fraction);
+		FindLeaf(Context, Case, T->Branch[Dv], T, Fraction);
 	    }
 	    else
 	    {
-		FollowAllBranches(Case, T, Fraction);
+		FollowAllBranches(Context, Case, T, Fraction);
 	    }
 
 	    return;
@@ -137,12 +131,12 @@ void FindLeaf(DataRec Case, Tree T, Tree PT, float Fraction)
 
 	    if ( Unknown(Case, T->Tested) )
 	    {
-		FollowAllBranches(Case, T, Fraction);
+		FollowAllBranches(Context, Case, T, Fraction);
 	    }
 	    else
 	    if ( NotApplic(Case, T->Tested) )
 	    {
-		FindLeaf(Case, T->Branch[1], T, Fraction);
+		FindLeaf(Context, Case, T->Branch[1], T, Fraction);
 	    }
 	    else
 	    {
@@ -156,7 +150,7 @@ void FindLeaf(DataRec Case, Tree T, Tree PT, float Fraction)
 		{
 		    if ( (NewFrac = Fraction * BrWt[v]) >= 0.01 )
 		    {
-			FindLeaf(Case, T->Branch[v], T, NewFrac);
+			FindLeaf(Context, Case, T->Branch[v], T, NewFrac);
 		    }
 		}
 	    }
@@ -173,7 +167,7 @@ void FindLeaf(DataRec Case, Tree T, Tree PT, float Fraction)
 		{
 		    if ( In(Dv, T->Subset[v]) )
 		    {
-			FindLeaf(Case, T->Branch[v], T, Fraction);
+			FindLeaf(Context, Case, T->Branch[v], T, Fraction);
 
 			return;
 		    }
@@ -185,7 +179,7 @@ void FindLeaf(DataRec Case, Tree T, Tree PT, float Fraction)
 	    }
 	    else
 	    {
-		FollowAllBranches(Case, T, Fraction);
+		FollowAllBranches(Context, Case, T, Fraction);
 	    }
     }
 }
@@ -200,7 +194,8 @@ void FindLeaf(DataRec Case, Tree T, Tree PT, float Fraction)
 /*************************************************************************/
 
 
-void FollowAllBranches(DataRec Case, Tree T, float Fraction)
+void FollowAllBranches(c50_context *Context, DataRec Case, Tree T,
+		       float Fraction)
 /*   -----------------  */
 {
     DiscrValue	v;
@@ -209,7 +204,7 @@ void FollowAllBranches(DataRec Case, Tree T, float Fraction)
     {
 	if ( T->Branch[v]->Cases > Epsilon )
 	{
-	    FindLeaf(Case, T->Branch[v], T,
+	    FindLeaf(Context, Case, T->Branch[v], T,
 		     (Fraction * T->Branch[v]->Cases) / T->Cases);
 	}
     }
@@ -224,7 +219,7 @@ void FollowAllBranches(DataRec Case, Tree T, float Fraction)
 /*************************************************************************/
 
 
-ClassNo RuleClassify(DataRec Case, CRuleSet RS)
+ClassNo RuleClassify(c50_context *Context, DataRec Case, CRuleSet RS)
 /*      ------------  */
 {
     ClassNo	c, Best;
@@ -235,17 +230,17 @@ ClassNo RuleClassify(DataRec Case, CRuleSet RS)
 
     ForEach(c, 0, MaxClass)
     {
-	ClassSum[c] = 0;
-	MostSpec[c] = Nil;
+	Context->class_sum[c] = 0;
+	Context->most_specific_rules[c] = Nil;
     }
 
     /*  Find active rules  */
 
-    NActive = 0;
+    Context->active_rule_count = 0;
 
     if ( RS->RT )
     {
-	MarkActive(RS->RT, Case);
+	MarkActive(Context, RS->RT, Case);
     }
     else
     {
@@ -255,7 +250,7 @@ ClassNo RuleClassify(DataRec Case, CRuleSet RS)
 
 	    if ( Matches(R, Case) )
 	    {
-		Active[NActive++] = r;
+		Context->active_rules[Context->active_rule_count++] = r;
 	    }
 	}
     }
@@ -264,14 +259,14 @@ ClassNo RuleClassify(DataRec Case, CRuleSet RS)
 
     if ( UtilBand )
     {
-	SortActive();
+	SortActive(Context);
     }
 
     /*  Vote active rules  */
 
-    ForEach(a, 0, NActive-1)
+    ForEach(a, 0, Context->active_rule_count-1)
     {
-	r = Active[a];
+	r = Context->active_rules[a];
 	R = RS->SRule[r];
 
 	if ( Tested )
@@ -281,19 +276,22 @@ ClassNo RuleClassify(DataRec Case, CRuleSet RS)
 		Tested[R->Lhs[d]->Tested] = true;	/* for usage */
 	    }
 	}
-	if ( UtilBand ) CheckUtilityBand(&u, r, Class(Case), RS->SDefault);
-	ClassSum[R->Rhs] += R->Vote;
+	if ( UtilBand )
+	{
+	    CheckUtilityBand(Context, &u, r, Class(Case), RS->SDefault);
+	}
+	Context->class_sum[R->Rhs] += R->Vote;
 	TotWeight        += 1000.0;
 
 	/*  Check whether this is the most specific rule for this class;
 	    resolve ties in favor of rule with higher vote  */
 
-	if ( ! MostSpec[R->Rhs] ||
-	     R->Cover < MostSpec[R->Rhs]->Cover ||
-	     ( R->Cover == MostSpec[R->Rhs]->Cover &&
-	       R->Vote > MostSpec[R->Rhs]->Vote ) )
+	if ( ! Context->most_specific_rules[R->Rhs] ||
+	     R->Cover < Context->most_specific_rules[R->Rhs]->Cover ||
+	     ( R->Cover == Context->most_specific_rules[R->Rhs]->Cover &&
+	       R->Vote > Context->most_specific_rules[R->Rhs]->Vote ) )
 	{
-	    MostSpec[R->Rhs] = R;
+	    Context->most_specific_rules[R->Rhs] = R;
 	}
     }
 
@@ -301,27 +299,28 @@ ClassNo RuleClassify(DataRec Case, CRuleSet RS)
 
     if ( UtilBand )
     {
-	CheckUtilityBand(&u, RS->SNRules+1, Class(Case), RS->SDefault);
+	CheckUtilityBand(Context, &u, RS->SNRules+1, Class(Case),
+			 RS->SDefault);
     }
 
-    /*  Check for default and normalise ClassSum  */
+    /*  Check for default and normalise class sums  */
 
     if ( ! TotWeight )
     {
-	Confidence = 0.5;
+	Context->confidence = 0.5;
 	return RS->SDefault;
     }
 
     ForEach(c, 1, MaxClass)
     {
-	ClassSum[c] /= TotWeight;
+	Context->class_sum[c] /= TotWeight;
     }
 
-    Best = SelectClass(RS->SDefault, false);
+    Best = SelectClass(Context, RS->SDefault, false);
 
-    /*  Set Confidence to the vote for the most specific rule of class Best  */
+    /*  Set confidence to the vote for the most specific rule of class Best  */
 
-    Confidence = MostSpec[Best]->Vote / 1000.0;
+    Context->confidence = Context->most_specific_rules[Best]->Vote / 1000.0;
 
     return Best;
 }
@@ -420,12 +419,13 @@ Boolean Matches(CRule R, DataRec Case)
 /*************************************************************************/
 
 
-void CheckActiveSpace(int N)
+void CheckActiveSpace(c50_context *Context, int N)
 /*   ----------------  */
 {
-    if ( ActiveSpace <= N )
+    if ( Context->active_rule_capacity <= N )
     {
-	Realloc(Active, (ActiveSpace=N+1), RuleNo);
+	Realloc(Context->active_rules,
+		(Context->active_rule_capacity = N + 1), RuleNo);
     }
 }
 
@@ -438,7 +438,7 @@ void CheckActiveSpace(int N)
 /*************************************************************************/
 
 
-void MarkActive(RuleTree RT, DataRec Case)
+void MarkActive(c50_context *Context, RuleTree RT, DataRec Case)
 /*   ----------  */
 {
     DiscrValue	v;
@@ -453,7 +453,7 @@ void MarkActive(RuleTree RT, DataRec Case)
     {
 	for ( ri = 0 ; (r = RT->Fire[ri]) ; ri++ )
 	{
-	    Active[NActive++] = r;
+	    Context->active_rules[Context->active_rule_count++] = r;
 	}
     }
 
@@ -463,12 +463,12 @@ void MarkActive(RuleTree RT, DataRec Case)
 
     if ( (v = FindOutcome(Case, RT->CondTest)) > 0 && v <= RT->Forks )
     {
-	MarkActive(RT->Branch[v], Case);
+	MarkActive(Context, RT->Branch[v], Case);
     }
 
     /*  Explore default subtree for rules that do not include condition  */
 
-    MarkActive(RT->Branch[0], Case);
+    MarkActive(Context, RT->Branch[0], Case);
 }
 
 
@@ -480,24 +480,27 @@ void MarkActive(RuleTree RT, DataRec Case)
 /*************************************************************************/
 
 
-void SortActive()
+void SortActive(c50_context *Context)
 /*   ----------  */
 {
     RuleNo	r;
     int		a, aa, aLow;
 
-    ForEach(a, 0, NActive-1)
+    ForEach(a, 0, Context->active_rule_count-1)
     {
 	aLow = a;
 
-	ForEach(aa, a+1, NActive-1)
+	ForEach(aa, a+1, Context->active_rule_count-1)
 	{
-	    if ( Active[aa] < Active[aLow] ) aLow = aa;
+	    if ( Context->active_rules[aa] < Context->active_rules[aLow] )
+	    {
+		aLow = aa;
+	    }
 	}
 
-	r = Active[a];
-	Active[a] = Active[aLow];
-	Active[aLow] = r;
+	r = Context->active_rules[a];
+	Context->active_rules[a] = Context->active_rules[aLow];
+	Context->active_rules[aLow] = r;
     }
 }
 
@@ -511,14 +514,15 @@ void SortActive()
 /*************************************************************************/
 
 
-void CheckUtilityBand(int *u, RuleNo r, ClassNo Actual, ClassNo Default)
+void CheckUtilityBand(c50_context *Context, int *u, RuleNo r,
+		      ClassNo Actual, ClassNo Default)
 /*   ----------------  */
 {
     ClassNo	c;
 
     while ( *u < UTILITY && r > UtilBand[*u] )
     {
-	c = SelectClass(Default, false);
+	c = SelectClass(Context, Default, false);
 	if ( c != Actual )
 	{
 	    UtilErr[*u]++;
@@ -546,7 +550,7 @@ void CheckUtilityBand(int *u, RuleNo r, ClassNo Actual, ClassNo Default)
 /*************************************************************************/
 
 
-ClassNo BoostClassify(DataRec Case, int MaxTrial)
+ClassNo BoostClassify(c50_context *Context, DataRec Case, int MaxTrial)
 /*	-------------  */
 {
     ClassNo	c, Best;
@@ -555,28 +559,28 @@ ClassNo BoostClassify(DataRec Case, int MaxTrial)
 
     ForEach(c, 1, MaxClass)
     {
-	Vote[c] = 0;
+	Context->votes[c] = 0;
     }
 
     ForEach(t, 0, MaxTrial)
     {
-	Best = ( RULES ? RuleClassify(Case, RuleSet[t]) :
-			 TreeClassify(Case, Pruned[t]) );
+	Best = ( RULES ? RuleClassify(Context, Case, RuleSet[t]) :
+		 TreeClassify(Context, Case, Pruned[t]) );
 
-	Vote[Best] += Confidence;
-	Total += Confidence;
+	Context->votes[Best] += Context->confidence;
+	Total += Context->confidence;
 
-	TrialPred[t] = Best;
+	Context->trial_predictions[t] = Best;
     }
 
-    /*  Copy votes into ClassSum  */
+    /*  Copy votes into the class sums  */
 
     ForEach(c, 1, MaxClass)
     {
-	ClassSum[c] = Vote[c] / Total;
+	Context->class_sum[c] = Context->votes[c] / Total;
     }
 
-    return SelectClass(Default, false);
+    return SelectClass(Context, Default, false);
 }
 
 
@@ -589,7 +593,7 @@ ClassNo BoostClassify(DataRec Case, int MaxTrial)
 /*************************************************************************/
 
 
-ClassNo SelectClass(ClassNo Default, Boolean UseCosts)
+ClassNo SelectClass(c50_context *Context, ClassNo Default, Boolean UseCosts)
 /*      -----------  */
 {
     ClassNo	c, cc, BestClass;
@@ -605,7 +609,7 @@ ClassNo SelectClass(ClassNo Default, Boolean UseCosts)
 	    ForEach(cc, 1, MaxClass)
 	    {
 		if ( cc == c ) continue;
-		ExpCost += ClassSum[cc] * MCost[c][cc];
+		ExpCost += Context->class_sum[cc] * MCost[c][cc];
 	    }
 
 	    TotCost += ExpCost;
@@ -617,16 +621,16 @@ ClassNo SelectClass(ClassNo Default, Boolean UseCosts)
 	    }
 	}
 
-	Confidence = 1 - BestCost / TotCost;
+	Context->confidence = 1 - BestCost / TotCost;
     }
     else
     {
 	ForEach(c, 1, MaxClass)
 	{
-	    if ( ClassSum[c] > ClassSum[BestClass] ) BestClass = c;
+	    if ( Context->class_sum[c] > Context->class_sum[BestClass] ) BestClass = c;
 	}
 
-	Confidence = ClassSum[BestClass];
+	Context->confidence = Context->class_sum[BestClass];
     }
 
     return BestClass;
@@ -641,13 +645,13 @@ ClassNo SelectClass(ClassNo Default, Boolean UseCosts)
 /*************************************************************************/
 
 
-ClassNo Classify(DataRec Case)
+ClassNo Classify(c50_context *Context, DataRec Case)
 /*      --------  */
 {
 
-    return ( TRIALS > 1 ? BoostClassify(Case, TRIALS-1) :
-	     RULES ?	  RuleClassify(Case, RuleSet[0]) :
-			  TreeClassify(Case, Pruned[0]) );
+    return ( TRIALS > 1 ? BoostClassify(Context, Case, TRIALS-1) :
+	     RULES ?	  RuleClassify(Context, Case, RuleSet[0]) :
+		  TreeClassify(Context, Case, Pruned[0]) );
 }
 
 

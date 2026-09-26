@@ -279,7 +279,7 @@ int main(int Argc, char *Argv[])
 	TRIALS = 1;
     }
 
-    InitialiseTreeData();
+    InitialiseTreeData(Context);
     if ( RULES )
     {
 	RuleSet = AllocZero(TRIALS+1, CRuleSet);
@@ -289,7 +289,7 @@ int main(int Argc, char *Argv[])
     {
 	NotifyStage(WINNOWATTS);
 	Progress(-MaxAtt);
-	WinnowAtts();
+	WinnowAtts(Context);
     }
 
     if ( XVAL )
@@ -307,7 +307,7 @@ int main(int Argc, char *Argv[])
 	NotifyStage(EVALTRAIN);
 	Progress(-TRIALS * (MaxCase+1.0));
 
-	Evaluate(CMINFO | USAGEINFO);
+	Evaluate(Context, CMINFO | USAGEINFO);
 
 	if ( (F = GetFile(( SAMPLE ? ".data" : ".test" ), "r")) )
 	{
@@ -322,7 +322,7 @@ int main(int Argc, char *Argv[])
 	    NotifyStage(EVALTEST);
 	    Progress(-TRIALS * (MaxCase+1.0));
 
-	    Evaluate(CMINFO);
+	    Evaluate(Context, CMINFO);
 	}
     }
 
