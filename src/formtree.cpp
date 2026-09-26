@@ -40,6 +40,24 @@
 #define		SAMPLEUNIT	2000
 
 
+void c50_split_workspace_deleter::operator()(
+    SplitWorkspace *Workspace) const noexcept
+{
+    if ( ! Workspace ) return;
+
+    const DiscrValue MaxValue = Workspace->MaxDiscrValue;
+    FreeVector((void **) Workspace->Freq, 0, Max(3, MaxValue+1));
+    free(Workspace->ValFreq);
+    free(Workspace->ClassFreq);
+    free(Workspace->SRec);
+    free(Workspace->SubsetInfo);
+    free(Workspace->SubsetEntr);
+    FreeVector((void **) Workspace->MergeInfo, 1, MaxValue);
+    FreeVector((void **) Workspace->MergeEntr, 1, MaxValue);
+    FreeVector((void **) Workspace->WSubset, 1, MaxValue);
+    delete Workspace;
+}
+
 
 
 /*************************************************************************/
@@ -143,7 +161,8 @@ void InitialiseTreeData(c50_context *Context)
 
     /*  Set up environment  */
 
-    Context->training.environment = AllocZero(1, EnvRec);
+    Context->training.environment.reset(new SplitWorkspace{});
+    Context->training.environment->MaxDiscrValue = Context->schema.max_discrete_value;
     Context->splits.waiting_attributes = Alloc(Context->schema.max_attribute+1, Attribute);
 
     vMax = Max(3, Context->schema.max_discrete_value+1);
@@ -183,7 +202,6 @@ void FreeTreeData(c50_context *Context)
 /*   ------------  */
 {
     Attribute	Att;
-    DiscrValue	vMax;
 
     FreeUnlessNil(Context->trees.raw);					Context->trees.raw = Nil;
     FreeUnlessNil(Context->trees.pruned);				Context->trees.pruned = Nil;
@@ -229,29 +247,7 @@ void FreeTreeData(c50_context *Context)
     FreeUnlessNil(Context->training.class_frequencies);				Context->training.class_frequencies = Nil;
     FreeUnlessNil(Context->splits.possible_cuts);			Context->splits.possible_cuts = Nil;
 
-    if ( Context->training.environment )
-    {
-	vMax = Max(3, Context->schema.max_discrete_value+1);
-	FreeVector((void **) Context->training.environment->Freq, 0, vMax);
-	Free(Context->training.environment->ValFreq);
-	Free(Context->training.environment->ClassFreq);
-	FreeUnlessNil(Context->training.environment->SRec);
-
-	if ( Context->training.environment->SubsetInfo )
-	{
-	    Free(Context->training.environment->SubsetInfo);
-	    Free(Context->training.environment->SubsetEntr);
-	    FreeVector((void **) Context->training.environment->MergeInfo,
-		       1, Context->schema.max_discrete_value);
-	    FreeVector((void **) Context->training.environment->MergeEntr,
-		       1, Context->schema.max_discrete_value);
-	    FreeVector((void **) Context->training.environment->WSubset,
-		       1, Context->schema.max_discrete_value);
-	}
-
-	Free(Context->training.environment);
-	Context->training.environment = Nil;
-    }
+    Context->training.environment.reset();
 
     FreeUnlessNil(Context->splits.waiting_attributes);				Context->splits.waiting_attributes = Nil;
 }
@@ -664,7 +660,7 @@ void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
 	else
 	if ( Context->splits.sample_fraction < 1 )
 	{
-	    EstimateMaxGR(Context, Att, WFp, WLp);
+	    EstimateMaxGR(Context, *Context->training.environment, Att, WFp, WLp);
 	}
 	else
 	if ( Context->splits.sampled )
@@ -673,7 +669,7 @@ void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
 
 	    if ( Context->splits.estimated_max_gain_ratio[Att] > Context->splits.value_threshold )
 	    {
-		EvalContinuousAtt(Context, Att, WFp, WLp);
+		EvalContinuousAtt(Context, *Context->training.environment, Att, WFp, WLp);
 
 		if ( Context->splits.information[Att] > Epsilon &&
 		     (GR = Context->splits.gain[Att] / Context->splits.information[Att]) > Context->splits.value_threshold )
@@ -684,7 +680,7 @@ void ProcessQueue(c50_context *Context, CaseNo WFp, CaseNo WLp,
 	}
 	else
 	{
-	    EvalContinuousAtt(Context, Att, WFp, WLp);
+	    EvalContinuousAtt(Context, *Context->training.environment, Att, WFp, WLp);
 	}
     }
 }
@@ -776,6 +772,7 @@ Attribute FindBestAtt(c50_context *Context, CaseCount Cases)
 void EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases)
 /*   --------------  */
 {
+    SplitWorkspace &Workspace = *Context->training.environment;
     DiscrValue	v, NBr;
 
     Context->splits.gain[Att] = None;
@@ -784,24 +781,24 @@ void EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases)
 
     if ( Ordered(Att) )
     {
-	EvalOrderedAtt(Context, Att, Cases);
-	NBr = ( Context->training.environment->ValFreq[1] > 0.5 ? 3 : 2 );
+	EvalOrderedAtt(Context, Workspace, Att, Cases);
+	NBr = ( Workspace.ValFreq[1] > 0.5 ? 3 : 2 );
     }
     else
     if ( Context->options.subset_splits && Context->schema.max_attribute_value[Att] > 3 )
     {
-	EvalSubset(Context, Att, Cases);
+	EvalSubset(Context, Workspace, Att, Cases);
 	NBr = Context->splits.subset_counts[Att];
     }
     else
     if ( ! Context->splits.tested_attributes[Att] )
     {
-	EvalDiscreteAtt(Context, Att, Cases);
+	EvalDiscreteAtt(Context, Workspace, Att, Cases);
 
 	NBr = 0;
 	ForEach(v, 1, Context->schema.max_attribute_value[Att])
 	{
-	    if ( Context->training.environment->ValFreq[v] > 0.5 ) NBr++;
+	    if ( Workspace.ValFreq[v] > 0.5 ) NBr++;
 	}
     }
     else
