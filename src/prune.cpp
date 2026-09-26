@@ -963,7 +963,7 @@ void RestoreDistribs(c50_context *Context, Tree T)
 void CompressBranches(c50_context *Context, Tree T)
 /*   ----------------  */
 {
-    DiscrValue	v, vv, S=0, *LocalSet;
+    DiscrValue	v, vv, S=0;
     int		Bytes;
     Tree	Br, *OldBranch;
     ClassNo	c;
@@ -975,7 +975,8 @@ void CompressBranches(c50_context *Context, Tree T)
     {
 	/*  LocalSet[v] is the new branch number to which branch v belongs  */
 
-	LocalSet = AllocZero(T->Forks+1, DiscrValue);
+	std::unique_ptr<DiscrValue[], decltype(&free)> LocalSet(
+            AllocZero(T->Forks+1, DiscrValue), &free);
 
 	ForEach(v, 1, T->Forks)
 	{
@@ -1018,11 +1019,28 @@ void CompressBranches(c50_context *Context, Tree T)
 	{
 	    /*  Compress!  */
 
-	    T->Subset   = Alloc(S+1, Set);
-	    OldBranch   = T->Branch;
-	    T->Branch	= Alloc(S+1, Tree);
+            const DiscrValue Forks = S;
+            auto FreeSubsets = [Forks](Set *Subsets) {
+                FreeVector((void **) Subsets, 1, Forks);
+            };
+            std::unique_ptr<Set[], decltype(FreeSubsets)> Subsets(
+                Alloc(Forks+1, Set), FreeSubsets);
+            std::unique_ptr<Tree[], decltype(&free)> Branches(
+                Alloc(Forks+1, Tree), &free);
+            OldBranch = T->Branch;
 
-	    Bytes = (Context->schema.max_attribute_value[T->Tested]>>3) + 1;
+            // Complete fallible allocations while the original tree owns all
+            // children. The following merge loop retains its arithmetic order.
+            Bytes = (Context->schema.max_attribute_value[T->Tested]>>3) + 1;
+            ForEach(v, 1, T->Forks)
+            {
+                const DiscrValue Group = LocalSet[v];
+                if ( Branches[Group] ) continue;
+                Br = Branches[Group] = OldBranch[v];
+                if ( ! Br->ClassDist )
+                    Br->ClassDist = AllocZero(Context->schema.max_class+1, CaseCount);
+                Subsets[Group] = AllocZero(Bytes, Byte);
+            }
 	    S = 0;
 
 	    ForEach(v, 1, T->Forks)
@@ -1030,23 +1048,18 @@ void CompressBranches(c50_context *Context, Tree T)
 		if ( LocalSet[v] > S )
 		{
 		    S++;
-		    Br = T->Branch[S] = OldBranch[v];
-		    if ( ! Br->ClassDist )
-		    {
-			Br->ClassDist = AllocZero(Context->schema.max_class+1, CaseCount);
-		    }
-		    T->Subset[S] = AllocZero(Bytes, Byte);
+		    Br = Branches[S];
 
 		    /*  Must include N/A even when no cases  -- otherwise
 			reader gets the branches muddled  */
 
-		    SetBit(v, T->Subset[S]);
+		    SetBit(v, Subsets[S]);
 
 		    ForEach(vv, v+1, T->Forks)
 		    {
 			if ( LocalSet[vv] == S )
 			{
-			    SetBit(vv, T->Subset[S]);
+			    SetBit(vv, Subsets[S]);
 
 			    Br->Cases  += OldBranch[vv]->Cases;
 			    Br->Errors += OldBranch[vv]->Errors;
@@ -1063,11 +1076,12 @@ void CompressBranches(c50_context *Context, Tree T)
 		}
 	    }
 
+	    T->Subset = Subsets.release();
+	    T->Branch = Branches.release();
 	    T->NodeType = BrSubset;
 	    T->Forks = S;
 	    Free(OldBranch);
 	}
-	Free(LocalSet);
     }
 }
 
