@@ -569,13 +569,16 @@ void	    DiscreteTest(c50_context *Context, Tree Node, Attribute Att);
 
 	/* contin.c */
 
-void	    EvalContinuousAtt(c50_context *Context, Attribute Att,
+void	    EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace,
+			      Attribute Att,
 			      CaseNo Fp, CaseNo Lp);
-void	    EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp,
+void	    EstimateMaxGR(c50_context *Context, SplitWorkspace &Workspace,
+			  Attribute Att, CaseNo Fp,
 			  CaseNo Lp);
-void	    PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
+void	    PrepareForContin(c50_context *Context, SplitWorkspace &Workspace,
+			     Attribute Att, CaseNo Fp,
 			     CaseNo Lp);
-CaseNo	    PrepareForScan(c50_context *Context, CaseNo Lp);
+CaseNo	    PrepareForScan(c50_context *Context, SplitWorkspace &Workspace, CaseNo Lp);
 void	    ContinTest(c50_context *Context, Tree Node, Attribute Att);
 void	    AdjustAllThresholds(c50_context *Context, Tree T);
 void	    AdjustThresholds(c50_context *Context, Tree T, Attribute Att,
