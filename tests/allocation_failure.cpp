@@ -76,6 +76,9 @@ int main()
         const std::string category_data =
             "red, no\nblue, yes\ngreen, no\nyellow, yes\n"
             "red, no\nblue, yes\ngreen, no\nyellow, yes\n";
+        exercise("branch compression", context, [&] {
+            c50::model::train(context, c50::model_kind::tree, category_names, category_data);
+        });
         c50::options subsets;
         subsets.subset_splits = true;
         exercise("subset rules", context, [&] {
