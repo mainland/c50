@@ -8,39 +8,38 @@ option(C50_ENABLE_SANITIZERS
 include(CTest)
 
 set(C50_CORE_SOURCES
-    src/attwinnow.c
-    src/classify.c
-    src/confmat.c
-    src/construct.c
-    src/contin.c
-    src/discr.c
-    src/formrules.c
-    src/formtree.c
-    src/getdata.c
-    src/getnames.c
-    src/global.c
-    src/implicitatt.c
-    src/info.c
-    src/mcost.c
-    src/modelfiles.c
-    src/p-thresh.c
-    src/prune.c
-    src/rules.c
-    src/ruletree.c
-    src/siftrules.c
-    src/sort.c
-    src/subset.c
-    src/trees.c
-    src/update.c
-    src/utility.c
-    src/xval.c
+    src/attwinnow.cpp
+    src/classify.cpp
+    src/confmat.cpp
+    src/construct.cpp
+    src/contin.cpp
+    src/discr.cpp
+    src/formrules.cpp
+    src/formtree.cpp
+    src/getdata.cpp
+    src/getnames.cpp
+    src/global.cpp
+    src/implicitatt.cpp
+    src/info.cpp
+    src/mcost.cpp
+    src/modelfiles.cpp
+    src/p-thresh.cpp
+    src/prune.cpp
+    src/rules.cpp
+    src/ruletree.cpp
+    src/siftrules.cpp
+    src/sort.cpp
+    src/subset.cpp
+    src/trees.cpp
+    src/update.cpp
+    src/utility.cpp
+    src/xval.cpp
 )
 
-set_source_files_properties(${C50_CORE_SOURCES} src/c50.c tests/prediction_probe.c PROPERTIES LANGUAGE CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_executable(c50_cli src/c50.c ${C50_CORE_SOURCES})
+add_executable(c50_cli src/c50.cpp ${C50_CORE_SOURCES})
 set_target_properties(c50_cli PROPERTIES OUTPUT_NAME c5.0)
 
 add_executable(c50_report src/report.c)
@@ -51,7 +50,7 @@ set(C50_TARGETS c50_cli c50_report)
 if(BUILD_TESTING)
     add_executable(
         c50_prediction_probe
-        tests/prediction_probe.c
+        tests/prediction_probe.cpp
         ${C50_CORE_SOURCES}
     )
     target_include_directories(
