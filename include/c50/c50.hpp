@@ -13,7 +13,8 @@
  * Independent contexts may run concurrently. Callers must serialize operations
  * on each context. Immutable models may be shared by different contexts.
  * Every operation reads and writes numbers in the C locale on the calling
- * thread, so results do not depend on the host locale. The caller's thread locale is restored when the call returns or
+ * thread and on its split workers, so results do not depend on the host
+ * locale. The caller's thread locale is restored when the call returns or
  * throws, and the process locale is never changed.
  * Destruction and move assignment require exclusive access to the object.
  *
@@ -115,7 +116,7 @@ struct dense_dataset {
 /** Move-only owner of mutable operation workspace. */
 class context {
 public:
-    /** Create an independent workspace. */
+    /** Create an independent workspace using one split worker. */
     context();
     /** Release the workspace. Returned models and results remain valid. */
     ~context();
@@ -130,6 +131,9 @@ public:
     context(const context &) = delete;
     /** Copy assignment is disabled. */
     context &operator=(const context &) = delete;
+    /** Set the maximum split worker count.
+     * @param count Maximum workers, from 1 to 8. */
+    void split_workers(unsigned count);
 private:
     friend class model;
     std::unique_ptr<detail::context_state> state_;
