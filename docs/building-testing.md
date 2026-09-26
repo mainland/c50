@@ -287,3 +287,23 @@ ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
 
 The harness uses GNU linker allocation wrappers. It does not establish
 allocation-failure coverage on other platforms or cover every learner path.
+
+`parallel-failure` compiles the production split scheduler with private test
+probes. The installed core contains no probes. The test fails every allocation
+in each additional worker workspace, injects task-launch errors after earlier
+tasks start, and throws from the calling worker, background workers, and all
+workers together. It checks that all started tasks finish before workspace
+release and operation return, then retrains with the same context and compares
+classifiers and predictions. These cases also run in the sanitizer jobs.
+
+`cpp-contracts` compares normalized classifiers and exact class predictions,
+confidence values, and class scores at one, two, four, and eight split workers.
+The cases include boosted trees and rules, dense missing values, ordered
+attributes, not-applicable values, case weights, costs, sampling, subsets, and
+serialized-model reloads. They exercise both parallel split evaluation and its
+serial fallback conditions.
+
+The same test runs four simultaneous independent fits, each requesting four
+split workers, with trees, rules, and opposing class assignments. Repeated fits
+must reproduce their single-worker classifiers and predictions, and concurrent
+prediction through a shared immutable model must reproduce the reference.
