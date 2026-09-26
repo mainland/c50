@@ -295,3 +295,10 @@ tasks start, and throws from the calling worker, background workers, and all
 workers together. It checks that all started tasks finish before workspace
 release and operation return, then retrains with the same context and compares
 classifiers and predictions. These cases also run in the sanitizer jobs.
+
+`cpp-contracts` compares normalized classifiers and exact class predictions,
+confidence values, and class scores at one, two, four, and eight split workers.
+The cases include boosted trees and rules, dense missing values, ordered
+attributes, not-applicable values, case weights, costs, sampling, subsets, and
+serialized-model reloads. They exercise both parallel split evaluation and its
+serial fallback conditions.
