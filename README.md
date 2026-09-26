@@ -3,7 +3,11 @@
 This repository modernizes the single-threaded C5.0 Release 2.07 GPL Edition
 while preserving its learning behavior and model compatibility. The intended
 deliverables are a compiled C++17 library, command-line compatibility, and
-Python bindings. Native callers will use a C++ API without a stable C ABI.
+Python bindings. Native callers use the compiled C++17 API in `include/c50/c50.hpp`. Link
+against `C50::cpp`; there is no stable binary ABI. Contexts, models, and
+prediction results are move-only owners. Inputs are borrowed during calls.
+Independent contexts may run concurrently; serialize calls on each context.
+Input failures throw `c50::exception`; allocation failures throw `std::bad_alloc`.
 
 Geoffrey Mainland maintains this modernization project. The imported C5.0
 implementation remains attributed to RuleQuest Research Pty Ltd. in its source

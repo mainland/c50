@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: native C++ library integration. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -86,9 +87,9 @@ static int WhichProperty(const char *Name)
 
 static void ModelWriteError(c50_context *Context)
 {
-    c50_record_error(Context,
-                     Context->classifier_output.kind == C50_OUTPUT_MEMORY ?
-                         C50_STATUS_OUT_OF_MEMORY : C50_STATUS_IO_ERROR,
+    if (Context->classifier_output.kind == C50_OUTPUT_MEMORY)
+        throw std::bad_alloc();
+    c50_record_error(Context, c50::error_code::io_error,
                      "could not write classifier");
     C50Exit(Context, 1);
 }
@@ -185,7 +186,7 @@ void WriteFilePrefix(c50_context *Context, const char *Extension)
     if ( ! localtime_r(&clock, &now) )
 #endif
     {
-	c50_record_error(Context, C50_STATUS_INTERNAL_ERROR,
+	c50_record_error(Context, c50::error_code::internal_error,
 			 "could not determine classifier timestamp");
 	C50Exit(Context, 1);
     }
@@ -457,7 +458,7 @@ void SaveRules(c50_context *Context, CRuleSet RS, const char *Extension)
 /*************************************************************************/
 
 
-void AsciiOut(c50_context *Context, const char *Pre, String S)
+void AsciiOut(c50_context *Context, const char *Pre, const char *S)
 /*   --------  */
 {
     ModelPrintf(Context, "%s\"", Pre);
@@ -555,7 +556,8 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 		    p++;
 		    if ( *p == ',' ) p++;
 		}
-		Context->schema.attribute_value_names[Att][Context->schema.max_attribute_value[Att]+1] = "<other>";
+		Context->schema.attribute_value_names[Att][Context->schema.max_attribute_value[Att]+1] =
+		    Context->schema.other_attribute_value_name;
 		Context->schema.max_discrete_value = Max(Context->schema.max_discrete_value, Context->schema.max_attribute_value[Att]+1);
 		break;
 

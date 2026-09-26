@@ -1,44 +1,33 @@
 /* Copyright 2026 Geoffrey Mainland. */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-
+#include <cstdio>
+#include <cstdlib>
+#include <exception>
+#include <utility>
 #include "c50_api_internal.h"
 
-static void SetError(c50_context *context, c50_status status,
-                     const char *message)
-{
-    if ( ! context || context->status != C50_STATUS_OK ) return;
+c50::exception::exception(error_code code, const std::string &message)
+    : std::runtime_error(message), code_(code) {}
+c50::error_code c50::exception::code() const noexcept { return code_; }
 
-    context->status = status;
-    if ( message )
-    {
-        snprintf(context->error_message, sizeof(context->error_message),
-                 "%s", message);
-    }
+c50::detail::context_state::~context_state()
+{
+    c50_clear_prediction_state(this);
+    free(active_rules);
+    free(ignored_values);
+    free(property_value);
 }
 
-c50_status c50_context_create(c50_context **out_context)
+std::unique_ptr<c50_context> c50_make_context()
 {
-    c50_context *context;
-
-    if ( ! out_context )
-    {
-        return C50_STATUS_INVALID_ARGUMENT;
-    }
-
-    *out_context = NULL;
-    context = (c50_context *) calloc(1, sizeof(*context));
-    if ( ! context )
-    {
-        return C50_STATUS_OUT_OF_MEMORY;
-    }
-
-    context->status = C50_STATUS_OK;
+    auto context = std::make_unique<c50_context>();
     context->schema.max_discrete_value = 3;
+    snprintf(context->schema.unknown_class_name,
+             sizeof(context->schema.unknown_class_name), "%s", "?");
+    snprintf(context->schema.other_attribute_value_name,
+             sizeof(context->schema.other_attribute_value_name),
+             "%s", "<other>");
     context->cases.max_case = -1;
     context->costs.unit_weights = 1;
     context->options.trials = 1;
@@ -49,122 +38,64 @@ c50_status c50_context_create(c50_context **out_context)
     context->splits.sample_fraction = 1;
     context->io.file_stem = "undefined";
     context->io.option_index = 1;
-    *out_context = context;
-    return C50_STATUS_OK;
+    return context;
 }
 
-void c50_context_destroy(c50_context *context)
-{
-    if ( ! context ) return;
-    c50_clear_prediction_state(context);
-    free(context->active_rules);
-    free(context->ignored_values);
-    free(context->property_value);
-    free(context);
-}
+c50::context::context() : state_(c50_make_context()) {}
+c50::context::~context() = default;
+c50::context::context(context &&) noexcept = default;
+c50::context &c50::context::operator=(context &&) noexcept = default;
 
 void c50_clear_prediction_state(c50_context *context)
 {
-    if ( ! context ) return;
     free(context->class_sum);
     free(context->votes);
     free(context->trial_predictions);
     free(context->most_specific_rules);
-    context->class_sum = NULL;
-    context->votes = NULL;
-    context->trial_predictions = NULL;
-    context->most_specific_rules = NULL;
+    context->class_sum = nullptr;
+    context->votes = nullptr;
+    context->trial_predictions = nullptr;
+    context->most_specific_rules = nullptr;
 }
 
-c50_status c50_context_last_status(const c50_context *context)
-{
-    return context ? context->status : C50_STATUS_INVALID_ARGUMENT;
-}
-
-const char *c50_context_error_message(const c50_context *context)
-{
-    return context ? context->error_message :
-                     c50_status_message(C50_STATUS_INVALID_ARGUMENT);
-}
-
-const char *c50_status_message(c50_status status)
-{
-    switch ( status )
-    {
-        case C50_STATUS_OK:
-            return "success";
-        case C50_STATUS_INVALID_ARGUMENT:
-            return "invalid argument";
-        case C50_STATUS_OUT_OF_MEMORY:
-            return "out of memory";
-        case C50_STATUS_IO_ERROR:
-            return "I/O error";
-        case C50_STATUS_PARSE_ERROR:
-            return "parse error";
-        case C50_STATUS_UNSUPPORTED:
-            return "unsupported operation";
-        case C50_STATUS_INTERNAL_ERROR:
-            return "internal error";
-        default:
-            return "unknown C5.0 status";
-    }
-}
-
-c50_status c50_run_operation(c50_context *context,
-                             c50_operation_fn operation,
-                             c50_operation_cleanup_fn cleanup,
-                             void *user_data)
-{
-    if ( ! context || ! operation ) return C50_STATUS_INVALID_ARGUMENT;
-
-    if ( context->operation_active )
-    {
-        SetError(context, C50_STATUS_INTERNAL_ERROR,
-                 "a C5.0 operation is already active on this context");
-        return context->status;
-    }
-
-    context->status = C50_STATUS_OK;
-    context->error_message[0] = '\0';
-
-    context->operation_active = 1;
-    try
-    {
-        operation(context, user_data);
-    }
-    catch (const c50_operation_abort &) {}
-
-    context->operation_active = 0;
-    if ( cleanup ) cleanup(context, user_data);
-    return context->status;
-}
-
-void c50_record_error(c50_context *context, c50_status status,
+void c50_record_error(c50_context *context, c50::error_code code,
                       const char *message)
 {
-    SetError(context, status, message);
+    if (context->error) return;
+    context->error = code;
+    snprintf(context->error_message, sizeof(context->error_message), "%s", message);
 }
 
-c50_status c50_set_context_error(c50_context *context, c50_status status,
-                                 const char *message)
+[[noreturn]] void c50_abort_operation(c50_context *context, int exit_status)
 {
-    if ( ! context ) return C50_STATUS_INVALID_ARGUMENT;
+    if (context->error)
+        throw c50::exception(*context->error, context->error_message);
+    throw c50::exception(c50::error_code::internal_error,
+                        exit_status ? "C5.0 operation failed" :
+                                      "C5.0 operation terminated");
+}
 
-    context->status = C50_STATUS_OK;
+void c50_run_operation(c50_context *context, c50_operation_fn operation,
+                       c50_operation_cleanup_fn cleanup, void *user_data)
+{
+    if (context->operation_active)
+        throw c50::exception(c50::error_code::internal_error,
+                            "a C5.0 operation is already active on this context");
+    context->error.reset();
     context->error_message[0] = '\0';
-    SetError(context, status, message);
-    return status;
-}
-
-int c50_abort_active_operation(c50_context *context, int exit_status)
-{
-    if ( ! context || ! context->operation_active ) return 0;
-
-    if ( context->status == C50_STATUS_OK )
-    {
-        SetError(context, C50_STATUS_INTERNAL_ERROR,
-                 exit_status ? "C5.0 operation failed" :
-                               "C5.0 operation terminated");
+    context->operation_active = 1;
+    std::exception_ptr failure;
+    try {
+        operation(context, user_data);
+        if (context->error) c50_abort_operation(context, 1);
+    } catch (...) {
+        failure = std::current_exception();
     }
-    throw c50_operation_abort{exit_status ? exit_status : 1};
+    try {
+        if (cleanup) cleanup(context, user_data);
+    } catch (...) {
+        if (!failure) failure = std::current_exception();
+    }
+    context->operation_active = 0;
+    if (failure) std::rethrow_exception(failure);
 }

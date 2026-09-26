@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: native C++ library integration. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -49,9 +50,21 @@
 			ArgOK = true
 
 
-int main(int Argc, char *Argv[])
-/*  ----  */
+namespace
 {
+
+struct cli_arguments
+{
+    int argc;
+    char **argv;
+};
+
+void Run(c50_context *Context, void *UserData)
+/*   ---  */
+{
+    cli_arguments	*Arguments = static_cast<cli_arguments *>(UserData);
+    int			Argc = Arguments->argc;
+    char			**Argv = Arguments->argv;
     int			o;
     char		*EndPtr;
     Boolean		FirstTime=true, ArgOK;
@@ -60,11 +73,8 @@ int main(int Argc, char *Argv[])
     c50_input		NamesInput;
     CaseNo		SaveMaxCase;
     Attribute		Att;
-    c50_context	*Context = NULL;
 
     struct rlimit RL;
-
-    if ( c50_context_create(&Context) != C50_STATUS_OK ) return 1;
 
     /*  Make sure there is a largish runtime stack  */
 
@@ -327,12 +337,29 @@ int main(int Argc, char *Argv[])
     }
 
     fprintf(Context->io.output, T_Time, ExecTime() - StartTime);
+}
 
-#ifdef VerbOpt
+void CleanupCli(c50_context *Context, void *UserData)
+/*   ----------  */
+{
+    (void) UserData;
     Cleanup(Context);
-#endif
+}
 
-    c50_context_destroy(Context);
+} // namespace
 
-    return 0;
+int main(int Argc, char *Argv[])
+/*  ----  */
+{
+    cli_arguments Arguments = {Argc, Argv};
+    try
+    {
+        auto context = c50_make_context();
+        c50_run_operation(context.get(), Run, CleanupCli, &Arguments);
+        return 0;
+    }
+    catch (const std::exception &)
+    {
+        return 1;
+    }
 }

@@ -24,12 +24,12 @@ int main(int argc, char *argv[])
     static const unsigned char costs[] = "low, high: 5\n";
     char line[16];
     c50_input costs_input, input;
-    c50_context *context = NULL;
+    auto owner = c50_make_context();
+    c50_context *context = owner.get();
 
     (void) argc;
     (void) argv;
 
-    if ( c50_context_create(&context) != C50_STATUS_OK ) return 1;
 
     c50_input_init_memory(&input, text, sizeof(text) - 1);
     if ( c50_input_getc(&input) != 'f' ) return 1;
@@ -66,7 +66,8 @@ int main(int argc, char *argv[])
 
     context->options.rules = false;
     context->trees.max_tree = 0;
-    context->trees.pruned = static_cast<Tree *>(Pcalloc(context, 2, sizeof(Tree)));
+    context->trees.pruned =
+        static_cast<Tree *>(Pcalloc(context, 2, sizeof(Tree)));
     context->trees.pruned[0] = InTree(context, &input);
     if ( ! context->trees.pruned[0] || context->trees.pruned[0]->NodeType != 0 ||
          context->trees.pruned[0]->Leaf != 1 )
@@ -74,7 +75,7 @@ int main(int argc, char *argv[])
         return 1;
     }
     Cleanup(context);
-    c50_context_destroy(context);
+
 
     return 0;
 }
