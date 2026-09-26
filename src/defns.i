@@ -578,11 +578,12 @@ void	    EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp,
 void	    PrepareForContin(c50_context *Context, Attribute Att, CaseNo Fp,
 			     CaseNo Lp);
 CaseNo	    PrepareForScan(c50_context *Context, CaseNo Lp);
-void	    ContinTest(Tree Node, Attribute Att);
+void	    ContinTest(c50_context *Context, Tree Node, Attribute Att);
 void	    AdjustAllThresholds(c50_context *Context, Tree T);
 void	    AdjustThresholds(c50_context *Context, Tree T, Attribute Att,
 			     CaseNo *Ep);
-ContValue   GreatestValueBelow(ContValue Th, CaseNo *Ep);
+ContValue   GreatestValueBelow(c50_context *Context, ContValue Th,
+			       CaseNo *Ep);
 
 	/* info.c */
 
