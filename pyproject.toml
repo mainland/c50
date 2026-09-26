@@ -113,6 +113,8 @@ testpaths = ["tests/python"]
 files = [
     "python/c50",
     "tests/typing",
+    "benchmarks",
+    "tests/benchmark_smoke.py",
     "tests/reference",
 ]
 mypy_path = "python"
@@ -124,6 +126,14 @@ enable_error_code = [
 
 [[tool.mypy.overrides]]
 module = ["joblib", "joblib.*", "sklearn", "sklearn.*"]
+ignore_missing_imports = true
+
+# The benchmark scripts use pandas only through frames typed as Any, and
+# pybind11 only when a run builds the Python extension. Neither is a type-check
+# dependency, so skip their stubs instead of adding pandas-stubs, whose release
+# must track pandas.
+[[tool.mypy.overrides]]
+module = ["pandas", "pandas.*", "pybind11"]
 ignore_missing_imports = true
 
 [tool.codespell]
