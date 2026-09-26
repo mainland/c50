@@ -96,7 +96,7 @@ void GetMCostsInput(c50_context *Context, c50_input *Cf)
     /*  Don't need weights etc. for predict or interpret, or
 	if not using cost weighting  */
 
-    if ( ! (CostWeights = Context->schema.max_class == 2 && MaxCase >= 0 && MCost) )
+    if ( ! (CostWeights = Context->schema.max_class == 2 && Context->cases.max_case >= 0 && MCost) )
     {
 	return;
     }
@@ -108,16 +108,16 @@ void GetMCostsInput(c50_context *Context, c50_input *Cf)
     if ( Context->schema.case_weight_attribute )
     {
 	Context->average_case_weight = 1;			/* relative weights not yet set */
-	ForEach(i, 0, MaxCase)
+	ForEach(i, 0, Context->cases.max_case)
 	{
-	    ClassFreq[Class(Case[i])] += RelCWt(Context, Case[i]);
+	    ClassFreq[Class(Context->cases.records[i])] += RelCWt(Context, Context->cases.records[i]);
 	}
     }
     else
     {
-	ForEach(i, 0, MaxCase)
+	ForEach(i, 0, Context->cases.max_case)
 	{
-	    ClassFreq[Class(Case[i])]++;
+	    ClassFreq[Class(Context->cases.records[i])]++;
 	}
     }
 

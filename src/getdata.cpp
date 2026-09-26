@@ -49,7 +49,7 @@
 /*	Read raw cases from file with given extension.			 */
 /*									 */
 /*	On completion, cases are stored in array Case in the form	 */
-/*	of vectors of attribute values, and MaxCase is set to the	 */
+/*	of vectors of attribute values, and Context->cases.max_case is set to the	 */
 /*	number of data cases.						 */
 /*									 */
 /*************************************************************************/
@@ -81,16 +81,16 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 
     /*  Don't reset case count if appending data for xval  */
 
-    if ( Train || ! Case )
+    if ( Train || ! Context->cases.records )
     {
-	MaxCase = CaseSpace = 0;
+	Context->cases.max_case = CaseSpace = 0;
 	Context->max_label = 0;
-	Case = Alloc(1, DataRec);	/* for error reporting */
+	Context->cases.records = Alloc(1, DataRec);	/* for error reporting */
     }
     else
     {
-	CaseSpace = MaxCase + 1;
-	MaxCase++;
+	CaseSpace = Context->cases.max_case + 1;
+	Context->cases.max_case++;
     }
 
     if ( SAMPLE )
@@ -136,7 +136,7 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 	    if ( SelectTrain != Train ||
 		 ( ! Train && AltRandom >= WantTest / (float) LeftTest-- ) )
 	    {
-		FreeLastCase(DVec);
+		FreeLastCase(Context, DVec);
 		continue;
 	    }
 
@@ -148,18 +148,18 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 
 	/*  Make sure there is room for another case  */
 
-	if ( MaxCase >= CaseSpace )
+	if ( Context->cases.max_case >= CaseSpace )
 	{
 	    CaseSpace += Inc;
-	    Realloc(Case, CaseSpace+1, DataRec);
+	    Realloc(Context->cases.records, CaseSpace+1, DataRec);
 	}
 
 	/*  Ignore cases with unknown class  */
 
 	if ( AllowUnknownClass || (Class(DVec) & 077777777) > 0 )
 	{
-	    Case[MaxCase] = DVec;
-	    MaxCase++;
+	    Context->cases.records[Context->cases.max_case] = DVec;
+	    Context->cases.max_case++;
 	}
 	else
 	{
@@ -169,11 +169,11 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 		FirstIgnore = false;
 	    }
 
-	    FreeLastCase(DVec);
+	    FreeLastCase(Context, DVec);
 	}
     }
 
-    MaxCase--;
+    Context->cases.max_case--;
 
 }
 
@@ -217,7 +217,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 
     if ( ReadNameInput(Context, Input, Name, 1000, '\00') )
     {
-	Case[MaxCase] = DVec = NewCase(Context);
+	Context->cases.records[Context->cases.max_case] = DVec = NewCase(Context);
 	ForEach(Att, 1, Context->schema.max_attribute)
 	{
 	    if ( Context->schema.attribute_definitions[Att] )
@@ -229,10 +229,10 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 		    CheckValue(Context, DVec, Att);
 		}
 
-		if ( SomeMiss )
+		if ( Context->cases.some_missing )
 		{
-		    SomeMiss[Att] |= Unknown(DVec, Att);
-		    SomeNA[Att]   |= NotApplic(Context, DVec, Att);
+		    Context->cases.some_missing[Att] |= Unknown(DVec, Att);
+		    Context->cases.some_not_applicable[Att]   |= NotApplic(Context, DVec, Att);
 		}
 
 		continue;
@@ -243,7 +243,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 	    if ( ! FirstValue && ! ReadNameInput(Context, Input, Name, 1000, '\00') )
 	    {
 		XError(HITEOF, Context->schema.attribute_names[Att], "");
-		FreeLastCase(DVec);
+		FreeLastCase(Context, DVec);
 		return Nil;
 	    }
 	    FirstValue = false;
@@ -263,7 +263,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 		/*  Set marker to indicate missing value  */
 
 		DVal(DVec, Att) = UNKNOWN;
-		if ( SomeMiss ) SomeMiss[Att] = true;
+		if ( Context->cases.some_missing ) Context->cases.some_missing[Att] = true;
 	    }
 	    else
 	    if ( Att != Context->schema.class_attribute && ! strcmp(Name, "N/A") )
@@ -271,7 +271,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 		/*  Set marker to indicate not applicable  */
 
 		DVal(DVec, Att) = NA;
-		if ( SomeNA ) SomeNA[Att] = true;
+		if ( Context->cases.some_not_applicable ) Context->cases.some_not_applicable[Att] = true;
 	    }
 	    else
 	    if ( Discrete(Att) )
@@ -395,7 +395,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 	    if ( ! ReadNameInput(Context, Input, Name, 1000, '\00') )
 	    {
 		XError(HITEOF, Fn, "");
-		FreeLastCase(DVec);
+		FreeLastCase(Context, DVec);
 		return Nil;
 	    }
 
@@ -538,15 +538,15 @@ int StoreIVal(c50_context *Context, String S)
 void FreeData(c50_context *Context)
 /*   --------  */
 {
-    FreeCases();
+    FreeCases(Context);
 
     FreeUnlessNil(Context->ignored_values);
     Context->ignored_values = Nil;
     Context->ignored_values_size = Context->ignored_values_offset = 0;
 
-    Free(Case);						Case = Nil;
+    Free(Context->cases.records);		Context->cases.records = Nil;
 
-    MaxCase = -1;
+    Context->cases.max_case = -1;
 }
 
 

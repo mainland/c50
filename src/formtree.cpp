@@ -144,7 +144,7 @@ void InitialiseTreeData(c50_context *Context)
 	{
 	    if ( ! Skip(Att) && Att != Context->schema.class_attribute )
 	    {
-		MultiVal = Context->schema.max_attribute_value[Att] >= 0.3 * (MaxCase + 1);
+		MultiVal = Context->schema.max_attribute_value[Att] >= 0.3 * (Context->cases.max_case + 1);
 	    }
 	}
     }
@@ -173,7 +173,7 @@ void InitialiseTreeData(c50_context *Context)
 
     GEnv.ClassFreq = Alloc(Context->schema.max_class+1, double);
 
-    NoCases = ( MaxCase < 0 ? 0 : (size_t) MaxCase + 1 );
+    NoCases = ( Context->cases.max_case < 0 ? 0 : (size_t) Context->cases.max_case + 1 );
     GEnv.SRec = Alloc(NoCases, SortRec);
 
     if ( SUBSET )
@@ -287,20 +287,20 @@ void SetMinGainThresh(c50_context *Context)
 	AvGainWt = MDLWt = 0.0;
     }
     else
-    if ( (MaxCase+1) / Context->schema.max_class <= 500 )
+    if ( (Context->cases.max_case+1) / Context->schema.max_class <= 500 )
     {
 	AvGainWt = 1.0;
 	MDLWt    = 0.0;
     }
     else
-    if ( (MaxCase+1) / Context->schema.max_class >= 1000 )
+    if ( (Context->cases.max_case+1) / Context->schema.max_class >= 1000 )
     {
 	AvGainWt = 0.0;
 	MDLWt    = 0.9;
     }
     else
     {
-	Frac = ((MaxCase+1) / Context->schema.max_class - 500) / 500.0;
+	Frac = ((Context->cases.max_case+1) / Context->schema.max_class - 500) / 500.0;
 
 	AvGainWt = 1 - Frac;
 	MDLWt    = 0.9 * Frac;
@@ -345,7 +345,7 @@ void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
     DiscrValue	v;
 
 
-    assert(Fp >= 0 && Lp >= Fp && Lp <= MaxCase);
+    assert(Fp >= 0 && Lp >= Fp && Lp <= Context->cases.max_case);
 
     /*  Make a single pass through the cases to determine class frequencies
 	and value/class frequencies for all discrete attributes  */
@@ -523,12 +523,12 @@ void SampleEstimate(c50_context *Context, CaseNo Fp, CaseNo Lp,
     /*  Phase 2: generate sample  */
 
     SampleSize = Context->schema.max_class * SAMPLEUNIT;
-    Sample(Fp, Lp, SampleSize);
+    Sample(Context, Fp, Lp, SampleSize);
     SLp = Fp + SampleSize - 1;
 
     /*  Phase 3: evaluate continuous attributes using sample  */
 
-    NewCases   = CountCases(Fp, SLp);
+    NewCases   = CountCases(Context, Fp, SLp);
     SampleFrac = NewCases / Cases;
     NWaiting   = 0;
 
@@ -554,7 +554,7 @@ void SampleEstimate(c50_context *Context, CaseNo Fp, CaseNo Lp,
 /*************************************************************************/
 
 
-void Sample(CaseNo Fp, CaseNo Lp, CaseNo N)
+void Sample(c50_context *Context, CaseNo Fp, CaseNo Lp, CaseNo N)
 /*   ------  */
 {
     CaseNo	i, j;
@@ -718,7 +718,7 @@ Attribute FindBestAtt(c50_context *Context, CaseCount Cases)
 	    average gain (unless very many values)  */
 
 	if ( Gain[Att] >= Epsilon &&
-	     ( MultiVal || Context->schema.max_attribute_value[Att] < 0.3 * (MaxCase + 1) ) )
+	     ( MultiVal || Context->schema.max_attribute_value[Att] < 0.3 * (Context->cases.max_case + 1) ) )
 	{
 	    Possible++;
 	    AvGain += Gain[Att];
@@ -850,7 +850,7 @@ void Divide(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp, int Level)
     Att = T->Tested;
     Missing = (Ep = Group(Context, 0, Fp, Lp, T)) - Fp + 1;
 
-    KnownCases = T->Cases - (MissingCases = CountCases(Fp, Ep));
+    KnownCases = T->Cases - (MissingCases = CountCases(Context, Fp, Ep));
 
     if ( Missing )
     {
@@ -861,7 +861,7 @@ void Divide(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp, int Level)
 
 	if ( CostWeights )
 	{
-	    KnownCases = SumNocostWeights(Ep+1, Lp);
+	    KnownCases = SumNocostWeights(Context, Ep+1, Lp);
 	}
 
 	/*  If there are many cases with missing values and many branches,
@@ -873,10 +873,10 @@ void Divide(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp, int Level)
 	{
 	    ForEach(i, Fp, Ep)
 	    {
-		if ( Weight(Case[i]) < 0.1 )
+		if ( Weight(Context->cases.records[i]) < 0.1 )
 		{
 		    Missing--;
-		    MissingCases -= Weight(Case[i]);
+		    MissingCases -= Weight(Context->cases.records[i]);
 		    Swap(Fp, i);
 		    Fp++;
 		}
@@ -896,11 +896,11 @@ void Divide(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp, int Level)
 	/*  Bp -> first value in missing + remaining values
 	    Ep -> last value in missing + current group  */
 
-	BranchCases = CountCases(Bp + Missing, Ep);
+	BranchCases = CountCases(Context, Bp + Missing, Ep);
 
 	Factor = ( ! Missing ? 0 :
 		   ! CostWeights ? BranchCases / KnownCases :
-		   SumNocostWeights(Bp + Missing, Ep) / KnownCases );
+		   SumNocostWeights(Context, Bp + Missing, Ep) / KnownCases );
 
 	if ( BranchCases + Factor * MissingCases >= MinLeaf )
 	{
@@ -910,7 +910,7 @@ void Divide(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp, int Level)
 
 		ForEach(i, Bp, Bp + Missing - 1)
 		{
-		    Weight(Case[i]) *= Factor;
+		    Weight(Context->cases.records[i]) *= Factor;
 		}
 	    }
 
@@ -922,9 +922,9 @@ void Divide(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp, int Level)
 	    {
 		for ( i = Ep ; i >= Bp ; i-- )
 		{
-		    if ( Unknown(Case[i], Att) )
+		    if ( Unknown(Context->cases.records[i], Att) )
 		    {
-			Weight(Case[i]) /= Factor;
+			Weight(Context->cases.records[i]) /= Factor;
 			Swap(i, Ep);
 			Ep--;
 		    }
@@ -969,11 +969,11 @@ CaseNo Group(c50_context *Context, DiscrValue V, CaseNo Bp, CaseNo Ep,
     {
 	/*  Group together unknown values (if any)  */
 
-	if ( SomeMiss[Att] )
+	if ( Context->cases.some_missing[Att] )
 	{
 	    ForEach(i, Bp, Ep)
 	    {
-		if ( Unknown(Case[i], Att) )
+		if ( Unknown(Context->cases.records[i], Att) )
 		{
 		    Swap(Bp, i);
 		    Bp++;
@@ -982,7 +982,7 @@ CaseNo Group(c50_context *Context, DiscrValue V, CaseNo Bp, CaseNo Ep,
 	}
     }
     else				/* skip non-existant N/A values */
-    if ( V != 1 || TestNode->NodeType == BrSubset || SomeNA[Att] )
+    if ( V != 1 || TestNode->NodeType == BrSubset || Context->cases.some_not_applicable[Att] )
     {
 	/*  Group cases on the value of attribute Att, and depending
 	    on the type of branch  */
@@ -993,7 +993,7 @@ CaseNo Group(c50_context *Context, DiscrValue V, CaseNo Bp, CaseNo Ep,
 
 		ForEach(i, Bp, Ep)
 		{
-		    if ( DVal(Case[i], Att) == V )
+		    if ( DVal(Context->cases.records[i], Att) == V )
 		    {
 			Swap(Bp, i);
 			Bp++;
@@ -1006,8 +1006,8 @@ CaseNo Group(c50_context *Context, DiscrValue V, CaseNo Bp, CaseNo Ep,
 		Thresh = TestNode->Cut;
 		ForEach(i, Bp, Ep)
 		{
-		    if ( V == 1 ? NotApplic(Context, Case[i], Att) :
-			 (CVal(Case[i], Att) <= Thresh) == (V == 2) )
+		    if ( V == 1 ? NotApplic(Context, Context->cases.records[i], Att) :
+			 (CVal(Context->cases.records[i], Att) <= Thresh) == (V == 2) )
 		    {
 			Swap(Bp, i);
 			Bp++;
@@ -1020,7 +1020,7 @@ CaseNo Group(c50_context *Context, DiscrValue V, CaseNo Bp, CaseNo Ep,
 		SS = TestNode->Subset[V];
 		ForEach(i, Bp, Ep)
 		{
-		    if ( In(XDVal(Case[i], Att), SS) )
+		    if ( In(XDVal(Context->cases.records[i], Att), SS) )
 		    {
 			Swap(Bp, i);
 			Bp++;
@@ -1042,17 +1042,17 @@ CaseNo Group(c50_context *Context, DiscrValue V, CaseNo Bp, CaseNo Ep,
 /*************************************************************************/
 
 
-CaseCount SumWeights(CaseNo Fp, CaseNo Lp)
+CaseCount SumWeights(c50_context *Context, CaseNo Fp, CaseNo Lp)
 /*        ----------  */
 {
     double	Sum=0.0;
     CaseNo	i;
 
-    assert(Fp >= 0 && Lp >= Fp-1 && Lp <= MaxCase);
+    assert(Fp >= 0 && Lp >= Fp-1 && Lp <= Context->cases.max_case);
 
     ForEach(i, Fp, Lp)
     {
-	Sum += Weight(Case[i]);
+	Sum += Weight(Context->cases.records[i]);
     }
 
     return Sum;
@@ -1067,17 +1067,17 @@ CaseCount SumWeights(CaseNo Fp, CaseNo Lp)
 /*************************************************************************/
 
 
-CaseCount SumNocostWeights(CaseNo Fp, CaseNo Lp)
+CaseCount SumNocostWeights(c50_context *Context, CaseNo Fp, CaseNo Lp)
 /*        ----------------  */
 {
     double	Sum=0.0;
     CaseNo	i;
 
-    assert(Fp >= 0 && Lp >= Fp-1 && Lp <= MaxCase);
+    assert(Fp >= 0 && Lp >= Fp-1 && Lp <= Context->cases.max_case);
 
     ForEach(i, Fp, Lp)
     {
-	Sum += Weight(Case[i]) / WeightMul[Class(Case[i])];
+	Sum += Weight(Context->cases.records[i]) / WeightMul[Class(Context->cases.records[i])];
     }
 
     return Sum;
@@ -1098,7 +1098,7 @@ void FindClassFreq(c50_context *Context, double *CF, CaseNo Fp, CaseNo Lp)
     ClassNo	c;
     CaseNo	i;
 
-    assert(Fp >= 0 && Lp >= Fp && Lp <= MaxCase);
+    assert(Fp >= 0 && Lp >= Fp && Lp <= Context->cases.max_case);
 
     ForEach(c, 0, Context->schema.max_class)
     {
@@ -1107,9 +1107,9 @@ void FindClassFreq(c50_context *Context, double *CF, CaseNo Fp, CaseNo Lp)
 
     ForEach(i, Fp, Lp)
     {
-	assert(Class(Case[i]) >= 1 && Class(Case[i]) <= Context->schema.max_class);
+	assert(Class(Context->cases.records[i]) >= 1 && Class(Context->cases.records[i]) <= Context->schema.max_class);
 
-	CF[ Class(Case[i]) ] += Weight(Case[i]);
+	CF[ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
     }
 }
 
@@ -1151,12 +1151,12 @@ void FindAllFreq(c50_context *Context, CaseNo Fp, CaseNo Lp)
 
     ForEach(i, Fp, Lp)
     {
-	ClassFreq[ (c=Class(Case[i])) ] += (w=Weight(Case[i]));
+	ClassFreq[ (c=Class(Context->cases.records[i])) ] += (w=Weight(Context->cases.records[i]));
 
 	for ( a = 0 ; a < NDList ; a++ )
 	{
 	    Att = DList[a];
-	    DFreq[Att][ Context->schema.max_class * XDVal(Case[i], Att) + (c-1) ] += w;
+	    DFreq[Att][ Context->schema.max_class * XDVal(Context->cases.records[i], Att) + (c-1) ] += w;
 	}
     }
 }

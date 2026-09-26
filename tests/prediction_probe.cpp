@@ -38,8 +38,8 @@ int main(int argc, char **argv)
     GetNames(Context, &NamesInput);
     fclose(F);
 
-    SomeMiss = AllocZero(Context->schema.max_attribute+1, Boolean);
-    SomeNA = AllocZero(Context->schema.max_attribute+1, Boolean);
+    Context->cases.some_missing = AllocZero(Context->schema.max_attribute+1, Boolean);
+    Context->cases.some_not_applicable = AllocZero(Context->schema.max_attribute+1, Boolean);
 
     CheckFile(Context, Extension, false);
     MaxTree = TRIALS-1;
@@ -78,10 +78,10 @@ int main(int argc, char **argv)
     }
     putchar('\n');
 
-    ForEach(i, 0, MaxCase)
+    ForEach(i, 0, Context->cases.max_case)
     {
-        Actual = Class(Case[i]);
-        Predicted = Classify(Context, Case[i]);
+        Actual = Class(Context->cases.records[i]);
+        Predicted = Classify(Context, Context->cases.records[i]);
         printf("%d,%s,%s,%.7g", i+1, Context->schema.class_names[Actual],
                Context->schema.class_names[Predicted], Context->confidence);
         ForEach(c, 1, Context->schema.max_class)
