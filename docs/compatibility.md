@@ -114,6 +114,12 @@ Subset pruning releases partially allocated per-attribute value sets and local
 scratch arrays if allocation fails. This affects failure cleanup only. Subset
 selection, rule contents, and successful predictions are unchanged.
 
+Branch compression completes its replacement-array allocations before changing
+child ownership or branch counts. Allocation failure previously let cleanup
+scan a smaller array using the original count and leaked recursive scratch.
+The repaired failure path raises `std::bad_alloc` and permits context reuse.
+The merge order and floating-point arithmetic of successful runs are unchanged.
+
 ## Command-line failure messages
 
 The command-line program exits with status 1 after a failure and prints a
