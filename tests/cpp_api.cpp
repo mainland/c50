@@ -26,6 +26,9 @@ int main()
     const std::string training =
         "0, low\n1, low\n2, low\n3, high\n4, high\n5, high\n";
     const std::string cases = "0, ?\n5, ?\n";
+    const double dense_training_values[] = {0, 1, 2, 3, 4, 5};
+    const std::size_t dense_training_classes[] = {0, 0, 0, 1, 1, 1};
+    const double dense_case_values[] = {0, 5};
     c50::context context;
     c50::options options;
 
@@ -55,11 +58,22 @@ int main()
          trained.names_data() != names || trained.serialized_data().empty() ||
          ! trained.costs_data().empty() ) return 1;
 
+    const c50::dense_dataset dense_training(
+        dense_training_values, 6, 1, dense_training_classes);
+    c50::model dense_trained = c50::model::train(
+        context, c50::model_kind::tree, names, dense_training, options);
+    if ( dense_trained.serialized_data() != trained.serialized_data() ) return 1;
+
     c50::predictions result = trained.predict(context, cases);
     if ( result.size() != 2 || result.class_count() != 2 ||
          std::string(result.class_name(0)) != "low" ||
          std::string(result.class_name(1)) != "high" ||
          result.class_index(0) != 0 || result.class_index(1) != 1 ) return 1;
+
+    const c50::dense_dataset dense_cases(dense_case_values, 2, 1);
+    c50::predictions dense_result = dense_trained.predict(context, dense_cases);
+    if ( dense_result.size() != 2 || dense_result.class_index(0) != 0 ||
+         dense_result.class_index(1) != 1 ) return 1;
 
     c50::model loaded = c50::model::load(
         context, trained.kind(), trained.names_data(),
