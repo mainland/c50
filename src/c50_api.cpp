@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <new>
 
 
 #include "c50_api_internal.h"
@@ -21,6 +22,14 @@ static void SetError(c50_context *context, c50_status status,
     }
 }
 
+c50_context::~c50_context()
+{
+    c50_clear_prediction_state(this);
+    free(active_rules);
+    free(ignored_values);
+    free(property_value);
+}
+
 c50_status c50_context_create(c50_context **out_context)
 {
     c50_context *context;
@@ -31,7 +40,7 @@ c50_status c50_context_create(c50_context **out_context)
     }
 
     *out_context = NULL;
-    context = (c50_context *) calloc(1, sizeof(*context));
+    context = new (std::nothrow) c50_context{};
     if ( ! context )
     {
         return C50_STATUS_OUT_OF_MEMORY;
@@ -57,12 +66,7 @@ c50_status c50_context_create(c50_context **out_context)
 
 void c50_context_destroy(c50_context *context)
 {
-    if ( ! context ) return;
-    c50_clear_prediction_state(context);
-    free(context->active_rules);
-    free(context->ignored_values);
-    free(context->property_value);
-    free(context);
+    delete context;
 }
 
 void c50_clear_prediction_state(c50_context *context)
