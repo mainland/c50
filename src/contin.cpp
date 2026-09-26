@@ -66,7 +66,7 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
 
     /*  Special case when very few known values  */
 
-    if ( GEnv.ApplicCases < 2 * MINITEMS )
+    if ( GEnv.ApplicCases < 2 * Context->options.minimum_cases )
     {
 	Verbosity(2,
 	    fprintf(Of, "\tAtt %s\tinsufficient cases with known values\n",
@@ -79,12 +79,12 @@ void EvalContinuousAtt(c50_context *Context, Attribute Att, CaseNo Fp,
 
     /*  We have to be wary of splitting a small number of cases off one end,
 	as this has little predictive power.  The minimum split GEnv.MinSplit is
-	the maximum of MINITEMS or (the minimum of 25 and 10% of the cases
+	the maximum of Context->options.minimum_cases or (the minimum of 25 and 10% of the cases
 	per class)  */
 
     GEnv.MinSplit = 0.10 * GEnv.KnownCases / Context->schema.max_class;
     if ( GEnv.MinSplit > 25 ) GEnv.MinSplit = 25;
-    if ( GEnv.MinSplit < MINITEMS ) GEnv.MinSplit = MINITEMS;
+    if ( GEnv.MinSplit < Context->options.minimum_cases ) GEnv.MinSplit = Context->options.minimum_cases;
 
     /*	Find first possible cut point and initialise scan parameters  */
 
@@ -232,7 +232,7 @@ void EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp, CaseNo Lp)
 
     /*  Special case when very few known values  */
 
-    if ( GEnv.ApplicCases < 2 * MINITEMS * SampleFrac )
+    if ( GEnv.ApplicCases < 2 * Context->options.minimum_cases * SampleFrac )
     {
 	return;
     }
@@ -242,7 +242,7 @@ void EstimateMaxGR(c50_context *Context, Attribute Att, CaseNo Fp, CaseNo Lp)
 
     GEnv.MinSplit = 0.10 * GEnv.KnownCases / Context->schema.max_class;
     if ( GEnv.MinSplit > 25 ) GEnv.MinSplit = 25;
-    if ( GEnv.MinSplit < MINITEMS ) GEnv.MinSplit = MINITEMS;
+    if ( GEnv.MinSplit < Context->options.minimum_cases ) GEnv.MinSplit = Context->options.minimum_cases;
 
     GEnv.MinSplit *= SampleFrac * 0.33;
 
@@ -556,7 +556,7 @@ void AdjustThresholds(c50_context *Context, Tree T, Attribute Att, CaseNo *Ep)
 	    }
 	    Cachesort(0, *Ep, (&GEnv)->SRec);
 
-	    if ( PossibleCuts && Trial == 0 )
+	    if ( PossibleCuts && Context->trees.trial == 0 )
 	    {
 		int Cuts=0;
 

@@ -61,15 +61,15 @@ int main(int argc, char *argv[])
     c50_input_init_memory(&input, tree, sizeof(tree) - 1);
     c50_input_init_memory(&costs_input, costs, sizeof(costs) - 1);
     ReadHeaderMemory(context, &input, &costs_input);
-    if ( TRIALS != 1 ) return 1;
-    if ( ! MCost || MCost[1][2] != 5 ) return 1;
+    if ( context->options.trials != 1 ) return 1;
+    if ( ! context->costs.matrix || context->costs.matrix[1][2] != 5 ) return 1;
 
-    RULES = false;
-    MaxTree = 0;
-    Pruned = AllocZero(2, Tree);
-    Pruned[0] = InTree(context, &input);
-    if ( ! Pruned[0] || Pruned[0]->NodeType != 0 ||
-         Pruned[0]->Leaf != 1 )
+    context->options.rules = false;
+    context->trees.max_tree = 0;
+    context->trees.pruned = AllocZero(2, Tree);
+    context->trees.pruned[0] = InTree(context, &input);
+    if ( ! context->trees.pruned[0] || context->trees.pruned[0]->NodeType != 0 ||
+         context->trees.pruned[0]->Leaf != 1 )
     {
         return 1;
     }
