@@ -47,9 +47,9 @@
 void SoftenThresh(c50_context *Context, Tree T)
 /*   ------------  */
 {
-    ResubErrs(Context, T, 0, MaxCase);
+    ResubErrs(Context, T, 0, Context->cases.max_case);
 
-    FindBounds(Context, T, 0, MaxCase);
+    FindBounds(Context, T, 0, Context->cases.max_case);
 }
 
 
@@ -84,12 +84,12 @@ void ResubErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 
     if ( CostWeights )
     {
-	MissingCases = SumNocostWeights(Fp, Ep);
-	KnownCases   = SumNocostWeights(Ep+1, Lp);
+	MissingCases = SumNocostWeights(Context, Fp, Ep);
+	KnownCases   = SumNocostWeights(Context, Ep+1, Lp);
     }
     else
     {
-	MissingCases = CountCases(Fp, Ep);
+	MissingCases = CountCases(Context, Fp, Ep);
 	KnownCases   = Cases - MissingCases;
     }
 
@@ -106,11 +106,11 @@ void ResubErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 	/*  Bp -> first value in missing + remaining values
 	    Ep -> last value in missing + current group  */
 
-	BranchCases = CountCases(Bp + Missing, Ep);
+	BranchCases = CountCases(Context, Bp + Missing, Ep);
 
 	Factor = ( ! Missing ? 0 :
 		   ! CostWeights ? BranchCases / KnownCases :
-		   SumNocostWeights(Bp + Missing, Ep) / KnownCases );
+		   SumNocostWeights(Context, Bp + Missing, Ep) / KnownCases );
 
 	if ( BranchCases + Factor * MissingCases >= MinLeaf )
 	{
@@ -118,7 +118,7 @@ void ResubErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 	    {
 		ForEach(i, Bp, Bp + Missing - 1)
 		{
-		    Weight(Case[i]) *= Factor;
+		    Weight(Context->cases.records[i]) *= Factor;
 		}
 	    }
 
@@ -132,9 +132,9 @@ void ResubErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 	    {
 		for ( i = Ep ; i >= Bp ; i-- )
 		{
-		    if ( Unknown(Case[i], Att) )
+		    if ( Unknown(Context->cases.records[i], Att) )
 		    {
-			Weight(Case[i]) /= Factor;
+			Weight(Context->cases.records[i]) /= Factor;
 			Swap(i, Ep);
 			Ep--;
 		    }
@@ -181,7 +181,7 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
     Missing = Kp - Fp;
 
     Att = T->Tested;
-    KnownCases = CountCases(Kp, Lp);
+    KnownCases = CountCases(Context, Kp, Lp);
 
     /*  Soften a threshold for a continuous attribute  */
 
@@ -193,7 +193,7 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 
 	Ap = Group(Context, 1, Kp, Lp, T) + 1;
 
-	Quicksort(Ap, Lp, Att);
+	Quicksort(Context, Ap, Lp, Att);
 
 	/*  Locate cut point and overall errors of the LE and GT branches  */
 
@@ -201,10 +201,10 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 	LEErrs = GTErrs = 0;
 	ForEach(i, Ap, Lp)
 	{
-	    if ( CVal(Case[i], Att) <= T->Cut ) SplitI = i;
+	    if ( CVal(Context->cases.records[i], Att) <= T->Cut ) SplitI = i;
 	}
 
-	T->Mid = (CVal(Case[SplitI], Att) + CVal(Case[SplitI+1], Att)) / 2;
+	T->Mid = (CVal(Context->cases.records[SplitI], Att) + CVal(Context->cases.records[SplitI+1], Att)) / 2;
 
 	/*  Consider cutoff points below and above the threshold.
 	    The errors on the cases between the cutoff and the threshold
@@ -220,15 +220,15 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 	j = SplitI;
 	for ( i = SplitI ; i > Ap ; i-- )
 	{
-	    RealClass = Class(Case[i]);
+	    RealClass = Class(Context->cases.records[i]);
 
-	    w = Weight(Case[i]);
+	    w = Weight(Context->cases.records[i]);
 	    GTErrs += w *
-		( TreeClassify(Context, Case[i], T->Branch[3]) != RealClass );
+		( TreeClassify(Context, Context->cases.records[i], T->Branch[3]) != RealClass );
 	    LEErrs += w *
-		( TreeClassify(Context, Case[i], T->Branch[2]) != RealClass );
+		( TreeClassify(Context, Context->cases.records[i], T->Branch[2]) != RealClass );
 
-	    if ( CVal(Case[i-1], Att) < CVal(Case[i], Att) )
+	    if ( CVal(Context->cases.records[i-1], Att) < CVal(Context->cases.records[i], Att) )
 	    {
 		if ( GTErrs > 2 * LEErrs + 1 || GTErrs - LEErrs > 0.5 * SE )
 		{
@@ -238,21 +238,21 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 		j = i-1;
 	    }
 	}
-	T->Lower = Min(T->Mid, CVal(Case[j], Att));
+	T->Lower = Min(T->Mid, CVal(Context->cases.records[j], Att));
 
 	LEErrs = GTErrs = 0;
 	j = SplitI+1;
 	for ( i = SplitI+1 ; i < Lp ; i++ )
 	{
-	    RealClass = Class(Case[i]);
+	    RealClass = Class(Context->cases.records[i]);
 
-	    w = Weight(Case[i]);
+	    w = Weight(Context->cases.records[i]);
 	    LEErrs += w *
-		( TreeClassify(Context, Case[i], T->Branch[2]) != RealClass );
+		( TreeClassify(Context, Context->cases.records[i], T->Branch[2]) != RealClass );
 	    GTErrs += w *
-		( TreeClassify(Context, Case[i], T->Branch[3]) != RealClass );
+		( TreeClassify(Context, Context->cases.records[i], T->Branch[3]) != RealClass );
 
-	    if ( CVal(Case[i], Att) < CVal(Case[i+1], Att) )
+	    if ( CVal(Context->cases.records[i], Att) < CVal(Context->cases.records[i+1], Att) )
 	    {
 		if ( LEErrs > 2 * GTErrs + 1 || LEErrs - GTErrs > 0.5 * SE )
 		{
@@ -262,7 +262,7 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 		j = i+1;
 	    }
 	}
-	T->Upper = Max(T->Mid, CVal(Case[j], Att));
+	T->Upper = Max(T->Mid, CVal(Context->cases.records[j], Att));
 
 	Verbosity(1,
 	    fprintf(Of, "\tLower = %g, Upper = %g\n", T->Lower, T->Upper))
@@ -283,13 +283,13 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 	    Kp -> last value in missing + current group  */
 
 	if ( Bp + Missing <= Kp &&
-	     (Factor = CountCases(Bp + Missing, Kp) / KnownCases) > 1E-6 )
+	     (Factor = CountCases(Context, Bp + Missing, Kp) / KnownCases) > 1E-6 )
 	{
 	    if ( Missing )
 	    {
 		ForEach(i, Bp, Bp + Missing - 1)
 		{
-		    Weight(Case[i]) *= Factor;
+		    Weight(Context->cases.records[i]) *= Factor;
 		}
 	    }
 
@@ -301,9 +301,9 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 	    {
 		for ( i = Kp ; i >= Bp ; i-- )
 		{
-		    if ( Unknown(Case[i], Att) )
+		    if ( Unknown(Context->cases.records[i], Att) )
 		    {
-			Weight(Case[i]) /= Factor;
+			Weight(Context->cases.records[i]) /= Factor;
 			Swap(i, Kp);
 			Kp--;
 		    }

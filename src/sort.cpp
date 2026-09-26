@@ -34,6 +34,7 @@
 
 #include "defns.i"
 #include "extern.i"
+#include "c50_api_internal.h"
 
 #define SwapSRec(a,b)	{Xab=SRec[a]; SRec[a]=SRec[b]; SRec[b]=Xab;}
 
@@ -107,7 +108,7 @@ void Cachesort(CaseNo Fp, CaseNo Lp, SortRec *SRec)
 /*************************************************************************/
 
 
-void Quicksort(CaseNo Fp, CaseNo Lp, Attribute Att)
+void Quicksort(c50_context *Context, CaseNo Fp, CaseNo Lp, Attribute Att)
 /*   ---------  */
 {
     CaseNo	i, Middle, High;
@@ -115,22 +116,22 @@ void Quicksort(CaseNo Fp, CaseNo Lp, Attribute Att)
 
     if ( Fp < Lp )
     {
-	Thresh = CVal(Case[(Fp+Lp) / 2], Att);
+	Thresh = CVal(Context->cases.records[(Fp+Lp) / 2], Att);
 
 	/*  Divide cases into three groups:
 		Fp .. Middle-1: values < Thresh
 		Middle .. High: values = Thresh
 		High+1 .. Lp:   values > Thresh  */
 
-	for ( Middle = Fp ; CVal(Case[Middle], Att) < Thresh ; Middle++ )
+	for ( Middle = Fp ; CVal(Context->cases.records[Middle], Att) < Thresh ; Middle++ )
 	    ;
 
-	for ( High = Lp ; CVal(Case[High], Att) > Thresh ; High-- )
+	for ( High = Lp ; CVal(Context->cases.records[High], Att) > Thresh ; High-- )
 	    ;
 
 	for ( i = Middle ; i <= High ; )
 	{
-	    if ( (Val = CVal(Case[i], Att)) < Thresh )
+	    if ( (Val = CVal(Context->cases.records[i], Att)) < Thresh )
 	    {
 		Swap(Middle, i);
 		Middle++;
@@ -150,7 +151,7 @@ void Quicksort(CaseNo Fp, CaseNo Lp, Attribute Att)
 
 	/*  Sort the first and third groups  */
 
-	Quicksort(Fp, Middle-1, Att);
-	Quicksort(High+1, Lp, Att);
+	Quicksort(Context, Fp, Middle-1, Att);
+	Quicksort(Context, High+1, Lp, Att);
     }
 }

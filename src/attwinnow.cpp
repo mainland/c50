@@ -66,10 +66,10 @@ void WinnowAtts(c50_context *Context)
 
     /*  Save original case order  */
 
-    SaveCase = Alloc(MaxCase+1, DataRec);
-    ForEach(i, 0, MaxCase)
+    Context->cases.saved_records = Alloc(Context->cases.max_case+1, DataRec);
+    ForEach(i, 0, Context->cases.max_case)
     {
-	SaveCase[i] = Case[i];
+	Context->cases.saved_records[i] = Context->cases.records[i];
     }
 
     /*  Split data into two halves with equal class frequencies  */
@@ -77,18 +77,18 @@ void WinnowAtts(c50_context *Context)
     Upper = AllocZero(Context->schema.max_class+1, Boolean);
 
     Bp = 0;
-    Ep = MaxCase;
-    ForEach(i, 0, MaxCase)
+    Ep = Context->cases.max_case;
+    ForEach(i, 0, Context->cases.max_case)
     {
-	c = Class(SaveCase[i]);
+	c = Class(Context->cases.saved_records[i]);
 
 	if ( Upper[c] )
 	{
-	    Case[Ep--] = SaveCase[i];
+	    Context->cases.records[Ep--] = Context->cases.saved_records[i];
 	}
 	else
 	{
-	    Case[Bp++] = SaveCase[i];
+	    Context->cases.records[Bp++] = Context->cases.saved_records[i];
 	}
 
 	Upper[c] = ! Upper[c];
@@ -206,12 +206,12 @@ void WinnowAtts(c50_context *Context)
 
     /*  Restore case order and clean up  */
 
-    ForEach(i, 0, MaxCase)
+    ForEach(i, 0, Context->cases.max_case)
     {
-	Case[i] = SaveCase[i];
+	Context->cases.records[i] = Context->cases.saved_records[i];
     }
 
-    FreeUnlessNil(SaveCase);				SaveCase = Nil;
+    FreeUnlessNil(Context->cases.saved_records);				Context->cases.saved_records = Nil;
     FreeUnlessNil(AttImp);				AttImp = Nil;
     FreeUnlessNil(Split);				Split = Nil;
     FreeUnlessNil(Used);				Used = Nil;
@@ -243,17 +243,17 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 
     /*  Build and prune trial tree  */
 
-    SaveMaxCase   = MaxCase;
+    SaveMaxCase   = Context->cases.max_case;
     SaveVERBOSITY = VERBOSITY;
     SaveMINITEMS  = MINITEMS;
     MINITEMS      = Max(MINITEMS / 2, 2.0);
 
-    Cut = (MaxCase+1) / 2 - 1;
+    Cut = (Context->cases.max_case+1) / 2 - 1;
 
     InitialiseWeights(Context);
     LEAFRATIO = 0;
     VERBOSITY = 0;
-    MaxCase   = Cut;
+    Context->cases.max_case   = Cut;
 
     memset(Tested, 0, Context->schema.max_attribute+1);		/* reset tested attributes */
 
@@ -270,7 +270,7 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
     Prune(Context, WTree);
 
     VERBOSITY = SaveVERBOSITY;
-    MaxCase   = SaveMaxCase;
+    Context->cases.max_case   = SaveMaxCase;
     MINITEMS  = SaveMINITEMS;
 
     Verbosity(2,
@@ -278,7 +278,7 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 	fprintf(Of, "\n  training error cost %g\n",
 		ErrCost(Context, WTree, 0, Cut)))
 
-    Base = ErrCost(Context, WTree, Cut+1, MaxCase);
+    Base = ErrCost(Context, WTree, Cut+1, Context->cases.max_case);
 
     Verbosity(1,
 	fprintf(Of, "  initial error cost %g\n", Base))
@@ -312,7 +312,7 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 
 	    Context->schema.special_status[Att] ^= SKIP;
 
-	    Cost = ErrCost(Context, WTree, Cut+1, MaxCase);
+	    Cost = ErrCost(Context, WTree, Cut+1, Context->cases.max_case);
 
 	    AttImp[Att] = ( Cost < Base ? -1 : Cost / Base );
 	    Verbosity(1,
@@ -352,9 +352,9 @@ float ErrCost(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
     {
 	ForEach(i, Fp, Lp)
 	{
-	    if ( (Pred = TreeClassify(Context, Case[i], T)) != Class(Case[i]) )
+	    if ( (Pred = TreeClassify(Context, Context->cases.records[i], T)) != Class(Context->cases.records[i]) )
 	    {
-		ErrCost += MCost[Pred][Class(Case[i])];
+		ErrCost += MCost[Pred][Class(Context->cases.records[i])];
 	    }
 	}
     }
@@ -362,7 +362,7 @@ float ErrCost(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
     {
 	ForEach(i, Fp, Lp)
 	{
-	    if ( TreeClassify(Context, Case[i], T) != Class(Case[i]) )
+	    if ( TreeClassify(Context, Context->cases.records[i], T) != Class(Context->cases.records[i]) )
 	    {
 		ErrCost += 1.0;
 	    }
