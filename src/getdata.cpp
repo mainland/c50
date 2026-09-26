@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: check string allocation failures. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -297,7 +298,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 			    else
 			    {
 				Dv = ++Context->schema.max_attribute_value[Att];
-				Context->schema.attribute_value_names[Att][Dv]   = strdup(Name);
+				Context->schema.attribute_value_names[Att][Dv]   = Pstrdup(Context, Name);
 				Context->schema.attribute_value_names[Att][Dv+1] =
 				    Context->schema.other_attribute_value_name; /* no free */
 			    }

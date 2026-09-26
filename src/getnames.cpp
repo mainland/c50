@@ -200,6 +200,8 @@ void GetNames(c50_context *Context, c50_input *Nf)
     Context->line_buffer_position     = Context->line_buffer;
     *Context->line_buffer_position    = 0;
 
+    Context->schema.max_attribute = 0;
+    Context->schema.owned_class_names = 0;
     Context->schema.max_class = Context->schema.class_attribute = Context->schema.label_attribute = Context->schema.case_weight_attribute = 0;
 
     /*  Get class names from names file.  This entry can be:
@@ -213,12 +215,13 @@ void GetNames(c50_context *Context, c50_input *Nf)
     {
 	ReadNameInput(Context, Nf, Buffer, 1000, ':');
 
-	if ( ++Context->schema.max_class >= ClassCeiling)
+	if ( Context->schema.max_class + 1 >= ClassCeiling)
 	{
 	    ClassCeiling += 100;
 	    Realloc(Context->schema.class_names, ClassCeiling, String);
 	}
-	Context->schema.class_names[Context->schema.max_class] = strdup(Buffer);
+        Context->schema.class_names[Context->schema.max_class + 1] = Pstrdup(Context, Buffer);
+        Context->schema.owned_class_names = ++Context->schema.max_class;
     }
     while ( Context->delimiter == ',' );
 
@@ -312,7 +315,7 @@ void GetNames(c50_context *Context, c50_input *Nf)
 	    Error(Context, DUPATTNAME, Buffer, Nil);
 	}
 
-	if ( ++Context->schema.max_attribute >= AttCeiling )
+	if ( Context->schema.max_attribute + 1 >= AttCeiling )
 	{
 	    AttCeiling += 100;
 	    Realloc(Context->schema.attribute_names, AttCeiling, String);
@@ -323,11 +326,14 @@ void GetNames(c50_context *Context, c50_input *Nf)
 	    Realloc(Context->schema.attribute_definition_uses, AttCeiling, Attribute *);
 	}
 
-	Context->schema.attribute_names[Context->schema.max_attribute]       = strdup(Buffer);
+        ++Context->schema.max_attribute;
+        Context->schema.attribute_names[Context->schema.max_attribute] = Nil;
+        Context->schema.attribute_value_names[Context->schema.max_attribute] = Nil;
 	Context->schema.special_status[Context->schema.max_attribute] = Nil;
 	Context->schema.attribute_definitions[Context->schema.max_attribute]        = Nil;
 	Context->schema.max_attribute_value[Context->schema.max_attribute]     = 0;
 	Context->schema.attribute_definition_uses[Context->schema.max_attribute]    = Nil;
+        Context->schema.attribute_names[Context->schema.max_attribute] = Pstrdup(Context, Buffer);
 
 	if ( Context->delimiter == '=' )
 	{
@@ -384,34 +390,39 @@ void GetNames(c50_context *Context, c50_input *Nf)
 	    Error(Context, BADDTARGET, Context->schema.class_names[1], "");
 	}
 
-	Free(Context->schema.class_names[1]);
+        FreeVector((void **) Context->schema.class_names, 1, Context->schema.owned_class_names);
+        Context->schema.class_names = Nil;
+        Context->schema.owned_class_names = 0;
 
 	if ( ! Context->schema.class_thresholds )
 	{
-	    Free(Context->schema.class_names);
 	    Context->schema.max_class  = Context->schema.max_attribute_value[Context->schema.class_attribute];
 	    Context->schema.class_names = Context->schema.attribute_value_names[Context->schema.class_attribute];
+            Context->schema.owned_class_names = Context->schema.max_class;
 	}
 	else
 	{
 	    /*  Set up class names as segments of continuous target att  */
 
 	    Context->schema.max_class++;
-	    Realloc(Context->schema.class_names, Context->schema.max_class+1, String);
+            Context->schema.class_names = AllocZero(Context->schema.max_class+1, String);
 
 	    sprintf(Buffer, "%s <= %g", Context->schema.attribute_names[Context->schema.class_attribute], Context->schema.class_thresholds[1]);
-	    Context->schema.class_names[1] = strdup(Buffer);
+	    Context->schema.class_names[1] = Pstrdup(Context, Buffer);
+            Context->schema.owned_class_names = 1;
 
 	    ForEach(c, 2, Context->schema.max_class-1)
 	    {
 		sprintf(Buffer, "%g < %s <= %g",
 			Context->schema.class_thresholds[c-1], Context->schema.attribute_names[Context->schema.class_attribute], Context->schema.class_thresholds[c]);
-		Context->schema.class_names[c] = strdup(Buffer);
+		Context->schema.class_names[c] = Pstrdup(Context, Buffer);
+                Context->schema.owned_class_names = c;
 	    }
 
 	    sprintf(Buffer, "%s > %g",
 		    Context->schema.attribute_names[Context->schema.class_attribute], Context->schema.class_thresholds[Context->schema.max_class-1]);
-	    Context->schema.class_names[Context->schema.max_class] = strdup(Buffer);
+	    Context->schema.class_names[Context->schema.max_class] = Pstrdup(Context, Buffer);
+            Context->schema.owned_class_names = Context->schema.max_class;
 	}
     }
 
@@ -507,7 +518,7 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
 
 	    Context->schema.attribute_value_names[Context->schema.max_attribute] = Alloc(v+3, String);
 	    Context->schema.attribute_value_names[Context->schema.max_attribute][0] = (String) (intptr_t) (v+1);
-	    Context->schema.attribute_value_names[Context->schema.max_attribute][(Context->schema.max_attribute_value[Context->schema.max_attribute]=1)] = strdup("N/A");
+	    Context->schema.attribute_value_names[Context->schema.max_attribute][(Context->schema.max_attribute_value[Context->schema.max_attribute]=1)] = Pstrdup(Context, "N/A");
 	}
 	else
 	if ( ! strcmp(Buffer, "ignore") )
@@ -537,7 +548,7 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
 
 	if ( Context->schema.max_class > 1 || strcmp(Context->schema.class_names[1], Context->schema.attribute_names[Context->schema.max_attribute]) )
 	{
-	    Context->schema.attribute_value_names[Context->schema.max_attribute][(Context->schema.max_attribute_value[Context->schema.max_attribute]=1)] = strdup("N/A");
+	    Context->schema.attribute_value_names[Context->schema.max_attribute][(Context->schema.max_attribute_value[Context->schema.max_attribute]=1)] = Pstrdup(Context, "N/A");
 	}
 	else
 	{
@@ -558,7 +569,7 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
 
 	/*  Record first real explicit value  */
 
-	Context->schema.attribute_value_names[Context->schema.max_attribute][++Context->schema.max_attribute_value[Context->schema.max_attribute]] = strdup(p);
+	Context->schema.attribute_value_names[Context->schema.max_attribute][++Context->schema.max_attribute_value[Context->schema.max_attribute]] = Pstrdup(Context, p);
 
 	/*  Record remaining values  */
 
@@ -569,13 +580,14 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
 		Error(Context, EOFINATT, Context->schema.attribute_names[Context->schema.max_attribute], "");
 	    }
 
-	    if ( ++Context->schema.max_attribute_value[Context->schema.max_attribute] >= ValCeiling )
+	    if ( Context->schema.max_attribute_value[Context->schema.max_attribute] + 1 >= ValCeiling )
 	    {
 		ValCeiling += 100;
 		Realloc(Context->schema.attribute_value_names[Context->schema.max_attribute], ValCeiling, String);
 	    }
 
-	    Context->schema.attribute_value_names[Context->schema.max_attribute][Context->schema.max_attribute_value[Context->schema.max_attribute]] = strdup(Buffer);
+            Context->schema.attribute_value_names[Context->schema.max_attribute][Context->schema.max_attribute_value[Context->schema.max_attribute] + 1] = Pstrdup(Context, Buffer);
+            ++Context->schema.max_attribute_value[Context->schema.max_attribute];
 	}
 	while ( Context->delimiter == ',' );
 
@@ -681,11 +693,10 @@ void FreeNames(c50_context *Context)
 {
     Attribute a, t;
 
-    if ( ! Context->schema.attribute_names ) return;
 
-    ForEach(a, 1, Context->schema.max_attribute)
+    if (Context->schema.attribute_value_names) ForEach(a, 1, Context->schema.max_attribute)
     {
-	if ( Context->schema.attribute_value_names[a] != Context->schema.class_names && Discrete(a) )
+	if ( Context->schema.attribute_value_names[a] != Context->schema.class_names )
 	{
 	    FreeVector((void **) Context->schema.attribute_value_names[a], 1, Context->schema.max_attribute_value[a]);
 	}
@@ -694,7 +705,7 @@ void FreeNames(c50_context *Context)
     FreeUnlessNil(Context->schema.max_attribute_value);				Context->schema.max_attribute_value = Nil;
     FreeUnlessNil(Context->schema.class_thresholds);				Context->schema.class_thresholds = Nil;
     FreeVector((void **) Context->schema.attribute_names, 1, Context->schema.max_attribute);		Context->schema.attribute_names = Nil;
-    FreeVector((void **) Context->schema.class_names, 1, Context->schema.max_class);	Context->schema.class_names = Nil;
+    FreeVector((void **) Context->schema.class_names, 1, Context->schema.owned_class_names);	Context->schema.class_names = Nil;
 
     FreeUnlessNil(Context->schema.special_status);			Context->schema.special_status = Nil;
 
