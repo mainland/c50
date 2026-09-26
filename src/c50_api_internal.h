@@ -275,6 +275,8 @@ typedef struct
 
 struct c50_context
 {
+    ~c50_context();
+
     c50_status status;
     char error_message[C50_ERROR_MESSAGE_CAPACITY];
     int operation_active;
