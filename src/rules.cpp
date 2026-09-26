@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: exception-safe rule construction. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -36,6 +37,7 @@
 #include "defns.i"
 #include "extern.i"
 #include "c50_api_internal.h"
+#include <memory>
 
 
 /*************************************************************************/
@@ -54,10 +56,12 @@ Boolean NewRule(c50_context *Context, Condition Cond[], int NCond,
 {
     int		d, dd, id, r, Size=0, Bytes;
     CaseNo	i;
-    CRule	R;
     Condition	*Lhs;
     Boolean	Exclude=false;
     int		Vote;
+
+    std::unique_ptr<RuleRec, decltype(&FreeRule)> Owner(Alloc(1, RuleRec), &FreeRule);
+    CRule R = Owner.get();
 
     /*  Sort and copy the conditions if required  */
 
@@ -68,7 +72,8 @@ Boolean NewRule(c50_context *Context, Condition Cond[], int NCond,
 	    if ( ! Deleted[d] ) Size++;
 	}
 
-	Lhs = Alloc(Size+1, Condition);
+	R->Size = Size;
+	R->Lhs = Lhs = Alloc(Size+1, Condition);
 
 	/*  Sort conditions in print order  */
 
@@ -88,6 +93,7 @@ Boolean NewRule(c50_context *Context, Condition Cond[], int NCond,
 	    if ( Lhs[d]->NodeType == BrSubset )
 	    {
 		Bytes = (Context->schema.max_attribute_value[Lhs[d]->Tested]>>3) + 1;
+		Lhs[d]->Subset = Nil;
 		Lhs[d]->Subset = Alloc(Bytes, Byte);
 		memcpy(Lhs[d]->Subset, Cond[dd]->Subset, Bytes);
 	    }
@@ -122,48 +128,36 @@ Boolean NewRule(c50_context *Context, Condition Cond[], int NCond,
 	}
     }
 
-    if ( Exclude )
+    if ( Exclude ) return false;
+
+    /*  Publish capacity only after both arrays have grown. Cleanup then
+        visits only initialized entries if either allocation fails.  */
+
+    if ( Context->rules.count+1 >= Context->rules.capacity )
     {
-	if ( ! Existing )
-	{
-	    ForEach(d, 1, Size)
-	    {
-		if ( Lhs[d]->NodeType == BrSubset ) Free(Lhs[d]->Subset);
-	    }
-	    FreeVector((void **) Lhs, 1, Size);
-	}
-
-	return false;
-    }
-
-    /*  Make sure there is enough room for the new rule  */
-
-    Context->rules.count++;
-    if ( Context->rules.count >= Context->rules.capacity )
-    {
-	Context->rules.capacity += 100;
-	if ( Context->rules.capacity > 100 )
-	{
-	    Realloc(Context->rules.rules,  Context->rules.capacity, CRule);
-	    Realloc(Context->rule_build.fires, Context->rules.capacity, Byte *);
-	    ForEach(r, Context->rules.capacity-100, Context->rules.capacity-1)
-	    {
-		Context->rule_build.fires[r] = Nil;
-	    }
-	}
-	else
-	{
-	    Context->rules.rules  = Alloc(Context->rules.capacity, CRule);
-	    Context->rule_build.fires = AllocZero(Context->rules.capacity, Byte *);
-	}
+        const int Capacity = Context->rules.capacity + 100;
+        if ( Context->rules.capacity )
+        {
+            Realloc(Context->rules.rules, Capacity, CRule);
+            Realloc(Context->rule_build.fires, Capacity, Byte *);
+            ForEach(r, Context->rules.capacity, Capacity-1)
+            {
+                Context->rules.rules[r] = Nil;
+                Context->rule_build.fires[r] = Nil;
+            }
+        }
+        else
+        {
+            Context->rules.rules = Alloc(Capacity, CRule);
+            Context->rule_build.fires = AllocZero(Capacity, Byte *);
+        }
+        Context->rules.capacity = Capacity;
     }
 
     /*  Form the new rule  */
 
-    Context->rules.rules[Context->rules.count] = R = Alloc(1, RuleRec);
-
     R->TNo     = ( Existing ? Existing->TNo : Context->trees.trial );
-    R->RNo     = ( Existing ? Existing->RNo : Context->rules.count );
+    R->RNo     = ( Existing ? Existing->RNo : Context->rules.count+1 );
     R->Size    = Size;
     R->Lhs     = Lhs;
     R->Rhs     = TargetClass;
@@ -171,6 +165,8 @@ Boolean NewRule(c50_context *Context, Condition Cond[], int NCond,
     R->Correct = Correct;
     R->Prior   = Prior;
     R->Vote    = Vote;
+
+    Context->rules.rules[++Context->rules.count] = Owner.release();
 
     /*  Record entry in Context->rule_build.fires and Context->rule_build.coverage_counts  */
 

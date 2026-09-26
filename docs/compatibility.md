@@ -104,6 +104,12 @@ therefore raise `std::bad_alloc` without invalid cleanup reads or leaks, and
 the context remains reusable. Accepted expressions and classifier output are
 unchanged.
 
+Rule construction retains ownership of incomplete conditions, rulesets, and
+rule-tree nodes until publication. Cleanup also releases partially allocated
+rule scratch buffers and normalized costs. Allocation failures during rule
+training, loading, and prediction leave the context reusable without leaks.
+These changes do not alter successful rule selection or classifier output.
+
 ## Command-line failure messages
 
 The command-line program exits with status 1 after a failure and prints a
