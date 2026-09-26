@@ -8,7 +8,7 @@
 
 CC	= gcc
 CXX	= g++ -ffloat-store
-CXXSTD = -std=c++17
+CXXSTD = -std=c++17 -Iinclude
 CXXFLAGS = $(CXXSTD) -g -Wall -DVerbOpt -O0
 LFLAGS = $(S)
 
@@ -25,6 +25,7 @@ sources =\
 	$(SRC_DIR)/c50_api.cpp\
 	$(SRC_DIR)/c50_input.cpp\
 	$(SRC_DIR)/c50_output.cpp\
+	$(SRC_DIR)/c50_model.cpp\
 	$(SRC_DIR)/c50.cpp\
 	$(SRC_DIR)/construct.cpp\
 	$(SRC_DIR)/formtree.cpp\
