@@ -67,27 +67,27 @@ void CrossVal(c50_context *Context)
 	Free(ConfusionMat);
     }
 
-    if ( FOLDS > Context->cases.max_case+1 )
+    if ( Context->options.folds > Context->cases.max_case+1 )
     {
 	fprintf(Of, T_FoldsReduced);
-	FOLDS = Context->cases.max_case+1;
+	Context->options.folds = Context->cases.max_case+1;
     }
 
-    Result	 = AllocZero((SaveFOLDS = FOLDS), float *);
+    Result	 = AllocZero((SaveFOLDS = Context->options.folds), float *);
     Blocked	 = Alloc(Context->cases.max_case+1, DataRec);
     ConfusionMat = AllocZero((Context->schema.max_class+1)*(Context->schema.max_class+1), CaseNo);
 
     Prepare(Context);
 
     SaveMaxCase = Context->cases.max_case;
-    SaveTRIALS  = TRIALS;
+    SaveTRIALS  = Context->options.trials;
 
     /*  First test blocks may be smaller than the others  */
 
-    SmallTestBlocks = FOLDS - ((Context->cases.max_case+1) % FOLDS);
-    Size = (Context->cases.max_case + 1) / FOLDS;
+    SmallTestBlocks = Context->options.folds - ((Context->cases.max_case+1) % Context->options.folds);
+    Size = (Context->cases.max_case + 1) / Context->options.folds;
 
-    ForEach(f, 0, FOLDS-1)
+    ForEach(f, 0, Context->options.folds-1)
     {
 	fprintf(Of, "\n\n[ " T_Fold " %d ]\n", f+1);
 	Result[f] = AllocZero(3, float);
@@ -105,22 +105,22 @@ void CrossVal(c50_context *Context)
 
 	/*  Check size (if appropriate) and errors  */
 
-	if ( TRIALS == 1 )
+	if ( Context->options.trials == 1 )
 	{
-	    Result[f][0] = ( RULES ? RuleSet[0]->SNRules :
-				     TreeSize(Pruned[0]) );
+	    Result[f][0] = ( Context->options.rules ? Context->rules.sets[0]->SNRules :
+				     TreeSize(Context->trees.pruned[0]) );
 	    Next = Start;
 	    ForEach(i, 0, Size-1)
 	    {
 		Context->cases.records[i] = Blocked[Next];
-		c = ( RULES ? RuleClassify(Context, Blocked[Next], RuleSet[0]) :
-			      TreeClassify(Context, Blocked[Next], Pruned[0]) );
+		c = ( Context->options.rules ? RuleClassify(Context, Blocked[Next], Context->rules.sets[0]) :
+			      TreeClassify(Context, Blocked[Next], Context->trees.pruned[0]) );
 		if ( c != Class(Blocked[Next]) )
 		{
 		    Result[f][1] += 1.0;
-		    if ( MCost )
+		    if ( Context->costs.matrix )
 		    {
-			Result[f][2] += MCost[c][Class(Blocked[Next])];
+			Result[f][2] += Context->costs.matrix[c][Class(Blocked[Next])];
 		    }
 		}
 
@@ -136,17 +136,17 @@ void CrossVal(c50_context *Context)
 	    Result[f][0] = -1;
 	    Next = Start;
 	    Context->default_class =
-		( RULES ? RuleSet[0]->SDefault : Pruned[0]->Leaf );
+		( Context->options.rules ? Context->rules.sets[0]->SDefault : Context->trees.pruned[0]->Leaf );
 	    ForEach(i, 0, Size-1)
 	    {
 		Context->cases.records[i] = Blocked[Next];
-		c = BoostClassify(Context, Blocked[Next], TRIALS-1);
+		c = BoostClassify(Context, Blocked[Next], Context->options.trials-1);
 		if ( c != Class(Blocked[Next]) )
 		{
 		    Result[f][1] += 1.0;
-		    if ( MCost )
+		    if ( Context->costs.matrix )
 		    {
-			Result[f][2] += MCost[c][Class(Blocked[Next])];
+			Result[f][2] += Context->costs.matrix[c][Class(Blocked[Next])];
 		    }
 		}
 
@@ -167,20 +167,20 @@ void CrossVal(c50_context *Context)
 
 	/*  Free space used by classifiers  */
 
-	ForEach(t, 0, MaxTree)
+	ForEach(t, 0, Context->trees.max_tree)
 	{
-	    FreeClassifier(t);
+	    FreeClassifier(Context, t);
 	}
-	MaxTree = -1;
+	Context->trees.max_tree = -1;
 
-	TRIALS = SaveTRIALS;
+	Context->options.trials = SaveTRIALS;
     }
 
     /*  Print summary of crossvalidation  */
 
     Context->cases.max_case = SaveMaxCase;
 
-    Summary();
+    Summary(Context);
     PrintConfusionMatrix(Context, ConfusionMat);
 
     /*  Free local storage  */
@@ -190,7 +190,7 @@ void CrossVal(c50_context *Context)
 	Context->cases.records[i] = Blocked[i];
     }
 
-    FreeVector((void **) Result, 0, FOLDS-1);		Result = Nil;
+    FreeVector((void **) Result, 0, Context->options.folds-1);		Result = Nil;
     Free(Blocked);					Blocked = Nil;
     Free(ConfusionMat);					ConfusionMat = Nil;
 }
@@ -241,9 +241,9 @@ void Prepare(c50_context *Context)
 
     /*  Organize into stratified blocks  */
 
-    ForEach(First, 0, FOLDS-1)
+    ForEach(First, 0, Context->options.folds-1)
     {
-	for ( i = First ; i <= Context->cases.max_case ; i += FOLDS )
+	for ( i = First ; i <= Context->cases.max_case ; i += Context->options.folds )
 	{
 	    Blocked[Next++] = Context->cases.records[Temp[i]];
 	}
@@ -290,7 +290,7 @@ void Shuffle(c50_context *Context, int *Vec)
 char
      *FoldHead[] = { F_Fold, F_UFold, "" };
 
-void Summary()
+void Summary(c50_context *Context)
 /*   -------  */
 {
     int		i, f, t;
@@ -303,7 +303,7 @@ void Summary()
 	Sum[i] = SumSq[i] = 0;
     }
 
-    ForEach(f, 0, FOLDS-1)
+    ForEach(f, 0, Context->options.folds-1)
     {
 	if ( Result[f][0] < 1 ) PrintSize = false;
     }
@@ -314,19 +314,19 @@ void Summary()
     {
 	fprintf(Of, "%s", FoldHead[t]);
 	putc('\t', Of);
-	if ( RULES )
+	if ( Context->options.rules )
 	{
-	    fprintf(Of, "%s", ( MCost ? ExtraC[t] : Extra[t] ));
+	    fprintf(Of, "%s", ( Context->costs.matrix ? ExtraC[t] : Extra[t] ));
 	}
 	else
 	{
-	    fprintf(Of, "%s", ( MCost ? StdPC[t] : StdP[t] ));
+	    fprintf(Of, "%s", ( Context->costs.matrix ? StdPC[t] : StdP[t] ));
 	}
 	putc('\n', Of);
     }
     putc('\n', Of);
 
-    ForEach(f, 0, FOLDS-1)
+    ForEach(f, 0, Context->options.folds-1)
     {
 	fprintf(Of, "%4d\t", f+1);
 
@@ -340,7 +340,7 @@ void Summary()
 	}
 	fprintf(Of, " %10.1f%%", Result[f][1]);
 
-	if ( MCost )
+	if ( Context->costs.matrix )
 	{
 	    fprintf(Of, "%7.2f", Result[f][2]);
 	}
@@ -361,14 +361,14 @@ void Summary()
     }
     else
     {
-	fprintf(Of, "%6.1f", Sum[0] / FOLDS);
+	fprintf(Of, "%6.1f", Sum[0] / Context->options.folds);
     }
 
-    fprintf(Of, " %10.1f%%", Sum[1] / FOLDS);
+    fprintf(Of, " %10.1f%%", Sum[1] / Context->options.folds);
 
-    if ( MCost )
+    if ( Context->costs.matrix )
     {
-	fprintf(Of, "%7.2f", Sum[2] / FOLDS);
+	fprintf(Of, "%7.2f", Sum[2] / Context->options.folds);
     }
 
     fprintf(Of, "\n  " T_SE "\t");
@@ -379,14 +379,14 @@ void Summary()
     }
     else
     {
-	fprintf(Of, "%6.1f", SE(Sum[0], SumSq[0], FOLDS));
+	fprintf(Of, "%6.1f", SE(Sum[0], SumSq[0], Context->options.folds));
     }
 
-    fprintf(Of, " %10.1f%%", SE(Sum[1], SumSq[1], FOLDS));
+    fprintf(Of, " %10.1f%%", SE(Sum[1], SumSq[1], Context->options.folds));
 
-    if ( MCost )
+    if ( Context->costs.matrix )
     {
-	fprintf(Of, "%7.2f", SE(Sum[2], SumSq[2], FOLDS));
+	fprintf(Of, "%7.2f", SE(Sum[2], SumSq[2], Context->options.folds));
     }
     fprintf(Of, "\n");
 }

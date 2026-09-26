@@ -74,8 +74,8 @@ void InitialiseTreeData(c50_context *Context)
     size_t	NoAttributes;
     size_t	NoCases;
 
-    Raw	     = AllocZero(TRIALS+1, Tree);
-    Pruned   = AllocZero(TRIALS+1, Tree);
+    Context->trees.raw	     = AllocZero(Context->options.trials+1, Tree);
+    Context->trees.pruned   = AllocZero(Context->options.trials+1, Tree);
 
     Tested   = AllocZero(Context->schema.max_attribute+1, Byte);
 
@@ -87,7 +87,7 @@ void InitialiseTreeData(c50_context *Context)
 
     /*  Data for subsets  */
 
-    if ( SUBSET )
+    if ( Context->options.subset_splits )
     {
 	InitialiseBellNumbers(Context);
 	Subset = Alloc(Context->schema.max_attribute+1, Set *);
@@ -120,16 +120,16 @@ void InitialiseTreeData(c50_context *Context)
 	DFreq[Att] = Alloc(Context->schema.max_class * (Context->schema.max_attribute_value[Att]+1), double);
     }
 
-    ClassFreq = AllocZero(Context->schema.max_class+1, double);
+    Context->training.class_frequencies = AllocZero(Context->schema.max_class+1, double);
     Context->class_sum  = Alloc(Context->schema.max_class+1, float);
 
-    if ( BOOST )
+    if ( Context->options.boosting )
     {
 	Context->votes      = Alloc(Context->schema.max_class+1, float);
-	Context->trial_predictions = Alloc(TRIALS, ClassNo);
+	Context->trial_predictions = Alloc(Context->options.trials, ClassNo);
     }
 
-    if ( RULES )
+    if ( Context->options.rules )
     {
 	Context->most_specific_rules     = Alloc(Context->schema.max_class+1, CRule);
 	PossibleCuts = Alloc(Context->schema.max_attribute+1, int);
@@ -138,7 +138,7 @@ void InitialiseTreeData(c50_context *Context)
     /*  Check whether all attributes have many discrete values  */
 
     MultiVal = true;
-    if ( ! SUBSET )
+    if ( ! Context->options.subset_splits )
     {
 	for ( Att = 1 ; MultiVal && Att <= Context->schema.max_attribute ; Att++ )
 	{
@@ -155,7 +155,7 @@ void InitialiseTreeData(c50_context *Context)
 
     /*  Set parameters for RawExtraErrs() */
 
-    InitialiseExtraErrs();
+    InitialiseExtraErrs(Context);
 
     /*  Set up environment  */
 
@@ -176,7 +176,7 @@ void InitialiseTreeData(c50_context *Context)
     NoCases = ( Context->cases.max_case < 0 ? 0 : (size_t) Context->cases.max_case + 1 );
     GEnv.SRec = Alloc(NoCases, SortRec);
 
-    if ( SUBSET )
+    if ( Context->options.subset_splits )
     {
 	GEnv.SubsetInfo = Alloc(Context->schema.max_discrete_value+1, double);
 	GEnv.SubsetEntr = Alloc(Context->schema.max_discrete_value+1, double);
@@ -200,8 +200,8 @@ void FreeTreeData(c50_context *Context)
     Attribute	Att;
     DiscrValue	vMax;
 
-    FreeUnlessNil(Raw);					Raw = Nil;
-    FreeUnlessNil(Pruned);				Pruned = Nil;
+    FreeUnlessNil(Context->trees.raw);					Context->trees.raw = Nil;
+    FreeUnlessNil(Context->trees.pruned);				Context->trees.pruned = Nil;
 
     FreeUnlessNil(Tested);				Tested = Nil;
 
@@ -211,7 +211,7 @@ void FreeTreeData(c50_context *Context)
 
     FreeUnlessNil(EstMaxGR);				EstMaxGR = Nil;
 
-    if ( SUBSET )
+    if ( Context->options.subset_splits )
     {
 	FreeVector((void **) Bell, 1, Context->schema.max_discrete_value);	Bell = Nil;
 
@@ -241,7 +241,7 @@ void FreeTreeData(c50_context *Context)
 	Free(DFreq);					DFreq = Nil;
     }
 
-    FreeUnlessNil(ClassFreq);				ClassFreq = Nil;
+    FreeUnlessNil(Context->training.class_frequencies);				Context->training.class_frequencies = Nil;
     FreeUnlessNil(PossibleCuts);			PossibleCuts = Nil;
 
     vMax = Max(3, Context->schema.max_discrete_value+1);
@@ -326,7 +326,7 @@ void SetMinGainThresh(c50_context *Context)
 /*    - on the basis of these figures, and depending on the current	 */
 /*	selection criterion, find the best attribute to branch on. 	 */
 /*	Note:  this version will not allow a split on an attribute	 */
-/*	unless two or more subsets have at least MINITEMS cases 	 */
+/*	unless two or more subsets have at least Context->options.minimum_cases cases 	 */
 /*								 	 */
 /*    - try branching and test whether the resulting tree is better than */
 /*	forming a leaf						 	 */
@@ -356,12 +356,12 @@ void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
 
     ForEach(c, 2, Context->schema.max_class)
     {
-	if ( ClassFreq[c] > ClassFreq[BestLeaf] )
+	if ( Context->training.class_frequencies[c] > Context->training.class_frequencies[BestLeaf] )
 	{
 	    BestLeaf = c;
 	}
 	else
-	if ( ClassFreq[c] > 0.1 && ClassFreq[c] < ClassFreq[Least] )
+	if ( Context->training.class_frequencies[c] > 0.1 && Context->training.class_frequencies[c] < Context->training.class_frequencies[Least] )
 	{
 	    Least = c;
 	}
@@ -369,13 +369,13 @@ void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
 
     ForEach(c, 1, Context->schema.max_class)
     {
-	Cases += ClassFreq[c];
+	Cases += Context->training.class_frequencies[c];
     }
 
-    MaxLeaves = ( LEAFRATIO > 0 ? rint(LEAFRATIO * Cases) : 1E6 );
+    MaxLeaves = ( Context->options.leaf_ratio > 0 ? rint(Context->options.leaf_ratio * Cases) : 1E6 );
 
-    *Result = Node = Leaf(Context, ClassFreq, BestLeaf, Cases,
-			 Cases - ClassFreq[BestLeaf]);
+    *Result = Node = Leaf(Context, Context->training.class_frequencies, BestLeaf, Cases,
+			 Cases - Context->training.class_frequencies[BestLeaf]);
 
     Verbosity(1,
     	fprintf(Of, "\n<%d> %d cases", Level, No(Fp,Lp));
@@ -389,8 +389,8 @@ void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
 	- all cases are of the same class
 	- there are not enough cases to split  */
 
-    if ( ClassFreq[BestLeaf] >= 0.999 * Cases  ||
-	 Cases < 2 * MINITEMS ||
+    if ( Context->training.class_frequencies[BestLeaf] >= 0.999 * Cases  ||
+	 Cases < 2 * Context->options.minimum_cases ||
 	 MaxLeaves < 2 )
     {
 	if ( Now == FORMTREE ) Progress(Cases);
@@ -399,14 +399,14 @@ void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
 
     /*  Calculate base information  */
 
-    GlobalBaseInfo = TotalInfo(ClassFreq, 1, Context->schema.max_class) / Cases;
+    GlobalBaseInfo = TotalInfo(Context->training.class_frequencies, 1, Context->schema.max_class) / Cases;
 
     /*  Perform preliminary evaluation if using subsampling.
 	Must expect at least 10 of least prevalent class  */
 
     ValThresh = 0;
     if ( Subsample && No(Fp, Lp) > 5 * Context->schema.max_class * SAMPLEUNIT &&
-	 (ClassFreq[Least] * Context->schema.max_class * SAMPLEUNIT) / No(Fp, Lp) >= 10 )
+	 (Context->training.class_frequencies[Least] * Context->schema.max_class * SAMPLEUNIT) / No(Fp, Lp) >= 10 )
     {
 	SampleEstimate(Context, Fp, Lp, Cases);
 	Sampled   = true;
@@ -440,7 +440,7 @@ void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
 
 	if ( Discrete(BestAtt) )
 	{
-	    if ( SUBSET && Context->schema.max_attribute_value[BestAtt] > 3 && ! Ordered(BestAtt) )
+	    if ( Context->options.subset_splits && Context->schema.max_attribute_value[BestAtt] > 3 && ! Ordered(BestAtt) )
 	    {
 		SubsetTest(Context, Node, BestAtt);
 	    }
@@ -753,7 +753,7 @@ Attribute FindBestAtt(c50_context *Context, CaseCount Cases)
 	{
 	    Val = Gain[Att] / Info[Att];
 	    NBr = ( Context->schema.max_attribute_value[Att] <= 3 || Ordered(Att) ? 3 :
-		    SUBSET ? Subsets[Att] : Context->schema.max_attribute_value[Att] );
+		    Context->options.subset_splits ? Subsets[Att] : Context->schema.max_attribute_value[Att] );
 
 	    if ( Val > BestVal ||
 		 ( Val > 0.999 * BestVal &&
@@ -794,7 +794,7 @@ void EvalDiscrSplit(c50_context *Context, Attribute Att, CaseCount Cases)
 	NBr = ( GEnv.ValFreq[1] > 0.5 ? 3 : 2 );
     }
     else
-    if ( SUBSET && Context->schema.max_attribute_value[Att] > 3 )
+    if ( Context->options.subset_splits && Context->schema.max_attribute_value[Att] > 3 )
     {
 	EvalSubset(Context, Att, Cases);
 	NBr = Subsets[Att];
@@ -845,7 +845,7 @@ void Divide(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp, int Level)
     DiscrValue	v;
     Boolean	PrevUnitWeights;
 
-    PrevUnitWeights = UnitWeights;
+    PrevUnitWeights = Context->costs.unit_weights;
 
     Att = T->Tested;
     Missing = (Ep = Group(Context, 0, Fp, Lp, T)) - Fp + 1;
@@ -854,12 +854,12 @@ void Divide(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp, int Level)
 
     if ( Missing )
     {
-	UnitWeights = false;
+	Context->costs.unit_weights = false;
 
 	/*  If using costs, must adjust branch factors to undo effects of
 	    reweighting cases  */
 
-	if ( CostWeights )
+	if ( Context->costs.weighted )
 	{
 	    KnownCases = SumNocostWeights(Context, Ep+1, Lp);
 	}
@@ -899,7 +899,7 @@ void Divide(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp, int Level)
 	BranchCases = CountCases(Context, Bp + Missing, Ep);
 
 	Factor = ( ! Missing ? 0 :
-		   ! CostWeights ? BranchCases / KnownCases :
+		   ! Context->costs.weighted ? BranchCases / KnownCases :
 		   SumNocostWeights(Context, Bp + Missing, Ep) / KnownCases );
 
 	if ( BranchCases + Factor * MissingCases >= MinLeaf )
@@ -939,7 +939,7 @@ void Divide(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp, int Level)
 	}
     }
 
-    UnitWeights = PrevUnitWeights;
+    Context->costs.unit_weights = PrevUnitWeights;
 }
 
 
@@ -1077,7 +1077,7 @@ CaseCount SumNocostWeights(c50_context *Context, CaseNo Fp, CaseNo Lp)
 
     ForEach(i, Fp, Lp)
     {
-	Sum += Weight(Context->cases.records[i]) / WeightMul[Class(Context->cases.records[i])];
+	Sum += Weight(Context->cases.records[i]) / Context->costs.weight_multipliers[Class(Context->cases.records[i])];
     }
 
     return Sum;
@@ -1092,7 +1092,8 @@ CaseCount SumNocostWeights(c50_context *Context, CaseNo Fp, CaseNo Lp)
 /*************************************************************************/
 
 
-void FindClassFreq(c50_context *Context, double *CF, CaseNo Fp, CaseNo Lp)
+void FindClassFreq(c50_context *Context, double *Frequencies,
+		   CaseNo Fp, CaseNo Lp)
 /*   -------------  */
 {
     ClassNo	c;
@@ -1102,14 +1103,15 @@ void FindClassFreq(c50_context *Context, double *CF, CaseNo Fp, CaseNo Lp)
 
     ForEach(c, 0, Context->schema.max_class)
     {
-	CF[c] = 0;
+	Frequencies[c] = 0;
     }
 
     ForEach(i, Fp, Lp)
     {
 	assert(Class(Context->cases.records[i]) >= 1 && Class(Context->cases.records[i]) <= Context->schema.max_class);
 
-	CF[ Class(Context->cases.records[i]) ] += Weight(Context->cases.records[i]);
+	Frequencies[Class(Context->cases.records[i])] +=
+	    Weight(Context->cases.records[i]);
     }
 }
 
@@ -1135,7 +1137,7 @@ void FindAllFreq(c50_context *Context, CaseNo Fp, CaseNo Lp)
 
     ForEach(c, 0, Context->schema.max_class)
     {
-	ClassFreq[c] = 0;
+	Context->training.class_frequencies[c] = 0;
     }
 
     for ( a = 0 ; a < NDList ; a++ )
@@ -1151,7 +1153,7 @@ void FindAllFreq(c50_context *Context, CaseNo Fp, CaseNo Lp)
 
     ForEach(i, Fp, Lp)
     {
-	ClassFreq[ (c=Class(Context->cases.records[i])) ] += (w=Weight(Context->cases.records[i]));
+	Context->training.class_frequencies[ (c=Class(Context->cases.records[i])) ] += (w=Weight(Context->cases.records[i]));
 
 	for ( a = 0 ; a < NDList ; a++ )
 	{

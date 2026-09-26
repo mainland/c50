@@ -82,7 +82,7 @@ void ResubErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
     Att = T->Tested;
     Missing = (Ep = Group(Context, 0, Fp, Lp, T)) - Fp + 1;
 
-    if ( CostWeights )
+    if ( Context->costs.weighted )
     {
 	MissingCases = SumNocostWeights(Context, Fp, Ep);
 	KnownCases   = SumNocostWeights(Context, Ep+1, Lp);
@@ -93,8 +93,8 @@ void ResubErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 	KnownCases   = Cases - MissingCases;
     }
 
-    PrevUnitWeights = UnitWeights;
-    if ( Missing ) UnitWeights = false;
+    PrevUnitWeights = Context->costs.unit_weights;
+    if ( Missing ) Context->costs.unit_weights = false;
 
     T->Errors = 0;
     Bp = Fp;
@@ -109,7 +109,7 @@ void ResubErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 	BranchCases = CountCases(Context, Bp + Missing, Ep);
 
 	Factor = ( ! Missing ? 0 :
-		   ! CostWeights ? BranchCases / KnownCases :
+		   ! Context->costs.weighted ? BranchCases / KnownCases :
 		   SumNocostWeights(Context, Bp + Missing, Ep) / KnownCases );
 
 	if ( BranchCases + Factor * MissingCases >= MinLeaf )
@@ -145,7 +145,7 @@ void ResubErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 	}
     }
 
-    UnitWeights = PrevUnitWeights;
+    Context->costs.unit_weights = PrevUnitWeights;
 }
 
 
@@ -270,8 +270,8 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 
     /*  Recursively scan each branch  */
 
-    PrevUnitWeights = UnitWeights;
-    if ( Missing > 0 ) UnitWeights = false;
+    PrevUnitWeights = Context->costs.unit_weights;
+    if ( Missing > 0 ) Context->costs.unit_weights = false;
 
     Bp = Fp;
 
@@ -314,5 +314,5 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 	}
     }
 
-    UnitWeights = PrevUnitWeights;
+    Context->costs.unit_weights = PrevUnitWeights;
 }

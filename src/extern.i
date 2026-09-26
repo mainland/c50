@@ -24,26 +24,7 @@
 
 
 
-extern	int		VERBOSITY,
-			TRIALS,
-			FOLDS,
-			UTILITY,
-			NCPU;
-
-extern	Boolean		SUBSET,
-			BOOST,
-			PROBTHRESH,
-			RULES,
-			XVAL,
-			NOCOSTS,
-			WINNOW,
-			GLOBAL;
-
-extern	CaseCount	MINITEMS,
-			LEAFRATIO;
-
-extern	float		CF,
-			SAMPLE;
+extern	int		NCPU;
 
 extern	int		LineNo,
 			ErrMsgs,
@@ -52,24 +33,9 @@ extern	int		LineNo,
 
 extern	String		FileStem;
 
-extern	Tree		*Raw,
-			*Pruned,
-			WTree;
+extern	float		SampleFrac;
 
-extern	float		SampleFrac,
-			*BVoteBlock,
-			**MCost,
-			**NCost,
-			*WeightMul;
-
-extern	Boolean		UnitWeights,
-			CostWeights;
-
-extern	int		Trial,
-			MaxTree;
-
-extern double		*ClassFreq,
-			**DFreq;
+extern double		**DFreq;
 
 extern	float		*Gain,
 			*Info,
@@ -87,13 +53,6 @@ extern	int		*Subsets;
 
 extern	EnvRec		GEnv;
 
-extern	CRule		*Rule;
-
-extern	RuleNo		NRules,
-			RuleSpace;
-
-extern	CRuleSet	 *RuleSet;
-
 extern	Byte		**Fires,
 			*CBuffer;
 
@@ -107,10 +66,6 @@ extern	int		*AttValues,
 
 extern	double		*LogCaseNo,
 			*LogFact;
-
-extern	int		*UtilErr,
-			*UtilBand;
-extern	double		*UtilCost;
 
 extern	int		KRInit,
 			Now;
