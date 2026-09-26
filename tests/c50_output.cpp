@@ -7,6 +7,14 @@
 
 #include "c50_output.h"
 
+static int CheckAutomaticCleanup(void)
+{
+    c50_output output;
+
+    c50_output_init_memory(&output);
+    return c50_output_printf(&output, "%s", "owned") == 5 ? 0 : 1;
+}
+
 int main(void)
 {
     static const char expected[] = "value=42\nxxxxxxxxxxxxxxxx";
@@ -36,5 +44,5 @@ int main(void)
     if ( strcmp(buffer, "file\n") ) return 1;
     fclose(file);
 
-    return 0;
+    return CheckAutomaticCleanup();
 }
