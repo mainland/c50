@@ -397,6 +397,17 @@ if(BUILD_TESTING)
                 ENVIRONMENT
                     "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python"
         )
+        add_test(
+            NAME benchmark-smoke
+            COMMAND ${Python_EXECUTABLE}
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmark_smoke.py"
+        )
+        set_tests_properties(
+            benchmark-smoke
+            PROPERTIES
+                ENVIRONMENT
+                    "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python"
+        )
         if(NOT C50_ENABLE_SANITIZERS AND NOT C50_ENABLE_THREAD_SANITIZER)
             add_test(
                 NAME python-typecheck
