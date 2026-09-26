@@ -374,9 +374,17 @@ void ConstructClassifiers(c50_context *Context)
 	    }
 	}
 
-	fclose(Context->io.model_file);
+	if ( Context->classifier_output.kind == C50_OUTPUT_FILE )
+	{
+	    if ( c50_output_close(&Context->classifier_output) )
+	    {
+		c50_record_error(Context, C50_STATUS_IO_ERROR,
+				 "could not close classifier");
+		C50Exit(Context, 1);
+	    }
+	    Context->classifier_output_active = false;
+	}
     }
-    Context->io.model_file = 0;
 
     Free(Context->training.wrong_predictions);					Context->training.wrong_predictions = Nil;
     FreeUnlessNil(Context->training.boost_vote_block);				Context->training.boost_vote_block = Nil;
