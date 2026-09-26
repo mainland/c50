@@ -10,6 +10,8 @@ CC	= gcc -ffloat-store
 CFLAGS = -g -Wall -DVerbOpt -O0
 LFLAGS = $(S)
 
+.PHONY: all test
+
 
 #	Definitions of file sets
 #	New file ordering suggested by gprof
@@ -62,9 +64,16 @@ headers =\
 	$(SRC_DIR)/extern.i\
 	$(SRC_DIR)/text.i
 
-all:
-	$(MAKE) c5.0
-	$(CC) $(LFLAGS) -o report $(SRC_DIR)/report.c -lm
+all: c5.0 report
+
+
+test: c5.0 report
+	./tests/test_cli.sh
+	./tests/test_report.sh
+
+
+report: $(SRC_DIR)/report.c Makefile
+	$(CC) $(LFLAGS) -o $@ $(SRC_DIR)/report.c -lm
 
 
 # debug version (including verbosity option)

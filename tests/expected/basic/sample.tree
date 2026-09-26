@@ -1,0 +1,7 @@
+id="See5/C5.0 2.07 GPL Edition <date>"
+sample="0.7" init="17"
+entries="1"
+type="2" class="low" freq="7,7" att="signal" forks="3" cut="4.5"
+type="0" class="low" freq="1.16667,1.16667"
+type="0" class="low" freq="5.41667,0.416667"
+type="0" class="high" freq="0.416667,5.41667"
