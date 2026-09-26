@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: reject undefined cost normalization. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -170,6 +171,7 @@ void SetupNCost(c50_context *Context)
 {
     ClassNo	Real, Pred;
     double	AvErrCost=0, ProbPred, ProbReal;
+    bool	Skip;
 
     Context->costs.normalized_matrix = Alloc(Context->schema.max_class+1, float *);
 
@@ -187,10 +189,18 @@ void SetupNCost(c50_context *Context)
 	else
  	{
 	    ProbPred = Context->training.class_frequencies[Pred] / (Context->cases.max_case+1);
+
+	    /*  With no cases ProbPred is 0/0, and a class that has every
+		case makes ProbReal / (1 - ProbPred) 0/0.  Release 2.07
+		carries the NaN on and forms no rules.  Skip the terms
+		instead, because no rule can be formed.  */
+
+	    Skip = Context->cases.max_case < 0 || ProbPred == 1;
+
 	    ForEach(Real, 1, Context->schema.max_class)
 	    {
 		Context->costs.normalized_matrix[Pred][Real] = Context->costs.matrix[Pred][Real];
-		if ( Real == Pred ) continue;
+		if ( Real == Pred || Skip ) continue;
 
 		ProbReal = Context->training.class_frequencies[Real] / (Context->cases.max_case+1);
 		AvErrCost +=
@@ -202,6 +212,8 @@ void SetupNCost(c50_context *Context)
     if ( Context->costs.matrix && ! Context->costs.weighted )
     {
 	AvErrCost = (AvErrCost + 1) / 2;	/* reduced average cost */
+        if (!isfinite(AvErrCost) || AvErrCost <= 0)
+            Error(Context, BADCOST, "rule costs have no finite positive normalization", "");
 	ForEach(Real, 1, Context->schema.max_class)
 	{
 	    ForEach(Pred, 1, Context->schema.max_class)
