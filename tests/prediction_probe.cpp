@@ -28,12 +28,12 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    Of = stderr;
-    FileStem = argv[1];
+    Context->io.output = stderr;
+    Context->io.file_stem = argv[1];
     Context->options.rules = ! strcmp(argv[2], "rules");
     Extension = ( Context->options.rules ? ".rules" : ".tree" );
 
-    if ( ! (F = GetFile(".names", "r")) ) Error(NOFILE, "", "");
+    if ( ! (F = GetFile(Context, ".names", "r")) ) Error(Context, NOFILE, "", "");
     c50_input_init_file(&NamesInput, F);
     GetNames(Context, &NamesInput);
     fclose(F);
@@ -68,7 +68,7 @@ int main(int argc, char **argv)
     Context->votes = AllocZero(Context->schema.max_class+1, float);
     Context->trial_predictions = AllocZero(Context->options.trials, ClassNo);
 
-    if ( ! (F = GetFile(".test", "r")) ) Error(NOFILE, "", "");
+    if ( ! (F = GetFile(Context, ".test", "r")) ) Error(Context, NOFILE, "", "");
     GetData(Context, F, false, false);
 
     printf("case,actual,predicted,confidence");

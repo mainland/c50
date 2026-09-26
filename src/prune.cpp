@@ -59,7 +59,7 @@ void Prune(c50_context *Context, Tree T)
     int		i, Options;
     Boolean	Regrow;
 
-    Verbosity(2, fprintf(Of, "\n"))
+    Verbosity(2, fprintf(Context->io.output, "\n"))
 
     Regrow = ( Context->trees.trial == 0 || Context->progress.stage == WINNOWATTS );
 
@@ -215,7 +215,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 	    {
 		LocalVerbosity(3,
 		    Intab(Sh);
-		    fprintf(Of, "%s (%.2f:%.2f/%.2f)\n", Context->schema.class_names[T->Leaf],
+		    fprintf(Context->io.output, "%s (%.2f:%.2f/%.2f)\n", Context->schema.class_names[T->Leaf],
 			    T->Cases, LeafErrs, T->Errors))
 	    }
 	}
@@ -366,15 +366,15 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 
     LocalVerbosity(2,
 	Intab(Sh);
-	fprintf(Of, "%s:  [%d%%  N=%.2f  tree=%.2f  leaf=%.2f+%.2f",
+	fprintf(Context->io.output, "%s:  [%d%%  N=%.2f  tree=%.2f  leaf=%.2f+%.2f",
 		Context->schema.attribute_names[T->Tested],
 		(int) ((TreeErrs * 100) / (T->Cases + 0.001)),
 		T->Cases, TreeErrs, LeafErrs, ExtraLeafErrs);
 	if ( BestBr )
 	{
-	    fprintf(Of, "  br[%d]=%.2f", BestBr, BestBrErrs);
+	    fprintf(Context->io.output, "  br[%d]=%.2f", BestBr, BestBrErrs);
 	}
-	fprintf(Of, "]\n"))
+	fprintf(Context->io.output, "]\n"))
 
     /*  See whether tree should be replaced with leaf or best branch  */
 
@@ -383,7 +383,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
     {
 	LocalVerbosity(2,
 	    Intab(Sh);
-	    fprintf(Of, "Replaced with leaf %s\n", Context->schema.class_names[T->Leaf]))
+	    fprintf(Context->io.output, "Replaced with leaf %s\n", Context->schema.class_names[T->Leaf]))
 
 	UnSprout(T);
 	T->Errors = LeafErrs + ExtraLeafErrs;
@@ -393,7 +393,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
     {
 	LocalVerbosity(2,
 	    Intab(Sh);
-	    fprintf(Of, "Replaced with branch %d\n", BestBr))
+	    fprintf(Context->io.output, "Replaced with branch %d\n", BestBr))
 
 	/*  Free unused bits of tree  */
 
@@ -497,7 +497,7 @@ void GlobalPrune(c50_context *Context, Tree T)
 
 	Verbosity(2,
 	    if ( Context->pruning.minimum_cost_subtree_count > 0 && Context->pruning.total_extra_errors > Context->pruning.maximum_extra_errors )
-		fprintf(Of, "%d tied with MinCC=%.3f; total extra errs %.1f\n",
+		fprintf(Context->io.output, "%d tied with MinCC=%.3f; total extra errs %.1f\n",
 			Context->pruning.minimum_cost_subtree_count, Context->pruning.minimum_cost_complexity, Context->pruning.total_extra_errors))
 
 	if ( ! Context->pruning.minimum_cost_subtree_count || Context->pruning.total_extra_errors > Context->pruning.maximum_extra_errors ) break;
@@ -524,10 +524,10 @@ void GlobalPrune(c50_context *Context, Tree T)
 	    Context->pruning.maximum_extra_errors -= DeltaErrs;
 
 	    Verbosity(2,
-		fprintf(Of, "global: %d leaves, %.1f errs\n",
+		fprintf(Context->io.output, "global: %d leaves, %.1f errs\n",
 			DeltaLeaves, DeltaErrs))
 	}
-	Verbosity(2, fprintf(Of, "\tremaining=%.1f\n", Context->pruning.maximum_extra_errors))
+	Verbosity(2, fprintf(Context->io.output, "\tremaining=%.1f\n", Context->pruning.maximum_extra_errors))
     }
 
     Free(Context->pruning.minimum_cost_subtrees);

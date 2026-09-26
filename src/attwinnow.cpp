@@ -118,7 +118,7 @@ void WinnowAtts(c50_context *Context)
 	    {
 		Context->training.attribute_importance[Att] = 1;
 		Context->schema.special_status[Att] ^= SKIP;
-		Verbosity(1, fprintf(Of, "  re-including %s\n", Context->schema.attribute_names[Att]))
+		Verbosity(1, fprintf(Context->io.output, "  re-including %s\n", Context->schema.attribute_names[Att]))
 	    }
 	}
 
@@ -140,11 +140,11 @@ void WinnowAtts(c50_context *Context)
 
     if ( ! Removed )
     {
-	fprintf(Of, T_NoWinnow);
+	fprintf(Context->io.output, T_NoWinnow);
     }
     else
     {
-	fprintf(Of, T_AttributesWinnowed, Removed, Plural(Removed));
+	fprintf(Context->io.output, T_AttributesWinnowed, Removed, Plural(Removed));
 
 	/*  Print remaining attributes ordered by importance  */
 
@@ -163,18 +163,18 @@ void WinnowAtts(c50_context *Context)
 
 	    if ( First )
 	    {
-		fprintf(Of, T_EstImportance);
+		fprintf(Context->io.output, T_EstImportance);
 		First = false;
 	    }
 	    if ( Context->training.attribute_importance[Best] >= 1.005 )
 	    {
-		fprintf(Of, "%7d%%  %s\n",
+		fprintf(Context->io.output, "%7d%%  %s\n",
 			    (int) ((Context->training.attribute_importance[Best] - 1) * 100 + 0.5),
 			    Context->schema.attribute_names[Best]);
 	    }
 	    else
 	    {
-		fprintf(Of, "     <1%%  %s\n", Context->schema.attribute_names[Best]);
+		fprintf(Context->io.output, "     <1%%  %s\n", Context->schema.attribute_names[Best]);
 	    }
 	    Context->training.attribute_importance[Best] = 0;
 	}
@@ -231,7 +231,7 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
     int		SaveVERBOSITY;
 
     Verbosity(1,
-	fprintf(Of, ( FirstTime ? "\nWinnow cycle:\n" : "\nCheck:\n" )))
+	fprintf(Context->io.output, ( FirstTime ? "\nWinnow cycle:\n" : "\nCheck:\n" )))
 
     /*  Build and prune trial tree  */
 
@@ -267,13 +267,13 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 
     Verbosity(2,
 	PrintTree(Context, Context->trees.winnow, "Winnowing tree:");
-	fprintf(Of, "\n  training error cost %g\n",
+	fprintf(Context->io.output, "\n  training error cost %g\n",
 		ErrCost(Context, Context->trees.winnow, 0, Cut)))
 
     Base = ErrCost(Context, Context->trees.winnow, Cut+1, Context->cases.max_case);
 
     Verbosity(1,
-	fprintf(Of, "  initial error cost %g\n", Base))
+	fprintf(Context->io.output, "  initial error cost %g\n", Base))
 
     if ( FirstTime )
     {
@@ -289,7 +289,7 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 		Verbosity(1,
 		    if ( Att != Context->schema.class_attribute && ! Skip(Att) )
 		    {
-			fprintf(Of, "  %s not used\n", Context->schema.attribute_names[Att]);
+			fprintf(Context->io.output, "  %s not used\n", Context->schema.attribute_names[Att]);
 		    })
 
 		if ( Context->training.split_attributes[Att] )
@@ -308,7 +308,7 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 
 	    Context->training.attribute_importance[Att] = ( Cost < Base ? -1 : Cost / Base );
 	    Verbosity(1,
-		fprintf(Of, "  error cost without %s = %g%s\n",
+		fprintf(Context->io.output, "  error cost without %s = %g%s\n",
 			    Context->schema.attribute_names[Att], Cost,
 			    ( Cost < Base ? " - excluded" : "" )))
 

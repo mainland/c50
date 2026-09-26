@@ -100,7 +100,7 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
     if ( ! Context->training.environment->ReasonableSubsets )
     {
 	Verbosity(2,
-	    fprintf(Of, "\tAtt %s: poor initial split\n", Context->schema.attribute_names[Att]))
+	    fprintf(Context->io.output, "\tAtt %s: poor initial split\n", Context->schema.attribute_names[Att]))
 
 	return;
     }
@@ -115,11 +115,11 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
     PrevInfo = TotalInfo(Context->training.environment->ValFreq, 0, Context->schema.max_attribute_value[Att]) / Cases;
     BestVal  = PrevGain / PrevInfo;
 
-    Verbosity(2, fprintf(Of, "\tAtt %s", Context->schema.attribute_names[Att]))
+    Verbosity(2, fprintf(Context->io.output, "\tAtt %s", Context->schema.attribute_names[Att]))
     Verbosity(3, PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], Context->training.environment->Freq,
 				   Context->training.environment->ValFreq, true))
     Verbosity(2,
-	fprintf(Of, "\tinitial inf %.3f, gain %.3f, val=%.3f\n",
+	fprintf(Context->io.output, "\tinitial inf %.3f, gain %.3f, val=%.3f\n",
 		PrevInfo, PrevGain, BestVal))
 
     /*  Eliminate unrepresented attribute values from Freq[] and ValFreq[]
@@ -211,7 +211,7 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 
 	Verbosity(2,
 	{
-	    fprintf(Of, "\tprelim merges -> inf %.3f, gain %.3f, val %.3f%s%s",
+	    fprintf(Context->io.output, "\tprelim merges -> inf %.3f, gain %.3f, val %.3f%s%s",
 			PrevInfo, PrevGain, Val,
 		        ( Better ? " **" : "" ),
 			(Context->options.verbosity > 2 ? "" : "\n" ));
@@ -279,7 +279,7 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 		ThisInfo = PrevInfo + (Context->training.environment->MergeInfo[V1][V2] -
 			   (Context->training.environment->SubsetInfo[V1] + Context->training.environment->SubsetInfo[V2])) / Cases;
 		Verbosity(3,
-		    fprintf(Of, "\t    combine %d %d info %.3f gain %.3f\n",
+		    fprintf(Context->io.output, "\t    combine %d %d info %.3f gain %.3f\n",
 			    V1, V2, ThisInfo, ThisGain))
 
 		/*  See whether this merge has the best gain so far  */
@@ -311,9 +311,9 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
 	Merge(Context, BestV1, BestV2, Cases);
 
 	Verbosity(2,
-	    fprintf(Of, "\tform subset ");
+	    fprintf(Context->io.output, "\tform subset ");
 	    PrintSubset(Context, Att, Context->training.environment->WSubset[BestV1]);
-	    fprintf(Of, ": %d subsets, inf %.3f, gain %.3f, val %.3f%s\n",
+	    fprintf(Context->io.output, ": %d subsets, inf %.3f, gain %.3f, val %.3f%s\n",
 		   Context->training.environment->Blocks, BestInfo, BestGain, Val,
 		   ( Val > BestVal ? " **" : "" ));
 	    Verbosity(3,
@@ -345,7 +345,7 @@ void EvalSubset(c50_context *Context, Attribute Att, CaseCount Cases)
     }
 
     Verbosity(2,
-	fprintf(Of, "\tfinal inf %.3f, gain %.3f, val=%.3f\n",
+	fprintf(Context->io.output, "\tfinal inf %.3f, gain %.3f, val=%.3f\n",
 		Context->splits.information[Att], Context->splits.gain[Att], Context->splits.gain[Att] / (Context->splits.information[Att] + 1E-3)))
 }
 
@@ -567,10 +567,10 @@ void PrintSubset(c50_context *Context, Attribute Att, Set Ss)
 	    }
 	    else
 	    {
-		fprintf(Of, ", ");
+		fprintf(Context->io.output, ", ");
 	    }
 
-	    fprintf(Of, "%s", Context->schema.attribute_value_names[Att][V1]);
+	    fprintf(Context->io.output, "%s", Context->schema.attribute_value_names[Att][V1]);
 	}
     }
 }
@@ -589,7 +589,7 @@ void SubsetTest(c50_context *Context, Tree Node, Attribute Att)
 {
     int	S, Bytes;
 
-    Sprout(Node, Context->splits.subset_counts[Att]);
+    Sprout(Context, Node, Context->splits.subset_counts[Att]);
 
     Node->NodeType = BrSubset;
     Node->Tested   = Att;
