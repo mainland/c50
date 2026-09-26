@@ -45,9 +45,14 @@ jobs:
           ref: main
           path: release-207
           persist-credentials: false
+      # The imported sources are under src/. Build them with the source list
+      # of Release 2.07's Makefile.
       - name: Build this tree's c5.0
         env:
           FLAGS: ${{ matrix.flags }}
-        run: C50_REFERENCE_CFLAGS="$FLAGS" tests/reference/build_reference.sh . c5.0
+        run: |
+          mkdir stage
+          cp src/*.c src/*.i release-207/Makefile stage/
+          C50_REFERENCE_CFLAGS="$FLAGS" tests/reference/build_reference.sh stage c5.0
       - name: Compare with Release 2.07
         run: tests/reference/run.sh ./c5.0 release-207
