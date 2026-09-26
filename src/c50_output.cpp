@@ -7,6 +7,16 @@
 
 #include "c50_output.h"
 
+c50_output::c50_output() noexcept
+    : kind(C50_OUTPUT_MEMORY), file(NULL), data(NULL), size(0), capacity(0),
+      owns_file(0)
+{}
+
+c50_output::~c50_output()
+{
+    c50_output_close(this);
+}
+
 static int Reserve(c50_output *output, size_t additional)
 {
     size_t required, capacity;
@@ -36,7 +46,7 @@ static int Reserve(c50_output *output, size_t additional)
 
 void c50_output_init_file(c50_output *output, FILE *file, int owns_file)
 {
-    memset(output, 0, sizeof(*output));
+    c50_output_close(output);
     output->kind = C50_OUTPUT_FILE;
     output->file = file;
     output->owns_file = owns_file;
@@ -44,7 +54,7 @@ void c50_output_init_file(c50_output *output, FILE *file, int owns_file)
 
 void c50_output_init_memory(c50_output *output)
 {
-    memset(output, 0, sizeof(*output));
+    c50_output_close(output);
     output->kind = C50_OUTPUT_MEMORY;
 }
 
@@ -119,6 +129,11 @@ int c50_output_close(c50_output *output)
         result = fclose(output->file);
     }
     free(output->data);
-    memset(output, 0, sizeof(*output));
+    output->kind = C50_OUTPUT_MEMORY;
+    output->file = NULL;
+    output->data = NULL;
+    output->size = 0;
+    output->capacity = 0;
+    output->owns_file = 0;
     return result;
 }
