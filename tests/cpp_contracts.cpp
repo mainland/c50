@@ -127,6 +127,55 @@ static void reused_context_matches_fresh()
     }
 }
 
+static void concurrent_parallel_fits()
+{
+    constexpr std::size_t rows = 10000, columns = 6, fits = 4;
+    std::vector<double> values(rows * columns);
+    std::vector<std::vector<std::size_t>> labels(fits, std::vector<std::size_t>(rows));
+    std::string schema = "no, yes.\n";
+    for (std::size_t column = 0; column < columns; ++column)
+        schema += "x" + std::to_string(column) + ": red, green, blue, yellow.\n";
+    for (std::size_t row = 0; row < rows; ++row) {
+        for (std::size_t column = 0; column < columns; ++column)
+            values[row * columns + column] = (row / (column + 1)) % 4;
+        for (std::size_t fit = 0; fit < fits; ++fit)
+            labels[fit][row] = (values[row * columns] < 2 ? 0 : 1) ^ (fit / 2);
+    }
+    c50::options options;
+    options.subset_splits = true;
+    const c50::dense_dataset cases(values.data(), rows, columns);
+    std::vector<c50::model> references;
+    std::vector<c50::predictions> expected;
+    for (std::size_t fit = 0; fit < fits; ++fit) {
+        c50::context context;
+        const c50::dense_dataset data(values.data(), rows, columns, labels[fit].data());
+        const auto kind = fit % 2 ? c50::model_kind::rules : c50::model_kind::tree;
+        references.push_back(c50::model::train(context, kind, schema, data, options));
+        expected.push_back(references.back().predict(context, cases));
+    }
+    std::promise<void> start;
+    auto ready = start.get_future().share();
+    std::vector<std::future<void>> workers;
+    for (std::size_t fit = 0; fit < fits; ++fit) {
+        workers.push_back(std::async(std::launch::async, [&, fit] {
+            c50::context context;
+            context.split_workers(4);
+            const c50::dense_dataset data(values.data(), rows, columns, labels[fit].data());
+            const auto kind = fit % 2 ? c50::model_kind::rules : c50::model_kind::tree;
+            ready.wait();
+            for (unsigned repeat = 0; repeat < 3; ++repeat) {
+                auto model = c50::model::train(context, kind, schema, data, options);
+                require(model_body(model) == model_body(references[fit]),
+                        "simultaneous parallel classifier");
+                require_predictions_equal(model.predict(context, cases), expected[fit]);
+                require_predictions_equal(references[0].predict(context, cases), expected[0]);
+            }
+        }));
+    }
+    start.set_value();
+    for (auto &worker : workers) worker.get();
+}
+
 static void parallel_schema_equivalence()
 {
     constexpr std::size_t rows = 20001;
@@ -232,6 +281,7 @@ int main()
         concurrency();
         parallel_equivalence();
         parallel_schema_equivalence();
+        concurrent_parallel_fits();
         reused_context_matches_fresh();
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
