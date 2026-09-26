@@ -302,3 +302,8 @@ The cases include boosted trees and rules, dense missing values, ordered
 attributes, not-applicable values, case weights, costs, sampling, subsets, and
 serialized-model reloads. They exercise both parallel split evaluation and its
 serial fallback conditions.
+
+The same test runs four simultaneous independent fits, each requesting four
+split workers, with trees, rules, and opposing class assignments. Repeated fits
+must reproduce their single-worker classifiers and predictions, and concurrent
+prediction through a shared immutable model must reproduce the reference.
