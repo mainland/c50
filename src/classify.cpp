@@ -85,9 +85,9 @@ void FindLeaf(c50_context *Context, DataRec Case, Tree T, Tree PT,
 	return;
     }
 
-    if ( T->NodeType && Tested )
+    if ( T->NodeType && Context->splits.tested_attributes )
     {
-	Tested[T->Tested] = true;	/* for usage */
+	Context->splits.tested_attributes[T->Tested] = true;	/* for usage */
     }
 
     switch ( T->NodeType )
@@ -269,11 +269,11 @@ ClassNo RuleClassify(c50_context *Context, DataRec Case, CRuleSet RS)
 	r = Context->active_rules[a];
 	R = RS->SRule[r];
 
-	if ( Tested )
+	if ( Context->splits.tested_attributes )
 	{
 	    ForEach(d, 1, R->Size)
 	    {
-		Tested[R->Lhs[d]->Tested] = true;	/* for usage */
+		Context->splits.tested_attributes[R->Lhs[d]->Tested] = true;	/* for usage */
 	    }
 	}
 	if ( Context->evaluation.utility_bands )

@@ -33,36 +33,11 @@ extern	int		LineNo,
 
 extern	String		FileStem;
 
-extern	float		SampleFrac;
-
-extern double		**DFreq;
-
-extern	float		*Gain,
-			*Info,
-			*EstMaxGR;
-
-extern	ContValue	*Bar;
-
-extern	double		GlobalBaseInfo,
-			**Bell;
-
-extern	Byte		*Tested;
-
-extern	Set		**Subset;
-extern	int		*Subsets;
-
-extern	EnvRec		GEnv;
-
 extern	Byte		**Fires,
 			*CBuffer;
 
 extern	int		*CovBy,
 			*List;
-
-extern	float		AttTestBits,
-			*BranchBits;
-extern	int		*AttValues,
-			*PossibleCuts;
 
 extern	double		*LogCaseNo,
 			*LogFact;
