@@ -496,16 +496,16 @@ void EvaluateSingle(c50_context *Context, int Flags)
     CaseNo	*ConfusionMat, *Usage, i, RawErrs=0, Errs=0;
     double	ECost=0, Tests;
     Boolean	CMInfo, UsageInfo;
-    const char	*StdR[] = { "   Before Pruning   ",
+    const char *const StdR[] = { "   Before Pruning   ",
 			    "  ----------------  ", "  " F_SizeErrors "  " };
-    const char	*StdP[] = { "  " F_DecisionTree16 "  ",
+    const char *const StdP[] = { "  " F_DecisionTree16 "  ",
 			    "  ----------------  ", "  " F_SizeErrors "  " };
-    const char	*StdPC[] = { "  " F_DecisionTree23 "  ",
+    const char *const StdPC[] = { "  " F_DecisionTree23 "  ",
 			     "  -----------------------  ",
 			     "  " F_SizeErrorsCost "  " };
-    const char	*Extra[] = { "  " F_Rules16, "  ----------------",
+    const char *const Extra[] = { "  " F_Rules16, "  ----------------",
 			     "  " F_NoErrors };
-    const char	*ExtraC[] = { "  " F_Rules23,
+    const char *const ExtraC[] = { "  " F_Rules23,
 			      "  -----------------------",
 			      "  " F_NoErrorsCost };
 
@@ -686,15 +686,15 @@ void EvaluateBoost(c50_context *Context, int Flags)
     CaseNo	*ConfusionMat, *Usage, i, *Errs, BoostErrs=0;
     double	*ECost, BoostECost=0, Tests;
     Boolean	CMInfo, UsageInfo;
-    const char	*Multi[] = { F_Trial, F_UTrial, "" };
-    const char	*StdP[] = { "  " F_DecisionTree16 "  ",
+    const char *const Multi[] = { F_Trial, F_UTrial, "" };
+    const char *const StdP[] = { "  " F_DecisionTree16 "  ",
 			    "  ----------------  ", "  " F_SizeErrors "  " };
-    const char	*StdPC[] = { "  " F_DecisionTree23 "  ",
+    const char *const StdPC[] = { "  " F_DecisionTree23 "  ",
 			     "  -----------------------  ",
 			     "  " F_SizeErrorsCost "  " };
-    const char	*Extra[] = { "  " F_Rules16, "  ----------------",
+    const char *const Extra[] = { "  " F_Rules16, "  ----------------",
 			     "  " F_NoErrors };
-    const char	*ExtraC[] = { "  " F_Rules23,
+    const char *const ExtraC[] = { "  " F_Rules23,
 			      "  -----------------------",
 			      "  " F_NoErrorsCost };
 
