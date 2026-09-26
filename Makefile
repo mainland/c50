@@ -47,6 +47,10 @@ sources =\
 	$(SRC_DIR)/utility.c\
 	$(SRC_DIR)/xval.c
 
+prediction_sources =\
+	$(filter-out $(SRC_DIR)/c50.c,$(sources))\
+	tests/prediction_probe.c
+
 objects =\
 	 $(SRC_DIR)/c50.o $(SRC_DIR)/global.o\
 	 $(SRC_DIR)/construct.o $(SRC_DIR)/formtree.o $(SRC_DIR)/info.o\
@@ -67,13 +71,22 @@ headers =\
 all: c5.0 report
 
 
-test: c5.0 report
+test: c5.0 report prediction-probe
 	./tests/test_cli.sh
 	./tests/test_report.sh
+	./tests/test_predictions.sh
 
 
 report: $(SRC_DIR)/report.c Makefile
 	$(CC) $(LFLAGS) -o $@ $(SRC_DIR)/report.c -lm
+
+
+prediction-probe:\
+	$(prediction_sources) $(headers) Makefile
+	cat $(SRC_DIR)/defns.i $(prediction_sources)\
+		| egrep -v 'defns.i|extern.i' >$(SRC_DIR)/predictiongt.c
+	$(CC) $(LFLAGS) -O3 -o $@ $(SRC_DIR)/predictiongt.c -lm
+	rm $(SRC_DIR)/predictiongt.c
 
 
 # debug version (including verbosity option)
