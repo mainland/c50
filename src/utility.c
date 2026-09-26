@@ -1,6 +1,7 @@
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
+/*  Modifications Copyright 2026 Geoffrey Mainland.			 */
 /*									 */
 /*  This file is part of C5.0 GPL Edition, a single-threaded version	 */
 /*  of C5.0 release 2.07.						 */
@@ -471,7 +472,7 @@ void Error(int ErrNo, String S1, String S2)
 	    break;
     }
 
-    fprintf(Of, Buffer);
+    fputs(Buffer, Of);
 	
     if ( ! WarningOnly ) ErrMsgs++;
 
