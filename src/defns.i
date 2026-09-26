@@ -361,8 +361,9 @@ typedef  struct _treerec
 	 TreeRec;
 
 
-typedef	 struct _environment
+typedef	 struct _split_workspace
 	 {
+	    DiscrValue MaxDiscrValue;	/* allocation extent for cleanup */
 	    CaseNo	Xp, Ep;			/* start and end of scan  */
 	    double	Cases,			/* total cases */
 			KnownCases,		/* ditto less missing values */
@@ -390,7 +391,7 @@ typedef	 struct _environment
 			**MergeInfo,		/* info of merged subsets i,j */
 			**MergeEntr;		/* entropy ditto */
 	 }
-	 EnvRec;
+	 SplitWorkspace;
 
 
 typedef  int	RuleNo;			/* rule number */
