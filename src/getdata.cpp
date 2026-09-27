@@ -74,7 +74,7 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 /*   ------------  */
 {
     DataRec	DVec;
-    CaseNo	CaseSpace, WantTrain, LeftTrain, WantTest, LeftTest;
+    CaseNo	CaseSpace, WantTrain=0, LeftTrain=0, WantTest=0, LeftTest=0;
     Boolean	FirstIgnore=true, SelectTrain;
 
     Context->io.line_number = 0;
