@@ -38,7 +38,19 @@
 #include <stdlib.h>
 #include <string.h>
 
-void	PrintSummary(float **Val, int No, char *Title);
+#include <array>
+#include <charconv>
+#include <iostream>
+#include <new>
+#include <stdexcept>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <vector>
+
+using Metrics = std::array<float, 3>;
+
+void PrintSummary(const std::vector<Metrics> &Val, const char *Title);
 float	SE(float sum, float sumsq, int no);
 
 int Boost=0, Composite=0, Costs=0, Rules;
@@ -47,20 +59,71 @@ int Boost=0, Composite=0, Costs=0, Rules;
 #define	ERRP	1
 #define	COST	2
 
+static bool ParseInteger(const char *Text, int &Value)
+{
+    const char *End = Text + strlen(Text);
+    const auto Result = std::from_chars(Text, End, Value);
+    return Result.ec == std::errc() && Result.ptr == End;
+}
+
+static bool ParseResult(const std::string &Line, bool BoostLine,
+                        bool CompositeLine, bool HasCost, int &Size,
+                        int &Errs, float &Percentage, float &Cost)
+{
+    if ( BoostLine && CompositeLine ) return false;
+    std::string_view Data(Line);
+    if ( CompositeLine )
+    {
+        if ( Data.size() < 18 ) return false;
+        Data.remove_prefix(18);
+    }
+
+    std::istringstream Input{std::string(Data)};
+    if ( BoostLine )
+    {
+        std::string Keyword;
+        if ( !(Input >> Keyword) || Keyword != "boost" ) return false;
+    }
+    else if ( !(Input >> Size) )
+    {
+        return false;
+    }
+
+    char Open, Percent, Close;
+    if ( !(Input >> Errs >> Open >> Percentage >> Percent >> Close) ||
+         Open != '(' || Percent != '%' || Close != ')' ||
+         ! std::isfinite(Percentage) )
+    {
+        return false;
+    }
+    if ( HasCost && (!(Input >> Cost) || ! std::isfinite(Cost)) ) return false;
+
+    Input >> std::ws;
+    if ( Input.eof() ) return true;
+
+    std::string Marker;
+    if ( !(Input >> Marker) || Marker != "<<" ) return false;
+    Input >> std::ws;
+    return Input.eof();
+}
+
 
 int main(int argc, char *argv[])
 /*  ----  */
 {
-    char	Line[100], *p;
+    try
+    {
+    const char	*p;
+    std::string Line;
     int		Cases, Folds, Repeats, f, r, i, N,
-		Size=0, Errs=0, Form, OK, Status=0;
-    float	***Raw=0, **Average=0, FX, Tests, Cost=0;
+		Size=0, Errs=0, OK=0;
+    float	FX, Tests, Cost=0;
 
     if ( argc != 5 ||
-	 sscanf(argv[1], "%d", &Cases) != 1 ||
-	 sscanf(argv[2], "%d", &Folds) != 1 ||
-	 sscanf(argv[3], "%d", &Repeats) != 1 ||
-	 sscanf(argv[4], "%d", &Rules) != 1 ||
+	 ! ParseInteger(argv[1], Cases) ||
+	 ! ParseInteger(argv[2], Folds) ||
+	 ! ParseInteger(argv[3], Repeats) ||
+	 ! ParseInteger(argv[4], Rules) ||
 	 Cases < 1 || Folds < 2 || Folds > Cases || Repeats < 1 ||
 	 ( Rules != 0 && Rules != 1 ) )
     {
@@ -71,30 +134,29 @@ int main(int argc, char *argv[])
 
     /*  Assemble all data  */
 
-    Raw = (float ***) calloc(Repeats, sizeof(float **));
-    if ( Repeats > 1 )
-    {
-	Average = (float **) calloc(Repeats, sizeof(float *));
-    }
+    std::vector<std::vector<Metrics>> Raw(
+        static_cast<size_t>(Repeats),
+        std::vector<Metrics>(static_cast<size_t>(Folds)));
+    std::vector<Metrics> Average;
+    if ( Repeats > 1 ) Average.resize(static_cast<size_t>(Repeats));
 
     /*  Determine input type from the first line  */
 
-    if ( ! fgets(Line, 100, stdin) )
+    if ( ! std::getline(std::cin, Line) )
     {
 	fprintf(stderr, "Expecting %d lines\n", Folds * Repeats);
-	Status = 1;
-	goto cleanup;
+	return 1;
     }
 
     /*  Count the numbers on the line  */
 
     N = 0;
-    for ( p = Line ; *p ; )
+    for ( p = Line.c_str() ; *p ; )
     {
-	if ( isdigit(*p) )
+	if ( isdigit(static_cast<unsigned char>(*p)) )
 	{
 	    N++;
-	    while ( isdigit(*p) || *p == '.' ) p++;
+	    while ( isdigit(static_cast<unsigned char>(*p)) || *p == '.' ) p++;
 	}
 	else
 	{
@@ -102,13 +164,13 @@ int main(int argc, char *argv[])
 	}
     }
 
-    if ( ! memcmp(Line, "boost", 5) )
+    if ( Line.compare(0, 5, "boost") == 0 )
     {
 	Boost = 1;
 	Costs = ( N == 3 );
     }
     else
-    if ( ! memcmp(Line, "composite", 9) )
+    if ( Line.compare(0, 9, "composite") == 0 )
     {
 	Composite = 1;
 	Rules = 0;
@@ -118,80 +180,34 @@ int main(int argc, char *argv[])
     {
 	Costs = ( N == 4 );
     }
-    Form = ( Composite ? 2 + Costs : Costs );
 
     for ( r = 0 ; r < Repeats ; r++ )
     {
-	Raw[r] = (float **) calloc(Folds, sizeof(float *));
-	if ( Repeats > 1 )
-	{
-	    Average[r] = (float *) calloc(3, sizeof(float));
-	}
-
 	for ( f = 0 ; f < Folds ; f++ )
 	{
-	    Raw[r][f] = (float *) calloc(3, sizeof(float));
-
-	    if ( r + f != 0 && ! fgets(Line, 100, stdin) )
+	    if ( r + f != 0 && ! std::getline(std::cin, Line) )
 	    {
 		printf("\nExpecting %d lines\n", Folds * Repeats);
-		Status = 1;
-		goto cleanup;
+		return 1;
 	    }
 
 	    Tests = Cases / Folds + ( f >= Folds - Cases % Folds);
+            const bool BoostLine = Line.compare(0, 5, "boost") == 0;
+            if ( BoostLine ) Boost = 1;
+            OK = ParseResult(Line, BoostLine, Composite, Costs, Size, Errs,
+                             FX, Cost);
 
-	    if ( ! memcmp(Line, "boost", 5) )
+            if ( ! OK )
 	    {
-		Boost = 1;
-
-		switch ( Form )
-		{
-		case 0:
-		    N = sscanf(Line, "boost %d (%f%%)", &Errs, &FX);
-		    OK = ( N == 2 );
-		    break;
-
-		case 1:
-		    N = sscanf(Line, "boost %d (%f%%) %f", &Errs, &FX, &Cost);
-		    OK = ( N == 3 );
-		}
-	    }
-	    else
-	    {
-		switch ( Form )
-		{
-		case 0:
-		    N = sscanf(Line, "%d %d (%f%%)", &Size, &Errs, &FX);
-		    OK = ( N == 3 );
-		    break;
-
-		case 1:
-		    N = sscanf(Line, "%d %d (%f%%) %f",
-				     &Size, &Errs, &FX, &Cost);
-		    OK = ( N == 4 );
-		    break;
-
-		case 2:
-		    N = sscanf(Line+18, "%d %d (%f%%) %f",
-					&Size, &Errs, &FX, &Cost);
-		    OK = ( N == 4 );
-		    break;
-		}
-	    }
-
-	    if ( ! OK )
-	    {
-		printf("\nCannot parse line\n\t%s", Line);
-		Status = 1;
-		goto cleanup;
+		printf("\nCannot parse line\n\t%s\n", Line.c_str());
+		return 1;
 	    }
 
 	    Raw[r][f][SIZE] = Size;
 	    Raw[r][f][ERRP] = (100.0 * Errs) / Tests;
 	    Raw[r][f][COST] = Cost;
 
-	    if ( Average )
+	    if ( ! Average.empty() )
 	    {
 		for ( i = 0 ; i < 3 ; i++ )
 		{
@@ -200,7 +216,7 @@ int main(int argc, char *argv[])
 	    }
 	}
 
-	if ( Average )
+	if ( ! Average.empty() )
 	{
 	    for ( i = 0 ; i < 3 ; i++ )
 	    {
@@ -211,42 +227,36 @@ int main(int argc, char *argv[])
 
     /*  Check that amount of data is correct  */
 
-    if ( fgets(Line, 100, stdin) )
+    if ( std::getline(std::cin, Line) )
     {
 	printf("\nExpecting %d lines\n", Folds * Repeats * 2);
-	Status = 1;
-	goto cleanup;
+	return 1;
     }
 
-    if ( Average )
+    if ( ! Average.empty() )
     {
-	PrintSummary(Average, Repeats, "XVal");
+	PrintSummary(Average, "XVal");
     }
     else
     {
-	PrintSummary(Raw[SIZE], Folds, "Fold");
+	PrintSummary(Raw[0], "Fold");
     }
-cleanup:
-    for ( r = 0 ; r < Repeats ; r++ )
+    return 0;
+    }
+    catch ( const std::bad_alloc & )
     {
-	if ( Raw[r] )
-	{
-	    for ( f = 0 ; f < Folds ; f++ )
-	    {
-		free(Raw[r][f]);
-	    }
-	    free(Raw[r]);
-	}
-	if ( Average ) free(Average[r]);
+	fprintf(stderr, "Out of memory\n");
+	return 1;
     }
-    free(Raw);
-    free(Average);
-
-    return Status;
+    catch ( const std::length_error & )
+    {
+	fprintf(stderr, "Out of memory\n");
+	return 1;
+    }
 }
 
 
-char
+const char
      *StdP[]  = {	"    Decision Tree   ",
 			"  ----------------  ",
 			"    Size    Errors  " },
@@ -263,16 +273,12 @@ char
 			"  -----------------------",
 			"      No    Errors   Cost" };
 
-void PrintSummary(float **Val, int No, char *Title)
+void PrintSummary(const std::vector<Metrics> &Val, const char *Title)
 /*   ------------  */
 {
+    const int No = static_cast<int>(Val.size());
     int i, j;
-    float Sum[3], SumSq[3];
-
-    for ( i = 0 ; i < 3 ; i++ )
-    {
-	Sum[i] = SumSq[i] = 0;
-    }
+    Metrics Sum{}, SumSq{};
 
     for ( i = 0 ; i <= 2 ; i++ )
     {

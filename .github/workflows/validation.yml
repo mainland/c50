@@ -39,9 +39,7 @@ jobs:
         run: >-
           cmake -S . -B build
           -DCMAKE_BUILD_TYPE=Debug
-          -DCMAKE_C_COMPILER=${{ matrix.cc }}
           -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
-          -DCMAKE_C_FLAGS='-Wall -Wextra -Wpedantic'
           -DCMAKE_CXX_FLAGS='-Wall -Wextra -Wpedantic'
           -DC50_BUILD_BENCHMARKS=ON
       - name: Build and test native and installed interfaces
