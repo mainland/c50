@@ -39,6 +39,10 @@ struct c50::detail::model_data
     std::string names_data;
     std::string model_data;
     std::string costs_data;
+    /* The most tree levels that every parse of model_data accepts. Text that
+       the library wrote has no limit, which is the default here. model::load
+       records the limit of 1,024 levels. Copies carry it. */
+    std::optional<std::size_t> max_tree_depth;
 };
 
 struct c50::detail::prediction_data
@@ -110,6 +114,7 @@ static bool ParseModel(c50_context *Context, const c50_model *model)
     Context->io.output = NULL;
     Context->io.file_stem = "memory";
     Context->options.rules = model->kind == c50::model_kind::rules;
+    Context->max_serialized_tree_depth = model->max_tree_depth;
     Context->options.trials = 1;
     Context->trees.max_tree = -1;
     Context->options.sample_fraction = 0;
@@ -170,6 +175,7 @@ static void LoadModel(c50_context *Context, void *user_data)
 
     state->model = std::make_unique<c50_model>();
     state->model->kind = state->kind;
+    state->model->max_tree_depth = c50_default_max_tree_depth;
     state->model->names_data.assign(state->names_data, state->names_size);
     state->model->model_data.assign(state->model_data, state->model_size);
     if (state->costs_size)
