@@ -1,0 +1,40 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `implicit-divide-wrap'
+
+Read 300 cases (2 attributes) from implicit-divide-wrap.data
+
+Attributes excluded:
+    x
+
+Decision tree:
+
+r <= 9.715791e-05: low (134/20)
+r > 9.715791e-05: high (166/26)
+
+
+Evaluation on training data (300 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2   46(15.3%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	   114    26    (a): class low
+	    20   140    (b): class high
+
+
+	Attribute usage:
+
+	    100%  x
+	    100%  r
+
+
+Time: <elapsed> secs

@@ -1,0 +1,28 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `implicit-divide-zero'
+
+*** line 2 of `implicit-divide-zero.data': value of `r' changed to `?'
+
+*** line 3 of `implicit-divide-zero.data': value of `r' changed to `?'
+
+*** line 5 of `implicit-divide-zero.data': value of `r' changed to `?'
+
+*** line 6 of `implicit-divide-zero.data': value of `r' changed to `?'
+
+*** line 7 of `implicit-divide-zero.data': value of `r' changed to `?'
+
+*** line 9 of `implicit-divide-zero.data': value of `r' changed to `?'
+
+*** line 10 of `implicit-divide-zero.data': value of `r' changed to `?'
+
+*** line 11 of `implicit-divide-zero.data': value of `r' changed to `?'
+
+*** line 12 of `implicit-divide-zero.data': value of `r' changed to `?'
+
+*** line 13 of `implicit-divide-zero.data': value of `r' changed to `?'
+
+Error limit exceeded
