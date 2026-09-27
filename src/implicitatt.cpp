@@ -546,6 +546,7 @@ Boolean Atom(c50_context *Context)
 	else
 	{
 	    F = strtod(Context->implicit_state->buffer+Context->implicit_state->buffer_position, &EndPtr);
+	    if ( ! isfinite(F) ) FailSyn("finite number");
 
 	    /*  Check for period after integer  */
 
@@ -968,8 +969,8 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 /*       -----------  */
 {
     XStackElt	XStack[100];			/* allows 100-level nesting  */
-    int		XSN=0, DN, bv1, bv2, Mult;
-    double	cv1, cv2;
+    int		XSN=0, DN, bv1, bv2;
+    double	cv1, cv2, Mult;
     String	sv1, sv2;
     Attribute	Att;
     DefElt	DElt;
@@ -1106,7 +1107,10 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 
 		    cv1 = XStack[XSN-2].cval;
 		    cv2 = XStack[XSN-1].cval;
-		    if ( ! cv2 ||
+		    /*  An infinite divisor would never finish the precision
+			scaling loop below, so treat it like a zero divisor  */
+
+		    if ( ! cv2 || isinf(cv2) ||
 			 CUnknownVal(XStack[XSN-2]) ||
 			 CUnknownVal(XStack[XSN-1]) ||
 			 NotApplicVal(XStack[XSN-2]) ||

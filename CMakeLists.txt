@@ -495,6 +495,7 @@ if(BUILD_TESTING)
     add_test(NAME reference-compatibility COMMAND c50_reference_compatibility)
     add_test(NAME cost-validation COMMAND c50_cost_validation)
     add_test(NAME parser-validation COMMAND c50_parser_validation)
+    set_tests_properties(parser-validation PROPERTIES TIMEOUT 120)
     add_test(
         NAME parser-fuzz-seeds
         COMMAND c50_fuzz_seed_replay

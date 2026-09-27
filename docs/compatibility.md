@@ -75,12 +75,18 @@ must contain a complete integer from 2 through `INT_MAX - 3`, reserving space
 for the parser's internal entries without signed overflow.
 
 Implicit definitions reject missing and not-applicable literals without a
-preceding operand that determines their type. They also reject expressions
-nested beyond 100 levels. Token matching and date and time recognition remain
-within the definition buffer. These checks make extreme or malformed
-definitions reject instead of exhausting resources or invoking undefined
-behavior. Accepted definitions within these limits retain their existing
-evaluation behavior.
+preceding operand that determines their type. They also reject nonfinite numeric
+literals and expressions nested beyond 100 levels. Token matching and date and
+time recognition remain within the definition buffer, and division precision
+scaling does not overflow for large finite divisors. These checks make extreme
+or malformed definitions reject instead of exhausting resources or invoking
+undefined behavior. Accepted definitions within these limits retain their
+existing evaluation behavior.
+
+Division by an infinite value, which finite literals can produce through
+exponentiation overflow, yields an unknown value, as division by zero does.
+The imported implementation never finished evaluating such a definition, so
+this change affects no definition that previously completed.
 
 Serialized properties must use the quoted syntax emitted by C5.0. Unquoted
 values, incomplete escapes, and trailing property text produce parse errors.
