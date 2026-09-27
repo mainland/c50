@@ -45,6 +45,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+static constexpr DiscrValue DynamicValueChunk = 100;
+
 /*************************************************************************/
 /*									 */
 /*	Read a name from file f into string s, setting the delimiter.	 */
@@ -532,9 +534,11 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
             }
             v = static_cast<DiscrValue>(capacity);
 
-	    Context->schema.attribute_value_names[Context->schema.max_attribute] = Alloc(v+3, String);
-	    Context->schema.attribute_value_names[Context->schema.max_attribute][0] = (String) (intptr_t) (v+1);
-	    Context->schema.attribute_value_names[Context->schema.max_attribute][(Context->schema.max_attribute_value[Context->schema.max_attribute]=1)] = Pstrdup(Context, "N/A");
+            const DiscrValue allocation =
+                v + 3 < DynamicValueChunk ? v + 3 : DynamicValueChunk;
+            Context->schema.attribute_value_names[Context->schema.max_attribute] = Alloc(allocation, String);
+            Context->schema.attribute_value_names[Context->schema.max_attribute][0] = (String) (intptr_t) (v+1);
+            Context->schema.attribute_value_names[Context->schema.max_attribute][(Context->schema.max_attribute_value[Context->schema.max_attribute]=1)] = Pstrdup(Context, "N/A");
 	}
 	else
 	if ( ! strcmp(Buffer, "ignore") )
@@ -615,6 +619,40 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
 	}
 	if ( Context->schema.max_attribute_value[Context->schema.max_attribute] > Context->schema.max_discrete_value ) Context->schema.max_discrete_value = Context->schema.max_attribute_value[Context->schema.max_attribute];
     }
+}
+
+
+
+/*************************************************************************/
+/*									 */
+/*	Grow a dynamic attribute's value table in bounded chunks.		 */
+/*									 */
+/*************************************************************************/
+
+
+void EnsureDynamicValueSpace(c50_context *Context, Attribute Att,
+                             DiscrValue Value)
+/*   -----------------------  */
+{
+    constexpr size_t Chunk = DynamicValueChunk;
+    String *Values = Context->schema.attribute_value_names[Att];
+    const size_t Limit = static_cast<size_t>(
+        reinterpret_cast<intptr_t>(Values[0]));
+    const size_t FullSize = Limit + 2;
+    const size_t Required = static_cast<size_t>(Value) + 2;
+
+    if ( FullSize <= Chunk ) return;
+
+    const size_t Used = static_cast<size_t>(
+        Context->schema.max_attribute_value[Att]) + 2;
+    size_t Allocated = ((Used + Chunk - 1) / Chunk) * Chunk;
+    if ( Allocated < Chunk ) Allocated = Chunk;
+    if ( Required <= Allocated || Allocated >= FullSize ) return;
+
+    const size_t NewSize =
+        Allocated + Chunk < FullSize ? Allocated + Chunk : FullSize;
+    Context->schema.attribute_value_names[Att] = static_cast<String *>(
+        Prealloc(Context, Values, NewSize * sizeof(String)));
 }
 
 
