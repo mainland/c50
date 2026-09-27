@@ -275,6 +275,12 @@ if(BUILD_TESTING)
     add_executable(c50_cpp_api tests/cpp_api.cpp)
     target_compile_features(c50_cpp_api PRIVATE cxx_std_17)
     target_link_libraries(c50_cpp_api PRIVATE C50::cpp)
+    add_executable(c50_index_overflow tests/index_overflow.cpp)
+    target_compile_features(c50_index_overflow PRIVATE cxx_std_17)
+    target_include_directories(
+        c50_index_overflow
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
     list(
         APPEND C50_COMPILE_TARGETS
         c50_input_test
@@ -282,6 +288,7 @@ if(BUILD_TESTING)
         c50_data_input_test
         c50_reference_compatibility
         c50_cpp_api
+        c50_index_overflow
     )
     list(
         APPEND C50_EXECUTABLE_TARGETS
@@ -290,6 +297,7 @@ if(BUILD_TESTING)
         c50_data_input_test
         c50_reference_compatibility
         c50_cpp_api
+        c50_index_overflow
     )
 endif()
 
@@ -385,6 +393,27 @@ install(
     NAMESPACE C50::
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
 )
+
+# The class-count index check trains a schema of 46,341 classes, which reserves
+# about 8.6 GB of address space, so it is not part of the default tests. Run it
+# explicitly with `cmake --build build --target index-overflow-large`.
+if(UNIX)
+    add_executable(
+        c50_index_overflow_train EXCLUDE_FROM_ALL
+        tests/slow/index_overflow_train.cpp
+    )
+    target_compile_features(c50_index_overflow_train PRIVATE cxx_std_17)
+    target_link_libraries(c50_index_overflow_train PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_index_overflow_train)
+    add_custom_target(
+        index-overflow-large
+        COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/slow/index_overflow.sh"
+                $<TARGET_FILE:c50_cli> $<TARGET_FILE:c50_index_overflow_train>
+        DEPENDS c50_cli c50_index_overflow_train
+        USES_TERMINAL
+        VERBATIM
+    )
+endif()
 
 if(BUILD_TESTING OR C50_BUILD_FUZZERS)
     add_library(c50_fuzz_target STATIC tests/fuzz/parser_target.cpp)
@@ -524,6 +553,7 @@ if(BUILD_TESTING)
     add_test(NAME cpp-api COMMAND c50_cpp_api)
     add_test(NAME operation-state COMMAND c50_operation_state)
     add_test(NAME cpp-contracts COMMAND c50_cpp_contracts)
+    add_test(NAME index-overflow COMMAND c50_index_overflow)
     if(C50_BUILD_PYTHON)
         add_test(
             NAME python-api

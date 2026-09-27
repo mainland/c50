@@ -37,6 +37,7 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 #include <stdint.h>
+#include <limits>
 
 
 #define  NAME T_C50
@@ -148,10 +149,15 @@ void *Prealloc(c50_context *Context, void *Present, size_t Bytes)
 
 
 
-void *Pcalloc(c50_context *Context, size_t Number, unsigned int Size)
+void *Pcalloc(c50_context *Context, size_t Number, size_t Size)
 /*    -------  */
 {
     void *p=Nil;
+
+    if ( Size && Number > std::numeric_limits<size_t>::max() / Size )
+    {
+	Error(Context, NOMEM, "", "");
+    }
 
     if ( ! Number || (p = (void *) calloc(Number, Size)) )
     {
@@ -163,6 +169,17 @@ void *Pcalloc(c50_context *Context, size_t Number, unsigned int Size)
     return Nil;
 }
 
+
+
+void *PreallocArray(c50_context *Context, void *Present, size_t Number,
+                      size_t Size)
+{
+    if ( Size && Number > std::numeric_limits<size_t>::max() / Size )
+    {
+	Error(Context, NOMEM, "", "");
+    }
+    return Prealloc(Context, Present, Number * Size);
+}
 
 
 void FreeVector(void **V, int First, int Last)
@@ -213,8 +230,8 @@ DataRec NewCase(c50_context *Context)
 	Context->cases.memory_blocks = AllocZero(1, DataBlockRec);
         Context->cases.memory_blocks->Prev = Prev;
 	Context->cases.memory_blocks->Head =
-	    Alloc(Context->cases.block_size *
-		  (Context->schema.max_attribute+2), AttValue);
+	    Alloc(static_cast<size_t>(Context->cases.block_size) *
+	          static_cast<size_t>(Context->schema.max_attribute + 2), AttValue);
     }
 
     return Context->cases.memory_blocks->Head +
