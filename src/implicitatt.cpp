@@ -1,4 +1,4 @@
-/* Modified 2026 by Geoffrey Mainland: check string allocation failures. */
+/* Modified 2026 by Geoffrey Mainland: validate implicit expression bounds and ownership. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -59,6 +59,7 @@ struct c50_implicit_state
     c50_context *context;
     char *buffer = nullptr;
     int buffer_size = 0;
+    int buffer_length = 0;
     int buffer_position = 0;
     EltRec *type_stack = nullptr;
     int type_stack_size = 0;
@@ -226,6 +227,8 @@ void ReadDefinition(c50_context *Context, c50_input *f)
 
 	    if ( ! LastWasPeriod ) Append(Context, '.');
 	    Append(Context, 0);
+	    Context->implicit_state->buffer_length =
+		Context->implicit_state->buffer_position - 1;
 
 	    return;
 	}
@@ -468,11 +471,15 @@ Boolean Atom(c50_context *Context)
 /*      ----  */
 {
     char	*EndPtr, *Str, Date[11], Time[9];
-    int		o, FirstBN, Fi=Context->implicit_state->buffer_position;
+    int		o, FirstBN, Remaining, Fi=Context->implicit_state->buffer_position;
     ContValue	F;
     Attribute	Att;
 
-    if ( Context->implicit_state->buffer[Context->implicit_state->buffer_position] == ' ' ) Context->implicit_state->buffer_position++;
+    if ( Context->implicit_state->buffer_position < Context->implicit_state->buffer_length &&
+	 Context->implicit_state->buffer[Context->implicit_state->buffer_position] == ' ' ) Context->implicit_state->buffer_position++;
+    if ( Context->implicit_state->buffer_position >= Context->implicit_state->buffer_length ) return false;
+    Remaining = Context->implicit_state->buffer_length -
+		Context->implicit_state->buffer_position;
 
     if ( Context->implicit_state->buffer[Context->implicit_state->buffer_position] == '"' )
     {
@@ -499,16 +506,17 @@ Boolean Atom(c50_context *Context)
 	Dump(Context, OP_ATT, 0, (String) (intptr_t) Att, Fi);
     }
     else
-    if ( isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position]) )
+    if ( isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position]) )
     {
 	/*  Check for date or time first  */
 
-	if ( ( ( Context->implicit_state->buffer[Context->implicit_state->buffer_position+4] == '/' && Context->implicit_state->buffer[Context->implicit_state->buffer_position+7] == '/' ) ||
+	if ( Remaining >= 10 &&
+	     ( ( Context->implicit_state->buffer[Context->implicit_state->buffer_position+4] == '/' && Context->implicit_state->buffer[Context->implicit_state->buffer_position+7] == '/' ) ||
 	       ( Context->implicit_state->buffer[Context->implicit_state->buffer_position+4] == '-' && Context->implicit_state->buffer[Context->implicit_state->buffer_position+7] == '-' ) ) &&
-	     isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+1]) && isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+2]) &&
-		isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+3]) &&
-	     isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+5]) && isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+6]) &&
-	     isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+8]) && isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+9]) )
+	     isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+1]) && isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+2]) &&
+		isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+3]) &&
+	     isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+5]) && isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+6]) &&
+	     isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+8]) && isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+9]) )
 	{
 	    memcpy(Date, Context->implicit_state->buffer+Context->implicit_state->buffer_position, 10);
 	    Date[10] = '\00';
@@ -520,10 +528,11 @@ Boolean Atom(c50_context *Context)
 	    Context->implicit_state->buffer_position += 10;
 	}
 	else
-	if ( Context->implicit_state->buffer[Context->implicit_state->buffer_position+2] == ':' && Context->implicit_state->buffer[Context->implicit_state->buffer_position+5] == ':' &&
-	     isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+1]) &&
-	     isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+3]) && isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+4]) &&
-	     isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+6]) && isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+7]) )
+	if ( Remaining >= 8 &&
+	     Context->implicit_state->buffer[Context->implicit_state->buffer_position+2] == ':' && Context->implicit_state->buffer[Context->implicit_state->buffer_position+5] == ':' &&
+	     isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+1]) &&
+	     isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+3]) && isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+4]) &&
+	     isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+6]) && isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+7]) )
 	{
 	    memcpy(Time, Context->implicit_state->buffer+Context->implicit_state->buffer_position, 8);
 	    Time[8] = '\00';
@@ -580,7 +589,7 @@ Boolean Atom(c50_context *Context)
 	}
     }
     else
-    if ( ! memcmp(Context->implicit_state->buffer+Context->implicit_state->buffer_position, "N/A", 3) )
+    if ( Find(Context, "N/A") )
     {
 	if ( ! Context->implicit_state->type_stack_position ) return false;
 	Context->implicit_state->buffer_position += 3;
@@ -613,9 +622,14 @@ Boolean Atom(c50_context *Context)
 Boolean Find(c50_context *Context, const char *S)
 /*      ----  */
 {
-    if ( Context->implicit_state->buffer[Context->implicit_state->buffer_position] == ' ' ) Context->implicit_state->buffer_position++;
+    if ( Context->implicit_state->buffer_position < Context->implicit_state->buffer_length &&
+	 Context->implicit_state->buffer[Context->implicit_state->buffer_position] == ' ' ) Context->implicit_state->buffer_position++;
 
-    return ( ! Context->implicit_state->buffer[Context->implicit_state->buffer_position] ? false : ! memcmp(Context->implicit_state->buffer+Context->implicit_state->buffer_position, S, strlen(S)) );
+    const int Remaining = Context->implicit_state->buffer_length -
+			  Context->implicit_state->buffer_position;
+    const size_t Length = strlen(S);
+    return ( Remaining > 0 && Length <= static_cast<size_t>(Remaining) &&
+	     ! memcmp(Context->implicit_state->buffer+Context->implicit_state->buffer_position, S, Length) );
 }
 
 
