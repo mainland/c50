@@ -297,10 +297,12 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 			    }
 			    else
 			    {
-				Dv = ++Context->schema.max_attribute_value[Att];
+				Dv = Context->schema.max_attribute_value[Att] + 1;
+				EnsureDynamicValueSpace(Context, Att, Dv);
 				Context->schema.attribute_value_names[Att][Dv]   = Pstrdup(Context, Name);
 				Context->schema.attribute_value_names[Att][Dv+1] =
 				    Context->schema.other_attribute_value_name; /* no free */
+				Context->schema.max_attribute_value[Att] = Dv;
 			    }
 			    if ( Dv > Context->schema.max_discrete_value )
 			    {

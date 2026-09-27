@@ -486,6 +486,8 @@ Boolean	    ReadNameInput(c50_context *Context, c50_input *f, String s,
 			  int n, char ColonOpt);
 void	    GetNames(c50_context *Context, c50_input *Nf);
 void	    ExplicitAtt(c50_context *Context, c50_input *Nf);
+void	    EnsureDynamicValueSpace(c50_context *Context, Attribute Att,
+				    DiscrValue Value);
 int	    Which(String Val, String *List, int First, int Last);
 void	    ListAttsUsed(c50_context *Context);
 void	    FreeNames(c50_context *Context);
