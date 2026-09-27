@@ -183,6 +183,34 @@ scan a smaller array using the original count and leaked recursive scratch.
 The repaired failure path raises `std::bad_alloc` and permits context reuse.
 The merge order and floating-point arithmetic of successful runs are unchanged.
 
+## Command-line option values
+
+The command-line program parses numeric option values with `strtod` and
+`strtol`, as C5.0 Release 2.07 does, and checks them more strictly. Integer
+options (`-v`, `-t`, `-I`, `-u`, `-X`) accept a decimal integer within the
+range of `int`. Floating-point options (`-m`, `-c`, `-S`) accept any text that
+`strtod` reads in full, such as `1e2` or `0x10`, if the value is finite and
+within the range of `float`.
+
+An empty value is the number 0, as in Release 2.07, which only tests that
+`strtod` or `strtol` stopped at the terminating null. `-I ''` sets seed 0 and
+`-c ''` sets confidence 0, and an empty value for an option with a range that
+excludes 0, such as `-m ''`, gets the "illegal value" diagnostic below. A value
+that underflows is its rounded value, as in Release 2.07: `-c 1e-400` and the
+subnormal `-c 1e-320` train with confidence 0.
+
+A value that overflows its type or is not finite gets the diagnostic that
+Release 2.07 prints for a value outside an option's range:
+`** illegal value V -- should be between L and H`. This covers `-c inf`,
+`-m nan`, `-c 1e999`, `-I 99999999999`, and `-t 99999999999`. The range
+printed for `-I` and `-v`, which have no documented range, is that of `int`.
+Release 2.07 converted such values without an overflow check. It truncated
+`-I 99999999999` to the seed 1215752191, accepted `-m nan`, and reported
+`-t 99999999999` as the wrapped value 1.21575e+09. The program now stops with
+status 1 for all of them. It prints `Unrecognised option` followed by the
+option summary only for a value that is not a number or has trailing text, such
+as `-c 25x`, as Release 2.07 does.
+
 ## Command-line failure messages
 
 The command-line program exits with status 1 after a failure and prints a
