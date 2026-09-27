@@ -1,0 +1,42 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `implicit-divide-negative'
+
+Read 300 cases (3 attributes) from implicit-divide-negative.data
+
+Attributes excluded:
+    a
+    b
+
+Decision tree:
+
+r <= 4.248124e-07: low (152/23)
+r > 4.248124e-07: high (148/25)
+
+
+Evaluation on training data (300 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2   48(16.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	   129    25    (a): class low
+	    23   123    (b): class high
+
+
+	Attribute usage:
+
+	    100%  a
+	    100%  b
+	    100%  r
+
+
+Time: <elapsed> secs

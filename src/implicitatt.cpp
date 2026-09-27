@@ -1,4 +1,5 @@
 /* Modified 2026 by Geoffrey Mainland: validate implicit expression bounds and ownership. */
+/* Modified 2026 by Geoffrey Mainland: reproduce Release 2.07's wrapped division precision. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -570,6 +571,7 @@ Boolean Atom(c50_context *Context)
 	else
 	{
 	    F = strtod(Context->implicit_state->buffer+Context->implicit_state->buffer_position, &EndPtr);
+	    if ( ! isfinite(F) ) FailSyn("finite number");
 
 	    /*  Check for period after integer  */
 
@@ -992,8 +994,8 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 /*       -----------  */
 {
     XStackElt	XStack[100];			/* allows 100-level nesting  */
-    int		XSN=0, DN, bv1, bv2, Mult;
-    double	cv1, cv2;
+    int		XSN=0, DN, bv1, bv2;
+    double	cv1, cv2, Mult;
     String	sv1, sv2;
     Attribute	Att;
     DefElt	DElt;
@@ -1130,7 +1132,10 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 
 		    cv1 = XStack[XSN-2].cval;
 		    cv2 = XStack[XSN-1].cval;
-		    if ( ! cv2 ||
+		    /*  An infinite divisor would never finish the precision
+			scaling loop below, so treat it like a zero divisor  */
+
+		    if ( ! cv2 || isinf(cv2) ||
 			 CUnknownVal(XStack[XSN-2]) ||
 			 CUnknownVal(XStack[XSN-1]) ||
 			 NotApplicVal(XStack[XSN-2]) ||
@@ -1140,14 +1145,24 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 		    }
 		    else
 		    {
-			Mult = Denominator(cv1);
+			/*  Release 2.07 keeps the precision multiplier in an int,
+			    which wraps modulo 2^32 once the numerator's decimals
+			    and the divisor's stripped digits reach 10. The wrap
+			    is reproduced here with unsigned arithmetic, so that
+			    the quotient rounds as it does in Release 2.07, and
+			    a multiplier that wraps to 0 yields NaN as there  */
+
+			uint32_t Wrapped = (uint32_t) Denominator(cv1);
 			cv1 = cv1 / cv2;
 			while ( fabs(cv2) > 1 )
 			{
-			    Mult *= 10;
+			    Wrapped *= 10u;
 			    cv2 /= 10;
 			}
-			XStack[XSN-2].cval = rint(cv1 * Mult) / Mult;
+			Mult = Wrapped <= (uint32_t) INT32_MAX ?
+			       (double) Wrapped : (double) Wrapped - 4294967296.0;
+			XStack[XSN-2].cval =
+			    ( Mult == 0 ? nan("") : rint(cv1 * Mult) / Mult );
 		    }
 		    XSN--;
 		    break;

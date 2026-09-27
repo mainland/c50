@@ -320,10 +320,18 @@ run_case implicit-unknown tree tree
 run_case implicit-literals tree tree
 run_case implicit-log tree tree
 run_case implicit-divide tree tree
+# Release 2.07 keeps the division precision multiplier in an int that wraps.
+# The expected files come from Release 2.07, whose cuts differ from the
+# unwrapped quotient, and whose multiplier reaches 0 in the last case, so
+# that every value of r becomes unknown and the run stops at the error limit.
+run_case implicit-divide-wrap tree tree
+run_case implicit-divide-wrap rules rules -r
 # The rounding error of division forms in double precision, as in Release 2.07,
 # so that the cut is 0.1662537. A float subtraction gives
 # 0.166254.
 run_case implicit-divide-precision tree tree
+run_case implicit-divide-negative tree tree
+run_case implicit-divide-zero tree - --status 1
 run_case implicit-power tree tree
 run_case multiclass tree tree
 run_case multiclass rules rules -r
