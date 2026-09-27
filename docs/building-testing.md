@@ -23,7 +23,6 @@ Select GCC explicitly when configuring CMake:
 
 ```sh
 cmake -S . -B build/gcc \
-    -DCMAKE_C_COMPILER=gcc \
     -DCMAKE_CXX_COMPILER=g++
 cmake --build build/gcc
 ctest --test-dir build/gcc --output-on-failure
@@ -48,7 +47,6 @@ Select Clang explicitly with both compiler settings:
 
 ```sh
 cmake -S . -B build/clang \
-    -DCMAKE_C_COMPILER=clang \
     -DCMAKE_CXX_COMPILER=clang++
 cmake --build build/clang
 ctest --test-dir build/clang --output-on-failure
