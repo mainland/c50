@@ -75,12 +75,52 @@ must contain a complete integer from 2 through `INT_MAX - 3`, reserving space
 for the parser's internal entries without signed overflow.
 
 Implicit definitions reject missing and not-applicable literals without a
-preceding operand that determines their type. They also reject expressions
-nested beyond 100 levels. Token matching and date and time recognition remain
-within the definition buffer. These checks make extreme or malformed
-definitions reject instead of exhausting resources or invoking undefined
-behavior. Accepted definitions within these limits retain their existing
-evaluation behavior.
+preceding operand that determines their type. They also reject nonfinite numeric
+literals and expressions nested beyond 100 levels. Token matching and date and
+time recognition remain within the definition buffer. These checks make extreme
+or malformed definitions reject instead of exhausting resources or invoking
+undefined behavior. Accepted definitions within these limits retain their
+existing evaluation behavior.
+
+Division rounds its quotient to a precision that Release 2.07 keeps in a
+32-bit `int` multiplier. The multiplier starts at 10^p, where p is the number
+of decimals that the numerator needs up to a tolerance, at most 6, and gains a
+factor of 10 for each digit that scaling strips from the divisor's magnitude
+above 1. Once the product passes 2^31 - 1, Release 2.07's `int` wraps, which
+is undefined behavior in C, and every compiler and optimization level tried
+gives the two's-complement result. This project reproduces that result with
+unsigned arithmetic, so a numerator that needs six decimals divided by more
+than 1,000, or an integer divided by more than 10^9, rounds to a coarser grid
+than the exact quotient needs, and trees, rules, and predictions match
+Release 2.07. A multiplier that wraps to negative rounds as its magnitude
+does. A multiplier that wraps to 0 yields a not-a-number value, as in Release
+2.07. A top-level result is reported as a bad value that changes to `?`, and a
+nested one propagates through the enclosing operators.
+
+The multiplier is 10^(p + q) modulo 2^32, where p is the number of decimals
+needed to represent the numerator to within 2e-6 of its magnitude, up to 6, and
+q is the number of times that the divisor, stored as a 32-bit `float`, divides
+by 10 before its magnitude is at most 1. The multiplier is 0 exactly when
+p + q is at least 32, because 2^32 divides 10^n only for n of at least 32, and
+the quotient is then not a number.
+
+The tolerance scales with the numerator, so a numerator of 1 or more can have
+a smaller p than the decimals it has. `123456.25` has two decimals but p = 1,
+because rounding it to one decimal errs by 0.05, below the tolerance of 0.247.
+`123456.25 / 1.1e29` therefore has p + q = 31 and a finite quotient, while
+`0.25 / 1.1e29` has p = 2 and q = 30 and is not a number.
+
+A numerator of six decimals below 1 over a divisor with q = 26 gives a
+not-a-number quotient, as in `0.123456 / 1.1e25`, and so does an integer over
+a divisor with q = 32, as in `3 / 1.1e31`. A sum of 31 wraps to -2^31 instead
+and gives a finite quotient, as in `0.123456 / 1e25` and `3 / 1e31`, because
+the nearest `float` to each of those literals lies below the power of ten, so
+that q is one less than the literal suggests.
+
+Division by an infinite value, which finite literals can produce through
+exponentiation overflow, yields an unknown value, as division by zero does.
+The imported implementation never finished evaluating such a definition, so
+this change affects no definition that previously completed.
 
 Serialized properties must use the quoted syntax emitted by C5.0. Unquoted
 values, incomplete escapes, and trailing property text produce parse errors.
