@@ -90,7 +90,7 @@ static void ParseModel(c50_context *Context, const c50_model *model)
 
     Context->io.output = NULL;
     Context->io.file_stem = "memory";
-    snprintf(Context->io.file_name, sizeof(Context->io.file_name), "%s", "memory.model");
+    Context->io.file_name = "memory.model";
     Context->options.rules = model->kind == c50::model_kind::rules;
     Context->options.trials = 1;
     Context->trees.max_tree = -1;

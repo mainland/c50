@@ -722,21 +722,20 @@ void	    Error(c50_context *Context, int ErrNo, const char *S1,
 void	    ErrorContext(c50_context *Context, int ErrNo, const char *S1,
 			 const char *S2);
 void	    C50Exit(c50_context *Context, int Status);
-String	    CaseLabel(c50_context *Context, CaseNo N);
+const char *CaseLabel(c50_context *Context, CaseNo N);
 FILE *	    GetFile(c50_context *Context, const char *Extension,
 		    const char *RW);
 double	    ExecTime(void);
 int	    Denominator(ContValue Val);
 int	    GetInt(String S, int N);
 int	    DateToDay(String DS);
-void	    DayToDate(int DI, String Date);
+std::string DayToDate(int Day);
 int	    TimeToSecs(String TS);
-void	    SecsToTime(int Secs, String Time);
+std::string SecsToTime(int Seconds);
 void	    SetTSBase(c50_context *Context, int y);
 int	    TStampToMins(c50_context *Context, String TS);
 void	    Check(c50_context *Context, float Val, float Low, float High);
-void	    CValToStr(c50_context *Context, ContValue CV, Attribute Att,
-		      String DS);
+std::string CValToStr(c50_context *Context, ContValue CV, Attribute Att);
 double	    rint(double v);
 void	    Cleanup(c50_context *Context);
 #ifdef UTF8

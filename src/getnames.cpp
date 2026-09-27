@@ -136,7 +136,8 @@ Boolean ReadNameInput(c50_context *Context, c50_input *f, String s, int n,
 
     if ( Context->delimiter == ':' )
     {
-	if ( *Context->line_buffer_position == '=' )
+	if ( Context->line_buffer_position < Context->line_buffer.size() &&
+	     Context->line_buffer[Context->line_buffer_position] == '=' )
 	{
 	    Context->delimiter = '=';
 	    Context->line_buffer_position++;
@@ -151,7 +152,7 @@ Boolean ReadNameInput(c50_context *Context, c50_input *f, String s, int n,
     {
 	Msg[0] = ( Space(c) ? '.' : c );
 	Msg[1] = '\00';
-	Error(Context, MISSNAME, Context->io.file_name, Msg);
+	Error(Context, MISSNAME, Context->io.file_name.c_str(), Msg);
     }
 
     *Sp++ = '\0';
@@ -202,8 +203,8 @@ void GetNames(c50_context *Context, c50_input *Nf)
 
     Context->io.error_count = Context->io.attribute_exclusions = 0;
     Context->io.line_number  = 0;
-    Context->line_buffer_position     = Context->line_buffer;
-    *Context->line_buffer_position    = 0;
+    Context->line_buffer.clear();
+    Context->line_buffer_position = 0;
 
     Context->schema.max_attribute = 0;
     Context->schema.owned_class_names = 0;
@@ -248,7 +249,8 @@ void GetNames(c50_context *Context, c50_input *Nf)
 	    }
 
 	    Context->schema.class_thresholds[Context->schema.max_class] = strtod(Buffer, &EndBuff);
-	    if ( EndBuff == Buffer || *EndBuff != '\0' )
+	    if ( EndBuff == Buffer || *EndBuff != '\0' ||
+	         ! isfinite(Context->schema.class_thresholds[Context->schema.max_class]) )
 	    {
 		Error(Context, BADCLASSTHRESH, Buffer, Nil);
 	    }
@@ -798,18 +800,21 @@ void FreeNames(c50_context *Context)
 int InChar(c50_context *Context, c50_input *f)
 /*  ------  */
 {
-    if ( ! *Context->line_buffer_position )
+    if ( Context->line_buffer_position >= Context->line_buffer.size() )
     {
-	Context->line_buffer_position = Context->line_buffer;
-
-	if ( ! c50_input_gets(Context->line_buffer, C50_LINE_BUFFER_CAPACITY, f) )
+	Context->line_buffer.clear();
+	Context->line_buffer_position = 0;
+	int c;
+	while ( (c = c50_input_getc(f)) != EOF )
 	{
-	    Context->line_buffer[0] = '\00';
-	    return EOF;
+	    Context->line_buffer.push_back(static_cast<char>(c));
+	    if ( c == '\n' ) break;
 	}
+	if ( Context->line_buffer.empty() ) return EOF;
 
 	Context->io.line_number++;
     }
-	
-    return (int) *Context->line_buffer_position++;
+
+    return static_cast<unsigned char>(
+        Context->line_buffer[Context->line_buffer_position++]);
 }

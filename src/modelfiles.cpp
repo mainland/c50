@@ -116,7 +116,7 @@ static void ValidateNumber(c50_context *Context, int Property)
     if (end == value || *end != '"' || end[1] || errno == ERANGE ||
         !isfinite(number) || number < low || number > high ||
         (Property == LIFTP && static_cast<float>(number) <= 0))
-        Error(Context, MODELFILE, "invalid numeric property", Context->property_name);
+        Error(Context, MODELFILE, "invalid numeric property", Context->property_name.c_str());
 }
 
 static unsigned PropertyBit(int property) { return 1u << property; }
@@ -127,7 +127,7 @@ static int ReadRecordProperty(c50_context *Context, c50_input *Input,
     const int property = ReadProp(Context, Input, Delim);
     const unsigned bit = PropertyBit(property);
     if (!(Allowed & bit) || ((Seen & bit) && property != ELTSP))
-        Error(Context, MODELFILE, "unexpected or repeated property", Context->property_name);
+        Error(Context, MODELFILE, "unexpected or repeated property", Context->property_name.c_str());
     Seen |= bit;
     return property;
 }
@@ -221,7 +221,7 @@ void WriteFilePrefix(c50_context *Context, const char *Extension)
     if ( ! Context->classifier_output_active )
     {
 	FILE *ModelFile = GetFile(Context, Extension, "w");
-	if ( ! ModelFile ) Error(Context, NOFILE, Context->io.file_name, E_ForWrite);
+	if ( ! ModelFile ) Error(Context, NOFILE, Context->io.file_name.c_str(), E_ForWrite);
 	c50_output_init_file(&Context->classifier_output, ModelFile, true);
 	Context->classifier_output_active = true;
     }
@@ -271,7 +271,7 @@ void WriteFilePrefix(c50_context *Context, const char *Extension)
 void ReadFilePrefix(c50_context *Context, const char *Extension)
 /*   --------------  */
 {
-    if ( ! (Context->io.model_file = GetFile(Context, Extension, "r")) ) Error(Context, NOFILE, Context->io.file_name, "");
+    if ( ! (Context->io.model_file = GetFile(Context, Extension, "r")) ) Error(Context, NOFILE, Context->io.file_name.c_str(), "");
 
     c50_input_init_file(&Context->classifier_input, Context->io.model_file);
     StreamIn(&Context->classifier_input, (char *) &Context->options.trials, sizeof(int));
@@ -569,7 +569,7 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 		}
 		else
 		{
-		    Error(Context, NOFILE, Context->io.file_name, "costs input required by model");
+		    Error(Context, NOFILE, Context->io.file_name.c_str(), "costs input required by model");
 		}
 		break;
 	    case SAMPLEP:
@@ -620,7 +620,7 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 		Context->model_entry = 0;
 		return;
             default:
-                Error(Context, MODELFILE, "unexpected header property", Context->property_name);
+                Error(Context, MODELFILE, "unexpected header property", Context->property_name.c_str());
 	}
     }
 }
@@ -1112,17 +1112,18 @@ int ReadProp(c50_context *Context, c50_input *Input, char *Delim)
 	    Alloc(Context->property_value_size + 3, char);
     }
 
-    for ( p = Context->property_name ; (c = c50_input_getc(Input)) != '=' ;  )
+    Context->property_name.clear();
+    while ( (c = c50_input_getc(Input)) != '=' )
     {
-	if ( p - Context->property_name >= 19 || c == EOF )
+	if ( Context->property_name.size() >= 19 || c == EOF )
 	{
 	    Error(Context, MODELFILE, E_MFEOF, "");
-	    Context->property_name[0] = Context->property_value[0] = *Delim = '\00';
+	    Context->property_name.clear();
+	    Context->property_value[0] = *Delim = '\00';
 	    return 0;
 	}
-	*p++ = c;
+	Context->property_name.push_back(static_cast<char>(c));
     }
-    *p = '\00';
 
     for ( p = Context->property_value ;
 	  ((c = c50_input_getc(Input)) != ' ' && c != '\n') || Quote ; )
@@ -1130,7 +1131,8 @@ int ReadProp(c50_context *Context, c50_input *Input, char *Delim)
 	if ( c == EOF )
 	{
 	    Error(Context, MODELFILE, E_MFEOF, "");
-	    Context->property_name[0] = Context->property_value[0] = '\00';
+	    Context->property_name.clear();
+	    Context->property_value[0] = '\00';
 	    return 0;
 	}
 
@@ -1160,26 +1162,26 @@ int ReadProp(c50_context *Context, c50_input *Input, char *Delim)
     *p = '\00';
     *Delim = c;
 
-    const int property = WhichProperty(Context->property_name);
-    if (!property) Error(Context, MODELFILE, "unknown property", Context->property_name);
+    const int property = WhichProperty(Context->property_name.c_str());
+    if (!property) Error(Context, MODELFILE, "unknown property", Context->property_name.c_str());
 
     // All scalar properties are quoted. Only elts permits a quoted list.
     // Validate before the legacy unquoting helpers modify this buffer.
     for (const char *value = Context->property_value; ; )
     {
         if (*value++ != '"')
-            Error(Context, MODELFILE, "expected quoted property", Context->property_name);
+            Error(Context, MODELFILE, "expected quoted property", Context->property_name.c_str());
         while (*value && *value != '"')
         {
             if (*value == '\\' && !*++value)
-                Error(Context, MODELFILE, "incomplete escape", Context->property_name);
+                Error(Context, MODELFILE, "incomplete escape", Context->property_name.c_str());
             ++value;
         }
         if (*value++ != '"')
-            Error(Context, MODELFILE, "unterminated property", Context->property_name);
+            Error(Context, MODELFILE, "unterminated property", Context->property_name.c_str());
         if (!*value) break;
         if (property != ELTSP || *value++ != ',')
-            Error(Context, MODELFILE, "invalid property suffix", Context->property_name);
+            Error(Context, MODELFILE, "invalid property suffix", Context->property_name.c_str());
     }
     ValidateNumber(Context, property);
     return property;

@@ -495,7 +495,7 @@ void PrintCondition(c50_context *Context, Condition C)
     Boolean	First=true;
     Attribute	Att;
     int		Col, Base, Entry;
-    char	CVS[20];
+    std::string CVS;
 
     v   = C->TestValue;
     Att = C->Tested;
@@ -521,8 +521,8 @@ void PrintCondition(c50_context *Context, Condition C)
 	    }
 	    else
 	    {
-		CValToStr(Context, C->Cut, Att, CVS);
-		fprintf(Context->io.output, " %s %s\n", ( v == 2 ? "<=" : ">" ), CVS);
+		CVS = CValToStr(Context, C->Cut, Att);
+		fprintf(Context->io.output, " %s %s\n", ( v == 2 ? "<=" : ">" ), CVS.c_str());
 	    }
 	    break;
 

@@ -93,6 +93,7 @@ void PrintTree(c50_context *Context, Tree T, const char *Title)
     FindDepth(T);
 
     Context->trees.printed_subtree_count=0;
+    Context->trees.last_branches.clear();
     fprintf(Context->io.output, "\n%s\n", Title);
     Show(Context, T, 0);
     fprintf(Context->io.output, "\n");
@@ -167,6 +168,10 @@ void Show(c50_context *Context, Tree T, int Sh)
 		    }
 		}
 
+		if ( Context->trees.last_branches.size() <= static_cast<size_t>(Sh + 1) )
+		{
+		    Context->trees.last_branches.resize(Sh + 2);
+		}
 		Context->trees.last_branches[Sh+1] = ( ++BrNo == MaxV );
 		ShowBranch(Context, Sh, T, Simplest,
 			   (int)( BrNo == First ));
@@ -205,7 +210,7 @@ void ShowBranch(c50_context *Context, int Sh, Tree T, DiscrValue v,
     Attribute	Att;
     Boolean	FirstValue;
     int		TextWidth, Skip, Values, i, Extra;
-    char	CVS1[20], CVS2[20];
+    std::string CVS1, CVS2;
 
     Att = T->Tested;
 
@@ -234,21 +239,21 @@ void ShowBranch(c50_context *Context, int Sh, Tree T, DiscrValue v,
 	    {
 		if ( v == 2 )
 		{
-		    CValToStr(Context, T->Lower, Att, CVS1);
-		    CValToStr(Context, T->Mid  , Att, CVS2);
-		    fprintf(Context->io.output, " <= %s (%s):", CVS1, CVS2);
+		    CVS1 = CValToStr(Context, T->Lower, Att);
+		    CVS2 = CValToStr(Context, T->Mid, Att);
+		    fprintf(Context->io.output, " <= %s (%s):", CVS1.c_str(), CVS2.c_str());
 		}
 		else
 		{
-		    CValToStr(Context, T->Upper, Att, CVS1);
-		    CValToStr(Context, T->Mid  , Att, CVS2);
-		    fprintf(Context->io.output, " >= %s (%s):", CVS1, CVS2);
+		    CVS1 = CValToStr(Context, T->Upper, Att);
+		    CVS2 = CValToStr(Context, T->Mid, Att);
+		    fprintf(Context->io.output, " >= %s (%s):", CVS1.c_str(), CVS2.c_str());
 		}
 	    }
 	    else
 	    {
-		CValToStr(Context, T->Cut, Att, CVS1);
-		fprintf(Context->io.output, " %s %s:", ( v == 2 ? "<=" : ">" ), CVS1);
+		CVS1 = CValToStr(Context, T->Cut, Att);
+		fprintf(Context->io.output, " %s %s:", ( v == 2 ? "<=" : ">" ), CVS1.c_str());
 	    }
 
 	    break;
