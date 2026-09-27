@@ -126,7 +126,7 @@ using c50_context = c50::detail::context_state;
 
 #define  AllocZero(N,T)		(T *) Pcalloc(Context, N, sizeof(T))
 #define  Alloc(N,T)		AllocZero(N,T) /* for safety */
-#define  Realloc(V,N,T)		V = (T *) Prealloc(Context, V, (N)*sizeof(T))
+#define  Realloc(V,N,T)		V = (T *) PreallocArray(Context, V, N, sizeof(T))
 
 #define	 Max(a,b)               ((a)>(b) ? (a) : (b))
 #define	 Min(a,b)               ((a)<(b) ? (a) : (b))
@@ -710,7 +710,9 @@ char	    ProcessOption(c50_context *Context, int Argc, char **Argv,
 void	    *Pmalloc(c50_context *Context, size_t Bytes);
 char *Pstrdup(c50_context *Context, const char *text);
 void	    *Prealloc(c50_context *Context, void *Present, size_t Bytes);
-void	    *Pcalloc(c50_context *Context, size_t Number, unsigned int Size);
+void        *Pcalloc(c50_context *Context, size_t Number, size_t Size);
+void        *PreallocArray(c50_context *Context, void *Present,
+                           size_t Number, size_t Size);
 void	    FreeVector(void **V, int First, int Last);
 DataRec	    NewCase(c50_context *Context);
 void	    FreeCases(c50_context *Context);

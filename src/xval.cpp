@@ -66,7 +66,8 @@ void CrossVal(c50_context *Context)
 
     Context->cross_validation.results	 = AllocZero((Context->cross_validation.saved_folds = Context->options.folds), float *);
     Context->cross_validation.blocked_cases	 = Alloc(Context->cases.max_case+1, DataRec);
-    Context->cross_validation.confusion_matrix = AllocZero((Context->schema.max_class+1)*(Context->schema.max_class+1), CaseNo);
+    Context->cross_validation.confusion_matrix = AllocZero(static_cast<size_t>(Context->schema.max_class + 1) *
+	                                                      static_cast<size_t>(Context->schema.max_class + 1), CaseNo);
 
     Prepare(Context);
 

@@ -190,7 +190,8 @@ void InitialiseTreeData(c50_context *Context)
 
 	Context->splits.discrete_attributes[Context->splits.discrete_attribute_count++] = Att;
 
-	Context->splits.discrete_frequencies[Att] = Alloc(Context->schema.max_class * (Context->schema.max_attribute_value[Att]+1), double);
+	Context->splits.discrete_frequencies[Att] = Alloc(static_cast<size_t>(Context->schema.max_class) *
+	                                                 static_cast<size_t>(Context->schema.max_attribute_value[Att] + 1), double);
     }
 
     Context->training.class_frequencies = AllocZero(Context->schema.max_class+1, double);

@@ -82,7 +82,8 @@ void ConstructClassifiers(c50_context *Context)
     {
 	/*  Context->training.boost_vote_block contains each case's class votes  */
 
-	Context->training.boost_vote_block = AllocZero((Context->cases.max_case+1) * (Context->schema.max_class+1), float);
+	Context->training.boost_vote_block = AllocZero(static_cast<size_t>(Context->cases.max_case + 1) *
+	              static_cast<size_t>(Context->schema.max_class + 1), float);
     }
 
     /*  Preserve original case order  */
@@ -516,7 +517,8 @@ void EvaluateSingle(c50_context *Context, int Flags)
 
     if ( CMInfo )
     {
-	ConfusionMat = AllocZero((Context->schema.max_class+1)*(Context->schema.max_class+1), CaseNo);
+	ConfusionMat = AllocZero(static_cast<size_t>(Context->schema.max_class + 1) *
+	                          static_cast<size_t>(Context->schema.max_class + 1), CaseNo);
     }
 
     if ( UsageInfo )
@@ -703,7 +705,8 @@ void EvaluateBoost(c50_context *Context, int Flags)
 
     if ( CMInfo )
     {
-	ConfusionMat = AllocZero((Context->schema.max_class+1)*(Context->schema.max_class+1), CaseNo);
+	ConfusionMat = AllocZero(static_cast<size_t>(Context->schema.max_class + 1) *
+	                          static_cast<size_t>(Context->schema.max_class + 1), CaseNo);
     }
 
     if ( UsageInfo )
