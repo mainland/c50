@@ -121,6 +121,28 @@ run_missing_file_format()
         "$missing_case_dir/output.actual"
 }
 
+run_invalid_option()
+{
+    option_name=$1
+    shift
+
+    set +e
+    "$binary" "$@" > "$test_dir/$option_name.actual" 2>&1
+    option_exit_code=$?
+    set -e
+
+    if test "$option_exit_code" -ne 1; then
+        printf '%s returned %d, expected 1\n' \
+            "$option_name" "$option_exit_code" >&2
+        return 1
+    fi
+}
+
+run_invalid_option sample-nan -S nan
+run_invalid_option seed-overflow -I 999999999999999999999
+long_stem=$(printf '%600s' '' | tr ' ' x)
+run_invalid_option long-stem -f "$long_stem"
+
 run_case basic tree tree
 run_case basic rules rules -r
 run_case basic subsets tree -s
