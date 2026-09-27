@@ -1,6 +1,7 @@
 /* Copyright 2026 Geoffrey Mainland. */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
+#include <algorithm>
 #include <exception>
 #include <cstdint>
 #include <limits>
@@ -156,8 +157,10 @@ public:
         }
 
         const auto indices = checked_classes(class_indices);
+        std::vector<double> value_copy(static_cast<std::size_t>(values.size()));
+        std::copy_n(values.data(), value_copy.size(), value_copy.data());
         const c50::dense_dataset dataset(
-            values.data(), static_cast<std::size_t>(values.shape(0)),
+            value_copy.data(), static_cast<std::size_t>(values.shape(0)),
             static_cast<std::size_t>(values.shape(1)), indices.data());
         c50::context context;
         context.split_workers(split_workers);
@@ -196,8 +199,10 @@ public:
             throw py::value_error("values must be a two-dimensional array");
         }
 
+        std::vector<double> value_copy(static_cast<std::size_t>(values.size()));
+        std::copy_n(values.data(), value_copy.size(), value_copy.data());
         const c50::dense_dataset dataset(
-            values.data(), static_cast<std::size_t>(values.shape(0)),
+            value_copy.data(), static_cast<std::size_t>(values.shape(0)),
             static_cast<std::size_t>(values.shape(1)));
         c50::context context;
         py::gil_scoped_release release;
