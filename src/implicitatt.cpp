@@ -569,6 +569,7 @@ Boolean Atom(c50_context *Context)
     else
     if ( Context->implicit_state->buffer[Context->implicit_state->buffer_position] == '?' )
     {
+	if ( ! Context->implicit_state->type_stack_position ) return false;
 	Context->implicit_state->buffer_position++;
 	if ( Context->implicit_state->type_stack[Context->implicit_state->type_stack_position-1].Type == 'N' )
 	{
@@ -582,6 +583,7 @@ Boolean Atom(c50_context *Context)
     else
     if ( ! memcmp(Context->implicit_state->buffer+Context->implicit_state->buffer_position, "N/A", 3) )
     {
+	if ( ! Context->implicit_state->type_stack_position ) return false;
 	Context->implicit_state->buffer_position += 3;
 	if ( Context->implicit_state->type_stack[Context->implicit_state->type_stack_position-1].Type == 'N' )
 	{
