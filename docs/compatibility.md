@@ -73,7 +73,8 @@ classifiers or predictions for accepted input. The same bound applies to class
 names generated from continuous-target thresholds. A `discrete N` declaration
 must contain a complete integer from 2 through `INT_MAX - 3`. Dynamic value
 dictionaries grow with the values read instead of reserving `N` pointer slots
-from the declaration.
+from the declaration. Input lines may exceed the legacy 9,999-byte read
+buffer. Per-token length checks still apply.
 
 Implicit definitions reject missing and not-applicable literals without a
 preceding operand that determines their type. They also reject nonfinite numeric
