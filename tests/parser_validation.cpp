@@ -106,6 +106,10 @@ int main()
         const std::string target(995, 'x');
         rejects([&] { c50::model::load(context, kind,
             target + ": 1, 2.\n" + target + ": continuous.\n", header + leaf); });
+        for (const auto &value : {"?", "N/A"})
+            rejects([&] { c50::model::load(context, kind,
+                "no, yes.\nx: continuous.\nderived := " + std::string(value) + ".\n",
+                header + leaf); });
         structure(context);
         if (model.predict(context, "0, ?\n").class_index(0) != 0) return 1;
     } catch (const std::exception &error) {
