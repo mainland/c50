@@ -130,6 +130,13 @@ int main()
         rejects([&] { c50::model::load(context, kind,
             "no, yes.\nx: continuous.\nderived := " + nested_expression + ".\n",
             header + leaf); });
+        const std::string boundary_expression =
+            "color = \"" + std::string(38, 'a') + "\"";
+        if (boundary_expression.size() != 48) return 1;
+        c50::model::load(context, kind,
+            "no, yes.\nx: continuous.\ncolor: red, blue, green.\nderived := " +
+                boundary_expression + ".\n",
+            header + leaf);
         structure(context);
         if (model.predict(context, "0, ?\n").class_index(0) != 0) return 1;
     } catch (const std::exception &error) {

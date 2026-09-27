@@ -76,7 +76,11 @@ for the parser's internal entries without signed overflow.
 
 Implicit definitions reject missing and not-applicable literals without a
 preceding operand that determines their type. They also reject expressions
-nested beyond 100 levels.
+nested beyond 100 levels. Token matching and date and time recognition remain
+within the definition buffer. These checks make extreme or malformed
+definitions reject instead of exhausting resources or invoking undefined
+behavior. Accepted definitions within these limits retain their existing
+evaluation behavior.
 
 Serialized properties must use the quoted syntax emitted by C5.0. Unquoted
 values, incomplete escapes, and trailing property text produce parse errors.
