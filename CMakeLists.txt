@@ -156,7 +156,8 @@ add_executable(c50_cli src/c50.cpp)
 target_link_libraries(c50_cli PRIVATE C50::core)
 set_target_properties(c50_cli PROPERTIES OUTPUT_NAME c5.0)
 
-add_executable(c50_report src/report.c)
+add_executable(c50_report src/report.cpp)
+target_compile_features(c50_report PRIVATE cxx_std_17)
 set_target_properties(c50_report PROPERTIES OUTPUT_NAME report)
 
 set(C50_COMPILE_TARGETS c50_core c50_cli c50_report)
@@ -599,6 +600,7 @@ if(BUILD_TESTING)
         COMMAND
             ${CMAKE_COMMAND} -E env
             "REPORT_BINARY=$<TARGET_FILE:c50_report>"
+            "C50_BINARY=$<TARGET_FILE:c50_cli>"
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_report.sh"
     )
     add_test(

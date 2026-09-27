@@ -81,8 +81,8 @@ test: c5.0 report prediction-probe
 	./tests/test_predictions.sh
 
 
-report: $(SRC_DIR)/report.c Makefile
-	$(CC) $(CPPFLAGS) $(LFLAGS) -o $@ $(SRC_DIR)/report.c -lm
+report: $(SRC_DIR)/report.cpp Makefile
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(LFLAGS) -o $@ $(SRC_DIR)/report.cpp -lm
 
 
 prediction-probe:\
