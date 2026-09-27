@@ -99,12 +99,12 @@ static bool ParseModel(c50_context *Context, const c50_model *model)
 
     c50_input_init_memory(&names_input, model->names_data.data(),
                           model->names_data.size());
-    snprintf(Context->io.file_name, sizeof(Context->io.file_name), "%s", "names");
+    Context->io.file_name = "names";
     GetNames(Context, &names_input);
 
     c50_input_init_memory(&model_input, model->model_data.data(),
                           model->model_data.size());
-    snprintf(Context->io.file_name, sizeof(Context->io.file_name), "%s", "model");
+    Context->io.file_name = "model";
     if ( model->costs_data.size() )
     {
         c50_input_init_memory(&costs_input, model->costs_data.data(),
@@ -453,7 +453,7 @@ static void TrainModel(c50_context *Context, void *user_data)
     Context->classifier_output_active = true;
 
     c50_input_init_memory(&names_input, state->names_data, state->names_size);
-    snprintf(Context->io.file_name, sizeof(Context->io.file_name), "%s", "names");
+    Context->io.file_name = "names";
     GetNames(Context, &names_input);
 
     Context->cases.some_missing =
@@ -467,7 +467,7 @@ static void TrainModel(c50_context *Context, void *user_data)
     }
     else
     {
-        snprintf(Context->io.file_name, sizeof(Context->io.file_name), "%s", "training data");
+        Context->io.file_name = "training data";
         c50_input_init_memory(&training_input, state->training_data,
                               state->training_size);
         GetDataInput(Context, &training_input, true, false);
@@ -483,7 +483,7 @@ static void TrainModel(c50_context *Context, void *user_data)
     {
         c50_input_init_memory(&costs_input, state->costs_data,
                               state->costs_size);
-        snprintf(Context->io.file_name, sizeof(Context->io.file_name), "%s", "costs");
+        Context->io.file_name = "costs";
         GetMCostsInput(Context, &costs_input);
     }
 
@@ -557,7 +557,7 @@ static void PredictModel(c50_context *Context, void *user_data)
     }
     else
     {
-        snprintf(Context->io.file_name, sizeof(Context->io.file_name), "%s", "cases");
+        Context->io.file_name = "cases";
         c50_input_init_memory(&cases_input, state->cases_data,
                               state->cases_size);
         GetDataInput(Context, &cases_input, false, true);
