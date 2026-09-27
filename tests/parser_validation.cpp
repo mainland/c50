@@ -140,6 +140,20 @@ int main()
             "1, no\n2, yes\n3, no\n4, yes\n");
         rejects([&] { c50::model::load(context, kind,
             "no, yes.\nx: continuous.\nderived := 1e1000.\n", header + leaf); });
+        c50::model::load(context, kind,
+            "no, yes.\nx: discrete 472721496.\n", header + leaf);
+        const std::string growing_names = "no, yes.\nx: discrete 101.\n";
+        std::string growing_header = "att=\"x\" elts=";
+        std::string growing_data;
+        for (int value = 0; value < 101; ++value) {
+            if (value) growing_header += ',';
+            growing_header += "\"v" + std::to_string(value) + "\"";
+            growing_data +=
+                "v" + std::to_string(value) + (value < 51 ? ", no\n" : ", yes\n");
+        }
+        c50::model::load(context, kind, growing_names,
+                         growing_header + "\n" + header + leaf);
+        c50::model::train(context, kind, growing_names, growing_data);
         structure(context);
         if (model.predict(context, "0, ?\n").class_index(0) != 0) return 1;
     } catch (const std::exception &error) {

@@ -597,8 +597,10 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
                     if (Context->schema.max_attribute_value[Att] >=
                         reinterpret_cast<intptr_t>(Context->schema.attribute_value_names[Att][0]))
                         Error(Context, MODELFILE, "too many dynamic attribute values", p);
-		    v = ++Context->schema.max_attribute_value[Att];
+		    v = Context->schema.max_attribute_value[Att] + 1;
+		    EnsureDynamicValueSpace(Context, Att, v);
 		    Context->schema.attribute_value_names[Att][v] = Pstrdup(Context, p);
+		    Context->schema.max_attribute_value[Att] = v;
 
 		    for ( p += strlen(p) ; *p != '"' ; p++ )
 			;
