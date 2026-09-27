@@ -75,7 +75,8 @@ must contain a complete integer from 2 through `INT_MAX - 3`, reserving space
 for the parser's internal entries without signed overflow.
 
 Implicit definitions reject missing and not-applicable literals without a
-preceding operand that determines their type.
+preceding operand that determines their type. They also reject expressions
+nested beyond 100 levels.
 
 Serialized properties must use the quoted syntax emitted by C5.0. Unquoted
 values, incomplete escapes, and trailing property text produce parse errors.
