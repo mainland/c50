@@ -110,6 +110,11 @@ int main()
             rejects([&] { c50::model::load(context, kind,
                 "no, yes.\nx: continuous.\nderived := " + std::string(value) + ".\n",
                 header + leaf); });
+        const std::string nested_expression =
+            std::string(200, '(') + "x" + std::string(200, ')');
+        rejects([&] { c50::model::load(context, kind,
+            "no, yes.\nx: continuous.\nderived := " + nested_expression + ".\n",
+            header + leaf); });
         structure(context);
         if (model.predict(context, "0, ?\n").class_index(0) != 0) return 1;
     } catch (const std::exception &error) {

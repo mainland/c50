@@ -66,7 +66,26 @@ struct c50_implicit_state
     int definition_size = 0;
     int definition_position = 0;
     Boolean previous_error = false;
+    int expression_depth = 0;
 };
+
+struct c50_expression_depth
+{
+    explicit c50_expression_depth(c50_implicit_state *owner) : state(owner)
+    {
+        ++state->expression_depth;
+    }
+    ~c50_expression_depth()
+    {
+        --state->expression_depth;
+    }
+    c50_expression_depth(const c50_expression_depth &) = delete;
+    c50_expression_depth &operator=(const c50_expression_depth &) = delete;
+
+    c50_implicit_state *state;
+};
+
+static constexpr int MaxExpressionDepth = 100;
 
 #define FailSyn(Msg) {DefSyntaxError(Context, Msg); return false;}
 #define FailSem(Msg) \
@@ -270,6 +289,10 @@ Boolean Expression(c50_context *Context)
 /*      ----------  */
 {
     int		Fi=Context->implicit_state->buffer_position;
+
+    if ( Context->implicit_state->expression_depth >= MaxExpressionDepth )
+        FailSyn("expression nested at most 100 levels");
+    c50_expression_depth Depth(Context->implicit_state);
 
     if ( Context->implicit_state->buffer[Context->implicit_state->buffer_position] == ' ' ) Context->implicit_state->buffer_position++;
 
