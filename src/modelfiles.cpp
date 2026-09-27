@@ -43,6 +43,7 @@
 #include <limits>
 
 static constexpr size_t RuleConditionChunk = 100;
+static constexpr size_t SerializedRuleChunk = 100;
 
 static const char PropertyNames[] =
     "null\0att\0class\0cut\0conds\0elts\0entries\0forks\0freq\0id\0"
@@ -840,7 +841,7 @@ CRuleSet InRulesAt(c50_context *Context, c50_input *Input, CRuleSet *Slot)
 /*	 ---------  */
 {
     CRuleSet	RS;
-    RuleNo	r;
+    RuleNo	r, RuleCount=0;
     char	Delim, *Unquoted;
 
     RS = Alloc(1, RuleSetRec);
@@ -856,8 +857,7 @@ CRuleSet InRulesAt(c50_context *Context, c50_input *Input, CRuleSet *Slot)
 		return Nil;
 
 	    case RULESP:
-		sscanf(Context->property_value, "\"%d\"", &RS->SNRules);
-		CheckActiveSpace(Context, RS->SNRules);
+		sscanf(Context->property_value, "\"%d\"", &RuleCount);
 		break;
 
 	    case DEFAULTP:
@@ -869,20 +869,35 @@ CRuleSet InRulesAt(c50_context *Context, c50_input *Input, CRuleSet *Slot)
     }
     while ( Delim == ' ' );
 
-    if (!(Seen & PropertyBit(RULESP)) || !RS->SDefault)
+    if (!(Seen & PropertyBit(RULESP)) || RuleCount < 0 || !RS->SDefault)
         Error(Context, MODELFILE, "missing ruleset count or default", "");
 
     /*  Read each rule  */
 
-    RS->SRule = Alloc(RS->SNRules+1, CRule);
-    ForEach(r, 1, RS->SNRules)
+    const size_t FullSize = static_cast<size_t>(RuleCount) + 1;
+    size_t Allocated = FullSize < SerializedRuleChunk + 1 ?
+                       FullSize : SerializedRuleChunk + 1;
+    RS->SRule = Alloc(Allocated, CRule);
+    ForEach(r, 1, RuleCount)
     {
+	if ( static_cast<size_t>(r) >= Allocated )
+	{
+	    const size_t NewSize =
+		Allocated + SerializedRuleChunk < FullSize ?
+		Allocated + SerializedRuleChunk : FullSize;
+	    RS->SRule = static_cast<CRule *>(
+		Prealloc(Context, RS->SRule, NewSize * sizeof(CRule)));
+	    Allocated = NewSize;
+	}
+	RS->SRule[r] = Nil;
+	RS->SNRules = r;
 	if ( InRuleAt(Context, Input, &RS->SRule[r]) )
 	{
 	    RS->SRule[r]->RNo = r;
 	    RS->SRule[r]->TNo = Context->model_entry;
 	}
     }
+    CheckActiveSpace(Context, RS->SNRules);
     ConstructRuleTree(Context, RS);
     Context->model_entry++;
     return RS;
