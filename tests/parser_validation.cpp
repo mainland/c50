@@ -62,6 +62,15 @@ static void structure(c50::context &context)
         "rules=\"1\" default=\"no\"\nconds=\"0\" cover=\"1\" ok=\"2\" lift=\"1\" class=\"no\"\n",
         "rules=\"1\" default=\"no\"\nconds=\"0\" cover=\"1\" ok=\"1\" lift=\"0\" class=\"no\"\n"})
         rejects([&] { c50::model::load(context, rules, names, header + bad); });
+    rejects([&] { c50::model::load(context, rules, names,
+        "entries=\"1\"\nrules=\"1\" default=\"yes\"\n"
+        "conds=\"100000000\" cover=\"0\" ok=\"0\" lift=\"1\" class=\"no\"\n"); });
+    std::string growing_rule = header + "rules=\"1\" default=\"no\"\n"
+        "conds=\"101\" cover=\"1\" ok=\"1\" lift=\"1\" class=\"no\"\n";
+    for (int condition = 0; condition < 101; ++condition)
+        growing_rule += "type=\"2\" att=\"x\" cut=\"" +
+                        std::to_string(condition) + "\" result=\">\"\n";
+    c50::model::load(context, rules, names, growing_rule);
     const std::string rule = header + "rules=\"1\" default=\"no\"\n"
         "conds=\"1\" cover=\"1\" ok=\"1\" lift=\"1\" class=\"no\"\n";
     for (const auto &condition : {"type=\"0\" att=\"x\"\n",
