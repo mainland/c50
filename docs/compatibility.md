@@ -98,9 +98,10 @@ missing required classes or rule fields, nonfinite numeric properties, and
 frequency vectors that disagree with the class schema. Dynamic attribute
 lists must fit their declared capacity. Serialized rule and condition arrays
 grow as records are read instead of reserving space from untrusted declared
-counts. A tree root must have enough total class frequency to satisfy the
-predictor's `1e-4` case threshold; unlike child
-nodes, it has no parent distribution to use below that threshold. Zero-case
+counts. Rules with duplicate conditions are rejected before rule-tree
+construction can exhaust its distinct tests. A tree root must have enough
+total class frequency to satisfy the predictor's `1e-4` case threshold;
+unlike child nodes, it has no parent distribution to use below that threshold. Zero-case
 child nodes remain valid and retain their parent-based prediction behavior.
 These checks reject malformed artifacts before prediction can index their
 internal structures.
