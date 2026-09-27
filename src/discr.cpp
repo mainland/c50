@@ -102,8 +102,8 @@ void EvalOrderedAtt(c50_context *Context, SplitWorkspace &Workspace, SplitResult
     double	*HoldFreqRow, SplitFreq[4];
     ClassNo	c;
     int		Tries=0;
-    DiscrValue	v, BestV;
-    double	BaseInfo, ThisGain, BestInfo, BestGain=None;
+    DiscrValue	v, BestV=0;
+    double	BaseInfo, ThisGain, BestInfo=0, BestGain=None;
 
     SetDiscrFreq(Context, Workspace, Att);
     KnownCases = Cases - Workspace.ValFreq[0];
