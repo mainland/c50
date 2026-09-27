@@ -86,6 +86,12 @@ static void structure(c50::context &context)
         "type=\"2\" att=\"x\" val=\"bad\"\n",
         "type=\"3\" att=\"x\" elts=\"a\"\n"})
         rejects([&] { c50::model::load(context, rules, names, rule + condition); });
+    const std::string duplicate_condition =
+        "type=\"2\" att=\"x\" cut=\"0\" result=\">\"\n";
+    rejects([&] { c50::model::load(context, rules, names,
+        header + "rules=\"1\" default=\"no\"\n"
+        "conds=\"2\" cover=\"1\" ok=\"1\" lift=\"1\" class=\"no\"\n" +
+        duplicate_condition + duplicate_condition); });
 
     // Zero-case child nodes are valid legacy output and use their parent.
     auto empty_child = c50::model::load(context, kind, names, header +

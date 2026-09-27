@@ -1,0 +1,5 @@
+entries="1"
+rules="1" default="no"
+conds="2" cover="1" ok="1" lift="1" class="no"
+type="2" att="x" cut="0" result=">"
+type="2" att="x" cut="0" result=">"

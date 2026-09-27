@@ -209,6 +209,8 @@ RuleTree GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule)
     /*  Choose test for this node  */
 
     TI = SelectTest(Context, RR, RRN, Rule);
+    if ( TI < 0 )
+        Error(Context, MODELFILE, "inconsistent rule conditions", "");
     Context->rule_tree.tests_used[TI] = true;
 
     Node->CondTest = Context->rule_tree.tests[TI];
