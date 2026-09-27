@@ -68,7 +68,7 @@ void ConstructClassifiers(c50_context *Context)
     CaseNo	i, Errs, Cases, Bp, Excl=0;
     double	ErrWt, OKWt, ExtraErrWt, NFact, MinWt=1.0, a, b;
     ClassNo	c, Pred, Real, Best;
-    int		BaseLeaves;
+    int		BaseLeaves=0;
     Boolean	NoStructure, CheckExcl;
     float	*BVote;
 
@@ -493,7 +493,7 @@ void EvaluateSingle(c50_context *Context, int Flags)
 /*   --------------  */
 {
     ClassNo	RealClass, PredClass;
-    int		x, u, SaveUtility;
+    int		x, u, SaveUtility=0;
     CaseNo	*ConfusionMat, *Usage, i, RawErrs=0, Errs=0;
     double	ECost=0, Tests;
     Boolean	CMInfo, UsageInfo;

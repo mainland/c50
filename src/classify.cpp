@@ -340,7 +340,7 @@ ClassNo RuleClassify(c50_context *Context, DataRec Case, CRuleSet RS)
 int FindOutcome(c50_context *Context, DataRec Case, Condition OneCond)
 /*  -----------  */
 {
-    DiscrValue  v, Outcome;
+    DiscrValue  v, Outcome=-1;
     Attribute	Att;
 
     Att = OneCond->Tested;

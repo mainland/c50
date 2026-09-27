@@ -42,7 +42,7 @@
 void GetMCostsInput(c50_context *Context, c50_input *Cf)
 /*   --------------  */
 {
-    ClassNo	Pred, Real, p, r;
+    ClassNo	Pred=0, Real=0, p, r;
     char	Name[1000];
     CaseNo	i;
     float	Val, Sum=0;
