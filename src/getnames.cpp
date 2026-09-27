@@ -46,6 +46,7 @@
 #include <sys/stat.h>
 
 static constexpr DiscrValue DynamicValueChunk = 100;
+static constexpr int MaxClassCount = 4096;
 
 /*************************************************************************/
 /*									 */
@@ -439,6 +440,13 @@ void GetNames(c50_context *Context, c50_input *Nf)
 	    Context->schema.class_names[Context->schema.max_class] = Pstrdup(Context, Buffer);
             Context->schema.owned_class_names = Context->schema.max_class;
 	}
+    }
+
+    if ( Context->schema.max_class > MaxClassCount )
+    {
+        c50_record_error(Context, c50::error_code::parse_error,
+                         "schema exceeds maximum of 4096 classes");
+        C50Exit(Context, 1);
     }
 
     /*  Ignore case weight attribute if it is excluded; otherwise,

@@ -193,6 +193,11 @@ int main()
             "no, yes.\nx: continuous.\nderived := 1e1000.\n", header + leaf); });
         c50::model::load(context, kind,
             "no, yes.\nx: discrete 472721496.\n", header + leaf);
+        std::string excessive_classes;
+        for (int class_index = 0; class_index < 4097; ++class_index)
+            excessive_classes += class_index ? ",c" : "c";
+        rejects([&] { c50::model::load(context, kind,
+            excessive_classes + ".\nx: continuous.\n", header + leaf); });
         const std::string growing_names = "no, yes.\nx: discrete 101.\n";
         std::string growing_header = "att=\"x\" elts=";
         std::string growing_data;
