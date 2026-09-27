@@ -398,7 +398,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 	{
 	    if ( ! ReadNameInput(Context, Input, Name, 1000, '\00') )
 	    {
-		XError(HITEOF, Context->io.file_name, "");
+		XError(HITEOF, Context->io.file_name.c_str(), "");
 		FreeLastCase(Context, DVec);
 		return Nil;
 	    }
