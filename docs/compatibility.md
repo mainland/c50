@@ -71,8 +71,9 @@ or not diagnostics are printed. Oversized model-property diagnostics are
 bounded. These safety fixes change rejection behavior for malformed input, not
 classifiers or predictions for accepted input. The same bound applies to class
 names generated from continuous-target thresholds. A `discrete N` declaration
-must contain a complete integer from 2 through `INT_MAX - 3`, reserving space
-for the parser's internal entries without signed overflow.
+must contain a complete integer from 2 through `INT_MAX - 3`. Dynamic value
+dictionaries grow with the values read instead of reserving `N` pointer slots
+from the declaration.
 
 Implicit definitions reject missing and not-applicable literals without a
 preceding operand that determines their type. They also reject nonfinite numeric
