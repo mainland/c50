@@ -273,6 +273,10 @@ typedef struct
 
 using c50_context = c50::detail::context_state;
 
+/* The tree depth limit of a model that model::load reads, and of other text
+   that the parser reads outside a model. */
+constexpr std::size_t c50_default_max_tree_depth = 1024;
+
 struct c50::detail::context_state
 {
     ~context_state();
@@ -287,6 +291,9 @@ struct c50::detail::context_state
      * as Release 2.07 does. A library operation ends at its first error. */
     int continue_past_errors;
     unsigned int split_worker_count;
+    /* The most levels that the model-text parser accepts in a tree, or no
+     * limit. ParseModel sets it from the model before every parse. */
+    std::optional<std::size_t> max_serialized_tree_depth;
     int sample_from;
     int suppress_error_messages;
     int delimiter;
