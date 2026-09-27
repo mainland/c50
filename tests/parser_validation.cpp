@@ -78,6 +78,8 @@ static void structure(c50::context &context)
         growing_rules +=
             "conds=\"0\" cover=\"1\" ok=\"1\" lift=\"1\" class=\"no\"\n";
     c50::model::load(context, rules, names, growing_rules);
+    rejects([&] { c50::model::load(context, rules, names,
+        growing_rules + "trailing"); });
     const std::string rule = header + "rules=\"1\" default=\"no\"\n"
         "conds=\"1\" cover=\"1\" ok=\"1\" lift=\"1\" class=\"no\"\n";
     for (const auto &condition : {"type=\"0\" att=\"x\"\n",
@@ -122,6 +124,9 @@ int main()
         c50::context context;
         const auto kind = c50::model_kind::tree;
         auto model = c50::model::load(context, kind, names, header + leaf);
+        rejects([&] { c50::model::load(context, kind, names,
+            header + leaf + "trailing"); });
+        c50::model::load(context, kind, names, header + leaf + " \t\n");
         rejects([&] { c50::model::load(context, kind,
             "no, yes.\n" + std::string(2000, 'x') + ": continuous.\n", header + leaf); });
         rejects([&] { model.predict(context, std::string(2000, '1') + ", ?\n"); });
