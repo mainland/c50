@@ -96,8 +96,10 @@ Short model identifiers remain accepted without date recovery.
 Model loading rejects inconsistent branch counts, invalid attribute kinds,
 missing required classes or rule fields, nonfinite numeric properties, and
 frequency vectors that disagree with the class schema. Dynamic attribute
-lists must fit their declared capacity. A tree root must have enough total
-class frequency to satisfy the predictor's `1e-4` case threshold; unlike child
+lists must fit their declared capacity. Rule condition arrays grow as
+conditions are read instead of reserving space from an untrusted declared
+count. A tree root must have enough total class frequency to satisfy the
+predictor's `1e-4` case threshold; unlike child
 nodes, it has no parent distribution to use below that threshold. Zero-case
 child nodes remain valid and retain their parent-based prediction behavior.
 These checks reject malformed artifacts before prediction can index their

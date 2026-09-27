@@ -42,6 +42,8 @@
 #include <memory>
 #include <limits>
 
+static constexpr size_t RuleConditionChunk = 100;
+
 static const char PropertyNames[] =
     "null\0att\0class\0cut\0conds\0elts\0entries\0forks\0freq\0id\0"
     "type\0low\0mid\0high\0result\0rules\0val\0lift\0cover\0ok\0"
@@ -900,7 +902,7 @@ CRule InRuleAt(c50_context *Context, c50_input *Input, CRule *Slot)
 /*    --------  */
 {
     CRule	R;
-    int		d;
+    int		d, ConditionCount=0;
     char	Delim, *Unquoted;
     float	Lift;
 
@@ -917,7 +919,7 @@ CRule InRuleAt(c50_context *Context, c50_input *Input, CRule *Slot)
 		return Nil;
 
 	    case CONDSP:
-		sscanf(Context->property_value, "\"%d\"", &R->Size);
+		sscanf(Context->property_value, "\"%d\"", &ConditionCount);
 		break;
 
 	    case COVERP:
@@ -943,15 +945,30 @@ CRule InRuleAt(c50_context *Context, c50_input *Input, CRule *Slot)
 
     const unsigned required = PropertyBit(CONDSP) | PropertyBit(COVERP) |
                               PropertyBit(OKP) | PropertyBit(LIFTP) | PropertyBit(CLASSP);
-    if ((Seen & required) != required || R->Correct > R->Cover)
+    if ((Seen & required) != required || ConditionCount < 0 ||
+        R->Correct > R->Cover)
         Error(Context, MODELFILE, "incomplete or inconsistent rule", "");
     R->Prior = (R->Correct + 1) / ((R->Cover + 2) * Lift);
     if (!isfinite(R->Prior) || R->Prior <= 0)
         Error(Context, MODELFILE, "invalid rule prior", "");
 
-    R->Lhs = Alloc(R->Size+1, Condition);
-    ForEach(d, 1, R->Size)
+    const size_t FullSize = static_cast<size_t>(ConditionCount) + 1;
+    size_t Allocated = FullSize < RuleConditionChunk + 1 ?
+                       FullSize : RuleConditionChunk + 1;
+    R->Lhs = Alloc(Allocated, Condition);
+    ForEach(d, 1, ConditionCount)
     {
+	if ( static_cast<size_t>(d) >= Allocated )
+	{
+	    const size_t NewSize =
+		Allocated + RuleConditionChunk < FullSize ?
+		Allocated + RuleConditionChunk : FullSize;
+	    R->Lhs = static_cast<Condition *>(
+		Prealloc(Context, R->Lhs, NewSize * sizeof(Condition)));
+	    Allocated = NewSize;
+	}
+	R->Lhs[d] = Nil;
+	R->Size = d;
 	InConditionAt(Context, Input, &R->Lhs[d]);
     }
 
