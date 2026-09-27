@@ -143,6 +143,20 @@ int main()
         const std::string target(995, 'x');
         rejects([&] { c50::model::load(context, kind,
             target + ": 1, 2.\n" + target + ": continuous.\n", header + leaf); });
+        c50::model::load(context, kind,
+            "|" + std::string(9997, 'x') + "\n" + names, header + leaf);
+        const auto long_line_model = c50::model::load(context, kind,
+            "|" + std::string(20000, 'x') + "\n" + names, header + leaf);
+        const auto long_line_predictions = long_line_model.predict(context,
+            "0, ?\n" + std::string(20000, ' ') + "1, ?\n");
+        if (long_line_predictions.size() != 2 ||
+            long_line_predictions.class_index(0) != 0 ||
+            long_line_predictions.class_index(1) != 0)
+            throw std::runtime_error("long input lines changed predictions");
+        for (const auto &threshold : {"nan", "inf", "-inf"})
+            rejects([&] { c50::model::load(context, kind,
+                "y: 1, " + std::string(threshold) + ".\ny: continuous.\nx: continuous.\n",
+                header + leaf); });
         for (const auto &value : {"?", "N/A"})
             rejects([&] { c50::model::load(context, kind,
                 "no, yes.\nx: continuous.\nderived := " + std::string(value) + ".\n",

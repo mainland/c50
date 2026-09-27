@@ -46,15 +46,15 @@
 void PrintHeader(c50_context *Context, const char *Title)
 /*   -----------  */
 {
-    char	TitleLine[80];
-    time_t	clock;
-    int		Underline;
+    std::string TitleLine = std::string(NAME) + Title + " [" +
+                            TX_Release(RELEASE) + "]";
+    time_t clock;
+    int Underline;
 
     clock = time(0);
-    sprintf(TitleLine, "%s%s [%s]", NAME, Title, TX_Release(RELEASE));
-    fprintf(Context->io.output, "\n%s  \t%s", TitleLine, ctime(&clock));
+    fprintf(Context->io.output, "\n%s  \t%s", TitleLine.c_str(), ctime(&clock));
 
-    Underline = CharWidth(TitleLine);
+    Underline = CharWidth(TitleLine.c_str());
     while ( Underline-- ) putc('-', Context->io.output);
     putc('\n', Context->io.output);
 }
@@ -351,165 +351,181 @@ void ErrorContext(c50_context *Context, int ErrNo, const char *S1,
 /*   -----  */
 {
     Boolean	Quit=false, WarningOnly=false;
-    char	Buffer[10000], *Msg=Buffer;
+    std::string Buffer;
+    const auto Append = [&Buffer](const char *Format, auto... Args) {
+	if constexpr ( sizeof...(Args) == 0 )
+	{
+	    Buffer += Format;
+	}
+	else
+	{
+	    const int Length = snprintf(nullptr, 0, Format, Args...);
+	    if ( Length < 0 )
+	    {
+		throw c50::exception(c50::error_code::internal_error,
+		                     "cannot format diagnostic");
+	    }
+	    std::vector<char> Formatted(static_cast<size_t>(Length) + 32);
+	    snprintf(Formatted.data(), Formatted.size(), Format, Args...);
+	    Buffer.append(Formatted.data(), static_cast<size_t>(Length));
+	}
+    };
 
 
     if ( Context->io.output ) fprintf(Context->io.output, "\n");
 
     if ( ErrNo == NOFILE || ErrNo == NOMEM || ErrNo == MODELFILE )
     {
-	snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), "*** ");
+	Append("*** ");
     }
     else
     {
-	snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), TX_Line(Context->io.line_number, Context->io.file_name));
+	Append(TX_Line(Context->io.line_number, Context->io.file_name.c_str()));
     }
-    Msg += strlen(Buffer);
 
     switch ( ErrNo )
     {
 	case NOFILE:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_NOFILE(Context->io.file_name, S2));
+	    Append(E_NOFILE(Context->io.file_name.c_str(), S2));
 	    Quit = true;
 	    break;
 
 	case BADCLASSTHRESH:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADCLASSTHRESH, S1);
+	    Append(E_BADCLASSTHRESH, S1);
 	    break;
 
 	case LEQCLASSTHRESH:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_LEQCLASSTHRESH, S1);
+	    Append(E_LEQCLASSTHRESH, S1);
 	    break;
 
 	case BADATTNAME:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADATTNAME, S1);
+	    Append(E_BADATTNAME, S1);
 	    break;
 
 	case EOFINATT:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_EOFINATT, S1);
+	    Append(E_EOFINATT, S1);
 	    break;
 
 	case SINGLEATTVAL:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_SINGLEATTVAL(S1, S2));
+	    Append(E_SINGLEATTVAL(S1, S2));
 	    break;
 
 	case DUPATTNAME:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_DUPATTNAME, S1);
+	    Append(E_DUPATTNAME, S1);
 	    break;
 
 	case CWTATTERR:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_CWTATTERR);
+	    Append(E_CWTATTERR);
 	    break;
 
 	case BADATTVAL:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADATTVAL(S2, S1));
+	    Append(E_BADATTVAL(S2, S1));
 	    break;
 
 	case BADNUMBER:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADNUMBER(S1));
+	    Append(E_BADNUMBER(S1));
 	    break;
 
 	case BADCLASS:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADCLASS, S2);
+	    Append(E_BADCLASS, S2);
 	    break;
 
 	case BADCOSTCLASS:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADCOSTCLASS, S1);
+	    Append(E_BADCOSTCLASS, S1);
 	    Quit = true;
 	    break;
 
 	case BADCOST:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADCOST, S1);
+	    Append(E_BADCOST, S1);
 	    Quit = true;
 	    break;
 
 	case NOMEM:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_NOMEM);
+	    Append(E_NOMEM);
 	    Quit = true;
 	    break;
 
 	case TOOMANYVALS:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_TOOMANYVALS(S1, (int) (intptr_t) S2));
+	    Append(E_TOOMANYVALS(S1, (int) (intptr_t) S2));
 	    break;
 
 	case BADDISCRETE:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADDISCRETE, S1);
+	    Append(E_BADDISCRETE, S1);
 	    break;
 
 	case NOTARGET:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_NOTARGET, S1);
+	    Append(E_NOTARGET, S1);
 	    Quit = true;
 	    break;
 
 	case BADCTARGET:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADCTARGET, S1);
+	    Append(E_BADCTARGET, S1);
 	    Quit = true;
 	    break;
 
 	case BADDTARGET:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADDTARGET, S1);
+	    Append(E_BADDTARGET, S1);
 	    Quit = true;
 	    break;
 
 	case LONGNAME:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_LONGNAME);
+	    Append(E_LONGNAME);
 	    Quit = true;
 	    break;
 
 	case HITEOF:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_HITEOF);
+	    Append(E_HITEOF);
 	    break;
 
 	case MISSNAME:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_MISSNAME, S2);
+	    Append(E_MISSNAME, S2);
 	    break;
 
 	case BADTSTMP:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADTSTMP(S2, S1));
+	    Append(E_BADTSTMP(S2, S1));
 	    break;
 
 	case BADDATE:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADDATE(S2, S1));
+	    Append(E_BADDATE(S2, S1));
 	    break;
 
 	case BADTIME:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADTIME(S2, S1));
+	    Append(E_BADTIME(S2, S1));
 	    break;
 
 	case UNKNOWNATT:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_UNKNOWNATT, S1);
+	    Append(E_UNKNOWNATT, S1);
 	    break;
 
 	case BADDEF1:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADDEF1(Context->schema.attribute_names[Context->schema.max_attribute], S1, S2));
+	    Append(E_BADDEF1(Context->schema.attribute_names[Context->schema.max_attribute], S1, S2));
 	    break;
 
 	case BADDEF2:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADDEF2(Context->schema.attribute_names[Context->schema.max_attribute], S1, S2));
+	    Append(E_BADDEF2(Context->schema.attribute_names[Context->schema.max_attribute], S1, S2));
 	    break;
 
 	case SAMEATT:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_SAMEATT(Context->schema.attribute_names[Context->schema.max_attribute], S1));
+	    Append(E_SAMEATT(Context->schema.attribute_names[Context->schema.max_attribute], S1));
 	    WarningOnly = true;
 	    break;
 
 	case BADDEF3:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADDEF3, Context->schema.attribute_names[Context->schema.max_attribute]);
+	    Append(E_BADDEF3, Context->schema.attribute_names[Context->schema.max_attribute]);
 	    break;
 
 	case BADDEF4:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), E_BADDEF4, Context->schema.attribute_names[Context->schema.max_attribute]);
+	    Append(E_BADDEF4, Context->schema.attribute_names[Context->schema.max_attribute]);
 	    WarningOnly = true;
 	    break;
 
 	case MODELFILE:
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), EX_MODELFILE(Context->io.file_name));
-	    snprintf(Msg, sizeof(Buffer) - (Msg - Buffer), "    (%s `%s')\n", S1, S2);
+	    Append("    (%s `%s')\n", S1, S2);
 	    Quit = true;
 	    break;
     }
 
-    if ( Context->io.output ) fputs(Buffer, Context->io.output);
+    if ( Context->io.output ) fputs(Buffer.c_str(), Context->io.output);
 	
     if ( ! WarningOnly )
     {
@@ -517,7 +533,7 @@ void ErrorContext(c50_context *Context, int ErrNo, const char *S1,
 	if (ErrNo == NOMEM) throw std::bad_alloc();
 	c50_record_error(Context, ErrNo == NOFILE ? c50::error_code::io_error :
 			 c50::error_code::parse_error,
-			 Buffer);
+			 Buffer.c_str());
     }
 
     if ( Context->io.error_count == 10 )
@@ -549,10 +565,10 @@ void Error(c50_context *Context, int ErrNo, const char *S1, const char *S2)
 /*                                                                       */
 /*************************************************************************/
 
-String CaseLabel(c50_context *Context, CaseNo N)
+const char *CaseLabel(c50_context *Context, CaseNo N)
 /*     ---------  */
 {
-    String      p;
+    const char *p;
 
     if ( Context->schema.label_attribute &&
 	 (p = Context->ignored_values +
@@ -560,8 +576,8 @@ String CaseLabel(c50_context *Context, CaseNo N)
 	;
     else
     {
-	sprintf(Context->io.label_buffer, "#%d", N+1);
-	p = Context->io.label_buffer;
+	Context->io.label_buffer = "#" + std::to_string(N + 1);
+	p = Context->io.label_buffer.c_str();
     }
 
     return p;
@@ -579,9 +595,8 @@ String CaseLabel(c50_context *Context, CaseNo N)
 FILE *GetFile(c50_context *Context, const char *Extension, const char *RW)
 /*    --------  */
 {
-    strcpy(Context->io.file_name, Context->io.file_stem);
-    strcat(Context->io.file_name, Extension);
-    return fopen(Context->io.file_name, RW);
+    Context->io.file_name = std::string(Context->io.file_stem) + Extension;
+    return fopen(Context->io.file_name.c_str(), RW);
 }
 
 
@@ -699,16 +714,12 @@ int DateToDay(String DS)	/*  Day 1 is 0000/03/01  */
 
 
 
-void DayToDate(int Day, String Date)
-/*   ---------  */
+std::string DayToDate(int Day)
+/*         ---------  */
 {
     int Year, Month, OrigDay=Day;
 
-    if ( Day <= 0 )
-    {
-	strcpy(Date, "?");
-	return;
-    }
+    if ( Day <= 0 ) return "?";
 
     Year = (Day - 1) / 365.2425L;  /*  Year = completed years  */
     Day -= Year * 365 + Year / 4 - Year / 100 + Year / 400;
@@ -718,11 +729,10 @@ void DayToDate(int Day, String Date)
 	Year--;
 	Day = OrigDay - (Year * 365 + Year / 4 - Year / 100 + Year / 400);
     }
-    else
-    if ( Day > 366 ||
-	 ( Day == 366 &&
-	   ( (Year+1) % 4 != 0 ||
-	     ( (Year+1) % 100 == 0 && (Year+1) % 400 != 0 ) ) ) )
+    else if ( Day > 366 ||
+	      ( Day == 366 &&
+	        ( (Year+1) % 4 != 0 ||
+	          ( (Year+1) % 100 == 0 && (Year+1) % 400 != 0 ) ) ) )
     {
 	Year++;
 	Day = OrigDay - (Year * 365 + Year / 4 - Year / 100 + Year / 400);
@@ -743,14 +753,18 @@ void DayToDate(int Day, String Date)
 	Year++;
     }
 
-    sprintf(Date, "%d/%d%d/%d%d", Year, Month/10, Month % 10, Day/10, Day % 10);
+    const auto TwoDigits = [](int Value) {
+	return std::string(Value < 10 ? "0" : "") + std::to_string(Value);
+    };
+    return std::to_string(Year) + "/" + TwoDigits(Month) + "/" +
+           TwoDigits(Day);
 }
 
 
 
 /*************************************************************************/
 /*									 */
-/*	Routines to process clock time and timestamps			 */
+/*	Routines to process clock time and timestamps		 */
 /*									 */
 /*************************************************************************/
 
@@ -777,19 +791,19 @@ int TimeToSecs(String TS)
 
 
 
-void SecsToTime(int Secs, String Time)
-/*   ----------  */
+std::string SecsToTime(int Secs)
+/*         ----------  */
 {
-    int Hour, Mins;
+    if ( Secs < 0 || Secs >= 24 * 60 * 60 ) return "?";
 
-    Hour = Secs / 3600;
-    Mins = (Secs % 3600) / 60;
-    Secs = Secs % 60;
-
-    sprintf(Time, "%d%d:%d%d:%d%d",
-		  Hour / 10, Hour % 10,
-		  Mins / 10, Mins % 10,
-		  Secs / 10, Secs % 10);
+    const int Hour = Secs / 3600;
+    const int Mins = (Secs % 3600) / 60;
+    Secs %= 60;
+    const auto TwoDigits = [](int Value) {
+	return std::string(Value < 10 ? "0" : "") + std::to_string(Value);
+    };
+    return TwoDigits(Hour) + ":" + TwoDigits(Mins) + ":" +
+           TwoDigits(Secs);
 }
 
 
@@ -838,38 +852,46 @@ int TStampToMins(c50_context *Context, String TS)
 
 /*************************************************************************/
 /*									 */
-/*	Convert a continuous value to a string.		DS must be	 */
-/*	large enough to hold any value (e.g. a date, time, ...)		 */
+/*	Convert a continuous value to an owned string.			 */
 /*									 */
 /*************************************************************************/
 
 
-void CValToStr(c50_context *Context, ContValue CV, Attribute Att, String DS)
+std::string CValToStr(c50_context *Context, ContValue CV, Attribute Att)
 /*   ---------  */
 {
-    int		Mins;
+    const auto ToInt = [](double Value) {
+	if ( ! isfinite(Value) ||
+	     Value < std::numeric_limits<int>::min() ||
+	     Value > std::numeric_limits<int>::max() )
+	{
+	    throw c50::exception(c50::error_code::internal_error,
+	                         "formatted date or time is out of range");
+	}
+	return static_cast<int>(Value);
+    };
 
     if ( TStampVal(Att) )
     {
-	DayToDate(floor(CV / 1440) + Context->io.timestamp_base, DS);
-	DS[10] = ' ';
-	Mins = rint(CV) - floor(CV / 1440) * 1440;
-	SecsToTime(Mins * 60, DS+11);
+	const std::string Date = DayToDate(
+	    ToInt(floor(CV / 1440) + Context->io.timestamp_base));
+	const int Mins = ToInt(rint(CV) - floor(CV / 1440) * 1440);
+	const std::string Time = SecsToTime(
+	    ToInt(static_cast<double>(Mins) * 60));
+	return Date == "?" || Time == "?" ? "?" : Date + " " + Time;
     }
-    else
-    if ( DateVal(Att) )
+    if ( DateVal(Att) ) return DayToDate(ToInt(CV));
+    if ( TimeVal(Att) ) return SecsToTime(ToInt(CV));
+
+    const int Length = snprintf(nullptr, 0, "%.*g", PREC, CV);
+    if ( Length < 0 )
     {
-	DayToDate(CV, DS);
+	throw c50::exception(c50::error_code::internal_error,
+	                     "cannot format continuous value");
     }
-    else
-    if ( TimeVal(Att) )
-    {
-	SecsToTime(CV, DS);
-    }
-    else
-    {
-	sprintf(DS, "%.*g", PREC, CV);
-    }
+    std::vector<char> Buffer(static_cast<size_t>(Length) + 32);
+    snprintf(Buffer.data(), Buffer.size(), "%.*g", PREC, CV);
+    return std::string(Buffer.data(), static_cast<size_t>(Length));
 }
 
 
