@@ -24,11 +24,9 @@ jobs:
       matrix:
         include:
           - kind: address-undefined-leak
-            cc: clang
             cxx: clang++
             option: C50_ENABLE_SANITIZERS
           - kind: thread
-            cc: gcc
             cxx: g++
             option: C50_ENABLE_THREAD_SANITIZER
     name: ${{ matrix.kind }}
@@ -41,7 +39,6 @@ jobs:
       - name: Configure and build
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
             -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
             -D${{ matrix.option }}=ON -DC50_BUILD_BENCHMARKS=ON
           cmake --build build --parallel 2
@@ -72,7 +69,6 @@ jobs:
         run: >-
           cmake -S . -B build/afl
           -DCMAKE_BUILD_TYPE=RelWithDebInfo
-          -DCMAKE_C_COMPILER=afl-clang-lto
           -DCMAKE_CXX_COMPILER=afl-clang-lto++
           -DBUILD_TESTING=OFF
           -DC50_BUILD_FUZZERS=ON
