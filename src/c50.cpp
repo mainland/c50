@@ -38,20 +38,51 @@
 #include "c50_api_internal.h"
 #include <signal.h>
 
+#include <cerrno>
+#include <limits>
+
 #include <sys/unistd.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 
-#define SetFOpt(V)	V = strtod(Context->io.option_argument, &EndPtr);\
-			if ( ! EndPtr || *EndPtr != '\00' ) break;\
+#define SetFOpt(V)	if ( ! ParseFloatOption(Context->io.option_argument, V) ) break;\
 			ArgOK = true
-#define SetIOpt(V)	V = strtol(Context->io.option_argument, &EndPtr, 10);\
-			if ( ! EndPtr || *EndPtr != '\00' ) break;\
+#define SetIOpt(V)	if ( ! ParseIntegerOption(Context->io.option_argument, V) ) break;\
 			ArgOK = true
 
 
 namespace
 {
+
+bool ParseFloatOption(const char *Text, float &Value)
+{
+    char *End;
+    errno = 0;
+    const double Parsed = strtod(Text, &End);
+    if ( End == Text || *End || errno == ERANGE || ! isfinite(Parsed) ||
+         Parsed < -std::numeric_limits<float>::max() ||
+         Parsed > std::numeric_limits<float>::max() )
+    {
+        return false;
+    }
+    Value = static_cast<float>(Parsed);
+    return isfinite(Value);
+}
+
+bool ParseIntegerOption(const char *Text, int &Value)
+{
+    char *End;
+    errno = 0;
+    const long Parsed = strtol(Text, &End, 10);
+    if ( End == Text || *End || errno == ERANGE ||
+         Parsed < std::numeric_limits<int>::min() ||
+         Parsed > std::numeric_limits<int>::max() )
+    {
+        return false;
+    }
+    Value = static_cast<int>(Parsed);
+    return true;
+}
 
 struct cli_arguments
 {
@@ -66,7 +97,6 @@ void Run(c50_context *Context, void *UserData)
     int			Argc = Arguments->argc;
     char			**Argv = Arguments->argv;
     int			o;
-    char		*EndPtr;
     Boolean		FirstTime=true, ArgOK;
     double		StartTime;
     FILE		*F;
