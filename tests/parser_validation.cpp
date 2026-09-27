@@ -125,10 +125,19 @@ int main()
             rejects([&] { c50::model::load(context, kind,
                 "no, yes.\nx: continuous.\nderived := " + std::string(value) + ".\n",
                 header + leaf); });
-        const std::string nested_expression =
-            std::string(200, '(') + "x" + std::string(200, ')');
+        const auto nested_expression = [](int depth) {
+            std::string expression = "x";
+            for (int level = 1; level < depth; ++level)
+                expression = "1 + (" + expression + ")";
+            return expression;
+        };
+        const auto boundary_model = c50::model::load(context, kind,
+            "no, yes.\nx: continuous.\nderived := " + nested_expression(100) + ".\n",
+            header + leaf);
+        if (boundary_model.predict(context, "1, ?\n").class_index(0) != 0)
+            throw std::runtime_error("expression depth boundary changed prediction");
         rejects([&] { c50::model::load(context, kind,
-            "no, yes.\nx: continuous.\nderived := " + nested_expression + ".\n",
+            "no, yes.\nx: continuous.\nderived := " + nested_expression(101) + ".\n",
             header + leaf); });
         const std::string boundary_expression =
             "color = \"" + std::string(38, 'a') + "\"";
