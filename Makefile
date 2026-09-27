@@ -65,6 +65,7 @@ objects = $(sources:.cpp=.o)
 headers =\
 	include/c50/c50.hpp\
 	$(SRC_DIR)/c50_api_internal.h\
+	$(SRC_DIR)/c50_index.h\
 	$(SRC_DIR)/c50_input.h\
 	$(SRC_DIR)/c50_locale.h\
 	$(SRC_DIR)/c50_output.h\

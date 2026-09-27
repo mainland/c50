@@ -56,7 +56,7 @@ void PrintConfusionMatrix(c50_context *Context, CaseNo *ConfusionMat)
     {
 	ForEach(Col, 1, Context->schema.max_class)
 	{
-	    EntryWidth = Max(EntryWidth, ConfusionMat[Row*(Context->schema.max_class+1) + Col]);
+	    EntryWidth = Max(EntryWidth, ConfusionMat[FlatIndex(Row, Context->schema.max_class+1, Col)]);
 	}
     }
 
@@ -82,7 +82,7 @@ void PrintConfusionMatrix(c50_context *Context, CaseNo *ConfusionMat)
 	fprintf(Context->io.output, "\t");
 	ForEach(Col, 1, Context->schema.max_class)
 	{
-	    if ( (Entry = ConfusionMat[Row*(Context->schema.max_class+1) + Col]) )
+	    if ( (Entry = ConfusionMat[FlatIndex(Row, Context->schema.max_class+1, Col)]) )
 	    {
 		fprintf(Context->io.output, " %*d", EntryWidth-1, Entry);
 	    }
@@ -112,7 +112,7 @@ void PrintErrorBreakdown(c50_context *Context, CaseNo *ConfusionMat)
     {
 	ForEach(Col, 1, Context->schema.max_class)
 	{
-	    Entry = ConfusionMat[Row*(Context->schema.max_class+1) + Col];
+	    Entry = ConfusionMat[FlatIndex(Row, Context->schema.max_class+1, Col)];
 
 	    if ( Col == Row )
 	    {
