@@ -116,6 +116,16 @@ static void structure(c50::context &context)
     if (default_prediction.class_index(0) != 1 ||
         default_prediction.confidence(0) != 0.5)
         throw std::runtime_error("zero-vote rules did not use the default class");
+
+    std::string deep_tree = header;
+    for (int depth = 0; depth < 1024; ++depth) {
+        deep_tree += "type=\"2\" class=\"no\" att=\"x\" forks=\"3\" "
+                     "cut=\"0\" freq=\"1,1\"\n";
+        deep_tree += leaf;
+    }
+    deep_tree += leaf;
+    for (int depth = 0; depth < 1024; ++depth) deep_tree += leaf;
+    rejects([&] { c50::model::load(context, kind, names, deep_tree); });
 }
 
 int main()
