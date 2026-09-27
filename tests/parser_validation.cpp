@@ -101,6 +101,16 @@ static void structure(c50::context &context)
         "type=\"0\" class=\"no\"\n" + leaf + "type=\"0\" class=\"no\"\n");
     if (empty_child.predict(context, "5, ?\n").class_index(0) != 0)
         throw std::runtime_error("empty child prediction changed");
+
+    std::string deep_tree = header;
+    for (int depth = 0; depth < 1024; ++depth) {
+        deep_tree += "type=\"2\" class=\"no\" att=\"x\" forks=\"3\" "
+                     "cut=\"0\" freq=\"1,1\"\n";
+        deep_tree += leaf;
+    }
+    deep_tree += leaf;
+    for (int depth = 0; depth < 1024; ++depth) deep_tree += leaf;
+    rejects([&] { c50::model::load(context, kind, names, deep_tree); });
 }
 
 int main()

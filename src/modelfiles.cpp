@@ -44,6 +44,7 @@
 
 static constexpr size_t RuleConditionChunk = 100;
 static constexpr size_t SerializedRuleChunk = 100;
+static constexpr unsigned MaxSerializedTreeDepth = 1024;
 
 static const char PropertyNames[] =
     "null\0att\0class\0cut\0conds\0elts\0entries\0forks\0freq\0id\0"
@@ -671,9 +672,24 @@ Tree InTree(c50_context *Context, c50_input *Input)
 
 
 
+static Tree InTreeAtDepth(c50_context *Context, c50_input *Input, Tree *Slot,
+                          unsigned Depth);
+
 Tree InTreeAt(c50_context *Context, c50_input *Input, Tree *Slot)
 /*   --------  */
 {
+    return InTreeAtDepth(Context, Input, Slot, 0);
+}
+
+static Tree InTreeAtDepth(c50_context *Context, c50_input *Input, Tree *Slot,
+                          unsigned Depth)
+{
+    if ( Depth >= MaxSerializedTreeDepth )
+    {
+        c50_record_error(Context, c50::error_code::parse_error,
+                         "serialized tree exceeds maximum depth of 1024");
+        C50Exit(Context, 1);
+    }
     Tree	T;
     DiscrValue	v, Subset=0;
     char	Delim, *p, *Unquoted;
@@ -798,7 +814,7 @@ Tree InTreeAt(c50_context *Context, c50_input *Input, Tree *Slot)
 	T->Branch = AllocZero(T->Forks+1, Tree);
 	ForEach(v, 1, T->Forks)
 	{
-	    InTreeAt(Context, Input, &T->Branch[v]);
+	    InTreeAtDepth(Context, Input, &T->Branch[v], Depth + 1);
 	}
     }
 
