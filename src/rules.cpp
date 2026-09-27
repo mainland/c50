@@ -491,7 +491,7 @@ void PrintRule(c50_context *Context, CRule R)
 void PrintCondition(c50_context *Context, Condition C)
 /*  --------------  */
 {
-    DiscrValue	v, pv, Last, Values;
+    DiscrValue	v, pv, Last=0, Values;
     Boolean	First=true;
     Attribute	Att;
     int		Col, Base, Entry;

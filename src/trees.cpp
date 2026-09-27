@@ -206,7 +206,7 @@ void ShowBranch(c50_context *Context, int Sh, Tree T, DiscrValue v,
 		DiscrValue BrNo)
 /*   ----------  */
 {
-    DiscrValue	Pv, Last;
+    DiscrValue	Pv, Last=0;
     Attribute	Att;
     Boolean	FirstValue;
     int		TextWidth, Skip, Values, i, Extra;
@@ -379,7 +379,7 @@ int MaxLine(c50_context *Context, Tree T)
 {
     Attribute	Att;
     DiscrValue	v, vv;
-    int		Ll, One, MaxLl=0;
+    int		Ll=0, One, MaxLl=0;
 
     Att = T->Tested;
 
