@@ -15,6 +15,12 @@ class ModelKind(Enum):
 
 
 @final
+class TieOrder(Enum):
+    REFERENCE = 0
+    STABLE = 1
+
+
+@final
 class NodeKind(Enum):
     LEAF = 0
     DISCRETE = 1
@@ -152,6 +158,7 @@ class Options:
     confidence_factor: float
     sample_fraction: float
     random_seed: int
+    ties: TieOrder
 
 
 @final

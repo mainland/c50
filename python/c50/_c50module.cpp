@@ -501,6 +501,16 @@ GIL while training, loading, or predicting.
         .value("RULES", c50::model_kind::rules,
                "A ruleset or boosted ruleset ensemble.");
 
+    py::enum_<c50::tie_order>(
+        module, "TieOrder",
+        "Order of equal continuous values when evaluating splits.")
+        .value("REFERENCE", c50::tie_order::reference,
+               "Reproduce the tie order of the reference C5.0 learner.")
+        .value("STABLE", c50::tie_order::stable,
+               "Keep equal values in case order with a faster sort. "
+               "Classifiers are deterministic on every platform but may "
+               "differ from the reference learner.");
+
     bind_inspection(module);
 
     py::class_<c50::options>(
@@ -539,7 +549,10 @@ GIL while training, loading, or predicting.
             "sampling.")
         .def_readwrite(
             "random_seed", &c50::options::random_seed,
-            "Sampling seed in the range 0 through 4095.");
+            "Sampling seed in the range 0 through 4095.")
+        .def_readwrite(
+            "ties", &c50::options::ties,
+            "Order of equal continuous values when evaluating splits.");
 
     py::class_<c50::predictions>(
         module, "Predictions",

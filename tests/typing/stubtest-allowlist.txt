@@ -13,6 +13,11 @@ c50._c50.ModelKind.TREE
 c50._c50.ModelKind.__index__
 c50._c50.ModelKind.__int__
 c50._c50.ModelKind.__members__
+c50._c50.TieOrder.REFERENCE
+c50._c50.TieOrder.STABLE
+c50._c50.TieOrder.__index__
+c50._c50.TieOrder.__int__
+c50._c50.TieOrder.__members__
 
 # Owned inspection records have the same native metaclass and no constructor.
 c50._c50.SplitCondition
