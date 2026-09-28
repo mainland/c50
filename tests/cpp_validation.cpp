@@ -205,8 +205,11 @@ static void dense_support_checks()
                 const c50::dense_dataset training(
                     null_buffers ? nullptr : values, rows, width,
                     null_buffers ? nullptr : classes);
+                auto predictor = model.prepare_predictor();
                 rejects(expected, [&] { model.predict(context, cases); },
                         where + ", predict");
+                rejects(expected, [&] { predictor.predict(cases); },
+                        where + ", predictor");
                 rejects(expected, [&] {
                     c50::model::train(context, c50::model_kind::tree,
                                       names_data, training);
@@ -227,7 +230,9 @@ static void dense_support_checks()
         const std::string label = "supported at width " + std::to_string(width);
         const c50::dense_dataset cases(values, 2, width);
         const c50::dense_dataset training(values, 2, width, classes);
+        auto predictor = model.prepare_predictor();
         rejects(invalid, [&] { model.predict(context, cases); }, label);
+        rejects(invalid, [&] { predictor.predict(cases); }, label);
         rejects(invalid, [&] {
             c50::model::train(context, c50::model_kind::tree, dense_schema, training);
         }, label);
