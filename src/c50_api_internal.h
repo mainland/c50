@@ -347,4 +347,6 @@ void c50_record_error(c50_context *context, c50::error_code code,
 void c50_clear_prediction_state(c50_context *context);
 std::unique_ptr<c50_context> c50_make_context();
 
+c50::model_inspection c50_build_inspection(c50_context *Context);
+
 #endif
