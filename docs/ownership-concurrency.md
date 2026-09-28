@@ -25,6 +25,13 @@ originating contexts. Multiple threads may use a model concurrently with
 separate contexts. Each call currently parses the retained classifier into its
 context's workspace.
 
+`model.inspect` returns an owned, copyable classifier snapshot with class and
+feature names, nodes, branches, rules, and structural statistics. It uses the
+same exclusive context rule as prediction. The snapshot survives both the
+model and context,
+and changes to a snapshot do not affect the classifier. See
+{doc}`model-inspection` for serialization-precision and missing-value semantics.
+
 `model.predict` returns an independently owned `c50::predictions` batch.
 Results retain class names, labels, confidence values, and scores after the
 originating model or context is destroyed. Indexed access checks bounds.

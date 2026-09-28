@@ -27,6 +27,7 @@ sources =\
 	$(SRC_DIR)/c50_api.cpp\
 	$(SRC_DIR)/c50_input.cpp\
 	$(SRC_DIR)/c50_output.cpp\
+	$(SRC_DIR)/c50_inspection.cpp\
 	$(SRC_DIR)/c50_model.cpp\
 	$(SRC_DIR)/c50.cpp\
 	$(SRC_DIR)/construct.cpp\

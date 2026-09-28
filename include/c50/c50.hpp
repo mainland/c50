@@ -24,9 +24,11 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace c50 {
 namespace detail {
@@ -166,6 +168,97 @@ private:
     std::unique_ptr<detail::prediction_data> data_;
 };
 
+/** Tree node representation in an owned inspection snapshot. */
+enum class node_kind {
+    leaf,      /**< Terminal class distribution. */
+    discrete,  /**< One branch per categorical value, including N/A. */
+    threshold, /**< Continuous cutoff, possibly with soft thresholds. */
+    subset     /**< Branches containing subsets of categorical values. */
+};
+
+/** A tree branch or rule condition, independent of private node encodings. */
+enum class condition_kind {
+    not_applicable, /**< The feature has the distinct N/A value. */
+    equals,        /**< The feature equals the one named category. */
+    less_equal,    /**< The feature is at or below the cutoff. */
+    greater,       /**< The feature is above the cutoff. */
+    in_subset      /**< The feature belongs to the named subset. */
+};
+
+/** Owned condition metadata. Missing values follow native prediction policy. */
+struct split_condition {
+    std::size_t feature = 0; /**< Zero-based schema attribute index. */
+    condition_kind kind = condition_kind::not_applicable; /**< Comparison kind. */
+    double cut = 0; /**< Cutoff for less_equal and greater, otherwise zero. */
+    std::vector<std::string> values; /**< Ordinary categories for equals/in_subset. */
+    bool includes_not_applicable = false; /**< N/A membership for in_subset only. */
+};
+
+/** Continuous threshold points as read from the retained classifier. */
+struct continuous_threshold {
+    double cut = 0;      /**< Printed decision cutoff. */
+    double lower = 0;    /**< Lower soft-threshold point. */
+    double midpoint = 0; /**< Middle soft-threshold point. */
+    double upper = 0;    /**< Upper soft-threshold point. */
+};
+
+/** Owned outgoing branch with an index into the containing tree's nodes. */
+struct tree_branch {
+    split_condition condition; /**< Branch condition in native branch order. */
+    std::size_t child = 0; /**< Zero-based child node index. */
+};
+
+/** Owned node metadata, not an alternate prediction implementation. */
+struct tree_node {
+    node_kind kind = node_kind::leaf; /**< Leaf or split representation. */
+    std::optional<std::size_t> feature; /**< Tested attribute, absent at a leaf. */
+    std::size_t predicted_class = 0; /**< Stored class, not a cost-adjusted prediction. */
+    double case_weight = 0; /**< Sum of serialized class weights, possibly zero. */
+    std::vector<double> class_weights; /**< Weighted support in class-name order. */
+    std::optional<continuous_threshold> threshold; /**< Present only for thresholds. */
+    std::vector<tree_branch> branches; /**< Ordered branches, empty at a leaf. */
+};
+
+/** Owned tree with root zero and nodes in preorder, including empty leaves. */
+struct tree_inspection {
+    std::vector<tree_node> nodes; /**< Independently owned node records. */
+    std::size_t leaf_count = 0; /**< All leaves, including zero-support leaves. */
+    std::size_t supported_leaf_count = 0; /**< Leaves with positive case weight. */
+    std::size_t depth = 0; /**< Maximum node depth in edges from the root. */
+    std::size_t supported_depth = 0; /**< Maximum positive-support leaf depth. */
+    std::vector<std::size_t> feature_use; /**< Split counts in attribute-name order. */
+};
+
+/** Owned rule in serialized order, with all its condition metadata. */
+struct rule_inspection {
+    std::vector<split_condition> conditions; /**< Conjunction in serialized order. */
+    std::size_t predicted_class = 0; /**< Zero-based rule conclusion. */
+    double cover = 0; /**< Weighted cases covered by the rule. */
+    double correct = 0; /**< Weighted covered cases with the concluded class. */
+    double prior = 0; /**< Prior reconstructed from serialized cover, correct, and lift. */
+    int vote = 0; /**< Native confidence vote in integer thousandths. */
+};
+
+/** Owned ruleset, including the fallback class for cases matching no rule. */
+struct ruleset_inspection {
+    std::size_t default_class = 0; /**< Zero-based fallback class. */
+    std::vector<rule_inspection> rules; /**< Rules in serialized order. */
+    std::vector<std::size_t> feature_use; /**< Condition counts per schema attribute. */
+};
+
+/**
+ * Copyable snapshot owning all model-inspection data. Mutations affect only
+ * this value. It may outlive its model and context. Concurrent reads are safe
+ * when no thread mutates the snapshot. Counts reflect serialization precision.
+ */
+struct model_inspection {
+    model_kind kind = model_kind::tree; /**< Source classifier representation. */
+    std::vector<std::string> class_names; /**< Classes in prediction-score order. */
+    std::vector<std::string> feature_names; /**< All schema attributes in source order. */
+    std::vector<tree_inspection> trees; /**< Tree components, empty for rules models. */
+    std::vector<ruleset_inspection> rulesets; /**< Ruleset components in serialized order. */
+};
+
 /** Move-only owner of an immutable classifier and its schema and costs. */
 class model {
 public:
@@ -225,6 +318,10 @@ public:
      * @param cases Borrowed dense features, possibly empty.
      * @return An independently owned prediction batch. */
     predictions predict(context &workspace, const dense_dataset &cases) const;
+    /** Inspect retained classifiers through the validated native loader.
+     * @param workspace Exclusive operation workspace.
+     * @return A copyable snapshot independent of this model and workspace. */
+    model_inspection inspect(context &workspace) const;
     /** @return the classifier representation. */
     model_kind kind() const noexcept;
     /** @return owned names-file contents. The reference follows model lifetime. */
