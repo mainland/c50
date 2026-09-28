@@ -413,7 +413,15 @@ void PrepareForContin(c50_context *Context, SplitWorkspace &Workspace,
 
     Workspace.UnknownRate = 1.0 - Workspace.KnownCases / Workspace.Cases;
 
-    Cachesort(Workspace.Xp, Lp, Workspace.SRec);
+    if ( Context->options.stable_ties )
+    {
+	StableCachesort(Workspace.Xp, Lp, Workspace.SRec, Workspace.SortScratch,
+			Workspace.SortKeys, Workspace.SortKeyScratch);
+    }
+    else
+    {
+	Cachesort(Workspace.Xp, Lp, Workspace.SRec);
+    }
 
     /*  If unknowns or using sampling, must recompute base information  */
 

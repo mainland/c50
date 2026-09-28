@@ -66,6 +66,9 @@ void c50_split_workspace_deleter::operator()(
     free(Workspace->ValFreq);
     free(Workspace->ClassFreq);
     free(Workspace->SRec);
+    free(Workspace->SortScratch);
+    free(Workspace->SortKeys);
+    free(Workspace->SortKeyScratch);
     free(Workspace->SubsetInfo);
     free(Workspace->SubsetEntr);
     FreeVector((void **) Workspace->MergeInfo, 1, MaxValue);
@@ -120,6 +123,12 @@ static SplitWorkspacePtr MakeSplitWorkspace(c50_context *Context)
         Error(Context, NOMEM, "", "");
     }
     Workspace->SRec = Alloc(NoCases, SortRec);
+    if ( Context->options.stable_ties )
+    {
+	Workspace->SortScratch = Alloc(NoCases, SortRec);
+	Workspace->SortKeys = Alloc(NoCases, C50SortKey);
+	Workspace->SortKeyScratch = Alloc(NoCases, C50SortKey);
+    }
 
     if ( Context->options.subset_splits )
     {
