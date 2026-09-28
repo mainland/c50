@@ -145,7 +145,99 @@ void require_rulequest_order(std::vector<SortRec> records)
     REQUIRE(same_order(records, expected));
 }
 
+void require_stable_order(std::vector<SortRec> records, int first = 0)
+{
+    const int last = static_cast<int>(records.size()) - 1;
+    std::vector<SortRec> expected = records;
+    if ( first <= last )
+    {
+        std::stable_sort(expected.begin() + first, expected.end(),
+                         [](const SortRec &left, const SortRec &right)
+                         {
+                             return left.V < right.V;
+                         });
+    }
+
+    std::vector<SortRec> record_scratch(records.size());
+    std::vector<C50SortKey> keys(records.size());
+    std::vector<C50SortKey> key_scratch(records.size());
+    StableCachesort(first, last, records.data(), record_scratch.data(),
+                    keys.data(), key_scratch.data());
+    REQUIRE(same_order(records, expected));
+}
+
+std::vector<SortRec> numbered(std::vector<SortRec> records)
+{
+    for ( std::size_t index = 0; index < records.size(); ++index )
+    {
+        records[index].C = static_cast<int>(index + 1);
+    }
+    return records;
+}
+
 } // namespace
+
+TEST_CASE("StableCachesort matches std::stable_sort", "[sort][property]")
+{
+    constexpr std::array<C50SortValue, 3> alphabet = {-1.0F, 0.0F, 1.0F};
+    std::size_t combinations = 1;
+
+    for ( std::size_t length = 0; length <= 8; ++length )
+    {
+        for ( std::size_t encoded = 0; encoded < combinations; ++encoded )
+        {
+            std::size_t remaining = encoded;
+            std::vector<SortRec> records;
+            for ( std::size_t index = 0; index < length; ++index )
+            {
+                records.push_back(
+                    {alphabet[remaining % alphabet.size()],
+                     static_cast<int>(index + 1), 1.0F});
+                remaining /= alphabet.size();
+            }
+            CAPTURE(length, encoded);
+            require_stable_order(records);
+        }
+        combinations *= alphabet.size();
+    }
+
+    // Lengths on both sides of the insertion-sort limit, and large ranges.
+    for ( const std::size_t count : {47U, 48U, 49U, 50U, 1000U, 100000U} )
+    {
+        for ( const std::size_t distinct_values : {2U, 8U, 1000U, 100000U} )
+        {
+            CAPTURE(count, distinct_values);
+            require_stable_order(
+                numbered(random_records(count, distinct_values)));
+        }
+    }
+}
+
+TEST_CASE("StableCachesort orders signed zeros and extremes as equal values",
+          "[sort][property]")
+{
+    const C50SortValue maximum = std::numeric_limits<C50SortValue>::max();
+    const C50SortValue denormal =
+        std::numeric_limits<C50SortValue>::denorm_min();
+    const std::array<C50SortValue, 10> values = {
+        -maximum, -maximum / 2, -1, -denormal, -0.0,
+        0.0, denormal, 1, maximum / 2, maximum
+    };
+    deterministic_generator generator(UINT64_C(271828));
+
+    for ( const std::size_t count : {10U, 40U, 200U, 5000U} )
+    {
+        std::vector<SortRec> records;
+        for ( std::size_t index = 0; index < count; ++index )
+        {
+            records.push_back(
+                {values[generator.next() % values.size()], 0, 1.0F});
+        }
+        CAPTURE(count);
+        require_stable_order(numbered(records));
+        require_stable_order(numbered(records), static_cast<int>(count / 3));
+    }
+}
 
 TEST_CASE("Cachesort reproduces the RuleQuest tie order", "[sort][property]")
 {
