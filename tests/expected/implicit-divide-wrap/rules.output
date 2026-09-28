@@ -1,0 +1,48 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `implicit-divide-wrap'
+	Rule-based classifiers
+
+Read 300 cases (2 attributes) from implicit-divide-wrap.data
+
+Attributes excluded:
+    x
+
+Rules:
+
+Rule 1: (134/20, lift 1.8)
+	r <= 9.715791e-05
+	->  class low  [0.846]
+
+Rule 2: (166/26, lift 1.6)
+	r > 9.715791e-05
+	->  class high  [0.839]
+
+Default class: high
+
+
+Evaluation on training data (300 cases):
+
+	        Rules
+	  ----------------
+	    No      Errors
+
+	     2   46(15.3%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	   114    26    (a): class low
+	    20   140    (b): class high
+
+
+	Attribute usage:
+
+	    100%  x
+	    100%  r
+
+
+Time: <elapsed> secs

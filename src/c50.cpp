@@ -38,20 +38,106 @@
 #include "c50_api_internal.h"
 #include <signal.h>
 
+#include <cerrno>
+#include <climits>
+#include <cmath>
+#include <limits>
+#include <type_traits>
+
 #include <sys/unistd.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 
-#define SetFOpt(V)	V = strtod(Context->io.option_argument, &EndPtr);\
-			if ( ! EndPtr || *EndPtr != '\00' ) break;\
-			ArgOK = true
-#define SetIOpt(V)	V = strtol(Context->io.option_argument, &EndPtr, 10);\
-			if ( ! EndPtr || *EndPtr != '\00' ) break;\
-			ArgOK = true
+// A value that is not a number at all, or that has trailing text, ends the
+// option list as an unrecognized option, as in Release 2.07. Empty text is the
+// number 0, because Release 2.07 only tests the end pointer that strtod and
+// strtol leave on the terminating null. A number that overflows its type or is
+// not finite reports the same "illegal value" diagnostic as a number outside
+// the option's range. A number that underflows is its rounded value.
+enum class OptionValue { Valid, Malformed, OutOfRange };
 
 
 namespace
 {
+
+// Release 2.07 prints with %g, which keeps six digits. An integer option's
+// bounds and value need up to ten digits to differ, as -I 2147483648 does.
+
+void IllegalValue(c50_context *Context, double Value, double Low, double High,
+                  bool Integer)
+{
+    if ( Integer )
+    {
+        fprintf(Context->io.output,
+                "\t** illegal value %.10g -- should be between %.10g and %.10g\n",
+                Value, Low, High);
+    }
+    else
+    {
+        fprintf(Context->io.output, TX_IllegalValue(Value, Low, High));
+    }
+    C50Exit(Context, 1);
+}
+
+OptionValue ParseOption(const char *Text, float &Value, double &Shown)
+{
+    char *End;
+    errno = 0;
+    const double Parsed = strtod(Text, &End);
+    if ( *End ) return OptionValue::Malformed;
+    Shown = Parsed;
+
+    // ERANGE with a result no larger than the smallest normal double is
+    // underflow, which leaves a zero or subnormal value that is not an error.
+
+    if ( ( errno == ERANGE &&
+           std::fabs(Parsed) > std::numeric_limits<double>::min() ) ||
+         ! isfinite(Parsed) ||
+         Parsed < -std::numeric_limits<float>::max() ||
+         Parsed > std::numeric_limits<float>::max() )
+    {
+        return OptionValue::OutOfRange;
+    }
+    Value = static_cast<float>(Parsed);
+    return OptionValue::Valid;
+}
+
+OptionValue ParseOption(const char *Text, int &Value, double &Shown)
+{
+    char *End;
+    errno = 0;
+    const long Parsed = strtol(Text, &End, 10);
+    if ( *End ) return OptionValue::Malformed;
+    Shown = static_cast<double>(Parsed);
+    if ( errno == ERANGE ||
+         Parsed < std::numeric_limits<int>::min() ||
+         Parsed > std::numeric_limits<int>::max() )
+    {
+        // An overflowing value reports its own magnitude.
+        if ( errno == ERANGE ) Shown = strtod(Text, nullptr);
+        return OptionValue::OutOfRange;
+    }
+    Value = static_cast<int>(Parsed);
+    return OptionValue::Valid;
+}
+
+// Reads the value of the current option into V. Returns false for a value that
+// is malformed, which ends the option list as an unrecognized option, and does
+// not return for a value outside the range printed in the diagnostic.
+
+template <typename T>
+bool SetOption(c50_context *Context, T &V, double Low, double High)
+{
+    double Shown;
+    const OptionValue Status = ParseOption(Context->io.option_argument, V, Shown);
+
+    if ( Status == OptionValue::Malformed ) return false;
+    if ( Status == OptionValue::OutOfRange )
+    {
+        IllegalValue(Context, Shown, Low, High, std::is_integral<T>::value);
+    }
+    return true;
+}
 
 struct cli_arguments
 {
@@ -66,7 +152,6 @@ void Run(c50_context *Context, void *UserData)
     int			Argc = Arguments->argc;
     char			**Argv = Arguments->argv;
     int			o;
-    char		*EndPtr;
     Boolean		FirstTime=true, ArgOK;
     double		StartTime;
     FILE		*F;
@@ -135,12 +220,13 @@ void Run(c50_context *Context, void *UserData)
 		    ArgOK = true;
 		    break;
 #ifdef VerbOpt
-	case 'v':   SetIOpt(Context->options.verbosity);
-		    fprintf(Context->io.output, "\tVerbosity level %d\n", Context->options.verbosity);
+	case 'v':   if ( ! SetOption(Context, Context->options.verbosity, INT_MIN, INT_MAX) ) break;
 		    ArgOK = true;
+		    fprintf(Context->io.output, "\tVerbosity level %d\n", Context->options.verbosity);
 		    break;
 #endif
-	case 't':   SetIOpt(Context->options.trials);
+	case 't':   if ( ! SetOption(Context, Context->options.trials, 3, 1000) ) break;
+		    ArgOK = true;
 		    fprintf(Context->io.output, T_OptTrials, Context->options.trials);
 		    Check(Context, Context->options.trials, 3, 1000);
 		    Context->options.boosting = true;
@@ -149,11 +235,13 @@ void Run(c50_context *Context, void *UserData)
 		    fprintf(Context->io.output, T_OptSubsets);
 		    ArgOK = true;
 		    break;
-	case 'm':   SetFOpt(Context->options.minimum_cases);
+	case 'm':   if ( ! SetOption(Context, Context->options.minimum_cases, 1, 1000000) ) break;
+		    ArgOK = true;
 		    fprintf(Context->io.output, T_OptMinCases, Context->options.minimum_cases);
 		    Check(Context, Context->options.minimum_cases, 1, 1000000);
 		    break;
-	case 'c':   SetFOpt(Context->options.confidence_factor);
+	case 'c':   if ( ! SetOption(Context, Context->options.confidence_factor, 0, 100) ) break;
+		    ArgOK = true;
 		    fprintf(Context->io.output, T_OptCF, Context->options.confidence_factor);
 		    Check(Context, Context->options.confidence_factor, 0, 100);
 		    Context->options.confidence_factor /= 100;
@@ -162,16 +250,19 @@ void Run(c50_context *Context, void *UserData)
 		    fprintf(Context->io.output, T_OptRules);
 		    ArgOK = true;
 		    break;
-	case 'S':   SetFOpt(Context->options.sample_fraction);
+	case 'S':   if ( ! SetOption(Context, Context->options.sample_fraction, 0.1, 99.9) ) break;
+		    ArgOK = true;
 		    fprintf(Context->io.output, T_OptSampling, Context->options.sample_fraction);
 		    Check(Context, Context->options.sample_fraction, 0.1, 99.9);
 		    Context->options.sample_fraction /= 100;
 		    break;
-	case 'I':   SetIOpt(Context->io.random_initial_seed);
+	case 'I':   if ( ! SetOption(Context, Context->io.random_initial_seed, INT_MIN, INT_MAX) ) break;
+		    ArgOK = true;
 		    fprintf(Context->io.output, T_OptSeed, Context->io.random_initial_seed);
 		    Context->io.random_initial_seed = Context->io.random_initial_seed & 07777;
 		    break;
-	case 'u':   SetIOpt(Context->options.utility_bands);
+	case 'u':   if ( ! SetOption(Context, Context->options.utility_bands, 2, 10000) ) break;
+		    ArgOK = true;
 		    fprintf(Context->io.output, T_OptUtility, Context->options.utility_bands);
 		    Check(Context, Context->options.utility_bands, 2, 10000);
 		    Context->options.rules = true;
@@ -188,7 +279,8 @@ void Run(c50_context *Context, void *UserData)
 		    fprintf(Context->io.output, T_OptNoGlobal);
 		    ArgOK = true;
 		    break;
-	case 'X':   SetIOpt(Context->options.folds);
+	case 'X':   if ( ! SetOption(Context, Context->options.folds, 2, 1000) ) break;
+		    ArgOK = true;
 		    fprintf(Context->io.output, T_OptXval, Context->options.folds);
 		    Check(Context, Context->options.folds, 2, 1000);
 		    Context->options.cross_validation = true;

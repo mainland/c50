@@ -212,7 +212,7 @@ void SetDiscrFreq(c50_context *Context, SplitWorkspace &Workspace, Attribute Att
 {
     ClassNo	c;
     DiscrValue	v;
-    int		x;
+    size_t	x;
 
     /*  Determine the frequency of each possible value for the
 	given attribute  */
@@ -221,7 +221,7 @@ void SetDiscrFreq(c50_context *Context, SplitWorkspace &Workspace, Attribute Att
     {
 	Workspace.ValFreq[v] = 0;
 
-	x = v * Context->schema.max_class;
+	x = FlatIndex(v, Context->schema.max_class, 0);
 	ForEach(c, 1, Context->schema.max_class)
 	{
 	    Workspace.ValFreq[v] += (Workspace.Freq[v][c] = Context->splits.discrete_frequencies[Att][x + (c-1)]);

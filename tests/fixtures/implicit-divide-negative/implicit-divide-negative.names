@@ -1,0 +1,6 @@
+low, high.
+
+a: continuous.
+b: continuous.
+r := a / b.
+attributes excluded: a, b.
