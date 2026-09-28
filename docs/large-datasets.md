@@ -46,7 +46,8 @@ byte-identical serialized models and identical prediction details.
 ## Memory model and limits
 
 Training is in-memory, not streaming or out-of-core. The estimator's encoded
-float64 matrix and the core's case records coexist during training. The core
+float64 matrix, the binding's owned feature copy, and the core's case records
+coexist during training. The original input may also remain live. The core
 also allocates row- and attribute-dependent split, sort, pruning, and boosting
 workspaces. Boosting adds substantial row-by-class state, so a single tree is
 the appropriate baseline for both memory and interpretability.
