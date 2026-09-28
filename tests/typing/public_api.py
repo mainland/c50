@@ -36,6 +36,9 @@ assert_type(inspection.trees[0].nodes[0].feature, int | None)
 assert_type(c50.export_text(inspection), str)
 assert_type(c50.export_json(inspection), str)
 
+predictor = model.prepare_predictor()
+assert_type(predictor.predict_details(""), c50.Predictions)
+
 # The enumerations are pybind11 enums, not enum.Enum: members and the
 # attributes below exist, but iteration and subscripting fail at run time.
 assert_type(c50.ModelKind.TREE, c50.ModelKind)

@@ -66,6 +66,39 @@ template<class F> static void exercise(const char *label, c50::context &context,
     }
 }
 
+static void exercise_predictor(const c50::model &model, const std::string &cases)
+{
+    c50::context reference;
+    const auto expected = model.predict(reference, cases);
+    auto predictor = model.prepare_predictor();
+    predictor.predict(cases);
+    calls = fail_at = 0;
+    armed = true;
+    predictor.predict(cases);
+    armed = false;
+    const auto total = calls;
+    for (std::size_t index = 1; index <= total; ++index) {
+        predictor = model.prepare_predictor();
+        predictor.predict(cases);
+        calls = 0;
+        fail_at = index;
+        bool rejected = false;
+        armed = true;
+        try { predictor.predict(cases); }
+        catch (const std::bad_alloc &) { rejected = true; }
+        catch (...) { armed = false; throw; }
+        armed = false;
+        if (!rejected) throw std::runtime_error("predictor allocation failure was ignored");
+        const auto repeated = predictor.predict(cases);
+        if (expected.size() != repeated.size())
+            throw std::runtime_error("predictor recovery changed row count");
+        for (std::size_t row = 0; row < expected.size(); ++row)
+            for (std::size_t label = 0; label < expected.class_count(); ++label)
+                if (expected.score(row, label) != repeated.score(row, label))
+                    throw std::runtime_error("predictor recovery changed scores");
+    }
+}
+
 static std::string read_file(const std::string &path)
 {
     std::ifstream stream(path);
@@ -121,6 +154,8 @@ int main(int argc, char **argv)
                 c50::model::load(context, kind, boost_names, serialized);
             });
             exercise("predict ensemble", context, [&] { ensemble.predict(context, boost_data); });
+            exercise("prepare predictor", context, [&] { ensemble.prepare_predictor(); });
+            exercise_predictor(ensemble, boost_data);
             exercise("inspect ensemble", context, [&] { ensemble.inspect(context); });
         }
         const std::string dense_names = "no, yes.\nx: continuous.\ncolor: red, blue.\n";
