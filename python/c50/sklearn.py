@@ -14,11 +14,12 @@ from sklearn.utils import Tags
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import check_is_fitted, validate_data
 
-from ._c50 import Model, ModelKind, Options
+from ._c50 import Model, ModelKind, Options, TieOrder
 from ._data import Schema, encode_costs, fit_schema
 
 
 type ModelKindName = Literal["tree", "rules"]
+type TieOrderName = Literal["reference", "stable"]
 type UnknownCategoryPolicy = Literal["error", "missing"]
 
 
@@ -48,6 +49,10 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         sample_fraction: Fraction of cases used for training. Zero disables
             sampling.
         random_seed: Seed used by native sampling.
+        ties: Order of equal continuous values when evaluating splits.
+            ``"reference"`` reproduces the reference C5.0 learner.
+            ``"stable"`` is faster and deterministic on every platform, but
+            may build a classifier that differs from the reference learner.
         split_workers: Number of native split-evaluation workers,
             from 1 through 8.
         categorical_features: Categorical column indices or, for inputs with
@@ -94,6 +99,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         confidence_factor: float = 0.25,
         sample_fraction: float = 0.0,
         random_seed: int = 0,
+        ties: TieOrderName = "reference",
         split_workers: int = 1,
         categorical_features: Sequence[int | str] | None = None,
         unknown_categories: UnknownCategoryPolicy = "error",
@@ -111,6 +117,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         self.confidence_factor = confidence_factor
         self.sample_fraction = sample_fraction
         self.random_seed = random_seed
+        self.ties = ties
         self.split_workers = split_workers
         self.categorical_features = categorical_features
         self.unknown_categories = unknown_categories
@@ -307,6 +314,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
     def _validate_configuration(self) -> None:
         if self.model_kind not in ("tree", "rules"):
             raise ValueError("model_kind must be 'tree' or 'rules'")
+        if self.ties not in ("reference", "stable"):
+            raise ValueError("ties must be 'reference' or 'stable'")
         if (
             not isinstance(self.split_workers, Integral)
             or isinstance(self.split_workers, bool)
@@ -343,6 +352,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         options.confidence_factor = self.confidence_factor
         options.sample_fraction = self.sample_fraction
         options.random_seed = self.random_seed
+        options.ties = (
+            TieOrder.STABLE if self.ties == "stable" else TieOrder.REFERENCE
+        )
         return options
 
 

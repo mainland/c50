@@ -57,6 +57,16 @@ def test_worker_count_preserves_estimator_model() -> None:
     assert parallel.predict(X_BINARY).tolist() == serial.predict(X_BINARY).tolist()
 
 
+def test_stable_ties_fit_and_validation() -> None:
+    classifier = C50Classifier(ties="stable")
+
+    assert clone(classifier).ties == "stable"
+    classifier.fit(X_BINARY, Y_BINARY)
+    assert classifier.predict([[0.25], [3.75]]).tolist() == ["low", "high"]
+    with pytest.raises(ValueError, match="ties"):
+        C50Classifier(ties="fast").fit(X_BINARY, Y_BINARY)  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize("workers", [0, 9, 1.5, True])
 def test_invalid_worker_count(workers: object) -> None:
     classifier = C50Classifier(split_workers=workers)  # type: ignore[arg-type]
