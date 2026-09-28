@@ -12,8 +12,8 @@ minimum dependencies are NumPy 1.26 and scikit-learn 1.6.
 | Linux x86-64, Python 3.12 | NumPy 2.x, scikit-learn 1.9 | Locally validated Python and type checks |
 | Linux ARM64 | GCC on `ubuntu-24.04-arm` | Configured CI target, not yet executed |
 | macOS ARM64 | AppleClang on `macos-14` | Configured CI target, not yet executed |
-| Linux x86-64, Python 3.12 | NumPy 1.26.4, scikit-learn 1.6.1 | Configured minimum-dependency check |
-| Linux x86-64, Python 3.13 and 3.14 | Latest compatible dependencies | Configured CI targets, not yet executed |
+| Linux x86-64, Python 3.12 | NumPy 1.26.4, scikit-learn 1.6.1 | Locally validated installed wheel, 75 Python tests, and typing |
+| Linux x86-64, Python 3.13 and 3.14 | NumPy 2.5.3, scikit-learn 1.9.1 | Locally validated installed wheels, 75 Python tests, and typing |
 
 Hosted CI has not run for this milestone. Configured targets are candidates
 for support until their native and Python checks pass. Windows, free-threaded

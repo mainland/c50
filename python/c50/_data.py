@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from numbers import Integral, Real
@@ -289,6 +290,10 @@ def _normalize_scalar(value: object) -> object:
 def _is_missing(value: object) -> bool:
     if value is None:
         return True
+    if type(value).__module__.startswith("pandas."):
+        # Only pandas creates these values, so it is already imported.
+        missing = sys.modules["pandas"].isna(value)
+        return isinstance(missing, (bool, np.bool_)) and bool(missing)
     try:
         missing = np.isnan(cast(Any, value))
     except (TypeError, ValueError):
