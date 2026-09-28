@@ -54,6 +54,7 @@ endif()
 set(C50_CORE_SOURCES
     src/attwinnow.cpp
     src/c50_api.cpp
+    src/c50_inspection.cpp
     src/c50_input.cpp
     src/c50_model.cpp
     src/c50_output.cpp
@@ -244,6 +245,11 @@ if(BUILD_TESTING)
     target_link_libraries(c50_parser_validation PRIVATE C50::cpp)
     list(APPEND C50_COMPILE_TARGETS c50_parser_validation)
     list(APPEND C50_EXECUTABLE_TARGETS c50_parser_validation)
+    add_executable(c50_model_inspection tests/model_inspection.cpp)
+    target_link_libraries(c50_model_inspection PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_model_inspection)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_model_inspection)
+    add_test(NAME model-inspection COMMAND c50_model_inspection)
     add_executable(c50_cpp_validation tests/cpp_validation.cpp)
     target_link_libraries(c50_cpp_validation PRIVATE C50::cpp)
     add_executable(c50_operation_failure tests/operation_failure.cpp)
