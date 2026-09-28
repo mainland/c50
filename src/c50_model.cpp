@@ -1,6 +1,7 @@
 /* Copyright 2026 Geoffrey Mainland. */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
+#include <ctype.h>
 #include <limits.h>
 #include <math.h>
 #include <stdint.h>
@@ -84,13 +85,29 @@ typedef struct c50_predict_state
     owned_predictions predictions;
 } c50_predict_state;
 
+static void RequireInputEnd(c50_context *Context, c50_input *Input)
+{
+    int c;
+    do
+    {
+        c = c50_input_getc(Input);
+    } while ( c != EOF && isspace(static_cast<unsigned char>(c)) );
+
+    if ( c != EOF )
+    {
+        c50_record_error(Context, c50::error_code::parse_error,
+                         "unexpected trailing model data");
+        C50Exit(Context, 1);
+    }
+}
+
 static void ParseModel(c50_context *Context, const c50_model *model)
 {
     c50_input names_input, model_input, costs_input, *costs = NULL;
 
     Context->io.output = NULL;
     Context->io.file_stem = "memory";
-    snprintf(Context->io.file_name, sizeof(Context->io.file_name), "%s", "memory.model");
+    Context->io.file_name = "memory.model";
     Context->options.rules = model->kind == c50::model_kind::rules;
     Context->options.trials = 1;
     Context->trees.max_tree = -1;
@@ -139,6 +156,7 @@ static void ParseModel(c50_context *Context, const c50_model *model)
             }
         }
     }
+    RequireInputEnd(Context, &model_input);
 }
 
 static void LoadModel(c50_context *Context, void *user_data)

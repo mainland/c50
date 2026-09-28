@@ -9,14 +9,14 @@
 #include <memory>
 
 #include <c50/c50.hpp>
+#include <cstddef>
 #include <optional>
+#include <string>
+#include <vector>
 
 #include "c50_input.h"
 #include "c50_output.h"
 #include "c50_rng.h"
-
-#define C50_ERROR_MESSAGE_CAPACITY 1024
-#define C50_LINE_BUFFER_CAPACITY 10000
 
 struct c50_implicit_state;
 struct _datablockrec;
@@ -76,7 +76,7 @@ typedef struct
     int printed_subtree_count;
     int printed_subtree_capacity;
     struct _treerec **printed_subtrees;
-    unsigned char last_branches[80];
+    std::vector<unsigned char> last_branches;
 } c50_tree_state;
 
 typedef struct
@@ -261,13 +261,13 @@ typedef struct
     int timestamp_base;
     int random_initial_seed;
     const char *file_stem;
-    char file_name[500];
+    std::string file_name;
     FILE *model_file;
     FILE *output;
     char *option_argument;
     char *option;
     int option_index;
-    char label_buffer[1000];
+    std::string label_buffer;
 } c50_io_state;
 
 using c50_context = c50::detail::context_state;
@@ -277,7 +277,7 @@ struct c50::detail::context_state
     ~context_state();
 
     std::optional<c50::error_code> error;
-    char error_message[C50_ERROR_MESSAGE_CAPACITY];
+    std::string error_message;
     int operation_active;
     unsigned int split_worker_count;
     int sample_from;
@@ -305,15 +305,15 @@ struct c50::detail::context_state
     int ignored_values_size;
     int ignored_values_offset;
     int attributes_winnowed;
-    char line_buffer[C50_LINE_BUFFER_CAPACITY];
-    char *line_buffer_position;
+    std::string line_buffer;
+    size_t line_buffer_position;
     struct c50_implicit_state *implicit_state;
     c50_input classifier_input;
     c50_output classifier_output;
     int classifier_output_active;
     const char *last_model_extension;
     int model_entry;
-    char property_name[20];
+    std::string property_name;
     char *property_value;
     int property_value_size;
     int *active_rules;

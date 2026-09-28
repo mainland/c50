@@ -1,0 +1,3 @@
+no, yes.
+x: continuous.
+large := x > 1.

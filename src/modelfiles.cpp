@@ -42,6 +42,10 @@
 #include <memory>
 #include <limits>
 
+static constexpr size_t RuleConditionChunk = 100;
+static constexpr size_t SerializedRuleChunk = 100;
+static constexpr unsigned MaxSerializedTreeDepth = 1024;
+
 static const char PropertyNames[] =
     "null\0att\0class\0cut\0conds\0elts\0entries\0forks\0freq\0id\0"
     "type\0low\0mid\0high\0result\0rules\0val\0lift\0cover\0ok\0"
@@ -113,7 +117,7 @@ static void ValidateNumber(c50_context *Context, int Property)
     if (end == value || *end != '"' || end[1] || errno == ERANGE ||
         !isfinite(number) || number < low || number > high ||
         (Property == LIFTP && static_cast<float>(number) <= 0))
-        Error(Context, MODELFILE, "invalid numeric property", Context->property_name);
+        Error(Context, MODELFILE, "invalid numeric property", Context->property_name.c_str());
 }
 
 static unsigned PropertyBit(int property) { return 1u << property; }
@@ -124,7 +128,7 @@ static int ReadRecordProperty(c50_context *Context, c50_input *Input,
     const int property = ReadProp(Context, Input, Delim);
     const unsigned bit = PropertyBit(property);
     if (!(Allowed & bit) || ((Seen & bit) && property != ELTSP))
-        Error(Context, MODELFILE, "unexpected or repeated property", Context->property_name);
+        Error(Context, MODELFILE, "unexpected or repeated property", Context->property_name.c_str());
     Seen |= bit;
     return property;
 }
@@ -218,7 +222,7 @@ void WriteFilePrefix(c50_context *Context, const char *Extension)
     if ( ! Context->classifier_output_active )
     {
 	FILE *ModelFile = GetFile(Context, Extension, "w");
-	if ( ! ModelFile ) Error(Context, NOFILE, Context->io.file_name, E_ForWrite);
+	if ( ! ModelFile ) Error(Context, NOFILE, Context->io.file_name.c_str(), E_ForWrite);
 	c50_output_init_file(&Context->classifier_output, ModelFile, true);
 	Context->classifier_output_active = true;
     }
@@ -268,7 +272,7 @@ void WriteFilePrefix(c50_context *Context, const char *Extension)
 void ReadFilePrefix(c50_context *Context, const char *Extension)
 /*   --------------  */
 {
-    if ( ! (Context->io.model_file = GetFile(Context, Extension, "r")) ) Error(Context, NOFILE, Context->io.file_name, "");
+    if ( ! (Context->io.model_file = GetFile(Context, Extension, "r")) ) Error(Context, NOFILE, Context->io.file_name.c_str(), "");
 
     c50_input_init_file(&Context->classifier_input, Context->io.model_file);
     StreamIn(&Context->classifier_input, (char *) &Context->options.trials, sizeof(int));
@@ -566,7 +570,7 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 		}
 		else
 		{
-		    Error(Context, NOFILE, Context->io.file_name, "costs input required by model");
+		    Error(Context, NOFILE, Context->io.file_name.c_str(), "costs input required by model");
 		}
 		break;
 	    case SAMPLEP:
@@ -597,8 +601,10 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
                     if (Context->schema.max_attribute_value[Att] >=
                         reinterpret_cast<intptr_t>(Context->schema.attribute_value_names[Att][0]))
                         Error(Context, MODELFILE, "too many dynamic attribute values", p);
-		    v = ++Context->schema.max_attribute_value[Att];
+		    v = Context->schema.max_attribute_value[Att] + 1;
+		    EnsureDynamicValueSpace(Context, Att, v);
 		    Context->schema.attribute_value_names[Att][v] = Pstrdup(Context, p);
+		    Context->schema.max_attribute_value[Att] = v;
 
 		    for ( p += strlen(p) ; *p != '"' ; p++ )
 			;
@@ -615,7 +621,7 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 		Context->model_entry = 0;
 		return;
             default:
-                Error(Context, MODELFILE, "unexpected header property", Context->property_name);
+                Error(Context, MODELFILE, "unexpected header property", Context->property_name.c_str());
 	}
     }
 }
@@ -666,9 +672,24 @@ Tree InTree(c50_context *Context, c50_input *Input)
 
 
 
+static Tree InTreeAtDepth(c50_context *Context, c50_input *Input, Tree *Slot,
+                          unsigned Depth);
+
 Tree InTreeAt(c50_context *Context, c50_input *Input, Tree *Slot)
 /*   --------  */
 {
+    return InTreeAtDepth(Context, Input, Slot, 0);
+}
+
+static Tree InTreeAtDepth(c50_context *Context, c50_input *Input, Tree *Slot,
+                          unsigned Depth)
+{
+    if ( Depth >= MaxSerializedTreeDepth )
+    {
+        c50_record_error(Context, c50::error_code::parse_error,
+                         "serialized tree exceeds maximum depth of 1024");
+        C50Exit(Context, 1);
+    }
     Tree	T;
     DiscrValue	v, Subset=0;
     char	Delim, *p, *Unquoted;
@@ -793,7 +814,7 @@ Tree InTreeAt(c50_context *Context, c50_input *Input, Tree *Slot)
 	T->Branch = AllocZero(T->Forks+1, Tree);
 	ForEach(v, 1, T->Forks)
 	{
-	    InTreeAt(Context, Input, &T->Branch[v]);
+	    InTreeAtDepth(Context, Input, &T->Branch[v], Depth + 1);
 	}
     }
 
@@ -834,7 +855,7 @@ CRuleSet InRulesAt(c50_context *Context, c50_input *Input, CRuleSet *Slot)
 /*	 ---------  */
 {
     CRuleSet	RS;
-    RuleNo	r;
+    RuleNo	r, RuleCount=0;
     char	Delim, *Unquoted;
 
     RS = Alloc(1, RuleSetRec);
@@ -850,8 +871,7 @@ CRuleSet InRulesAt(c50_context *Context, c50_input *Input, CRuleSet *Slot)
 		return Nil;
 
 	    case RULESP:
-		sscanf(Context->property_value, "\"%d\"", &RS->SNRules);
-		CheckActiveSpace(Context, RS->SNRules);
+		sscanf(Context->property_value, "\"%d\"", &RuleCount);
 		break;
 
 	    case DEFAULTP:
@@ -863,20 +883,35 @@ CRuleSet InRulesAt(c50_context *Context, c50_input *Input, CRuleSet *Slot)
     }
     while ( Delim == ' ' );
 
-    if (!(Seen & PropertyBit(RULESP)) || !RS->SDefault)
+    if (!(Seen & PropertyBit(RULESP)) || RuleCount < 0 || !RS->SDefault)
         Error(Context, MODELFILE, "missing ruleset count or default", "");
 
     /*  Read each rule  */
 
-    RS->SRule = Alloc(RS->SNRules+1, CRule);
-    ForEach(r, 1, RS->SNRules)
+    const size_t FullSize = static_cast<size_t>(RuleCount) + 1;
+    size_t Allocated = FullSize < SerializedRuleChunk + 1 ?
+                       FullSize : SerializedRuleChunk + 1;
+    RS->SRule = Alloc(Allocated, CRule);
+    ForEach(r, 1, RuleCount)
     {
+	if ( static_cast<size_t>(r) >= Allocated )
+	{
+	    const size_t NewSize =
+		Allocated + SerializedRuleChunk < FullSize ?
+		Allocated + SerializedRuleChunk : FullSize;
+	    RS->SRule = static_cast<CRule *>(
+		Prealloc(Context, RS->SRule, NewSize * sizeof(CRule)));
+	    Allocated = NewSize;
+	}
+	RS->SRule[r] = Nil;
+	RS->SNRules = r;
 	if ( InRuleAt(Context, Input, &RS->SRule[r]) )
 	{
 	    RS->SRule[r]->RNo = r;
 	    RS->SRule[r]->TNo = Context->model_entry;
 	}
     }
+    CheckActiveSpace(Context, RS->SNRules);
     ConstructRuleTree(Context, RS);
     Context->model_entry++;
     return RS;
@@ -898,7 +933,7 @@ CRule InRuleAt(c50_context *Context, c50_input *Input, CRule *Slot)
 /*    --------  */
 {
     CRule	R;
-    int		d;
+    int		d, ConditionCount=0;
     char	Delim, *Unquoted;
     float	Lift;
 
@@ -915,7 +950,7 @@ CRule InRuleAt(c50_context *Context, c50_input *Input, CRule *Slot)
 		return Nil;
 
 	    case CONDSP:
-		sscanf(Context->property_value, "\"%d\"", &R->Size);
+		sscanf(Context->property_value, "\"%d\"", &ConditionCount);
 		break;
 
 	    case COVERP:
@@ -941,15 +976,30 @@ CRule InRuleAt(c50_context *Context, c50_input *Input, CRule *Slot)
 
     const unsigned required = PropertyBit(CONDSP) | PropertyBit(COVERP) |
                               PropertyBit(OKP) | PropertyBit(LIFTP) | PropertyBit(CLASSP);
-    if ((Seen & required) != required || R->Correct > R->Cover)
+    if ((Seen & required) != required || ConditionCount < 0 ||
+        R->Correct > R->Cover)
         Error(Context, MODELFILE, "incomplete or inconsistent rule", "");
     R->Prior = (R->Correct + 1) / ((R->Cover + 2) * Lift);
     if (!isfinite(R->Prior) || R->Prior <= 0)
         Error(Context, MODELFILE, "invalid rule prior", "");
 
-    R->Lhs = Alloc(R->Size+1, Condition);
-    ForEach(d, 1, R->Size)
+    const size_t FullSize = static_cast<size_t>(ConditionCount) + 1;
+    size_t Allocated = FullSize < RuleConditionChunk + 1 ?
+                       FullSize : RuleConditionChunk + 1;
+    R->Lhs = Alloc(Allocated, Condition);
+    ForEach(d, 1, ConditionCount)
     {
+	if ( static_cast<size_t>(d) >= Allocated )
+	{
+	    const size_t NewSize =
+		Allocated + RuleConditionChunk < FullSize ?
+		Allocated + RuleConditionChunk : FullSize;
+	    R->Lhs = static_cast<Condition *>(
+		Prealloc(Context, R->Lhs, NewSize * sizeof(Condition)));
+	    Allocated = NewSize;
+	}
+	R->Lhs[d] = Nil;
+	R->Size = d;
 	InConditionAt(Context, Input, &R->Lhs[d]);
     }
 
@@ -1078,17 +1128,18 @@ int ReadProp(c50_context *Context, c50_input *Input, char *Delim)
 	    Alloc(Context->property_value_size + 3, char);
     }
 
-    for ( p = Context->property_name ; (c = c50_input_getc(Input)) != '=' ;  )
+    Context->property_name.clear();
+    while ( (c = c50_input_getc(Input)) != '=' )
     {
-	if ( p - Context->property_name >= 19 || c == EOF )
+	if ( Context->property_name.size() >= 19 || c == EOF )
 	{
 	    Error(Context, MODELFILE, E_MFEOF, "");
-	    Context->property_name[0] = Context->property_value[0] = *Delim = '\00';
+	    Context->property_name.clear();
+	    Context->property_value[0] = *Delim = '\00';
 	    return 0;
 	}
-	*p++ = c;
+	Context->property_name.push_back(static_cast<char>(c));
     }
-    *p = '\00';
 
     for ( p = Context->property_value ;
 	  ((c = c50_input_getc(Input)) != ' ' && c != '\n') || Quote ; )
@@ -1096,7 +1147,8 @@ int ReadProp(c50_context *Context, c50_input *Input, char *Delim)
 	if ( c == EOF )
 	{
 	    Error(Context, MODELFILE, E_MFEOF, "");
-	    Context->property_name[0] = Context->property_value[0] = '\00';
+	    Context->property_name.clear();
+	    Context->property_value[0] = '\00';
 	    return 0;
 	}
 
@@ -1126,26 +1178,26 @@ int ReadProp(c50_context *Context, c50_input *Input, char *Delim)
     *p = '\00';
     *Delim = c;
 
-    const int property = WhichProperty(Context->property_name);
-    if (!property) Error(Context, MODELFILE, "unknown property", Context->property_name);
+    const int property = WhichProperty(Context->property_name.c_str());
+    if (!property) Error(Context, MODELFILE, "unknown property", Context->property_name.c_str());
 
     // All scalar properties are quoted. Only elts permits a quoted list.
     // Validate before the legacy unquoting helpers modify this buffer.
     for (const char *value = Context->property_value; ; )
     {
         if (*value++ != '"')
-            Error(Context, MODELFILE, "expected quoted property", Context->property_name);
+            Error(Context, MODELFILE, "expected quoted property", Context->property_name.c_str());
         while (*value && *value != '"')
         {
             if (*value == '\\' && !*++value)
-                Error(Context, MODELFILE, "incomplete escape", Context->property_name);
+                Error(Context, MODELFILE, "incomplete escape", Context->property_name.c_str());
             ++value;
         }
         if (*value++ != '"')
-            Error(Context, MODELFILE, "unterminated property", Context->property_name);
+            Error(Context, MODELFILE, "unterminated property", Context->property_name.c_str());
         if (!*value) break;
         if (property != ELTSP || *value++ != ',')
-            Error(Context, MODELFILE, "invalid property suffix", Context->property_name);
+            Error(Context, MODELFILE, "invalid property suffix", Context->property_name.c_str());
     }
     ValidateNumber(Context, property);
     return property;

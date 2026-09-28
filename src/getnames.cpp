@@ -45,6 +45,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+static constexpr DiscrValue DynamicValueChunk = 100;
+static constexpr int MaxClassCount = 4096;
+
 /*************************************************************************/
 /*									 */
 /*	Read a name from file f into string s, setting the delimiter.	 */
@@ -134,7 +137,8 @@ Boolean ReadNameInput(c50_context *Context, c50_input *f, String s, int n,
 
     if ( Context->delimiter == ':' )
     {
-	if ( *Context->line_buffer_position == '=' )
+	if ( Context->line_buffer_position < Context->line_buffer.size() &&
+	     Context->line_buffer[Context->line_buffer_position] == '=' )
 	{
 	    Context->delimiter = '=';
 	    Context->line_buffer_position++;
@@ -149,7 +153,7 @@ Boolean ReadNameInput(c50_context *Context, c50_input *f, String s, int n,
     {
 	Msg[0] = ( Space(c) ? '.' : c );
 	Msg[1] = '\00';
-	Error(Context, MISSNAME, Context->io.file_name, Msg);
+	Error(Context, MISSNAME, Context->io.file_name.c_str(), Msg);
     }
 
     *Sp++ = '\0';
@@ -200,8 +204,8 @@ void GetNames(c50_context *Context, c50_input *Nf)
 
     Context->io.error_count = Context->io.attribute_exclusions = 0;
     Context->io.line_number  = 0;
-    Context->line_buffer_position     = Context->line_buffer;
-    *Context->line_buffer_position    = 0;
+    Context->line_buffer.clear();
+    Context->line_buffer_position = 0;
 
     Context->schema.max_attribute = 0;
     Context->schema.owned_class_names = 0;
@@ -246,7 +250,8 @@ void GetNames(c50_context *Context, c50_input *Nf)
 	    }
 
 	    Context->schema.class_thresholds[Context->schema.max_class] = strtod(Buffer, &EndBuff);
-	    if ( EndBuff == Buffer || *EndBuff != '\0' )
+	    if ( EndBuff == Buffer || *EndBuff != '\0' ||
+	         ! isfinite(Context->schema.class_thresholds[Context->schema.max_class]) )
 	    {
 		Error(Context, BADCLASSTHRESH, Buffer, Nil);
 	    }
@@ -437,6 +442,13 @@ void GetNames(c50_context *Context, c50_input *Nf)
 	}
     }
 
+    if ( Context->schema.max_class > MaxClassCount )
+    {
+        c50_record_error(Context, c50::error_code::parse_error,
+                         "schema exceeds maximum of 4096 classes");
+        C50Exit(Context, 1);
+    }
+
     /*  Ignore case weight attribute if it is excluded; otherwise,
 	it cannot be used in models  */
 
@@ -532,9 +544,11 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
             }
             v = static_cast<DiscrValue>(capacity);
 
-	    Context->schema.attribute_value_names[Context->schema.max_attribute] = Alloc(v+3, String);
-	    Context->schema.attribute_value_names[Context->schema.max_attribute][0] = (String) (intptr_t) (v+1);
-	    Context->schema.attribute_value_names[Context->schema.max_attribute][(Context->schema.max_attribute_value[Context->schema.max_attribute]=1)] = Pstrdup(Context, "N/A");
+            const DiscrValue allocation =
+                v + 3 < DynamicValueChunk ? v + 3 : DynamicValueChunk;
+            Context->schema.attribute_value_names[Context->schema.max_attribute] = Alloc(allocation, String);
+            Context->schema.attribute_value_names[Context->schema.max_attribute][0] = (String) (intptr_t) (v+1);
+            Context->schema.attribute_value_names[Context->schema.max_attribute][(Context->schema.max_attribute_value[Context->schema.max_attribute]=1)] = Pstrdup(Context, "N/A");
 	}
 	else
 	if ( ! strcmp(Buffer, "ignore") )
@@ -615,6 +629,40 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
 	}
 	if ( Context->schema.max_attribute_value[Context->schema.max_attribute] > Context->schema.max_discrete_value ) Context->schema.max_discrete_value = Context->schema.max_attribute_value[Context->schema.max_attribute];
     }
+}
+
+
+
+/*************************************************************************/
+/*									 */
+/*	Grow a dynamic attribute's value table in bounded chunks.		 */
+/*									 */
+/*************************************************************************/
+
+
+void EnsureDynamicValueSpace(c50_context *Context, Attribute Att,
+                             DiscrValue Value)
+/*   -----------------------  */
+{
+    constexpr size_t Chunk = DynamicValueChunk;
+    String *Values = Context->schema.attribute_value_names[Att];
+    const size_t Limit = static_cast<size_t>(
+        reinterpret_cast<intptr_t>(Values[0]));
+    const size_t FullSize = Limit + 2;
+    const size_t Required = static_cast<size_t>(Value) + 2;
+
+    if ( FullSize <= Chunk ) return;
+
+    const size_t Used = static_cast<size_t>(
+        Context->schema.max_attribute_value[Att]) + 2;
+    size_t Allocated = ((Used + Chunk - 1) / Chunk) * Chunk;
+    if ( Allocated < Chunk ) Allocated = Chunk;
+    if ( Required <= Allocated || Allocated >= FullSize ) return;
+
+    const size_t NewSize =
+        Allocated + Chunk < FullSize ? Allocated + Chunk : FullSize;
+    Context->schema.attribute_value_names[Att] = static_cast<String *>(
+        Prealloc(Context, Values, NewSize * sizeof(String)));
 }
 
 
@@ -760,18 +808,21 @@ void FreeNames(c50_context *Context)
 int InChar(c50_context *Context, c50_input *f)
 /*  ------  */
 {
-    if ( ! *Context->line_buffer_position )
+    if ( Context->line_buffer_position >= Context->line_buffer.size() )
     {
-	Context->line_buffer_position = Context->line_buffer;
-
-	if ( ! c50_input_gets(Context->line_buffer, C50_LINE_BUFFER_CAPACITY, f) )
+	Context->line_buffer.clear();
+	Context->line_buffer_position = 0;
+	int c;
+	while ( (c = c50_input_getc(f)) != EOF )
 	{
-	    Context->line_buffer[0] = '\00';
-	    return EOF;
+	    Context->line_buffer.push_back(static_cast<char>(c));
+	    if ( c == '\n' ) break;
 	}
+	if ( Context->line_buffer.empty() ) return EOF;
 
 	Context->io.line_number++;
     }
-	
-    return (int) *Context->line_buffer_position++;
+
+    return static_cast<unsigned char>(
+        Context->line_buffer[Context->line_buffer_position++]);
 }
