@@ -30,6 +30,12 @@ assert_type(classifier, C50Classifier)
 labels: NDArray[Any] = classifier.predict(X)
 probabilities: NDArray[np.float64] = classifier.predict_proba(X)
 
+inspection = model.inspect()
+assert_type(inspection, c50.ModelInspection)
+assert_type(inspection.trees[0].nodes[0].feature, int | None)
+assert_type(c50.export_text(inspection), str)
+assert_type(c50.export_json(inspection), str)
+
 # The enumerations are pybind11 enums, not enum.Enum: members and the
 # attributes below exist, but iteration and subscripting fail at run time.
 assert_type(c50.ModelKind.TREE, c50.ModelKind)
