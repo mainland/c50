@@ -25,9 +25,10 @@ originating contexts. Multiple threads may use a model concurrently with
 separate contexts. Each call currently parses the retained classifier into its
 context's workspace.
 
-`model.inspect` returns an owned, copyable tree snapshot with class and feature
-names, nodes, branches, and structural statistics. It uses the same exclusive
-context rule as prediction. The snapshot survives both the model and context,
+`model.inspect` returns an owned, copyable classifier snapshot with class and
+feature names, nodes, branches, rules, and structural statistics. It uses the
+same exclusive context rule as prediction. The snapshot survives both the
+model and context,
 and changes to a snapshot do not affect the classifier. See
 {doc}`model-inspection` for serialization-precision and missing-value semantics.
 

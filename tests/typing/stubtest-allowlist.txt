@@ -44,3 +44,9 @@ c50._c50.ConditionKind.IN_SUBSET
 c50._c50.ConditionKind.__index__
 c50._c50.ConditionKind.__int__
 c50._c50.ConditionKind.__members__
+
+# Ruleset snapshots also have a native metaclass and no public constructor.
+c50._c50.RuleInspection
+c50._c50.RuleInspection.__init__
+c50._c50.RulesetInspection
+c50._c50.RulesetInspection.__init__

@@ -648,8 +648,6 @@ model::model(model &&) noexcept = default;
 model &model::operator=(model &&) noexcept = default;
 model_inspection model::inspect(context &workspace) const
 {
-    if (kind() != model_kind::tree)
-        throw exception(error_code::unsupported, "rules inspection is not implemented");
     c50_inspect_state state{data_.get(), {}};
     c50_run_operation(workspace.state_.get(), InspectModel, CleanupModelLoad, &state);
     return std::move(state.result);

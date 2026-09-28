@@ -3,6 +3,9 @@
 
 #include <c50/c50.hpp>
 #include <future>
+#include <cmath>
+#include <fstream>
+#include <iterator>
 #include <iostream>
 #include <numeric>
 #include <stdexcept>
@@ -125,14 +128,79 @@ void ownership_and_training()
     auto second = std::async(std::launch::async, worker);
     require(first.get() == 4 && second.get() == 4, "concurrent inspection");
 }
+void rules_contract()
+{
+    c50::context context;
+    auto model = c50::model::load(context, c50::model_kind::rules, names,
+        "entries=\"1\"\n"
+        "rules=\"2\" default=\"low\"\n"
+        "conds=\"2\" cover=\"4\" ok=\"3\" lift=\"1\" class=\"high\"\n"
+        "type=\"2\" att=\"signal\" cut=\"1.5\" result=\">\"\n"
+        "type=\"3\" att=\"color\" elts=\"blue\",\"green\"\n"
+        "conds=\"1\" cover=\"2\" ok=\"2\" lift=\"1\" class=\"low\"\n"
+        "type=\"2\" att=\"signal\" val=\"N/A\"\n");
+    auto before = model.predict(context, "3, blue, ?\n0, red, ?\nN/A, green, ?\n");
+    const auto snapshot = model.inspect(context);
+    require(snapshot.kind == c50::model_kind::rules && snapshot.trees.empty() &&
+            snapshot.rulesets.size() == 1, "rules model kind");
+    const auto &ruleset = snapshot.rulesets[0];
+    require(ruleset.default_class == 0 && ruleset.rules.size() == 2, "ruleset metadata");
+    require(ruleset.feature_use == std::vector<std::size_t>{2, 1}, "condition feature counts");
+    const auto &rule = ruleset.rules[0];
+    require(rule.predicted_class == 1 && rule.cover == 4 && rule.correct == 3 &&
+            rule.vote == 667 && std::abs(rule.prior - 2.0 / 3) < 1e-6, "rule weights");
+    require(rule.conditions.size() == 2 && rule.conditions[0].kind == c50::condition_kind::greater &&
+            rule.conditions[0].cut == 1.5 && rule.conditions[1].values ==
+            std::vector<std::string>{"blue", "green"}, "rule condition order");
+    require(ruleset.rules[1].conditions[0].kind == c50::condition_kind::not_applicable,
+            "rule N/A condition");
+    auto after = model.predict(context, "3, blue, ?\n0, red, ?\nN/A, green, ?\n");
+    for (std::size_t row = 0; row < before.size(); ++row)
+        for (std::size_t label = 0; label < before.class_count(); ++label)
+            require(before.score(row, label) == after.score(row, label), "unchanged rule scores");
+    auto empty = c50::model::load(context, c50::model_kind::rules, names,
+                                "entries=\"1\"\nrules=\"0\" default=\"high\"\n");
+    require(empty.inspect(context).rulesets[0].rules.empty() &&
+            empty.inspect(context).rulesets[0].default_class == 1, "empty ruleset fallback");
+}
+
+std::string read_file(const std::string &path)
+{
+    std::ifstream file(path);
+    if (!file) throw std::runtime_error("cannot read fixture: " + path);
+    return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+}
+
+void ensembles(const std::string &fixtures)
+{
+    const auto schema = read_file(fixtures + "/boost/boost.names");
+    const auto data = read_file(fixtures + "/boost/boost.data");
+    c50::context context;
+    c50::options settings;
+    settings.trials = 3;
+    for (auto kind : {c50::model_kind::tree, c50::model_kind::rules}) {
+        auto model = c50::model::train(context, kind, schema, data, settings);
+        auto before = model.predict(context, data);
+        auto snapshot = model.inspect(context);
+        require((kind == c50::model_kind::tree ? snapshot.trees.size() : snapshot.rulesets.size()) == 3,
+                "all ensemble components retained");
+        auto after = model.predict(context, data);
+        for (std::size_t row = 0; row < before.size(); ++row)
+            for (std::size_t label = 0; label < before.class_count(); ++label)
+                require(before.score(row, label) == after.score(row, label), "unchanged ensemble scores");
+    }
+}
 } // namespace
 
-int main()
+int main(int argc, char **argv)
 {
     try {
         tree_contract();
         categorical_contract();
         ownership_and_training();
+        rules_contract();
+        require(argc == 2, "expected fixture directory");
+        ensembles(argv[1]);
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
         return 1;
