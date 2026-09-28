@@ -57,11 +57,22 @@ schemas unsupported by the dense interface.
 
 ## Python interface
 
-Each Python training, loading, or prediction call constructs a local native
-context. Native work releases the Python GIL. Independent operations can
+Each Python `Model` training, loading, or prediction call constructs a local
+native context. Native work releases the Python GIL. Independent operations can
 therefore execute concurrently, and the binding does not depend on hidden
 process-global classifier state.
 
 Python `Model` objects expose immutable classifier data. `Options` remains a
 mutable value object, so callers must not modify one instance concurrently with
 a training call that uses it.
+
+`Model.prepare_predictor()` creates a Python `Predictor` with the same owned
+native state described above. Its `predict_details` and `predict_details_dense`
+methods return ordinary `Predictions`. Calls on one Python predictor acquire an
+instance lock after releasing the GIL. Independent predictors can run in
+parallel. Dense inputs are copied before releasing the GIL. Persist the source
+`Model`, which supports pickling, and recreate predictors after loading it.
+
+The scikit-learn estimator creates one predictor per `predict` or `predict_proba`
+call and reuses it across that call's batches. It retains no mutable prediction
+workspace between calls, so independent calls on a fitted estimator remain safe.
