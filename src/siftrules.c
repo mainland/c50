@@ -1070,7 +1070,7 @@ int OrderByUtility()
     RuleNo	r, *Drop, NDrop=0, NewNRules=0, Toggle;
     CaseNo	i;
     int		j, OutCount;
-    double	Errs=0;
+    [[maybe_unused]] double	Errs=0;
 
     Verbosity(1, fprintf(Of, "\n    Determining rule utility\n"))
 
