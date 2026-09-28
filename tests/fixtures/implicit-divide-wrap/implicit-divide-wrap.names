@@ -1,0 +1,5 @@
+low, high.
+
+x: continuous.
+r := x / 5000.
+attributes excluded: x.

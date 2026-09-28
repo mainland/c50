@@ -239,6 +239,21 @@ four, and eight workers, including a subset-split case. See
 {doc}`large-datasets` and the repository's
 `benchmarks/README.md` for the complete commands and interpretation rules.
 
+## Class-count index check
+
+The `index-overflow` test checks the flattened-index helper at the `INT_MAX`
+boundary and runs by default. The end-to-end check trains a schema of 46,341
+classes and a schema of 4,096 classes with 524,288 attribute values, through
+`c5.0` and the C++ API. The class-table cases need about 8.6 GB of address
+space. The value-table cases fill two tables of about 16 GiB each, the discrete
+frequencies and the split workspace, so they need about 32 GiB resident. CTest
+does not run the check. Run it on Linux or macOS with a host that has the
+memory:
+
+```sh
+cmake --build build --target index-overflow-large
+```
+
 ## API documentation
 
 Build the warning-strict Doxygen reference directly with CMake:
@@ -333,3 +348,9 @@ The same test runs four simultaneous independent fits, each requesting four
 split workers, with trees, rules, and opposing class assignments. Repeated fits
 must reproduce their single-worker classifiers and predictions, and concurrent
 prediction through a shared immutable model must reproduce the reference.
+
+## Parser fuzzing
+
+```{include} ../tests/fuzz/README.md
+:start-line: 2
+```

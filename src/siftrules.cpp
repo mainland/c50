@@ -137,7 +137,8 @@ void SiftRules(c50_context *Context, float EstErrRate)
     Context->rule_selection.alternate_classes = Alloc(Context->cases.max_case+1, ClassNo);
     Context->rule_selection.total_votes  = Alloc(Context->cases.max_case+1, int *);
 
-    bp = AllocZero((Context->cases.max_case+1) * (Context->schema.max_class+1), int);
+    bp = AllocZero(static_cast<size_t>(Context->cases.max_case + 1) *
+	                   static_cast<size_t>(Context->schema.max_class + 1), int);
     ForEach(i, 0, Context->cases.max_case)
     {
 	Context->rule_selection.total_votes[i] = bp;

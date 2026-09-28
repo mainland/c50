@@ -190,7 +190,8 @@ void InitialiseTreeData(c50_context *Context)
 
 	Context->splits.discrete_attributes[Context->splits.discrete_attribute_count++] = Att;
 
-	Context->splits.discrete_frequencies[Att] = Alloc(Context->schema.max_class * (Context->schema.max_attribute_value[Att]+1), double);
+	Context->splits.discrete_frequencies[Att] = Alloc(static_cast<size_t>(Context->schema.max_class) *
+	                                                 static_cast<size_t>(Context->schema.max_attribute_value[Att] + 1), double);
     }
 
     Context->training.class_frequencies = AllocZero(Context->schema.max_class+1, double);
@@ -1313,7 +1314,7 @@ void FindAllFreq(c50_context *Context, CaseNo Fp, CaseNo Lp)
     CaseNo	i;
     Attribute	Att, a;
     CaseCount	w;
-    int		x;
+    size_t	x;
 
     /*  Zero all values  */
 
@@ -1325,7 +1326,10 @@ void FindAllFreq(c50_context *Context, CaseNo Fp, CaseNo Lp)
     for ( a = 0 ; a < Context->splits.discrete_attribute_count ; a++ )
     {
 	Att = Context->splits.discrete_attributes[a];
-	for ( x = Context->schema.max_class * (Context->schema.max_attribute_value[Att]+1) - 1 ; x >= 0 ; x-- )
+	const size_t FreqCount = static_cast<size_t>(Context->schema.max_class) *
+				 static_cast<size_t>(Context->schema.max_attribute_value[Att]+1);
+
+	for ( x = 0 ; x < FreqCount ; x++ )
 	{
 	    Context->splits.discrete_frequencies[Att][x] = 0;
 	}
@@ -1340,7 +1344,7 @@ void FindAllFreq(c50_context *Context, CaseNo Fp, CaseNo Lp)
 	for ( a = 0 ; a < Context->splits.discrete_attribute_count ; a++ )
 	{
 	    Att = Context->splits.discrete_attributes[a];
-	    Context->splits.discrete_frequencies[Att][ Context->schema.max_class * XDVal(Context->cases.records[i], Att) + (c-1) ] += w;
+	    Context->splits.discrete_frequencies[Att][ FlatIndex(XDVal(Context->cases.records[i], Att), Context->schema.max_class, c-1) ] += w;
 	}
     }
 }

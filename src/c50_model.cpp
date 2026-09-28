@@ -1,6 +1,7 @@
 /* Copyright 2026 Geoffrey Mainland. */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
+#include <ctype.h>
 #include <limits.h>
 #include <math.h>
 #include <stdint.h>
@@ -38,6 +39,10 @@ struct c50::detail::model_data
     std::string names_data;
     std::string model_data;
     std::string costs_data;
+    /* The most tree levels that every parse of model_data accepts. Text that
+       the library wrote has no limit, which is the default here. model::load
+       records the limit of 1,024 levels. Copies carry it. */
+    std::optional<std::size_t> max_tree_depth;
 };
 
 struct c50::detail::prediction_data
@@ -84,6 +89,22 @@ typedef struct c50_predict_state
     owned_predictions predictions;
 } c50_predict_state;
 
+static void RequireInputEnd(c50_context *Context, c50_input *Input)
+{
+    int c;
+    do
+    {
+        c = c50_input_getc(Input);
+    } while ( c != EOF && isspace(static_cast<unsigned char>(c)) );
+
+    if ( c != EOF )
+    {
+        c50_record_error(Context, c50::error_code::parse_error,
+                         "unexpected trailing model data");
+        C50Exit(Context, 1);
+    }
+}
+
 /* Parse the model and report whether it read costs.  Costs supplied for a
    model that does not declare them are neither read nor validated. */
 static bool ParseModel(c50_context *Context, const c50_model *model)
@@ -93,18 +114,19 @@ static bool ParseModel(c50_context *Context, const c50_model *model)
     Context->io.output = NULL;
     Context->io.file_stem = "memory";
     Context->options.rules = model->kind == c50::model_kind::rules;
+    Context->max_serialized_tree_depth = model->max_tree_depth;
     Context->options.trials = 1;
     Context->trees.max_tree = -1;
     Context->options.sample_fraction = 0;
 
     c50_input_init_memory(&names_input, model->names_data.data(),
                           model->names_data.size());
-    snprintf(Context->io.file_name, sizeof(Context->io.file_name), "%s", "names");
+    Context->io.file_name = "names";
     GetNames(Context, &names_input);
 
     c50_input_init_memory(&model_input, model->model_data.data(),
                           model->model_data.size());
-    snprintf(Context->io.file_name, sizeof(Context->io.file_name), "%s", "model");
+    Context->io.file_name = "model";
     if ( model->costs_data.size() )
     {
         c50_input_init_memory(&costs_input, model->costs_data.data(),
@@ -142,6 +164,7 @@ static bool ParseModel(c50_context *Context, const c50_model *model)
             }
         }
     }
+    RequireInputEnd(Context, &model_input);
     return Context->costs.matrix != NULL;
 }
 
@@ -152,6 +175,7 @@ static void LoadModel(c50_context *Context, void *user_data)
 
     state->model = std::make_unique<c50_model>();
     state->model->kind = state->kind;
+    state->model->max_tree_depth = c50_default_max_tree_depth;
     state->model->names_data.assign(state->names_data, state->names_size);
     state->model->model_data.assign(state->model_data, state->model_size);
     if (state->costs_size)
@@ -442,7 +466,7 @@ static void TrainModel(c50_context *Context, void *user_data)
     Context->classifier_output_active = true;
 
     c50_input_init_memory(&names_input, state->names_data, state->names_size);
-    snprintf(Context->io.file_name, sizeof(Context->io.file_name), "%s", "names");
+    Context->io.file_name = "names";
     GetNames(Context, &names_input);
 
     Context->cases.some_missing =
@@ -456,7 +480,7 @@ static void TrainModel(c50_context *Context, void *user_data)
     }
     else
     {
-        snprintf(Context->io.file_name, sizeof(Context->io.file_name), "%s", "training data");
+        Context->io.file_name = "training data";
         c50_input_init_memory(&training_input, state->training_data,
                               state->training_size);
         GetDataInput(Context, &training_input, true, false);
@@ -472,7 +496,7 @@ static void TrainModel(c50_context *Context, void *user_data)
     {
         c50_input_init_memory(&costs_input, state->costs_data,
                               state->costs_size);
-        snprintf(Context->io.file_name, sizeof(Context->io.file_name), "%s", "costs");
+        Context->io.file_name = "costs";
         GetMCostsInput(Context, &costs_input);
     }
 
@@ -546,7 +570,7 @@ static void PredictModel(c50_context *Context, void *user_data)
     }
     else
     {
-        snprintf(Context->io.file_name, sizeof(Context->io.file_name), "%s", "cases");
+        Context->io.file_name = "cases";
         c50_input_init_memory(&cases_input, state->cases_data,
                               state->cases_size);
         GetDataInput(Context, &cases_input, false, true);
