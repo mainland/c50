@@ -1,4 +1,4 @@
-/* Modified 2026 by Geoffrey Mainland: check string allocation failures. */
+/* Modified 2026 by Geoffrey Mainland: check allocations and use portable finiteness tests. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -33,6 +33,8 @@
 /*									 */
 /*************************************************************************/
 
+
+#include <cmath>
 
 #include "defns.i"
 #include "extern.i"
@@ -568,7 +570,7 @@ void CheckValue(c50_context *Context, DataRec DVec, Attribute Att)
     ContValue	Cv;
 
     Cv = CVal(DVec, Att);
-    if ( ! finite(Cv) )
+    if ( ! std::isfinite(Cv) )
     {
 	Error(Context, BADNUMBER, Context->schema.attribute_names[Att], "");
 
