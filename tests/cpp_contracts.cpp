@@ -9,6 +9,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 static void require(bool condition, const char *message)
@@ -223,8 +224,12 @@ static void parallel_schema_equivalence()
         cases += '\n';
     }
     for (auto kind : {c50::model_kind::tree, c50::model_kind::rules}) {
-        for (double sample : {0.0, 0.75}) {
+        for (auto [sample, ties] : {std::pair{0.0, c50::tie_order::reference},
+                                    std::pair{0.75, c50::tie_order::reference},
+                                    std::pair{0.0, c50::tie_order::stable},
+                                    std::pair{0.75, c50::tie_order::stable}}) {
             c50::options options;
+            options.ties = ties;
             options.subset_splits = true;
             options.minimum_cases = 20;
             options.sample_fraction = sample;
@@ -268,8 +273,12 @@ static void parallel_equivalence()
     }
     const c50::dense_dataset training(values.data(), rows, columns, classes.data());
     const c50::dense_dataset cases(values.data(), rows, columns);
-    for (auto kind : {c50::model_kind::tree, c50::model_kind::rules}) {
+    for (auto [kind, ties] : {std::pair{c50::model_kind::tree, c50::tie_order::reference},
+                              std::pair{c50::model_kind::rules, c50::tie_order::reference},
+                              std::pair{c50::model_kind::tree, c50::tie_order::stable},
+                              std::pair{c50::model_kind::rules, c50::tie_order::stable}}) {
         c50::options options;
+        options.ties = ties;
         options.trials = 3;
         options.subset_splits = true;
         options.minimum_cases = 10;

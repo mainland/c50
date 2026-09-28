@@ -78,6 +78,12 @@ digests across worker counts near that threshold. Benchmark each worker count
 on the same workload and compare both time and peak RSS; more workers may
 increase memory use without improving throughput.
 
+Use `--ties stable` to evaluate continuous splits with the stable tie order,
+and `--value-levels N` to round continuous values to `N` evenly spaced levels
+in `[-1, 1]`, which creates equal values. Both options appear in the JSON
+workload record. Their defaults leave the workload and its digest unchanged.
+The equivalence test also checks the stable tie order on tied values.
+
 Use the native workload for CPU sampling:
 
 ```sh

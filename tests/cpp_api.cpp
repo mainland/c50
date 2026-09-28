@@ -44,6 +44,11 @@ int main()
     }
     context.split_workers(1);
 
+    if ( options.ties != c50::tie_order::reference )
+    {
+        return 1;
+    }
+
     options.trials = 1;
     options.subset_splits = true;
     options.winnow = false;
