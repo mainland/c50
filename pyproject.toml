@@ -22,6 +22,8 @@ classifiers = [
     "Programming Language :: C++",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Typing :: Typed",
 ]
 
@@ -39,6 +41,7 @@ test = [
     "hypothesis>=6.112",
     "mypy>=1.11",
     "numpy>=1.26",
+    "pandas>=2.2",
     "pytest>=8",
     "setuptools-scm>=9",
     "scikit-learn>=1.6",

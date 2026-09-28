@@ -101,6 +101,8 @@ jobs:
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: '2'
       - name: Test the installed Python package and public types
+        env:
+          SCIPY_ARRAY_API: '1'
         run: |
           python -m pytest
           python -m mypy

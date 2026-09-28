@@ -6,6 +6,7 @@ import pickle
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
+import pandas as pd
 import pytest
 from scipy import sparse
 from sklearn.base import clone
@@ -13,6 +14,7 @@ from sklearn.metrics import balanced_accuracy_score, f1_score
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.utils import get_tags
 from sklearn.utils.estimator_checks import check_estimator
 
 from c50.sklearn import C50Classifier
@@ -155,3 +157,53 @@ def test_sparse_and_wrong_dimension_inputs_are_rejected() -> None:
         classifier.fit(sparse.csr_matrix(X), Y)
     with pytest.raises(ValueError, match="2D array"):
         classifier.fit(X[:, 0], Y)
+
+
+def test_pandas_categories_names_and_missing_values() -> None:
+    frame = pd.DataFrame(
+        {
+            "signal": X[:, 0],
+            "group": pd.Categorical(["a", "a", None, "a", "b", "b", "b", "b"]),
+        }
+    )
+    classifier = C50Classifier(
+        minimum_cases=1, categorical_features=["group"]
+    ).fit(frame, pd.Series(Y))
+
+    assert classifier.feature_names_in_.tolist() == ["signal", "group"]
+    assert classifier.categorical_features_.tolist() == [1]
+    assert classifier.categories_[1].tolist() == ["a", "b"]
+    np.testing.assert_array_equal(classifier.predict(frame), Y)
+    restored = pickle.loads(pickle.dumps(classifier))
+    np.testing.assert_array_equal(
+        restored.predict_proba(frame), classifier.predict_proba(frame)
+    )
+    with pytest.raises(ValueError, match="order"):
+        classifier.predict(frame[["group", "signal"]])
+
+
+def test_nullable_dataframe_values_are_missing() -> None:
+    groups = ["a", "b"] * (len(Y) // 2) + ["a"] * (len(Y) % 2)
+    frame = pd.DataFrame(
+        {
+            "signal": pd.array(X[:, 0], dtype="Float64"),
+            "group": pd.array(groups, dtype="string"),
+        }
+    )
+    frame.loc[1, "signal"] = pd.NA
+    frame.loc[2, "group"] = pd.NA
+    classifier = C50Classifier(minimum_cases=1).fit(frame, Y)
+
+    assert classifier.feature_names_in_.tolist() == ["signal", "group"]
+    assert classifier.categories_[1].tolist() == ["a", "b"]
+    np.testing.assert_array_equal(
+        classifier.predict(frame.drop(index=[1, 2])), np.delete(Y, [1, 2])
+    )
+    assert np.isfinite(classifier.predict_proba(frame)).all()
+
+
+def test_estimator_declares_numpy_only_array_support() -> None:
+    assert not get_tags(C50Classifier()).array_api_support
+    classifier = C50Classifier(minimum_cases=1).fit(X, Y)
+    assert isinstance(classifier.predict(X), np.ndarray)
+    assert isinstance(classifier.predict_proba(X), np.ndarray)

@@ -262,6 +262,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
     def __sklearn_tags__(self) -> Tags:
         """Declare input capabilities to scikit-learn."""
         tags = super().__sklearn_tags__()
+        tags.array_api_support = False
         tags.input_tags.allow_nan = True
         tags.input_tags.categorical = True
         tags.input_tags.string = True
