@@ -13,3 +13,34 @@ c50._c50.ModelKind.TREE
 c50._c50.ModelKind.__index__
 c50._c50.ModelKind.__int__
 c50._c50.ModelKind.__members__
+
+# Owned inspection records have the same native metaclass and no constructor.
+c50._c50.SplitCondition
+c50._c50.SplitCondition.__init__
+c50._c50.ContinuousThreshold
+c50._c50.ContinuousThreshold.__init__
+c50._c50.TreeBranch
+c50._c50.TreeBranch.__init__
+c50._c50.TreeNode
+c50._c50.TreeNode.__init__
+c50._c50.TreeInspection
+c50._c50.TreeInspection.__init__
+c50._c50.ModelInspection
+c50._c50.ModelInspection.__init__
+
+# Inspection enums use the same pybind11 enum emulation as ModelKind.
+c50._c50.NodeKind.LEAF
+c50._c50.NodeKind.DISCRETE
+c50._c50.NodeKind.THRESHOLD
+c50._c50.NodeKind.SUBSET
+c50._c50.NodeKind.__index__
+c50._c50.NodeKind.__int__
+c50._c50.NodeKind.__members__
+c50._c50.ConditionKind.NOT_APPLICABLE
+c50._c50.ConditionKind.EQUALS
+c50._c50.ConditionKind.LESS_EQUAL
+c50._c50.ConditionKind.GREATER
+c50._c50.ConditionKind.IN_SUBSET
+c50._c50.ConditionKind.__index__
+c50._c50.ConditionKind.__int__
+c50._c50.ConditionKind.__members__

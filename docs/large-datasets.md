@@ -21,9 +21,9 @@ A tree learned from a large dataset can have tens of thousands of
 records, which is too many for direct inspection. Data
 capacity and interpretability are separate acceptance criteria: practical
 workloads need explicit model-size measurements and suitable pruning and
-`minimum_cases` settings. The C++ inspection API reports node counts, supported leaves, depth, and
-feature use without application-side parsing. Python exports are planned in
-the same milestone. See {doc}`model-inspection`.
+`minimum_cases` settings. The inspection API reports node counts, supported
+leaves, depth, and feature use without application-side parsing. Python text
+and JSON exports use the same owned metadata. See {doc}`model-inspection`.
 
 ## Implemented data path
 
@@ -66,8 +66,8 @@ and complete native case store.
 The classifier is retained in the compatible C5.0 serialized tree format.
 The command-line program prints the familiar tree report, while the library
 interfaces expose `serialized_data` for storage and interchange. The C++
-`model.inspect` API exposes owned node metadata. Python inspection and readable
-exports remain planned until their implementation commits.
+`model.inspect` and Python `Model.inspect()` APIs expose owned node metadata.
+Python `export_text` and `export_json` render that metadata for inspection.
 
 ## Exact and approximate modes
 

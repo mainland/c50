@@ -180,6 +180,13 @@ public:
             context, kind, names, serialized_data, costs));
     }
 
+    c50::model_inspection inspect() const
+    {
+        c50::context context;
+        py::gil_scoped_release release;
+        return model_.inspect(context);
+    }
+
     c50::model_kind kind() const noexcept { return model_.kind(); }
     std::string names_data() const { return model_.names_data(); }
     std::string serialized_data() const { return model_.serialized_data(); }
@@ -363,6 +370,61 @@ void translate_c50_exception(std::exception_ptr pointer)
     }
 }
 
+void bind_inspection(py::module_ &module)
+{
+    py::enum_<c50::node_kind>(module, "NodeKind")
+        .value("LEAF", c50::node_kind::leaf)
+        .value("DISCRETE", c50::node_kind::discrete)
+        .value("THRESHOLD", c50::node_kind::threshold)
+        .value("SUBSET", c50::node_kind::subset);
+    py::enum_<c50::condition_kind>(module, "ConditionKind")
+        .value("NOT_APPLICABLE", c50::condition_kind::not_applicable)
+        .value("EQUALS", c50::condition_kind::equals)
+        .value("LESS_EQUAL", c50::condition_kind::less_equal)
+        .value("GREATER", c50::condition_kind::greater)
+        .value("IN_SUBSET", c50::condition_kind::in_subset);
+    py::class_<c50::split_condition>(module, "SplitCondition",
+        "Owned inspection metadata. Fields are read-only and lists are copies.")
+        .def_readonly("feature", &c50::split_condition::feature)
+        .def_readonly("kind", &c50::split_condition::kind)
+        .def_readonly("cut", &c50::split_condition::cut)
+        .def_readonly("values", &c50::split_condition::values)
+        .def_readonly("includes_not_applicable", &c50::split_condition::includes_not_applicable);
+    py::class_<c50::continuous_threshold>(module, "ContinuousThreshold",
+        "Owned inspection metadata. Fields are read-only and lists are copies.")
+        .def_readonly("cut", &c50::continuous_threshold::cut)
+        .def_readonly("lower", &c50::continuous_threshold::lower)
+        .def_readonly("midpoint", &c50::continuous_threshold::midpoint)
+        .def_readonly("upper", &c50::continuous_threshold::upper);
+    py::class_<c50::tree_branch>(module, "TreeBranch",
+        "Owned inspection metadata. Fields are read-only and lists are copies.")
+        .def_readonly("condition", &c50::tree_branch::condition)
+        .def_readonly("child", &c50::tree_branch::child);
+    py::class_<c50::tree_node>(module, "TreeNode",
+        "Owned inspection metadata. Fields are read-only and lists are copies.")
+        .def_readonly("kind", &c50::tree_node::kind)
+        .def_readonly("feature", &c50::tree_node::feature)
+        .def_readonly("predicted_class", &c50::tree_node::predicted_class)
+        .def_readonly("case_weight", &c50::tree_node::case_weight)
+        .def_readonly("class_weights", &c50::tree_node::class_weights)
+        .def_readonly("threshold", &c50::tree_node::threshold)
+        .def_readonly("branches", &c50::tree_node::branches);
+    py::class_<c50::tree_inspection>(module, "TreeInspection",
+        "Owned inspection metadata. Fields are read-only and lists are copies.")
+        .def_readonly("nodes", &c50::tree_inspection::nodes)
+        .def_readonly("leaf_count", &c50::tree_inspection::leaf_count)
+        .def_readonly("supported_leaf_count", &c50::tree_inspection::supported_leaf_count)
+        .def_readonly("depth", &c50::tree_inspection::depth)
+        .def_readonly("supported_depth", &c50::tree_inspection::supported_depth)
+        .def_readonly("feature_use", &c50::tree_inspection::feature_use);
+    py::class_<c50::model_inspection>(module, "ModelInspection",
+        "Owned inspection metadata. Fields are read-only and lists are copies.")
+        .def_readonly("kind", &c50::model_inspection::kind)
+        .def_readonly("class_names", &c50::model_inspection::class_names)
+        .def_readonly("feature_names", &c50::model_inspection::feature_names)
+        .def_readonly("trees", &c50::model_inspection::trees);
+}
+
 } // namespace
 
 PYBIND11_MODULE(_c50, module)
@@ -387,6 +449,8 @@ GIL while training, loading, or predicting.
                "A decision tree or boosted tree ensemble.")
         .value("RULES", c50::model_kind::rules,
                "A ruleset or boosted ruleset ensemble.");
+
+    bind_inspection(module);
 
     py::class_<c50::options>(
         module, "Options",
@@ -486,6 +550,8 @@ GIL while training, loading, or predicting.
         .def_property_readonly(
             "classes_", &python_model::classes,
             "Class names in score-column order.")
+        .def("inspect", &python_model::inspect,
+             "Return owned structural metadata parsed from the retained classifier.")
         .def("predict_details", &python_model::predict_details,
              predict_details_doc, py::arg("cases"))
         .def("predict_details_dense", &python_model::predict_details_dense,
