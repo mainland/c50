@@ -8,46 +8,39 @@ if test "$#" -ne 1; then
 fi
 
 binary=$1
-for rows in 9999 10000 20000; do
+
+# Require the same classifier digest from 1, 2, 4, and 8 split workers.
+check_workers()
+{
+    label=$1
+    shift
     reference=
     for workers in 1 2 4 8; do
-        output=$("$binary" --rows "$rows" --features 12 \
-            --categorical-features 4 --workers "$workers")
+        output=$("$binary" "$@" --workers "$workers")
         model=$(printf '%s\n' "$output" |
             sed -n '/"serialized_bytes"/p; /"stable_fnv1a64"/p')
         if test -z "$model"; then
-            printf 'missing classifier digest for %s rows, %s workers\n' \
-                "$rows" "$workers" >&2
+            printf 'missing classifier digest for %s, %s workers\n' \
+                "$label" "$workers" >&2
             exit 1
         fi
         if test "$workers" -eq 1; then
             reference=$model
         elif test "$model" != "$reference"; then
-            printf 'classifier changed for %s rows, %s workers\n' \
-                "$rows" "$workers" >&2
+            printf 'classifier changed for %s, %s workers\n' \
+                "$label" "$workers" >&2
             exit 1
         fi
     done
-done
+}
 
-reference=
-for workers in 1 2 4 8; do
-    output=$("$binary" --rows 20000 --features 12 \
-        --categorical-features 4 --subsets --workers "$workers")
-    model=$(printf '%s\n' "$output" |
-        sed -n '/"serialized_bytes"/p; /"stable_fnv1a64"/p')
-    if test -z "$model"; then
-        printf 'missing subset classifier digest for %s workers\n' \
-            "$workers" >&2
-        exit 1
-    fi
-    if test "$workers" -eq 1; then
-        reference=$model
-    elif test "$model" != "$reference"; then
-        printf 'subset classifier changed for %s workers\n' \
-            "$workers" >&2
-        exit 1
-    fi
+for rows in 9999 10000 20000; do
+    check_workers "$rows rows" --rows "$rows" --features 12 \
+        --categorical-features 4
 done
+check_workers "subset splits" --rows 20000 --features 12 \
+    --categorical-features 4 --subsets
+check_workers "stable ties" --rows 20000 --features 12 \
+    --categorical-features 4 --value-levels 9 --ties stable
 
 printf 'Parallel workload equivalence passed\n'
