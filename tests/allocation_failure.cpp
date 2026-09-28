@@ -158,6 +158,11 @@ int main(int argc, char **argv)
             exercise_predictor(ensemble, boost_data);
             exercise("inspect ensemble", context, [&] { ensemble.inspect(context); });
         }
+        c50::options stable = boosted;
+        stable.ties = c50::tie_order::stable;
+        exercise("stable ties", context, [&] {
+            c50::model::train(context, c50::model_kind::tree, boost_names, boost_data, stable);
+        });
         const std::string dense_names = "no, yes.\nx: continuous.\ncolor: red, blue.\n";
         const double missing = std::numeric_limits<double>::quiet_NaN();
         const double values[] = {0, 0, 1, 0, 2, 1, 3, 1, missing, 1, 0, missing};
