@@ -40,6 +40,7 @@ _SCRIPT = textwrap.dedent(
     NAMES = "low, high.\\n\\nsignal: continuous.\\n"
     TRAINING = "0, low\\n1, low\\n2, high\\n3, high\\n"
     tree = c50.train(NAMES, TRAINING, c50.ModelKind.TREE)
+    rules = c50.train(NAMES, TRAINING, c50.ModelKind.RULES)
     tree_node = tree.inspect().trees[0].nodes[0]
     samples = {
         "Model": tree,
@@ -54,6 +55,8 @@ _SCRIPT = textwrap.dedent(
         "TreeBranch": tree_node.branches[0],
         "SplitCondition": tree_node.branches[0].condition,
         "ContinuousThreshold": tree_node.threshold,
+        "RulesetInspection": rules.inspect().rulesets[0],
+        "RuleInspection": rules.inspect().rulesets[0].rules[0],
     }
     name = sys.argv[1]
     sample = samples[name]
@@ -91,6 +94,8 @@ def test_every_class_has_a_sample() -> None:
         "TreeBranch",
         "SplitCondition",
         "ContinuousThreshold",
+        "RulesetInspection",
+        "RuleInspection",
         "C50Error",
     }
     assert set(_CLASSES) == known
