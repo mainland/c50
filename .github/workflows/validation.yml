@@ -31,12 +31,14 @@ jobs:
           persist-credentials: false
       - name: Install native test dependencies
         run: sudo apt-get update && sudo apt-get install -y catch2
+      # Verify that targets request C++17 even with an older project default.
       - name: Configure
         run: >-
           cmake -S . -B build
           -DCMAKE_BUILD_TYPE=Debug
           -DCMAKE_C_COMPILER=${{ matrix.cc }}
           -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+          -DCMAKE_CXX_STANDARD=14
           -DCMAKE_C_FLAGS='-Wall -Wextra -Wpedantic'
           -DCMAKE_CXX_FLAGS='-Wall -Wextra -Wpedantic'
           -DC50_BUILD_BENCHMARKS=ON
