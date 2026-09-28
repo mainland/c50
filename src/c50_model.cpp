@@ -442,9 +442,8 @@ static void TrainModel(c50_context *Context, void *user_data)
     Context->schema.max_discrete_value = 3;
     Context->cases.max_case = -1;
     Context->trees.max_tree = -1;
-    /* Winnowing runs before ConstructClassifiers sets these, and must see
-       the values of a fresh C5.0 process: the first trial and no average
-       case weight. */
+    /* Winnowing runs before ConstructClassifiers sets the trial, and must
+       not see values left by a previous training on this context. */
     Context->trees.trial = 0;
     Context->average_case_weight = 0;
     Context->attributes_winnowed = false;

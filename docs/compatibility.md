@@ -62,6 +62,31 @@ Parallel training must reproduce the classifier produced by the reference
 GPL C5.0 implementation, except for explicitly documented floating-point
 tie-breaking differences.
 
+Each training operation starts from the state of a fresh C5.0 process, so
+reusing a context does not change the classifier.
+
+## Winnowing with case weights
+
+This project deliberately differs from C5.0 Release 2.07 when it winnows data
+with a case-weight attribute and no two-class costs file. The imported program
+computes the average case weight only after winnowing, so winnowing divides
+every positive case weight by zero. Its trial tree then makes no split, and
+winnowing discards every attribute, which leaves a single-leaf classifier. The
+command-line program and library compute the average before winnowing in that
+case and use the relative case weights of classifier construction.
+
+A two-class costs file sets the average to one before winnowing in the
+imported program, which then winnows with unnormalized case weights. That
+behavior is preserved. Classifiers without winnowing or without a case-weight
+attribute are unchanged.
+
+The fix was developed in this project. The C50 R package keeps the imported
+order and does not reset the average between calls, so its winnowing result
+also depends on the previous training in the same R session. The
+`winnow-case-weights` fixture records output from the imported program with
+only the average computed before winnowing. The `winnow-case-weight-costs`
+fixture records unmodified imported output for the preserved costs case.
+
 The project is licensed under GPL-3.0-or-later. C5.0 and RuleQuest are
 associated with RuleQuest Research Pty Ltd. This project is not an official
 RuleQuest distribution.

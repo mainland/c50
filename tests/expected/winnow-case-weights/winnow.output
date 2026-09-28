@@ -1,0 +1,43 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `winnow-case-weights'
+	Winnow attributes
+
+Read 40 cases (3 attributes) from winnow-case-weights.data
+Using relative case weighting
+
+1 attribute winnowed
+Estimated importance of remaining attributes:
+
+    800%  signal
+
+Decision tree:
+
+signal <= 4.5: no (17.1)
+signal > 4.5: yes (22.9/0.6)
+
+
+Evaluation on training data (40 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2    2( 5.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	    17     2    (a): class no
+	          21    (b): class yes
+
+
+	Attribute usage:
+
+	    100%  signal
+
+
+Time: <elapsed> secs

@@ -127,6 +127,27 @@ static void reused_context_matches_fresh()
     }
 }
 
+static void winnowing_uses_case_weights()
+{
+    // Winnowing must use the relative case weights of construction.
+    const std::string names = "no, yes.\nsignal: continuous.\n"
+                              "noise: continuous.\ncase weight: continuous.\n";
+    std::string data;
+    for (unsigned row = 0; row < 60; ++row) {
+        const unsigned signal = row * 7 % 21, noise = row * 11 % 17;
+        data += std::to_string(signal) + ", " + std::to_string(noise) + ", " +
+                std::to_string(row % 4 + 1) + (signal > 10 ? ", yes\n" : ", no\n");
+    }
+    c50::options winnow;
+    winnow.winnow = true;
+    for (auto kind : {c50::model_kind::tree, c50::model_kind::rules}) {
+        c50::context context;
+        auto model = c50::model::train(context, kind, names, data, winnow);
+        require(model.serialized_data().find("att=\"signal\"") != std::string::npos,
+                "winnowing with case weights discarded the informative attribute");
+    }
+}
+
 static void concurrent_parallel_fits()
 {
     constexpr std::size_t rows = 10000, columns = 6, fits = 4;
@@ -283,6 +304,7 @@ int main()
         parallel_schema_equivalence();
         concurrent_parallel_fits();
         reused_context_matches_fresh();
+        winnowing_uses_case_weights();
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
         return 1;

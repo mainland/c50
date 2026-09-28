@@ -155,6 +155,8 @@ run_case basic cross-validation - -X 5 -I 17
 run_case print-rounding cross-validation - -X 3 -b -I 3
 run_case boost boost tree -t 5
 run_case case-weight case-weight tree
+run_case winnow-case-weights winnow tree -w
+run_case winnow-case-weight-costs winnow tree --with-costs -w
 run_case implicit implicit tree
 run_case multiclass tree tree
 run_case multiclass rules rules -r
