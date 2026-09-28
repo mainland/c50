@@ -61,6 +61,26 @@ static std::string with_year(std::string text, const char *year)
     return text;
 }
 
+/* A prepared predictor parses its model once and then runs one operation per
+   batch, so each batch must keep the timestamp base of the model. */
+static void prepared_predictor_keeps_base()
+{
+    c50::context fresh;
+    const auto model = train_stamps(fresh);
+    const std::string data = stamp_data();
+
+    auto expected = model.predict(fresh, data);
+    auto predictor = model.prepare_predictor();
+    for (int batch = 0; batch < 2; ++batch) {
+        auto result = predictor.predict(data);
+        require(result.size() == expected.size(), "predictor rows");
+        for (std::size_t row = 0; row < result.size(); ++row)
+            require(result.class_index(row) == expected.class_index(row) &&
+                    result.class_index(row) == (row < 10 ? 0u : 1u),
+                    "predictor timestamp class");
+    }
+}
+
 static void stale_timestamp_base()
 {
     c50::context fresh;
@@ -121,6 +141,7 @@ static void unused_costs()
                                             "| a comment\nlow, high: 5\n");
     commented_entry.predict(context, "1, ?\n");
     commented_entry.inspect(context);
+    commented_entry.prepare_predictor();
 }
 
 /* The diagnostic of a failed operation, without the command-line program's
@@ -207,6 +228,7 @@ int main()
 {
     int failures = 0;
     failures += run("stale timestamp base", stale_timestamp_base);
+    failures += run("prepared predictor", prepared_predictor_keeps_base);
     failures += run("unused costs", unused_costs);
     failures += run("diagnostics", diagnostics_name_their_input);
     failures += run("dense range", dense_range_message);

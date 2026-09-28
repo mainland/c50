@@ -18,9 +18,12 @@ int main()
         context, c50::model_kind::tree, names, training);
     c50::predictions predictions = model.predict(context, cases);
 
+    auto predictor = model.prepare_predictor();
+    auto repeated = predictor.predict(cases);
     const auto snapshot = model.inspect(context);
 
-    return snapshot.trees.size() == 1 &&
+    return repeated.class_index(0) == predictions.class_index(0) &&
+           snapshot.trees.size() == 1 &&
            snapshot.trees[0].supported_leaf_count == 2 &&
            model.kind() == c50::model_kind::tree &&
            predictions.size() == 1 && predictions.class_index(0) == 1 ?
