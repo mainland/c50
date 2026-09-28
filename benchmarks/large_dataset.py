@@ -10,10 +10,12 @@ import os
 import platform
 import sys
 import time
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
 
+from c50 import Model
 from c50.sklearn import C50Classifier
 
 
@@ -29,6 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--prediction-rows", type=int, default=10_000)
     parser.add_argument("--prediction-batch-size", type=int, default=65_536)
     parser.add_argument("--minimum-cases", type=float, default=20.0)
+    parser.add_argument("--operation-repetitions", type=int, default=5)
     parser.add_argument("--seed", type=int, default=1729)
     return parser.parse_args()
 
@@ -45,6 +48,8 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("classes must be between two and ten")
     if not 0 <= args.missing_fraction < 1:
         raise ValueError("missing-fraction must be in [0, 1)")
+    if args.operation_repetitions < 1:
+        raise ValueError("operation-repetitions must be positive")
     if args.prediction_rows < 0:
         raise ValueError("prediction-rows must be nonnegative")
 
@@ -119,6 +124,53 @@ def prediction_digest(probabilities: np.ndarray[Any, Any]) -> str:
     return hashlib.sha256(canonical.tobytes()).hexdigest()
 
 
+def operation_timings(
+    classifier: C50Classifier, X: np.ndarray[Any, Any], repetitions: int
+) -> dict[str, list[float]]:
+    """Measure public operation boundaries after the first prediction.
+
+    Loading includes validation, parsing, and copying. Serialized retrieval
+    copies an already serialized string. Native serialization remains part of
+    training. Empty prediction measures parser/setup overhead without cases.
+
+    Args:
+        classifier: Fitted estimator whose operations are measured.
+        X: Prediction inputs using the estimator's original feature encoding.
+        repetitions: Positive number of samples per operation.
+
+    Returns:
+        Wall-clock seconds for each operation and prediction batch size.
+    """
+    model = classifier.model_
+    names, serialized, costs = model.names_data, model.serialized_data, model.costs_data
+    kind = model.kind
+
+    def measure(operation: Callable[[], object]) -> list[float]:
+        samples = []
+        for _ in range(repetitions):
+            start = time.perf_counter()
+            result = operation()
+            samples.append(time.perf_counter() - start)
+            del result
+        return samples
+
+    timings = {
+        "model_load": measure(lambda: Model.load(names, serialized, kind, costs)),
+        "serialized_string_copy": measure(lambda: model.serialized_data),
+        "empty_prediction": measure(
+            lambda: model.predict_details_dense(np.empty((0, X.shape[1])))
+        ),
+    }
+    for rows in sorted({min(1, len(X)), min(1000, len(X)), len(X)} - {0}):
+        batch = X[:rows]
+        reference = classifier.predict_proba(batch)
+        timings[f"prediction_{rows}_rows"] = measure(
+            lambda: classifier.predict_proba(batch)
+        )
+        np.testing.assert_array_equal(classifier.predict_proba(batch), reference)
+    return timings
+
+
 def main() -> None:
     """Run one workload and print a machine-readable result."""
     args = parse_args()
@@ -153,6 +205,10 @@ def main() -> None:
     predict_wall_seconds = time.perf_counter() - predict_wall_start
     prediction_peak_rss = peak_rss_bytes()
 
+    operation_samples = operation_timings(
+        classifier, X[:prediction_rows], args.operation_repetitions
+    )
+    operation_peak_rss = peak_rss_bytes()
     serialized = classifier.model_.serialized_data
     result = {
         "environment": {
@@ -170,13 +226,15 @@ def main() -> None:
             "trials": 1,
         },
         "resources": {
-            "peak_rss_bytes": prediction_peak_rss,
+            "peak_rss_bytes": operation_peak_rss,
             "peak_rss_checkpoints_bytes": {
                 "after_data_generation": generation_peak_rss,
                 "after_prediction": prediction_peak_rss,
+                "after_operations": operation_peak_rss,
                 "after_training": training_peak_rss,
             },
         },
+        "operation_wall_seconds": operation_samples,
         "timing_seconds": {
             "data_generation_cpu": generation_cpu_seconds,
             "data_generation_wall": generation_wall_seconds,
@@ -195,6 +253,7 @@ def main() -> None:
             "prediction_batch_size": args.prediction_batch_size,
             "prediction_sha256": prediction_digest(probabilities),
             "prediction_rows": prediction_rows,
+            "operation_repetitions": args.operation_repetitions,
             "probability_checksum": float(probabilities.sum()),
             "rows": args.rows,
             "seed": args.seed,
