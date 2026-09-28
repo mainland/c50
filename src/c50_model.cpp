@@ -234,6 +234,11 @@ static const char *ValidateOptions(const c50_options *options)
     {
         return "options.random_seed must be between 0 and 4095";
     }
+    if ( options->ties != c50::tie_order::reference &&
+         options->ties != c50::tie_order::stable )
+    {
+        return "options.ties must be reference or stable";
+    }
     return NULL;
 }
 
@@ -462,6 +467,8 @@ static void TrainModel(c50_context *Context, void *user_data)
     Context->options.ignore_costs = state->options.ignore_costs;
     Context->options.winnow = state->options.winnow;
     Context->options.global_pruning = state->options.global_pruning;
+    Context->options.stable_ties =
+        state->options.ties == c50::tie_order::stable;
     Context->options.minimum_cases = (float) state->options.minimum_cases;
     Context->options.leaf_ratio = 0;
     Context->options.confidence_factor =

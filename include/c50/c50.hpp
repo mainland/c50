@@ -64,6 +64,14 @@ private:
     error_code code_;
 };
 
+/** Order of equal continuous values when evaluating splits. */
+enum class tie_order {
+    reference, /**< Reproduce the tie order of the reference C5.0 learner. */
+    stable     /**< Keep equal values in case order with a faster sort.
+                    Classifiers are deterministic on every platform but may
+                    differ from the reference learner. */
+};
+
 /** Training options. Values are checked at the start of training. */
 struct options {
     unsigned trials = 1;                 /**< Classifiers to build, 1 to 1000. */
@@ -76,6 +84,7 @@ struct options {
     double confidence_factor = 0.25;     /**< Pruning confidence in [0, 1]. */
     double sample_fraction = 0;          /**< Training fraction in [0, 0.999], zero disables sampling. */
     unsigned random_seed = 0;            /**< Sampling seed, 0 to 4095. */
+    tie_order ties = tie_order::reference; /**< Split-evaluation tie order. */
 };
 
 /**

@@ -134,6 +134,7 @@ typedef struct
     unsigned char ignore_costs;
     unsigned char winnow;
     unsigned char global_pruning;
+    unsigned char stable_ties;
     float minimum_cases;
     float leaf_ratio;
     float confidence_factor;

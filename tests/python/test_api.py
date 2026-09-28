@@ -65,13 +65,50 @@ def test_options_defaults_and_mutation() -> None:
     assert options.confidence_factor == 0.25
     assert options.sample_fraction == 0
     assert options.random_seed == 0
+    assert options.ties == c50.TieOrder.REFERENCE
 
     options.trials = 3
     options.subset_splits = True
     options.random_seed = 7
+    options.ties = c50.TieOrder.STABLE
     assert options.trials == 3
     assert options.subset_splits is True
     assert options.random_seed == 7
+    assert options.ties == c50.TieOrder.STABLE
+
+
+def test_stable_ties_are_deterministic() -> None:
+    # More rows than the stable sort's insertion-sort limit, with many ties.
+    rng = np.random.default_rng(11)
+    values = rng.integers(0, 6, size=(400, 3)).astype(np.float64)
+    values[rng.random(values.shape) < 0.05] = np.nan
+    classes = (np.nan_to_num(values).sum(axis=1) > 7).astype(np.uintp)
+    names = "no, yes.\n\nx0: continuous.\nx1: continuous.\nx2: continuous.\n"
+    options = c50.Options()
+    options.ties = c50.TieOrder.STABLE
+    options.trials = 3
+
+    first = c50.train_dense(names, values, classes, options=options)
+    repeated = c50.train_dense(names, values, classes, options=options)
+    parallel = c50.train_dense(
+        names, values, classes, options=options, split_workers=4
+    )
+
+    assert repeated.serialized_data == first.serialized_data
+    assert parallel.serialized_data == first.serialized_data
+    assert len(first.predict_details_dense(values)) == len(values)
+
+
+def test_stable_ties_agree_across_text_and_dense_training() -> None:
+    options = c50.Options()
+    options.ties = c50.TieOrder.STABLE
+    text_model = c50.train(NAMES, TRAINING, options=options)
+    dense_model = c50.train_dense(
+        NAMES, DENSE_TRAINING, DENSE_CLASSES, options=options
+    )
+
+    assert text_model.serialized_data == dense_model.serialized_data
+    assert dense_model.predict(CASES) == ["low", "high"]
 
 
 @pytest.mark.parametrize("factory", [c50.train, c50.Model.train])
