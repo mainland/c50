@@ -57,3 +57,24 @@ jobs:
         run: setarch "$(uname -m)" -R ctest --test-dir build --output-on-failure
         env:
           TSAN_OPTIONS: halt_on_error=1
+
+  afl-seed-replay:
+    name: AFL++ seed replay
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+      - name: Install AFL++
+        run: sudo apt-get update && sudo apt-get install -y afl++
+      - name: Configure AFL++ instrumentation
+        run: >-
+          cmake -S . -B build/afl
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_C_COMPILER=afl-clang-lto
+          -DCMAKE_CXX_COMPILER=afl-clang-lto++
+          -DBUILD_TESTING=OFF
+          -DC50_BUILD_FUZZERS=ON
+      - name: Replay checked-in fuzz seeds
+        run: cmake --build build/afl --target fuzz-seeds --parallel 2
