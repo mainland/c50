@@ -132,6 +132,11 @@ if(C50_BUILD_PYTHON)
         COPYONLY
     )
     configure_file(
+        python/c50/inspection.py
+        ${CMAKE_CURRENT_BINARY_DIR}/python/c50/inspection.py
+        COPYONLY
+    )
+    configure_file(
         python/c50/_data.py
         ${CMAKE_CURRENT_BINARY_DIR}/python/c50/_data.py
         COPYONLY

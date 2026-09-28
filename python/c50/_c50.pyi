@@ -15,6 +15,103 @@ class ModelKind(Enum):
 
 
 @final
+class NodeKind(Enum):
+    LEAF = 0
+    DISCRETE = 1
+    THRESHOLD = 2
+    SUBSET = 3
+
+
+@final
+class ConditionKind(Enum):
+    NOT_APPLICABLE = 0
+    EQUALS = 1
+    LESS_EQUAL = 2
+    GREATER = 3
+    IN_SUBSET = 4
+
+
+@final
+class SplitCondition:
+    @property
+    def feature(self) -> int: ...
+    @property
+    def kind(self) -> ConditionKind: ...
+    @property
+    def cut(self) -> float: ...
+    @property
+    def values(self) -> list[str]: ...
+    @property
+    def includes_not_applicable(self) -> bool: ...
+
+
+@final
+class ContinuousThreshold:
+    @property
+    def cut(self) -> float: ...
+    @property
+    def lower(self) -> float: ...
+    @property
+    def midpoint(self) -> float: ...
+    @property
+    def upper(self) -> float: ...
+
+
+@final
+class TreeBranch:
+    @property
+    def condition(self) -> SplitCondition: ...
+    @property
+    def child(self) -> int: ...
+
+
+@final
+class TreeNode:
+    @property
+    def kind(self) -> NodeKind: ...
+    @property
+    def feature(self) -> int | None: ...
+    @property
+    def predicted_class(self) -> int: ...
+    @property
+    def case_weight(self) -> float: ...
+    @property
+    def class_weights(self) -> list[float]: ...
+    @property
+    def threshold(self) -> ContinuousThreshold | None: ...
+    @property
+    def branches(self) -> list[TreeBranch]: ...
+
+
+@final
+class TreeInspection:
+    @property
+    def nodes(self) -> list[TreeNode]: ...
+    @property
+    def leaf_count(self) -> int: ...
+    @property
+    def supported_leaf_count(self) -> int: ...
+    @property
+    def depth(self) -> int: ...
+    @property
+    def supported_depth(self) -> int: ...
+    @property
+    def feature_use(self) -> list[int]: ...
+
+
+@final
+class ModelInspection:
+    @property
+    def kind(self) -> ModelKind: ...
+    @property
+    def class_names(self) -> list[str]: ...
+    @property
+    def feature_names(self) -> list[str]: ...
+    @property
+    def trees(self) -> list[TreeInspection]: ...
+
+
+@final
 class Options:
     def __init__(self) -> None: ...
     trials: int
@@ -82,6 +179,7 @@ class Model:
     def costs_data(self) -> str: ...
     @property
     def classes_(self) -> list[str]: ...
+    def inspect(self) -> ModelInspection: ...
     def predict_details(self, cases: str) -> Predictions: ...
     def predict_details_dense(
         self, values: NDArray[np.float64]
