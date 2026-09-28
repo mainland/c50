@@ -41,13 +41,13 @@ sequence of zero-based indices to override inference. String column names may
 also be used when the input exposes string feature names. When an explicit
 sequence is present, every unlisted column is continuous.
 
-`None` and numeric NaN values represent missing feature values. Infinite
-continuous values, and finite values beyond the single-precision range of
-about 3.4e38, are rejected with a `ValueError` that names the feature and, for
-numeric columns, the first row. C5.0 stores continuous values as
+`None`, numeric NaN, `pd.NA`, and `pd.NaT` represent missing feature values.
+Infinite continuous values, and finite values beyond the single-precision
+range of about 3.4e38, are rejected with a `ValueError` that names the feature
+and, for numeric columns, the first row. C5.0 stores continuous values as
 single-precision floats. An unseen prediction-time category raises
-`ValueError` by default. Set `unknown_categories="missing"` to pass unseen
-categories to C5.0 as missing values.
+`ValueError` by default. Set `unknown_categories="missing"` to pass
+unseen categories to C5.0 as missing values.
 
 Categories match by value. An integer category matches an equal float, so a
 model fitted on an integer column accepts the float column that results when
@@ -71,6 +71,23 @@ input. Set `prediction_batch_size` to a different positive integer, or to
 `None` for one batch. Training remains in-memory and retains both the encoded
 float64 matrix and native case data while the classifier is built. See
 {doc}`large-datasets` for the scale target, limitations, and benchmark.
+
+## pandas and Array API support
+
+DataFrames with string column names preserve `feature_names_in_`. Numeric,
+Boolean, string, and categorical columns use the same encoding rules as NumPy
+arrays. Prediction requires the fitted column names in their original order.
+Nullable pandas columns need no conversion because `pd.NA` is a missing value.
+
+pandas is a test dependency, not a runtime requirement. The estimator uses CPU
+NumPy arrays and returns NumPy arrays. It declares `array_api_support=False`.
+It does not promise preservation of another array namespace, device, or dtype.
+GPU and device-preserving Array API execution are unsupported. Convert inputs
+to CPU NumPy arrays explicitly before using this estimator. See the
+[scikit-learn Array API contract](https://scikit-learn.org/stable/modules/array_api.html).
+
+CI installs pandas and sets `SCIPY_ARRAY_API=1` before importing SciPy or
+scikit-learn so the available NumPy Array API estimator checks run as well.
 
 ## Native options and costs
 
