@@ -10,14 +10,18 @@ minimum dependencies are NumPy 1.26 and scikit-learn 1.6.
 | --- | --- | --- |
 | Linux x86-64 | GCC 13, Clang 18 | Locally validated native, installed-consumer, and sanitizer checks |
 | Linux x86-64, Python 3.12 | NumPy 2.x, scikit-learn 1.9 | Locally validated Python and type checks |
-| Linux ARM64 | GCC on `ubuntu-24.04-arm` | Configured CI target, not yet executed |
-| macOS ARM64 | AppleClang on `macos-14` | Configured CI target, not yet executed |
-| Linux x86-64, Python 3.12 | NumPy 1.26.4, scikit-learn 1.6.1 | Locally validated installed wheel, 75 Python tests, and typing |
-| Linux x86-64, Python 3.13 and 3.14 | NumPy 2.5.3, scikit-learn 1.9.1 | Locally validated installed wheels, 75 Python tests, and typing |
+| Linux ARM64 | GCC on `ubuntu-24.04-arm` | Hosted native and installed-consumer checks passed |
+| macOS ARM64 | AppleClang on `macos-14` | Finiteness-check portability fix awaiting hosted verification |
+| Linux x86-64, Python 3.12 | NumPy 1.26.4, scikit-learn 1.6.1 | Locally validated installed wheel, runtime tests, and typing |
+| Linux x86-64, Python 3.13 and 3.14 | NumPy 2.5.3, scikit-learn 1.9.1 | Locally validated installed wheels, runtime tests, and typing |
 
-Hosted CI has not run for this milestone. Configured targets are candidates
-for support until their native and Python checks pass. Windows, free-threaded
-Python, GPU arrays, and other compiler or platform combinations are unverified.
+The [hosted validation run at `e4243fa`](https://github.com/mainland/c50/actions/runs/36435262567)
+passed Linux x86-64 and ARM64 native checks and all four Python dependency
+configurations. That revision preceded a history cleanup and is not in the
+repository history, so the current revision requires a hosted rerun. The macOS build failed because its math library does not
+provide `finite()`. Those calls now use C++ `std::isfinite`, pending a hosted
+rerun. Windows, free-threaded Python, GPU arrays, and other compiler or platform
+combinations are unverified.
 The Linux-only allocation-injection and ELF writable-global inventory checks
 are omitted on macOS. Portable contract and installed-consumer tests still run.
 
@@ -192,7 +196,7 @@ ctest --test-dir build/python --output-on-failure
 
 The `c50` Python distribution has its own version sequence, independent of the
 imported C5.0 Release 2.07 GPL Edition. `setuptools-scm` derives the package
-version from Git tags beginning with `v` and a digit, such as `v0.1.0rc1`.
+version from Git tags beginning with `v` and a digit, such as `v1.0.0a1`.
 The upstream `c5.0-2.07` tag does not participate in package version discovery.
 Commits after a package tag receive development versions with a commit identifier.
 
