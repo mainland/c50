@@ -54,6 +54,7 @@ endif()
 set(C50_CORE_SOURCES
     src/attwinnow.cpp
     src/c50_api.cpp
+    src/c50_inspection.cpp
     src/c50_input.cpp
     src/c50_locale.cpp
     src/c50_model.cpp
@@ -129,6 +130,11 @@ if(C50_BUILD_PYTHON)
     configure_file(
         python/c50/_c50.pyi
         ${CMAKE_CURRENT_BINARY_DIR}/python/c50/_c50.pyi
+        COPYONLY
+    )
+    configure_file(
+        python/c50/inspection.py
+        ${CMAKE_CURRENT_BINARY_DIR}/python/c50/inspection.py
         COPYONLY
     )
     configure_file(
@@ -245,6 +251,12 @@ if(BUILD_TESTING)
     target_link_libraries(c50_parser_validation PRIVATE C50::cpp)
     list(APPEND C50_COMPILE_TARGETS c50_parser_validation)
     list(APPEND C50_EXECUTABLE_TARGETS c50_parser_validation)
+    add_executable(c50_model_inspection tests/model_inspection.cpp)
+    target_link_libraries(c50_model_inspection PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_model_inspection)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_model_inspection)
+    add_test(NAME model-inspection COMMAND c50_model_inspection
+             "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
     add_executable(c50_implicit_legacy tests/implicit_legacy.cpp)
     target_link_libraries(c50_implicit_legacy PRIVATE C50::cpp)
     list(APPEND C50_COMPILE_TARGETS c50_implicit_legacy)
@@ -262,6 +274,10 @@ if(BUILD_TESTING)
     target_link_libraries(c50_operation_state PRIVATE C50::cpp)
     list(APPEND C50_COMPILE_TARGETS c50_operation_state)
     list(APPEND C50_EXECUTABLE_TARGETS c50_operation_state)
+    add_executable(c50_locale_independence tests/locale_independence.cpp)
+    target_link_libraries(c50_locale_independence PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_locale_independence)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_locale_independence)
     add_executable(c50_cpp_contracts tests/cpp_contracts.cpp)
     target_link_libraries(c50_cpp_contracts PRIVATE C50::cpp)
     list(APPEND C50_COMPILE_TARGETS c50_cpp_contracts)
@@ -546,6 +562,8 @@ if(BUILD_TESTING)
     add_test(NAME operation-failure COMMAND c50_operation_failure)
     add_test(NAME cpp-api COMMAND c50_cpp_api)
     add_test(NAME operation-state COMMAND c50_operation_state)
+    add_test(NAME locale-independence COMMAND c50_locale_independence)
+    set_tests_properties(locale-independence PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME cpp-contracts COMMAND c50_cpp_contracts)
     add_test(NAME index-overflow COMMAND c50_index_overflow)
     if(C50_BUILD_PYTHON)
