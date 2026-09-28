@@ -78,6 +78,11 @@ single-tree learning and is the mode used for compatibility work. Setting
 the cases seen by the learner and may change the classifier. It must be
 described as approximate sampling rather than a transparent optimization.
 
+Set `ties` to `stable` to evaluate continuous splits with a faster sort that
+keeps equal values in case order. Training remains deterministic on every
+platform, but the classifier may differ from the reference learner. See
+{doc}`compatibility`.
+
 Set `split_workers` to 1 through 8 to enable bounded parallel evaluation
 of eligible attribute splits; one worker is the default. Nodes need at least
 10,000 training rows and multiple eligible attributes. Verbose diagnostics and
