@@ -27,7 +27,7 @@ _CLASSES = sorted(
 )
 
 # Classes whose objects pickle and compare equal after a round trip.
-_ROUND_TRIP = {"Model", "ModelKind"}
+_ROUND_TRIP = {"Model", "ModelKind", "NodeKind", "ConditionKind"}
 
 _SCRIPT = textwrap.dedent(
     """
@@ -40,11 +40,20 @@ _SCRIPT = textwrap.dedent(
     NAMES = "low, high.\\n\\nsignal: continuous.\\n"
     TRAINING = "0, low\\n1, low\\n2, high\\n3, high\\n"
     tree = c50.train(NAMES, TRAINING, c50.ModelKind.TREE)
+    tree_node = tree.inspect().trees[0].nodes[0]
     samples = {
         "Model": tree,
         "ModelKind": native.ModelKind.RULES,
+        "NodeKind": native.NodeKind.THRESHOLD,
+        "ConditionKind": native.ConditionKind.IN_SUBSET,
         "Options": native.Options(),
         "Predictions": tree.predict_details("0.5, ?\\n"),
+        "ModelInspection": tree.inspect(),
+        "TreeInspection": tree.inspect().trees[0],
+        "TreeNode": tree_node,
+        "TreeBranch": tree_node.branches[0],
+        "SplitCondition": tree_node.branches[0].condition,
+        "ContinuousThreshold": tree_node.threshold,
     }
     name = sys.argv[1]
     sample = samples[name]
@@ -76,6 +85,12 @@ def test_every_class_has_a_sample() -> None:
     known = set(_ROUND_TRIP) | {
         "Options",
         "Predictions",
+        "ModelInspection",
+        "TreeInspection",
+        "TreeNode",
+        "TreeBranch",
+        "SplitCondition",
+        "ContinuousThreshold",
         "C50Error",
     }
     assert set(_CLASSES) == known

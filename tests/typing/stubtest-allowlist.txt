@@ -5,7 +5,23 @@ c50._c50.Predictions
 
 # pybind11 enums also use the native metaclass.
 c50._c50.ModelKind
+c50._c50.NodeKind
+c50._c50.ConditionKind
 
 # Model and Predictions intentionally have no public constructor.
 c50._c50.Model.__init__
 c50._c50.Predictions.__init__
+
+# Owned inspection records have the same native metaclass and no constructor.
+c50._c50.SplitCondition
+c50._c50.SplitCondition.__init__
+c50._c50.ContinuousThreshold
+c50._c50.ContinuousThreshold.__init__
+c50._c50.TreeBranch
+c50._c50.TreeBranch.__init__
+c50._c50.TreeNode
+c50._c50.TreeNode.__init__
+c50._c50.TreeInspection
+c50._c50.TreeInspection.__init__
+c50._c50.ModelInspection
+c50._c50.ModelInspection.__init__

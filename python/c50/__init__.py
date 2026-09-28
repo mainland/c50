@@ -2,14 +2,23 @@
 
 from ._c50 import (
     C50Error,
+    ConditionKind,
+    ContinuousThreshold,
     Model,
+    ModelInspection,
     ModelKind,
+    NodeKind,
     Options,
     Predictions,
+    SplitCondition,
+    TreeBranch,
+    TreeInspection,
+    TreeNode,
     load,
     train,
     train_dense,
 )
+from .inspection import export_json, export_text
 
 # Version of the state that ``Model`` pickles. Increase it when the state
 # changes, and keep ``_restore_model`` loading every earlier version.
@@ -65,10 +74,20 @@ def _restore_model(
 
 __all__ = [
     "C50Error",
+    "ConditionKind",
+    "ContinuousThreshold",
     "Model",
+    "ModelInspection",
     "ModelKind",
+    "NodeKind",
     "Options",
     "Predictions",
+    "SplitCondition",
+    "TreeBranch",
+    "TreeInspection",
+    "TreeNode",
+    "export_json",
+    "export_text",
     "load",
     "train",
     "train_dense",

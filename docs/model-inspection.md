@@ -1,7 +1,7 @@
 # Model inspection
 
-The C++ tree snapshot interface is implemented. Rules and Python exports below
-remain proposed until their implementation commits.
+C++ and Python expose owned tree snapshots and deterministic text and JSON
+exports. Ruleset inspection below remains proposed until its implementation.
 
 ## Ownership and operation boundary
 
@@ -56,3 +56,27 @@ original labels instead of its generated encoding tokens. Exports describe the
 model but are not an alternate predictor or a replacement for legacy model
 serialization. The snapshot supports node counts, depth limits, and feature-use
 reports without application-side parsing of `.tree` or `.rules` files.
+
+## Inspect a model
+
+```python
+from c50 import Model, export_json, export_text
+
+model = Model.train(
+    "low, high.\nsignal: continuous.\n",
+    "0, low\n1, low\n2, low\n3, high\n4, high\n5, high\n",
+)
+snapshot = model.inspect()
+tree = snapshot.trees[0]
+assert tree.supported_leaf_count == 2
+print(export_text(snapshot, include_empty=False))
+metadata = export_json(snapshot)
+```
+
+`export_text` accepts `max_depth` to truncate display and `include_empty=False`
+to omit zero-support leaves. Both exports accept `feature_names` and
+`class_names` sequences in schema order. For a fitted estimator, inspect
+`classifier.model_` and pass string forms of `classifier.classes_` as display
+class names. Feature names may come from `classifier.feature_names_in_`.
+Native tokens remain available in the snapshot. Python fields are read-only,
+and list accessors return copies.
