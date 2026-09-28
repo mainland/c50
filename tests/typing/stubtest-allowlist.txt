@@ -25,3 +25,9 @@ c50._c50.TreeInspection
 c50._c50.TreeInspection.__init__
 c50._c50.ModelInspection
 c50._c50.ModelInspection.__init__
+
+# Ruleset snapshots also have a native metaclass and no public constructor.
+c50._c50.RuleInspection
+c50._c50.RuleInspection.__init__
+c50._c50.RulesetInspection
+c50._c50.RulesetInspection.__init__
