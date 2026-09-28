@@ -31,6 +31,7 @@ std::unique_ptr<c50_context> c50_make_context()
 {
     auto context = std::make_unique<c50_context>();
     context->split_worker_count = 1;
+    context->max_serialized_tree_depth = c50_default_max_tree_depth;
     context->schema.max_discrete_value = 3;
     snprintf(context->schema.unknown_class_name,
              sizeof(context->schema.unknown_class_name), "%s", "?");
@@ -80,7 +81,7 @@ void c50_record_error(c50_context *context, c50::error_code code,
 {
     if (context->error) return;
     context->error = code;
-    snprintf(context->error_message, sizeof(context->error_message), "%s", message);
+    context->error_message = message;
 }
 
 [[noreturn]] void c50_abort_operation(c50_context *context, int exit_status)
@@ -102,9 +103,9 @@ void c50_run_operation(c50_context *context, c50_operation_fn operation,
                             "a C5.0 operation is already active on this context");
     context->error.reset();
     context->failure_reported = 0;
-    context->error_message[0] = '\0';
+    context->error_message.clear();
     /* The input name of an earlier operation must not reach this one. */
-    context->io.file_name[0] = '\0';
+    context->io.file_name.clear();
     /* Parsing, training, prediction, and serialization all read and write
      * numbers, so the operation and its cleanup run in the C locale. The scope
      * ends on every exit, and a failure to enter it leaves the context idle. */

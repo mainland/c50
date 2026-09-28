@@ -48,8 +48,8 @@ void GetMCostsInput(c50_context *Context, c50_input *Cf)
     float	Val, Sum=0;
 
     Context->io.line_number = 0;
-    Context->line_buffer_position = Context->line_buffer;
-    Context->line_buffer[0] = '\0';
+    Context->line_buffer.clear();
+    Context->line_buffer_position = 0;
 
     /*  Read entries from cost file  */
 

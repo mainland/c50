@@ -135,6 +135,130 @@ run_missing_file_format()
         "$missing_case_dir/output.actual"
 }
 
+run_invalid_option()
+{
+    option_name=$1
+    shift
+
+    set +e
+    "$binary" "$@" > "$test_dir/$option_name.actual" 2>&1
+    option_exit_code=$?
+    set -e
+
+    if test "$option_exit_code" -ne 1; then
+        printf '%s returned %d, expected 1\n' \
+            "$option_name" "$option_exit_code" >&2
+        return 1
+    fi
+}
+
+# A value that overflows, is not finite, or is out of range reports the
+# "illegal value" diagnostic. A value that is not a number, or has trailing
+# text, is an unrecognized option, as in Release 2.07.
+expect_option_message()
+{
+    option_name=$1
+    expected_message=$2
+    shift 2
+
+    run_invalid_option "$option_name" "$@"
+    if ! grep -F -x -e "$expected_message" \
+        "$test_dir/$option_name.actual" > /dev/null; then
+        printf '%s did not report: %s\n' "$option_name" "$expected_message" >&2
+        cat "$test_dir/$option_name.actual" >&2
+        return 1
+    fi
+}
+
+illegal='	** illegal value'
+expect_option_message sample-nan \
+    "$illegal nan -- should be between 0.1 and 99.9" -S nan
+expect_option_message seed-overflow \
+    "$illegal 1e+21 -- should be between -2147483648 and 2147483647" \
+    -I 999999999999999999999
+expect_option_message seed-beyond-int \
+    "$illegal 1e+11 -- should be between -2147483648 and 2147483647" \
+    -I 99999999999
+# The bounds and the value of an integer option print with enough digits to
+# differ, where six significant digits print both as 2.14748e+09.
+expect_option_message seed-above-int \
+    "$illegal 2147483648 -- should be between -2147483648 and 2147483647" \
+    -I 2147483648
+expect_option_message seed-below-int \
+    "$illegal -2147483649 -- should be between -2147483648 and 2147483647" \
+    -I -2147483649
+expect_option_message trials-beyond-int \
+    "$illegal 1e+11 -- should be between 3 and 1000" -t 99999999999
+expect_option_message minimum-nan \
+    "$illegal nan -- should be between 1 and 1e+06" -m nan
+expect_option_message minimum-beyond-float \
+    "$illegal 1e+39 -- should be between 1 and 1e+06" -m 1e39
+expect_option_message confidence-infinite \
+    "$illegal inf -- should be between 0 and 100" -c inf
+expect_option_message confidence-overflow \
+    "$illegal inf -- should be between 0 and 100" -c 1e999
+expect_option_message confidence-range \
+    "$illegal 101 -- should be between 0 and 100" -c 101
+expect_option_message utility-overflow \
+    "$illegal 1e+20 -- should be between 2 and 10000" -u 99999999999999999999
+expect_option_message folds-trailing-text \
+    "    **  Unrecognised option -X 5x" -X 5x
+expect_option_message confidence-trailing-text \
+    "    **  Unrecognised option -c 25x" -c 25x
+expect_option_message trials-not-numeric \
+    "    **  Unrecognised option -t many" -t many
+long_stem=$(printf '%600s' '' | tr ' ' x)
+run_invalid_option long-stem -f "$long_stem"
+
+# An empty value is the number 0, because Release 2.07 only tests that strtod
+# and strtol stopped at the terminating null. A value that underflows is its
+# rounded value, not an overflow. The expected lines come from Release 2.07 on
+# the same data.
+expect_option_accepted()
+{
+    accepted_name=$1
+    expected_line=$2
+    shift 2
+
+    accepted_dir="$test_dir/accepted-$accepted_name"
+    mkdir "$accepted_dir"
+    cp "$script_dir/fixtures/basic/basic.names" \
+        "$script_dir/fixtures/basic/basic.data" "$accepted_dir/"
+    set +e
+    (cd "$accepted_dir" && "$binary" -f basic "$@" > output.raw 2>&1)
+    accepted_status=$?
+    set -e
+    if test "$accepted_status" -ne 0; then
+        printf '%s returned %d, expected 0\n' "$accepted_name" \
+            "$accepted_status" >&2
+        return 1
+    fi
+    if ! grep -F -x -e "$expected_line" "$accepted_dir/output.raw" \
+        > /dev/null ||
+        ! grep -F -x -e 'Decision tree:' "$accepted_dir/output.raw" \
+        > /dev/null; then
+        printf '%s did not train with: %s\n' "$accepted_name" \
+            "$expected_line" >&2
+        cat "$accepted_dir/output.raw" >&2
+        return 1
+    fi
+}
+
+expect_option_accepted seed-empty '	Random seed 0' -I ''
+expect_option_accepted confidence-empty '	Pruning confidence level 0%' -c ''
+expect_option_accepted confidence-underflow \
+    '	Pruning confidence level 0%' -c 1e-400
+expect_option_accepted confidence-subnormal \
+    '	Pruning confidence level 0%' -c 1e-320
+expect_option_message minimum-empty \
+    "$illegal 0 -- should be between 1 and 1e+06" -m ''
+expect_option_message trials-empty \
+    "$illegal 0 -- should be between 3 and 1000" -t ''
+expect_option_message sample-empty \
+    "$illegal 0 -- should be between 0.1 and 99.9" -S ''
+expect_option_message folds-empty \
+    "$illegal 0 -- should be between 2 and 1000" -X ''
+
 # Rules with a costs file on data with no cases or with one class among three.
 # The average cost of the rule normalization is then 0/0. Release 2.07 forms no
 # rules, writes the first class or the only class as the default, and exits 0.
@@ -320,10 +444,18 @@ run_case implicit-unknown tree tree
 run_case implicit-literals tree tree
 run_case implicit-log tree tree
 run_case implicit-divide tree tree
+# Release 2.07 keeps the division precision multiplier in an int that wraps.
+# The expected files come from Release 2.07, whose cuts differ from the
+# unwrapped quotient, and whose multiplier reaches 0 in the last case, so
+# that every value of r becomes unknown and the run stops at the error limit.
+run_case implicit-divide-wrap tree tree
+run_case implicit-divide-wrap rules rules -r
 # The rounding error of division forms in double precision, as in Release 2.07,
 # so that the cut is 0.1662537. A float subtraction gives
 # 0.166254.
 run_case implicit-divide-precision tree tree
+run_case implicit-divide-negative tree tree
+run_case implicit-divide-zero tree - --status 1
 run_case implicit-power tree tree
 run_case multiclass tree tree
 run_case multiclass rules rules -r

@@ -44,6 +44,18 @@ sed -e 's|^id="See5/C5\.0 2\.07 GPL Edition [0-9-][0-9-]*"$|id="See5/C5.0 2.07 G
     "$test_dir/basic.tree" > "$test_dir/model.actual"
 diff -u "$script_dir/expected/basic/subsets.tree" "$test_dir/model.actual"
 
+(
+    cd "$test_dir"
+    "$binary" -f basic -I 17 -u 2 > utility.raw
+    cp basic.rules utility.rules
+    "$binary" -f basic -I 17 -u 2 -v 2 > pruning.raw
+)
+sed -e 's|^id="See5/C5\.0 2\.07 GPL Edition [0-9-][0-9-]*"$|id="See5/C5.0 2.07 GPL Edition <date>"|' \
+    "$test_dir/basic.rules" > "$test_dir/pruned-model.actual"
+sed -e 's|^id="See5/C5\.0 2\.07 GPL Edition [0-9-][0-9-]*"$|id="See5/C5.0 2.07 GPL Edition <date>"|' \
+    "$test_dir/utility.rules" > "$test_dir/utility-model.actual"
+diff -u "$test_dir/utility-model.actual" "$test_dir/pruned-model.actual"
+
 # Rule construction at level 3 prints the pruned tree. The expected output
 # comes from a Release 2.07 `c5.0dbg` build, compiled with `-DVerbOpt` by
 # `tests/reference/build_reference.sh`.

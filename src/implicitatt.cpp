@@ -1,4 +1,5 @@
-/* Modified 2026 by Geoffrey Mainland: check string allocation failures. */
+/* Modified 2026 by Geoffrey Mainland: validate implicit expression bounds and ownership. */
+/* Modified 2026 by Geoffrey Mainland: reproduce Release 2.07's wrapped division precision. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -38,6 +39,7 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 #include <ctype.h>
+#include <vector>
 #include <stdint.h>
 #include <string.h>
 #include <memory>
@@ -50,24 +52,40 @@ struct c50_implicit_state
     }
     ~c50_implicit_state()
     {
-        free(buffer);
-        free(type_stack);
         context->implicit_state = nullptr;
     }
     c50_implicit_state(const c50_implicit_state &) = delete;
     c50_implicit_state &operator=(const c50_implicit_state &) = delete;
 
     c50_context *context;
-    char *buffer = nullptr;
-    int buffer_size = 0;
+    std::vector<char> buffer;
+    int buffer_length = 0;
     int buffer_position = 0;
-    EltRec *type_stack = nullptr;
-    int type_stack_size = 0;
+    std::vector<EltRec> type_stack;
     int type_stack_position = 0;
     int definition_size = 0;
     int definition_position = 0;
     Boolean previous_error = false;
+    int expression_depth = 0;
 };
+
+struct c50_expression_depth
+{
+    explicit c50_expression_depth(c50_implicit_state *owner) : state(owner)
+    {
+        ++state->expression_depth;
+    }
+    ~c50_expression_depth()
+    {
+        --state->expression_depth;
+    }
+    c50_expression_depth(const c50_expression_depth &) = delete;
+    c50_expression_depth &operator=(const c50_expression_depth &) = delete;
+
+    c50_implicit_state *state;
+};
+
+static constexpr int MaxExpressionDepth = 100;
 
 /*  Release 2.07 stores the unknown and N/A markers of a discrete value in a
     continuous slot by their bit patterns.  Copy the bits instead of
@@ -136,7 +154,7 @@ void ImplicitAtt(c50_context *Context, c50_input *Nf)
 
     /*  Allocate initial stack and attribute definition  */
 
-    Context->implicit_state->type_stack = Alloc(Context->implicit_state->type_stack_size=50, EltRec);
+    Context->implicit_state->type_stack.reserve(50);
     Context->implicit_state->type_stack_position = 0;
 
     Context->schema.attribute_definitions[Context->schema.max_attribute] = Alloc(Context->implicit_state->definition_size = 100, DefElt);
@@ -155,6 +173,11 @@ void ImplicitAtt(c50_context *Context, c50_input *Nf)
 
     if ( ! Context->implicit_state->previous_error )
     {
+	if ( Context->implicit_state->type_stack_position != 1 )
+	{
+	    throw c50::exception(c50::error_code::internal_error,
+	                         "invalid implicit expression type stack");
+	}
 	if ( Context->implicit_state->definition_position == 1 && DefOp(Context->schema.attribute_definitions[Context->schema.max_attribute][0]) == OP_ATT &&
 	     strcmp(Context->schema.attribute_names[Context->schema.max_attribute], "case weight") )
 	{
@@ -209,9 +232,10 @@ void ReadDefinition(c50_context *Context, c50_input *f)
 /*   --------------  */
 {
     Boolean	LastWasPeriod=false;
-    char	c;
+    int		c;
 
-    Context->implicit_state->buffer = Alloc(Context->implicit_state->buffer_size=50, char);
+    Context->implicit_state->buffer.clear();
+    Context->implicit_state->buffer.reserve(50);
     Context->implicit_state->buffer_position = 0;
 
     while ( true )
@@ -231,6 +255,8 @@ void ReadDefinition(c50_context *Context, c50_input *f)
 
 	    if ( ! LastWasPeriod ) Append(Context, '.');
 	    Append(Context, 0);
+	    Context->implicit_state->buffer_length =
+		Context->implicit_state->buffer_position - 1;
 
 	    return;
 	}
@@ -244,12 +270,21 @@ void ReadDefinition(c50_context *Context, c50_input *f)
 	{
 	    /*  Escaped character -- bypass any special meaning  */
 
-	    Append(Context, InChar(Context, f));
+	    c = InChar(Context, f);
+	    if ( c == EOF )
+	    {
+		Append(Context, '.');
+		Append(Context, 0);
+		Context->implicit_state->buffer_length =
+		    Context->implicit_state->buffer_position - 1;
+		return;
+	    }
+	    Append(Context, static_cast<char>(c));
 	}
 	else
 	{
 	    LastWasPeriod = ( c == '.' );
-	    Append(Context, c);
+	    Append(Context, static_cast<char>(c));
 	}
     }
 }
@@ -268,12 +303,8 @@ void Append(c50_context *Context, char c)
 {
     if ( c == ' ' && (! Context->implicit_state->buffer_position || Context->implicit_state->buffer[Context->implicit_state->buffer_position-1] == ' ' ) ) return;
 
-    if ( Context->implicit_state->buffer_position >= Context->implicit_state->buffer_size )
-    {
-	Realloc(Context->implicit_state->buffer, Context->implicit_state->buffer_size += 50, char);
-    }
-
-    Context->implicit_state->buffer[Context->implicit_state->buffer_position++] = c;
+    Context->implicit_state->buffer.push_back(c);
+    Context->implicit_state->buffer_position++;
 }
 
 
@@ -294,6 +325,10 @@ Boolean Expression(c50_context *Context)
 /*      ----------  */
 {
     int		Fi=Context->implicit_state->buffer_position;
+
+    if ( Context->implicit_state->expression_depth >= MaxExpressionDepth )
+        FailSyn("expression nested at most 100 levels");
+    c50_expression_depth Depth(Context->implicit_state);
 
     if ( Context->implicit_state->buffer[Context->implicit_state->buffer_position] == ' ' ) Context->implicit_state->buffer_position++;
 
@@ -469,11 +504,15 @@ Boolean Atom(c50_context *Context)
 /*      ----  */
 {
     char	*EndPtr, *Str, Date[11], Time[9];
-    int		o, FirstBN, Fi=Context->implicit_state->buffer_position;
+    int		o, FirstBN, Remaining, Fi=Context->implicit_state->buffer_position;
     ContValue	F;
     Attribute	Att;
 
-    if ( Context->implicit_state->buffer[Context->implicit_state->buffer_position] == ' ' ) Context->implicit_state->buffer_position++;
+    if ( Context->implicit_state->buffer_position < Context->implicit_state->buffer_length &&
+	 Context->implicit_state->buffer[Context->implicit_state->buffer_position] == ' ' ) Context->implicit_state->buffer_position++;
+    if ( Context->implicit_state->buffer_position >= Context->implicit_state->buffer_length ) return false;
+    Remaining = Context->implicit_state->buffer_length -
+		Context->implicit_state->buffer_position;
 
     if ( Context->implicit_state->buffer[Context->implicit_state->buffer_position] == '"' )
     {
@@ -487,7 +526,7 @@ Boolean Atom(c50_context *Context)
 	/*  Make a copy of the string without double quotes  */
 
 	Context->implicit_state->buffer[Context->implicit_state->buffer_position] = '\00';
-	Str = Pstrdup(Context, Context->implicit_state->buffer + FirstBN);
+	Str = Pstrdup(Context, Context->implicit_state->buffer.data() + FirstBN);
 
 	Context->implicit_state->buffer[Context->implicit_state->buffer_position++] = '"';
 	Dump(Context, OP_STR, 0, Str, Fi);
@@ -500,18 +539,19 @@ Boolean Atom(c50_context *Context)
 	Dump(Context, OP_ATT, 0, (String) (intptr_t) Att, Fi);
     }
     else
-    if ( isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position]) )
+    if ( isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position]) )
     {
 	/*  Check for date or time first  */
 
-	if ( ( ( Context->implicit_state->buffer[Context->implicit_state->buffer_position+4] == '/' && Context->implicit_state->buffer[Context->implicit_state->buffer_position+7] == '/' ) ||
+	if ( Remaining >= 10 &&
+	     ( ( Context->implicit_state->buffer[Context->implicit_state->buffer_position+4] == '/' && Context->implicit_state->buffer[Context->implicit_state->buffer_position+7] == '/' ) ||
 	       ( Context->implicit_state->buffer[Context->implicit_state->buffer_position+4] == '-' && Context->implicit_state->buffer[Context->implicit_state->buffer_position+7] == '-' ) ) &&
-	     isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+1]) && isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+2]) &&
-		isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+3]) &&
-	     isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+5]) && isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+6]) &&
-	     isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+8]) && isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+9]) )
+	     isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+1]) && isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+2]) &&
+		isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+3]) &&
+	     isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+5]) && isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+6]) &&
+	     isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+8]) && isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+9]) )
 	{
-	    memcpy(Date, Context->implicit_state->buffer+Context->implicit_state->buffer_position, 10);
+	    memcpy(Date, Context->implicit_state->buffer.data() + Context->implicit_state->buffer_position, 10);
 	    Date[10] = '\00';
 	    if ( (F = DateToDay(Date)) == 0 )
 	    {
@@ -521,12 +561,13 @@ Boolean Atom(c50_context *Context)
 	    Context->implicit_state->buffer_position += 10;
 	}
 	else
-	if ( Context->implicit_state->buffer[Context->implicit_state->buffer_position+2] == ':' && Context->implicit_state->buffer[Context->implicit_state->buffer_position+5] == ':' &&
-	     isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+1]) &&
-	     isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+3]) && isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+4]) &&
-	     isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+6]) && isdigit(Context->implicit_state->buffer[Context->implicit_state->buffer_position+7]) )
+	if ( Remaining >= 8 &&
+	     Context->implicit_state->buffer[Context->implicit_state->buffer_position+2] == ':' && Context->implicit_state->buffer[Context->implicit_state->buffer_position+5] == ':' &&
+	     isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+1]) &&
+	     isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+3]) && isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+4]) &&
+	     isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+6]) && isdigit((unsigned char) Context->implicit_state->buffer[Context->implicit_state->buffer_position+7]) )
 	{
-	    memcpy(Time, Context->implicit_state->buffer+Context->implicit_state->buffer_position, 8);
+	    memcpy(Time, Context->implicit_state->buffer.data() + Context->implicit_state->buffer_position, 8);
 	    Time[8] = '\00';
 	    if ( (F = TimeToSecs(Time)) == 0 )
 	    {
@@ -537,16 +578,17 @@ Boolean Atom(c50_context *Context)
 	}
 	else
 	{
-	    F = strtod(Context->implicit_state->buffer+Context->implicit_state->buffer_position, &EndPtr);
+	    F = strtod(Context->implicit_state->buffer.data() + Context->implicit_state->buffer_position, &EndPtr);
+	    if ( ! isfinite(F) ) FailSyn("finite number");
 
 	    /*  Check for period after integer  */
 
-	    if ( EndPtr > Context->implicit_state->buffer+Context->implicit_state->buffer_position+1 && *(EndPtr-1) == '.' )
+	    if ( EndPtr > Context->implicit_state->buffer.data() + Context->implicit_state->buffer_position+1 && *(EndPtr-1) == '.' )
 	    {
 		EndPtr--;
 	    }
 
-	    Context->implicit_state->buffer_position = EndPtr - Context->implicit_state->buffer;
+	    Context->implicit_state->buffer_position = EndPtr - Context->implicit_state->buffer.data();
 	}
 
 	Dump(Context, OP_NUM, F, Nil, Fi);
@@ -569,6 +611,7 @@ Boolean Atom(c50_context *Context)
     else
     if ( Context->implicit_state->buffer[Context->implicit_state->buffer_position] == '?' )
     {
+	if ( ! Context->implicit_state->type_stack_position ) return false;
 	Context->implicit_state->buffer_position++;
 	if ( Context->implicit_state->type_stack[Context->implicit_state->type_stack_position-1].Type == 'N' )
 	{
@@ -580,8 +623,9 @@ Boolean Atom(c50_context *Context)
 	}
     }
     else
-    if ( ! memcmp(Context->implicit_state->buffer+Context->implicit_state->buffer_position, "N/A", 3) )
+    if ( Find(Context, "N/A") )
     {
+	if ( ! Context->implicit_state->type_stack_position ) return false;
 	Context->implicit_state->buffer_position += 3;
 	if ( Context->implicit_state->type_stack[Context->implicit_state->type_stack_position-1].Type == 'N' )
 	{
@@ -612,9 +656,14 @@ Boolean Atom(c50_context *Context)
 Boolean Find(c50_context *Context, const char *S)
 /*      ----  */
 {
-    if ( Context->implicit_state->buffer[Context->implicit_state->buffer_position] == ' ' ) Context->implicit_state->buffer_position++;
+    if ( Context->implicit_state->buffer_position < Context->implicit_state->buffer_length &&
+	 Context->implicit_state->buffer[Context->implicit_state->buffer_position] == ' ' ) Context->implicit_state->buffer_position++;
 
-    return ( ! Context->implicit_state->buffer[Context->implicit_state->buffer_position] ? false : ! memcmp(Context->implicit_state->buffer+Context->implicit_state->buffer_position, S, strlen(S)) );
+    const int Remaining = Context->implicit_state->buffer_length -
+			  Context->implicit_state->buffer_position;
+    const size_t Length = strlen(S);
+    return ( Remaining > 0 && Length <= static_cast<size_t>(Remaining) &&
+	     ! memcmp(Context->implicit_state->buffer.data() + Context->implicit_state->buffer_position, S, Length) );
 }
 
 
@@ -694,7 +743,7 @@ void DefSyntaxError(c50_context *Context, const char *Msg)
 
     if ( ! Context->implicit_state->previous_error )
     {
-	RestOfText = Context->implicit_state->buffer + Context->implicit_state->buffer_position;
+	RestOfText = Context->implicit_state->buffer.data() + Context->implicit_state->buffer_position;
 
 	/*  Abbreviate text if longer than 12 characters  */
 
@@ -717,56 +766,63 @@ void DefSyntaxError(c50_context *Context, const char *Msg)
 
 
 void DefSemanticsError(c50_context *Context, int Fi, const char *Msg,
-		       int OpCode)
+                       int OpCode)
 /*   -----------------  */
 {
-    char	Exp[1000], XMsg[1008], Op[1000];
+    if ( Context->implicit_state->previous_error ) return;
 
-    if ( ! Context->implicit_state->previous_error )
+    if ( Fi < 0 || Fi > Context->implicit_state->buffer_position )
     {
-	/*  Abbreviate the input if necessary  */
-
-	if ( Context->implicit_state->buffer_position - Fi > 23 )
-	{
-	    snprintf(Exp, sizeof(Exp), "%.10s...%.10s",
-		     Context->implicit_state->buffer+Fi, Context->implicit_state->buffer+Context->implicit_state->buffer_position-10);
-	}
-	else
-	{
-	    snprintf(Exp, sizeof(Exp), "%.*s", Context->implicit_state->buffer_position - Fi, Context->implicit_state->buffer+Fi);
-	}
-
-	switch ( OpCode )
-	{
-	    case OP_AND:	snprintf(Op, sizeof(Op), "%s", "and"); break;
-	    case OP_OR:		snprintf(Op, sizeof(Op), "%s", "or"); break;
-	    case OP_SEQ:
-	    case OP_EQ:		snprintf(Op, sizeof(Op), "%s", "="); break;
-	    case OP_SNE:
-	    case OP_NE:		snprintf(Op, sizeof(Op), "%s", "<>"); break;
-	    case OP_GT:		snprintf(Op, sizeof(Op), "%s", ">"); break;
-	    case OP_GE:		snprintf(Op, sizeof(Op), "%s", ">="); break;
-	    case OP_LT:		snprintf(Op, sizeof(Op), "%s", "<"); break;
-	    case OP_LE:		snprintf(Op, sizeof(Op), "%s", "<="); break;
-	    case OP_PLUS:	snprintf(Op, sizeof(Op), "%s", "+"); break;
-	    case OP_MINUS:	snprintf(Op, sizeof(Op), "%s", "-"); break;
-	    case OP_UMINUS:	snprintf(Op, sizeof(Op), "%s", "unary -"); break;
-	    case OP_MULT:	snprintf(Op, sizeof(Op), "%s", "*"); break;
-	    case OP_DIV:	snprintf(Op, sizeof(Op), "%s", "/"); break;
-	    case OP_MOD:	snprintf(Op, sizeof(Op), "%s", "%"); break;
-	    case OP_POW:	snprintf(Op, sizeof(Op), "%s", "^"); break;
-	    case OP_SIN:	snprintf(Op, sizeof(Op), "%s", "sin"); break;
-	    case OP_COS:	snprintf(Op, sizeof(Op), "%s", "cos"); break;
-	    case OP_TAN:	snprintf(Op, sizeof(Op), "%s", "tan"); break;
-	    case OP_LOG:	snprintf(Op, sizeof(Op), "%s", "log"); break;
-	    case OP_EXP:	snprintf(Op, sizeof(Op), "%s", "exp"); break;
-	    case OP_INT:	snprintf(Op, sizeof(Op), "%s", "int");
-	}
-
-	snprintf(XMsg, sizeof(XMsg), "%s with '%s'", Msg, Op);
-	ErrorContext(Context, BADDEF2, Exp, XMsg);
-	Context->implicit_state->previous_error = true;
+        throw c50::exception(c50::error_code::internal_error,
+                             "invalid implicit expression bounds");
     }
+    const int Length = Context->implicit_state->buffer_position - Fi;
+    const char *Start = Context->implicit_state->buffer.data() + Fi;
+    std::string Exp;
+    if ( Length > 23 )
+    {
+        Exp.assign(Start, 10);
+        Exp += "...";
+        Exp.append(Start + Length - 10, 10);
+    }
+    else
+    {
+        Exp.assign(Start, static_cast<size_t>(Length));
+    }
+
+    const char *Op = "unknown operator";
+    switch ( OpCode )
+    {
+        case OP_AND: Op = "and"; break;
+        case OP_OR: Op = "or"; break;
+        case OP_SEQ:
+        case OP_EQ: Op = "="; break;
+        case OP_SNE:
+        case OP_NE: Op = "<>"; break;
+        case OP_GT: Op = ">"; break;
+        case OP_GE: Op = ">="; break;
+        case OP_LT: Op = "<"; break;
+        case OP_LE: Op = "<="; break;
+        case OP_PLUS: Op = "+"; break;
+        case OP_MINUS: Op = "-"; break;
+        case OP_UMINUS: Op = "unary -"; break;
+        case OP_MULT: Op = "*"; break;
+        case OP_DIV: Op = "/"; break;
+        case OP_MOD: Op = "%"; break;
+        case OP_POW: Op = "^"; break;
+        case OP_SIN: Op = "sin"; break;
+        case OP_COS: Op = "cos"; break;
+        case OP_TAN: Op = "tan"; break;
+        case OP_LOG: Op = "log"; break;
+        case OP_EXP: Op = "exp"; break;
+        case OP_INT: Op = "int"; break;
+    }
+
+    const std::string XMsg = std::string(Msg) + " with " +
+                             static_cast<char>(39) + Op +
+                             static_cast<char>(39);
+    ErrorContext(Context, BADDEF2, Exp.c_str(), XMsg.c_str());
+    Context->implicit_state->previous_error = true;
 }
 
 
@@ -829,9 +885,31 @@ Boolean UpdateTStack(c50_context *Context, char OpCode, ContValue F, String S,
 {
     (void) F;
 
-    if ( Context->implicit_state->type_stack_position >= Context->implicit_state->type_stack_size )
+    int Required = 0;
+    switch ( OpCode )
     {
-	Realloc(Context->implicit_state->type_stack, Context->implicit_state->type_stack_size += 50, EltRec);
+	case OP_AND: case OP_OR: case OP_EQ: case OP_NE:
+	case OP_GT: case OP_GE: case OP_LT: case OP_LE:
+	case OP_SEQ: case OP_SNE: case OP_PLUS: case OP_MINUS:
+	case OP_MULT: case OP_DIV: case OP_MOD: case OP_POW:
+	    Required = 2;
+	    break;
+	case OP_UMINUS: case OP_SIN: case OP_COS: case OP_TAN:
+	case OP_LOG: case OP_EXP: case OP_INT:
+	    Required = 1;
+	    break;
+    }
+    if ( Context->implicit_state->type_stack_position < Required )
+    {
+	throw c50::exception(c50::error_code::internal_error,
+	                     "invalid implicit expression type stack");
+    }
+
+    if ( static_cast<size_t>(Context->implicit_state->type_stack_position) >=
+         Context->implicit_state->type_stack.size() )
+    {
+	Context->implicit_state->type_stack.resize(
+	    static_cast<size_t>(Context->implicit_state->type_stack_position) + 1);
     }
 
     switch ( OpCode )
@@ -941,8 +1019,8 @@ Boolean UpdateTStack(c50_context *Context, char OpCode, ContValue F, String S,
 
 #define	CUnknownVal(AV)		(AV.cval==UnknownContValue())
 #define	DUnknownVal(AV)		(AV.dval==UNKNOWN)
-#define DUNA(a)	(DUnknownVal(XStack[a]) || NotApplicVal(XStack[a]))
-#define CUNA(a)	(CUnknownVal(XStack[a]) || NotApplicVal(XStack[a]))
+#define DUNA(a)	(DUnknownVal(StackAt(a)) || NotApplicVal(StackAt(a)))
+#define CUNA(a)	(CUnknownVal(StackAt(a)) || NotApplicVal(StackAt(a)))
 #define	C1(x)	(CUNA(XSN-1) ? UnknownContValue() : (x))
 #define	C2(x)	(CUNA(XSN-1) || CUNA(XSN-2) ? UnknownContValue() : (x))
 #define	CD2(x)	(CUNA(XSN-1) || CUNA(XSN-2) ? UNKNOWN : (x))
@@ -952,13 +1030,28 @@ Boolean UpdateTStack(c50_context *Context, char OpCode, ContValue F, String S,
 AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 /*       -----------  */
 {
-    XStackElt	XStack[100];			/* allows 100-level nesting  */
-    int		XSN=0, DN, bv1, bv2, Mult;
-    double	cv1, cv2;
+    std::vector<XStackElt> XStack;
+    XStack.reserve(MaxExpressionDepth);
+    int		XSN=0, DN, bv1, bv2;
+    double	cv1, cv2, Mult;
     String	sv1, sv2;
     Attribute	Att;
     DefElt	DElt;
     AttValue	ReturnVal;
+
+    const auto InvalidStack = []() -> void {
+	throw c50::exception(c50::error_code::internal_error,
+	                     "invalid compiled implicit expression");
+    };
+    const auto StackAt = [&](int Index) -> XStackElt & {
+	if ( Index < 0 || Index >= XSN ) InvalidStack();
+	return XStack[static_cast<size_t>(Index)];
+    };
+    const auto StackPush = [&]() -> XStackElt & {
+	if ( XSN >= MaxExpressionDepth ) InvalidStack();
+	if ( static_cast<size_t>(XSN) == XStack.size() ) XStack.emplace_back();
+	return XStack[static_cast<size_t>(XSN++)];
+    };
 
     for ( DN = 0 ; ; DN++)
     {
@@ -969,86 +1062,86 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 
 		    if ( Continuous(Att) )
 		    {
-			XStack[XSN++].cval = CVal(Case, Att);
+			StackPush().cval = CVal(Case, Att);
 		    }
 		    else
 		    {
-			XStack[XSN++].sval =
+			StackPush().sval =
 			    ( Unknown(Case, Att) && ! NotApplic(Context, Case, Att) ? 0 :
 			      Context->schema.attribute_value_names[Att][XDVal(Case, Att)] );
 		    }
 		    break;
 
 	    case OP_NUM:
-		    XStack[XSN++].cval = DefNVal(DElt);
+		    StackPush().cval = DefNVal(DElt);
 		    break;
 
 	    case OP_STR:
-		    XStack[XSN++].sval = DefSVal(DElt);
+		    StackPush().sval = DefSVal(DElt);
 		    break;
 
 	    case OP_AND:
-		    bv1 = XStack[XSN-2].dval;
-		    bv2 = XStack[XSN-1].dval;
-		    XStack[XSN-2].dval = ( bv1 == 3 || bv2 == 3 ? 3 :
+		    bv1 = StackAt(XSN-2).dval;
+		    bv2 = StackAt(XSN-1).dval;
+		    StackAt(XSN-2).dval = ( bv1 == 3 || bv2 == 3 ? 3 :
 					   D2(bv1 == 2 && bv2 == 2 ? 2 : 3) );
 		    XSN--;
 		    break;
 
 	    case OP_OR:
-		    bv1 = XStack[XSN-2].dval;
-		    bv2 = XStack[XSN-1].dval;
-		    XStack[XSN-2].dval = ( bv1 == 2 || bv2 == 2 ? 2 :
+		    bv1 = StackAt(XSN-2).dval;
+		    bv2 = StackAt(XSN-1).dval;
+		    StackAt(XSN-2).dval = ( bv1 == 2 || bv2 == 2 ? 2 :
 					   D2(bv1 == 2 || bv2 == 2 ? 2 : 3) );
 		    XSN--;
 		    break;
 
 	    case OP_EQ:
-		    cv1 = XStack[XSN-2].cval;
-		    cv2 = XStack[XSN-1].cval;
-		    XStack[XSN-2].dval = ( cv1 == cv2 ? 2 : 3 );
+		    cv1 = StackAt(XSN-2).cval;
+		    cv2 = StackAt(XSN-1).cval;
+		    StackAt(XSN-2).dval = ( cv1 == cv2 ? 2 : 3 );
 		    XSN--;
 		    break;
 
 	    case OP_NE:
-		    cv1 = XStack[XSN-2].cval;
-		    cv2 = XStack[XSN-1].cval;
-		    XStack[XSN-2].dval = ( cv1 != cv2 ? 2 : 3 );
+		    cv1 = StackAt(XSN-2).cval;
+		    cv2 = StackAt(XSN-1).cval;
+		    StackAt(XSN-2).dval = ( cv1 != cv2 ? 2 : 3 );
 		    XSN--;
 		    break;
 
 	    case OP_GT:
-		    cv1 = XStack[XSN-2].cval;
-		    cv2 = XStack[XSN-1].cval;
-		    XStack[XSN-2].dval = CD2(cv1 > cv2 ? 2 : 3);
+		    cv1 = StackAt(XSN-2).cval;
+		    cv2 = StackAt(XSN-1).cval;
+		    StackAt(XSN-2).dval = CD2(cv1 > cv2 ? 2 : 3);
 		    XSN--;
 		    break;
 
 	    case OP_GE:
-		    cv1 = XStack[XSN-2].cval;
-		    cv2 = XStack[XSN-1].cval;
-		    XStack[XSN-2].dval = CD2(cv1 >= cv2 ? 2 : 3);
+		    cv1 = StackAt(XSN-2).cval;
+		    cv2 = StackAt(XSN-1).cval;
+		    StackAt(XSN-2).dval = CD2(cv1 >= cv2 ? 2 : 3);
 		    XSN--;
 		    break;
 
 	    case OP_LT:
-		    cv1 = XStack[XSN-2].cval;
-		    cv2 = XStack[XSN-1].cval;
-		    XStack[XSN-2].dval = CD2(cv1 < cv2 ? 2 : 3);
+		    cv1 = StackAt(XSN-2).cval;
+		    cv2 = StackAt(XSN-1).cval;
+		    StackAt(XSN-2).dval = CD2(cv1 < cv2 ? 2 : 3);
 		    XSN--;
 		    break;
 
 	    case OP_LE:
-		    cv1 = XStack[XSN-2].cval;
-		    cv2 = XStack[XSN-1].cval;
-		    XStack[XSN-2].dval = CD2(cv1 <= cv2 ? 2 : 3);
+		    cv1 = StackAt(XSN-2).cval;
+		    cv2 = StackAt(XSN-1).cval;
+		    StackAt(XSN-2).dval = CD2(cv1 <= cv2 ? 2 : 3);
 		    XSN--;
 		    break;
 
 	    case OP_SEQ:
-		    sv1 = XStack[XSN-2].sval;
-		    sv2 = XStack[XSN-1].sval;
-		    XStack[XSN-2].dval =
+		    sv1 = StackAt(XSN-2).sval;
+		    sv2 = StackAt(XSN-1).sval;
+		    StackAt(XSN-2).dval =
 			( ! sv1 && ! sv2 ? 2 :
 			  ! sv1 || ! sv2 ? 3 :
 			  ! strcmp(sv1, sv2) ? 2 : 3 );
@@ -1056,9 +1149,9 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 		    break;
 
 	    case OP_SNE:
-		    sv1 = XStack[XSN-2].sval;
-		    sv2 = XStack[XSN-1].sval;
-		    XStack[XSN-2].dval =
+		    sv1 = StackAt(XSN-2).sval;
+		    sv2 = StackAt(XSN-1).sval;
+		    StackAt(XSN-2).dval =
 			( ! sv1 && ! sv2 ? 3 :
 			  ! sv1 || ! sv2 ? 2 :
 			  strcmp(sv1, sv2) ? 2 : 3 );
@@ -1066,64 +1159,77 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 		    break;
 
 	    case OP_PLUS:
-		    cv1 = XStack[XSN-2].cval;
-		    cv2 = XStack[XSN-1].cval;
-		    XStack[XSN-2].cval = C2(cv1 + cv2);
+		    cv1 = StackAt(XSN-2).cval;
+		    cv2 = StackAt(XSN-1).cval;
+		    StackAt(XSN-2).cval = C2(cv1 + cv2);
 		    XSN--;
 		    break;
 
 	    case OP_MINUS:
-		    cv1 = XStack[XSN-2].cval;
-		    cv2 = XStack[XSN-1].cval;
-		    XStack[XSN-2].cval = C2(cv1 - cv2);
+		    cv1 = StackAt(XSN-2).cval;
+		    cv2 = StackAt(XSN-1).cval;
+		    StackAt(XSN-2).cval = C2(cv1 - cv2);
 		    XSN--;
 		    break;
 
 	    case OP_MULT:
-		    cv1 = XStack[XSN-2].cval;
-		    cv2 = XStack[XSN-1].cval;
-		    XStack[XSN-2].cval = C2(cv1 * cv2);
+		    cv1 = StackAt(XSN-2).cval;
+		    cv2 = StackAt(XSN-1).cval;
+		    StackAt(XSN-2).cval = C2(cv1 * cv2);
 		    XSN--;
 		    break;
 
 	    case OP_DIV:
 		    /*  Note: have to set precision of result  */
 
-		    cv1 = XStack[XSN-2].cval;
-		    cv2 = XStack[XSN-1].cval;
-		    if ( ! cv2 ||
-			 CUnknownVal(XStack[XSN-2]) ||
-			 CUnknownVal(XStack[XSN-1]) ||
-			 NotApplicVal(XStack[XSN-2]) ||
-			 NotApplicVal(XStack[XSN-1]) )
+		    cv1 = StackAt(XSN-2).cval;
+		    cv2 = StackAt(XSN-1).cval;
+		    /*  An infinite divisor would never finish the precision
+			scaling loop below, so treat it like a zero divisor  */
+
+		    if ( ! cv2 || isinf(cv2) ||
+			 CUnknownVal(StackAt(XSN-2)) ||
+			 CUnknownVal(StackAt(XSN-1)) ||
+			 NotApplicVal(StackAt(XSN-2)) ||
+			 NotApplicVal(StackAt(XSN-1)) )
 		    {
-			XStack[XSN-2].cval = UnknownContValue();
+			StackAt(XSN-2).cval = UnknownContValue();
 		    }
 		    else
 		    {
-			Mult = Denominator(cv1);
+			/*  Release 2.07 keeps the precision multiplier in an int,
+			    which wraps modulo 2^32 once the numerator's decimals
+			    and the divisor's stripped digits reach 10. The wrap
+			    is reproduced here with unsigned arithmetic, so that
+			    the quotient rounds as it does in Release 2.07, and
+			    a multiplier that wraps to 0 yields NaN as there  */
+
+			uint32_t Wrapped = (uint32_t) Denominator(cv1);
 			cv1 = cv1 / cv2;
 			while ( fabs(cv2) > 1 )
 			{
-			    Mult *= 10;
+			    Wrapped *= 10u;
 			    cv2 /= 10;
 			}
-			XStack[XSN-2].cval = rint(cv1 * Mult) / Mult;
+			Mult = Wrapped <= (uint32_t) INT32_MAX ?
+			       (double) Wrapped : (double) Wrapped - 4294967296.0;
+			StackAt(XSN-2).cval =
+			    ( Mult == 0 ? nan("") : rint(cv1 * Mult) / Mult );
 		    }
 		    XSN--;
 		    break;
 
 	    case OP_MOD:
-		    cv1 = XStack[XSN-2].cval;
-		    cv2 = XStack[XSN-1].cval;
-		    XStack[XSN-2].cval = C2(fmod(cv1, cv2));
+		    cv1 = StackAt(XSN-2).cval;
+		    cv2 = StackAt(XSN-1).cval;
+		    StackAt(XSN-2).cval = C2(fmod(cv1, cv2));
 		    XSN--;
 		    break;
 
 	    case OP_POW:
-		    cv1 = XStack[XSN-2].cval;
-		    cv2 = XStack[XSN-1].cval;
-		    XStack[XSN-2].cval =
+		    cv1 = StackAt(XSN-2).cval;
+		    cv2 = StackAt(XSN-1).cval;
+		    StackAt(XSN-2).cval =
 			( CUNA(XSN-1) || CUNA(XSN-2) ||
 			  ( cv1 < 0 && ceil(cv2) != cv2 ) ? UnknownContValue() :
 			  pow(cv1, cv2) );
@@ -1131,43 +1237,44 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 		    break;
 
 	    case OP_UMINUS:
-		    cv1 = XStack[XSN-1].cval;
-		    XStack[XSN-1].cval = C1(-cv1);
+		    cv1 = StackAt(XSN-1).cval;
+		    StackAt(XSN-1).cval = C1(-cv1);
 		    break;
 
 	    case OP_SIN:
-		    cv1 = XStack[XSN-1].cval;
-		    XStack[XSN-1].cval = C1(sin(cv1));
+		    cv1 = StackAt(XSN-1).cval;
+		    StackAt(XSN-1).cval = C1(sin(cv1));
 		    break;
 
 	    case OP_COS:
-		    cv1 = XStack[XSN-1].cval;
-		    XStack[XSN-1].cval = C1(cos(cv1));
+		    cv1 = StackAt(XSN-1).cval;
+		    StackAt(XSN-1).cval = C1(cos(cv1));
 		    break;
 
 	    case OP_TAN:
-		    cv1 = XStack[XSN-1].cval;
-		    XStack[XSN-1].cval = C1(tan(cv1));
+		    cv1 = StackAt(XSN-1).cval;
+		    StackAt(XSN-1).cval = C1(tan(cv1));
 		    break;
 
 	    case OP_LOG:
-		    cv1 = XStack[XSN-1].cval;
-		    XStack[XSN-1].cval =
+		    cv1 = StackAt(XSN-1).cval;
+		    StackAt(XSN-1).cval =
 			( CUNA(XSN-1) || cv1 <= 0 ? UnknownContValue() : log(cv1) );
 		    break;
 
 	    case OP_EXP:
-		    cv1 = XStack[XSN-1].cval;
-		    XStack[XSN-1].cval = C1(exp(cv1));
+		    cv1 = StackAt(XSN-1).cval;
+		    StackAt(XSN-1).cval = C1(exp(cv1));
 		    break;
 
 	    case OP_INT:
-		    cv1 = XStack[XSN-1].cval;
-		    XStack[XSN-1].cval = C1(rint(cv1));
+		    cv1 = StackAt(XSN-1).cval;
+		    StackAt(XSN-1).cval = C1(rint(cv1));
 		    break;
 
 	    case OP_END:
-		    ReturnVal.cval = XStack[0].cval;	/* cval >= dval bytes */
+		    if ( XSN != 1 ) InvalidStack();
+		    ReturnVal.cval = StackAt(0).cval;	/* cval >= dval bytes */
 		    return ReturnVal;
 	}
     }

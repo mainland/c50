@@ -66,7 +66,8 @@ void CrossVal(c50_context *Context)
 
     Context->cross_validation.results	 = AllocZero((Context->cross_validation.saved_folds = Context->options.folds), float *);
     Context->cross_validation.blocked_cases	 = Alloc(Context->cases.max_case+1, DataRec);
-    Context->cross_validation.confusion_matrix = AllocZero((Context->schema.max_class+1)*(Context->schema.max_class+1), CaseNo);
+    Context->cross_validation.confusion_matrix = AllocZero(static_cast<size_t>(Context->schema.max_class + 1) *
+	                                                      static_cast<size_t>(Context->schema.max_class + 1), CaseNo);
 
     Prepare(Context);
 
@@ -117,7 +118,7 @@ void CrossVal(c50_context *Context)
 
 		/*  Add to confusion matrix for target classifier  */
 
-		Context->cross_validation.confusion_matrix[ Class(Context->cross_validation.blocked_cases[Next])*(Context->schema.max_class+1)+c ]++;
+		Context->cross_validation.confusion_matrix[ FlatIndex(Class(Context->cross_validation.blocked_cases[Next]), Context->schema.max_class+1, c) ]++;
 
 		Next = (Next + 1) % (SaveMaxCase + 1);
 	    }
@@ -143,7 +144,7 @@ void CrossVal(c50_context *Context)
 
 		/*  Add to confusion matrix for target classifier  */
 
-		Context->cross_validation.confusion_matrix[ Class(Context->cross_validation.blocked_cases[Next])*(Context->schema.max_class+1)+c ]++;
+		Context->cross_validation.confusion_matrix[ FlatIndex(Class(Context->cross_validation.blocked_cases[Next]), Context->schema.max_class+1, c) ]++;
 
 		Next = (Next + 1) % (SaveMaxCase + 1);
 	    }
