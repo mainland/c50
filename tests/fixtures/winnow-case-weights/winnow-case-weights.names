@@ -1,0 +1,5 @@
+no, yes.
+
+signal: continuous.
+noise: continuous.
+case weight: continuous.

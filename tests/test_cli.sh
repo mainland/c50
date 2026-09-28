@@ -431,6 +431,8 @@ run_case basic cross-validation - -X 5 -I 17
 run_case print-rounding cross-validation - -X 3 -b -I 3
 run_case boost boost tree -t 5
 run_case case-weight case-weight tree
+run_case winnow-case-weights winnow tree -w
+run_case winnow-case-weight-costs winnow tree --with-costs -w
 # Two-class costs and a low confidence factor raise the pessimistic error
 # estimate of the root's subtree above the number of cases, and neither branch
 # of the root is a subtree. Release 2.07 replaces the root with a branch that

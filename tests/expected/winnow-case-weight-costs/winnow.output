@@ -1,0 +1,46 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `winnow-case-weight-costs'
+	Winnow attributes
+
+Read 55 cases (3 attributes) from winnow-case-weight-costs.data
+Using relative case weighting
+Read misclassification costs from winnow-case-weight-costs.costs
+
+1 attribute winnowed
+Estimated importance of remaining attributes:
+
+     88%  signal
+
+Decision tree:
+
+signal > 7: yes (16.5)
+signal <= 7:
+:...signal <= 2.5: no (18/0.7)
+    signal > 2.5: yes (20.5/12.6)
+
+
+Evaluation on training data (55 cases):
+
+	       Decision Tree
+	  -----------------------
+	  Size      Errors   Cost
+
+	     3   14(25.5%)   0.36   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	    13    11    (a): class no
+	     3    28    (b): class yes
+
+
+	Attribute usage:
+
+	    100%  signal
+
+
+Time: <elapsed> secs
