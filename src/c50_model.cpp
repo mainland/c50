@@ -41,6 +41,21 @@ struct c50::detail::model_data
     std::string costs_data;
 };
 
+struct c50::detail::predictor_data
+{
+    model_data model;
+    std::unique_ptr<c50_context> workspace;
+
+    explicit predictor_data(const model_data &source) : model(source) {}
+    ~predictor_data() { reset(); }
+
+    void reset()
+    {
+        if (workspace) Cleanup(workspace.get());
+        workspace.reset();
+    }
+};
+
 struct c50::detail::prediction_data
 {
     std::vector<std::string> class_names;
@@ -533,7 +548,7 @@ static void CleanupTraining(c50_context *Context, void *user_data)
     state->diagnostics.reset();
 }
 
-static void PredictModel(c50_context *Context, void *user_data)
+static void PredictParsedModel(c50_context *Context, void *user_data)
 {
     c50_predict_state *state = static_cast<c50_predict_state *>(user_data);
     c50_input cases_input;
@@ -541,7 +556,9 @@ static void PredictModel(c50_context *Context, void *user_data)
     CaseNo row;
     ClassNo class_number, predicted;
 
-    ParseModel(Context, state->model);
+    Context->io.error_count = 0;
+    Context->line_buffer.clear();
+    Context->line_buffer_position = 0;
 
     /* Sampling is a training-time setting recorded for reproducibility.  It
        must not discard cases supplied to the prediction API. */
@@ -592,6 +609,51 @@ static void PredictModel(c50_context *Context, void *user_data)
                 Context->class_sum[class_number];
         }
     }
+}
+
+static void PredictModel(c50_context *Context, void *user_data)
+{
+    auto *state = static_cast<c50_predict_state *>(user_data);
+    ParseModel(Context, state->model);
+    PredictParsedModel(Context, state);
+}
+
+static void CleanupPredictionBatch(c50_context *Context, void *)
+{
+    FreeData(Context);
+    free(Context->cases.some_missing);
+    free(Context->cases.some_not_applicable);
+    Context->cases.some_missing = nullptr;
+    Context->cases.some_not_applicable = nullptr;
+    c50_clear_prediction_state(Context);
+}
+
+static void PreparePredictor(c50_context *Context, void *user_data)
+{
+    ParseModel(Context, static_cast<c50_model *>(user_data));
+}
+
+static void EnsurePredictor(c50::detail::predictor_data &data)
+{
+    if (!data.workspace) {
+        data.workspace = c50_make_context();
+        c50_run_operation(data.workspace.get(), PreparePredictor, nullptr, &data.model);
+    }
+}
+
+static owned_predictions RunPredictor(c50::detail::predictor_data &data,
+                                      c50_predict_state &state)
+{
+    try {
+        EnsurePredictor(data);
+        c50_run_operation(data.workspace.get(), PredictParsedModel,
+                          CleanupPredictionBatch, &state);
+    } catch (...) {
+        // Discard all mutable parser state after failure. The next call reparses.
+        data.reset();
+        throw;
+    }
+    return std::move(state.predictions);
 }
 
 static void CleanupPrediction(c50_context *Context, void *user_data)
@@ -651,6 +713,35 @@ model_inspection model::inspect(context &workspace) const
     c50_inspect_state state{data_.get(), {}};
     c50_run_operation(workspace.state_.get(), InspectModel, CleanupModelLoad, &state);
     return std::move(state.result);
+}
+
+predictor model::prepare_predictor() const
+{
+    auto data = std::make_unique<detail::predictor_data>(*data_);
+    EnsurePredictor(*data);
+    return predictor(std::move(data));
+}
+
+predictor::predictor(std::unique_ptr<detail::predictor_data> data) : data_(std::move(data)) {}
+predictor::~predictor() = default;
+predictor::predictor(predictor &&) noexcept = default;
+predictor &predictor::operator=(predictor &&) noexcept = default;
+
+predictions predictor::predict(std::string_view cases)
+{
+    validate_text(cases);
+    c50_predict_state state{};
+    state.cases_data = cases.data();
+    state.cases_size = cases.size();
+    return predictions(RunPredictor(*data_, state));
+}
+
+predictions predictor::predict(const dense_dataset &cases)
+{
+    auto dataset = validate_dense(cases, false);
+    c50_predict_state state{};
+    state.dense_dataset = &dataset;
+    return predictions(RunPredictor(*data_, state));
 }
 
 model_kind model::kind() const noexcept { return data_->kind; }

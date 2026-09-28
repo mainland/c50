@@ -227,8 +227,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         """
         X_checked = self._validate_prediction_input(X)
         indices = np.empty(X_checked.shape[0], dtype=np.intp)
+        predictor = self.model_.prepare_predictor()
         for row_slice, values in self._prediction_batches(X_checked):
-            details = self.model_.predict_details_dense(values)
+            details = predictor.predict_details_dense(values)
             indices[row_slice] = np.asarray(details.class_indices, dtype=np.intp)
         return self.classes_[indices]
 
@@ -250,8 +251,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             (X_checked.shape[0], self.classes_.shape[0]),
             dtype=np.float64,
         )
+        predictor = self.model_.prepare_predictor()
         for row_slice, values in self._prediction_batches(X_checked):
-            details = self.model_.predict_details_dense(values)
+            details = predictor.predict_details_dense(values)
             scores[row_slice] = np.asarray(details.scores, dtype=np.float64)
         return scores
 
