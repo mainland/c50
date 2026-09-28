@@ -15,22 +15,34 @@ concurrency:
 
 jobs:
   native:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         include:
-          - cc: gcc
+          - os: ubuntu-24.04
+            cc: gcc
             cxx: g++
-          - cc: clang
+          - os: ubuntu-24.04
+            cc: clang
+            cxx: clang++
+          - os: ubuntu-24.04-arm
+            cc: gcc
+            cxx: g++
+          - os: macos-14
+            cc: clang
             cxx: clang++
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Install native test dependencies
+      - name: Install Linux native test dependencies
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y catch2
+      - name: Install macOS native test dependencies
+        if: runner.os == 'macOS'
+        run: brew install catch2
       # Verify that targets request C++17 even with an older project default.
       - name: Configure
         run: >-
@@ -47,7 +59,7 @@ jobs:
           cmake --build build --parallel 2
           ctest --test-dir build --output-on-failure
       - name: Check production and verbose Make workflows
-        if: matrix.cc == 'gcc'
+        if: matrix.os == 'ubuntu-24.04' && matrix.cc == 'gcc'
         run: |
           make -j2 test
           make -j2 c5.0dbg
@@ -56,6 +68,22 @@ jobs:
   python-and-docs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python: '3.12'
+            dependencies: latest
+            constraints: ''
+          - python: '3.12'
+            dependencies: minimum
+            constraints: 'numpy==1.26.4 scikit-learn==1.6.1'
+          - python: '3.13'
+            dependencies: latest
+            constraints: ''
+          - python: '3.14'
+            dependencies: latest
+            constraints: ''
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -63,13 +91,13 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python }}
           cache: pip
       - name: Install documentation tools and the package
         run: |
           sudo apt-get update
           sudo apt-get install -y doxygen graphviz
-          python -m pip install '.[test,docs]'
+          python -m pip install '.[test,docs]' ${{ matrix.constraints }}
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: '2'
       - name: Test the installed Python package and public types
@@ -79,4 +107,5 @@ jobs:
           python -m mypy.stubtest --allowlist tests/typing/stubtest-allowlist.txt c50._c50
           python tests/benchmark_smoke.py
       - name: Build strict Doxygen and Sphinx documentation
+        if: matrix.python == '3.12' && matrix.dependencies == 'latest'
         run: python -m sphinx -W --keep-going -b html docs docs/_build/html

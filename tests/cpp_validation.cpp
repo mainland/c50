@@ -92,6 +92,29 @@ static void model_validation()
     }
 }
 
+static void continuous_text_values()
+{
+    c50::context context;
+    auto model = c50::model::load(context, c50::model_kind::tree, names, tree);
+    for (const std::string value : {"nan", "inf", "-inf", "1e9999"}) {
+        rejects(parse, [&] { model.predict(context, value + ", alpha, ?\n"); });
+        require(model.predict(context, "2, alpha, ?\n").class_index(0) == 1,
+                "prediction after rejecting nonfinite text");
+    }
+    auto result = model.predict(context,
+        "3.4028234663852886e38, alpha, ?\n"
+        "-3.4028234663852886e38, alpha, ?\n"
+        "1e-40, alpha, ?\n"
+        "0, alpha, ?\n-0, alpha, ?\n");
+    require(result.size() == 5, "finite text row count");
+    for (std::size_t row = 0; row < result.size(); ++row) {
+        const std::size_t expected = row == 0 ? 1 : 0;
+        require(result.class_index(row) == expected && result.confidence(row) == 1 &&
+                result.score(row, expected) == 1 && result.score(row, 1 - expected) == 0,
+                "finite text prediction");
+    }
+}
+
 static void training_validation()
 {
     c50::context context;
@@ -165,6 +188,6 @@ static void boosted_missing_values()
 }
 int main()
 {
-    try { model_validation(); training_validation(); boosted_missing_values(); }
+    try { model_validation(); continuous_text_values(); training_validation(); boosted_missing_values(); }
     catch (const std::exception &error) { std::cerr << error.what() << '\n'; return 1; }
 }
