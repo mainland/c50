@@ -59,6 +59,19 @@ void WinnowAtts(c50_context *Context)
     ClassNo	c;
     Context->attributes_winnowed = false;
 
+    /*  C5.0 Release 2.07 computed the average case weight only in
+	ConstructClassifiers, after winnowing.  Unless a two-class costs
+	file had set it to one, winnowing divided every positive case
+	weight by zero, made no split, and discarded every attribute.
+	Compute the average only in that case, so winnowing is otherwise
+	unchanged.  */
+
+    if ( Context->schema.case_weight_attribute &&
+	 ! Context->average_case_weight )
+    {
+	SetAvCWt(Context);
+    }
+
     /*  Save original case order  */
 
     Context->cases.saved_records = Alloc(Context->cases.max_case+1, DataRec);
