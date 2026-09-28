@@ -5,6 +5,7 @@
 #include <exception>
 #include <cstdint>
 #include <limits>
+#include <mutex>
 #include <type_traits>
 #include <string>
 #include <utility>
@@ -110,6 +111,36 @@ Columns follow ``classes_`` order. Each case row uses C5.0 data-file syntax
 and includes a final class field, which may be ``?`` when unknown.
 )doc";
 
+class python_predictor
+{
+public:
+    explicit python_predictor(c50::predictor predictor) : predictor_(std::move(predictor)) {}
+
+    c50::predictions predict_details(const std::string &cases)
+    {
+        py::gil_scoped_release release;
+        std::lock_guard<std::mutex> lock(mutex_);
+        return predictor_.predict(cases);
+    }
+
+    c50::predictions predict_details_dense(const dense_values<double> &values)
+    {
+        if (values.ndim() != 2)
+            throw py::value_error("values must be a two-dimensional array");
+        std::vector<double> copy(static_cast<std::size_t>(values.size()));
+        std::copy_n(values.data(), copy.size(), copy.data());
+        const c50::dense_dataset dataset(copy.data(), static_cast<std::size_t>(values.shape(0)),
+                                        static_cast<std::size_t>(values.shape(1)));
+        py::gil_scoped_release release;
+        std::lock_guard<std::mutex> lock(mutex_);
+        return predictor_.predict(dataset);
+    }
+
+private:
+    c50::predictor predictor_;
+    std::mutex mutex_;
+};
+
 class python_model
 {
 public:
@@ -185,6 +216,12 @@ public:
         c50::context context;
         py::gil_scoped_release release;
         return model_.inspect(context);
+    }
+
+    std::unique_ptr<python_predictor> prepare_predictor() const
+    {
+        py::gil_scoped_release release;
+        return std::make_unique<python_predictor>(model_.prepare_predictor());
     }
 
     c50::model_kind kind() const noexcept { return model_.kind(); }
@@ -525,6 +562,14 @@ GIL while training, loading, or predicting.
             "scores", &prediction_scores,
             "Per-class scores as rows in class_names order.");
 
+    py::class_<python_predictor>(module, "Predictor",
+        "Owned parsed classifier for repeated prediction. Calls on one instance "
+        "are serialized while the GIL is released. Create with Model.prepare_predictor().")
+        .def("predict_details", &python_predictor::predict_details,
+             predict_details_doc, py::arg("cases"))
+        .def("predict_details_dense", &python_predictor::predict_details_dense,
+             predict_details_dense_doc, py::arg("values"));
+
     py::class_<python_model>(
         module, "Model",
         "Immutable, pickleable C5.0 classifier with move-only native "
@@ -564,6 +609,8 @@ GIL while training, loading, or predicting.
         .def_property_readonly(
             "classes_", &python_model::classes,
             "Class names in score-column order.")
+        .def("prepare_predictor", &python_model::prepare_predictor,
+             "Create an independent parsed classifier for repeated prediction calls.")
         .def("inspect", &python_model::inspect,
              "Return owned structural metadata parsed from the retained classifier.")
         .def("predict_details", &python_model::predict_details,

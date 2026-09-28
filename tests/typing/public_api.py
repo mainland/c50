@@ -37,3 +37,6 @@ assert_type(inspection, c50.ModelInspection)
 assert_type(inspection.trees[0].nodes[0].feature, int | None)
 assert_type(c50.export_text(inspection), str)
 assert_type(c50.export_json(inspection), str)
+
+predictor = model.prepare_predictor()
+assert_type(predictor.predict_details(""), c50.Predictions)

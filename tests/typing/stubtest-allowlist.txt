@@ -50,3 +50,7 @@ c50._c50.RuleInspection
 c50._c50.RuleInspection.__init__
 c50._c50.RulesetInspection
 c50._c50.RulesetInspection.__init__
+
+# Predictors have a native metaclass and are created through Model.
+c50._c50.Predictor
+c50._c50.Predictor.__init__

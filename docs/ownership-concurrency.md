@@ -25,18 +25,26 @@ originating contexts. Multiple threads may use a model concurrently with
 separate contexts. Each call currently parses the retained classifier into its
 context's workspace.
 
+`model.prepare_predictor()` returns a move-only `predictor` that owns a parsed
+classifier, serialized recovery data, and an independent workspace. Reuse it
+for small prediction batches to avoid parsing the classifier on each call.
+It may outlive the model. Callers must serialize operations on one predictor.
+Independent predictors may run concurrently. Each result owns its storage.
+Batch input storage is released after each call. After a native failure, the
+next prediction rebuilds the parsed state from the retained model bytes.
+This trades retained memory for lower repeated-call latency.
+
 `model.inspect` returns an owned, copyable classifier snapshot with class and
 feature names, nodes, branches, rules, and structural statistics. It uses the
 same exclusive context rule as prediction. The snapshot survives both the
-model and context,
-and changes to a snapshot do not affect the classifier. See
+model and context, and changes to a snapshot do not affect the classifier. See
 {doc}`model-inspection` for serialization-precision and missing-value semantics.
 
 `model.predict` returns an independently owned `c50::predictions` batch.
 Results retain class names, labels, confidence values, and scores after the
 originating model or context is destroyed. Indexed access checks bounds.
 
-Contexts, models, and prediction batches are move-only. Moved-from objects may
+Contexts, models, predictors, and prediction batches are move-only. Moved-from objects may
 only be destroyed or assigned another object. References returned by model and
 result accessors remain valid until the owning data is destroyed or replaced.
 Destruction and move assignment require exclusive access to the object.
@@ -49,11 +57,22 @@ schemas unsupported by the dense interface.
 
 ## Python interface
 
-Each Python training, loading, or prediction call constructs a local native
-context. Native work releases the Python GIL. Independent operations can
+Each Python `Model` training, loading, or prediction call constructs a local
+native context. Native work releases the Python GIL. Independent operations can
 therefore execute concurrently, and the binding does not depend on hidden
 process-global classifier state.
 
 Python `Model` objects expose immutable classifier data. `Options` remains a
 mutable value object, so callers must not modify one instance concurrently with
 a training call that uses it.
+
+`Model.prepare_predictor()` creates a Python `Predictor` with the same owned
+native state described above. Its `predict_details` and `predict_details_dense`
+methods return ordinary `Predictions`. Calls on one Python predictor acquire an
+instance lock after releasing the GIL. Independent predictors can run in
+parallel. Dense inputs are copied before releasing the GIL. Persist the source
+`Model`, which supports pickling, and recreate predictors after loading it.
+
+The scikit-learn estimator creates one predictor per `predict` or `predict_proba`
+call and reuses it across that call's batches. It retains no mutable prediction
+workspace between calls, so independent calls on a fitted estimator remain safe.

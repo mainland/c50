@@ -35,6 +35,7 @@ namespace detail {
 struct context_state;
 struct model_data;
 struct prediction_data;
+struct predictor_data;
 }
 
 /** Classifier representation, including boosted ensembles. */
@@ -164,8 +165,41 @@ public:
     double score(std::size_t row, std::size_t index) const;
 private:
     friend class model;
+    friend class predictor;
     explicit predictions(std::unique_ptr<detail::prediction_data> data);
     std::unique_ptr<detail::prediction_data> data_;
+};
+
+/**
+ * Move-only owner of a parsed classifier and mutable prediction workspace.
+ * It may outlive its source model. Callers must serialize operations on each
+ * predictor. Independent predictors may run concurrently. Results own their
+ * data. Failed predictions leave this object reusable, reparsing on demand.
+ */
+class predictor {
+public:
+    /** Release retained classifier and workspace storage. */
+    ~predictor();
+    /** Transfer ownership. @param other Source owner. */
+    predictor(predictor &&other) noexcept;
+    /** Transfer ownership. @param other Source owner. @return This object. */
+    predictor &operator=(predictor &&other) noexcept;
+    /** Copying is disabled. */
+    predictor(const predictor &) = delete;
+    /** Copy assignment is disabled. */
+    predictor &operator=(const predictor &) = delete;
+    /** Predict from borrowed data-file contents, possibly empty.
+     * @param cases Data-file contents, borrowed for this call.
+     * @return An independently owned prediction batch. */
+    predictions predict(std::string_view cases);
+    /** Predict from borrowed dense features. Class indices are ignored.
+     * @param cases Dense features, borrowed for this call.
+     * @return An independently owned prediction batch. */
+    predictions predict(const dense_dataset &cases);
+private:
+    friend class model;
+    explicit predictor(std::unique_ptr<detail::predictor_data> data);
+    std::unique_ptr<detail::predictor_data> data_;
 };
 
 /** Tree node representation in an owned inspection snapshot. */
@@ -322,6 +356,9 @@ public:
      * @param workspace Exclusive operation workspace.
      * @return A copyable snapshot independent of this model and workspace. */
     model_inspection inspect(context &workspace) const;
+    /** Parse an independently owned classifier for repeated predictions.
+     * @return A predictor owning both parsed and serialized model data. */
+    predictor prepare_predictor() const;
     /** @return the classifier representation. */
     model_kind kind() const noexcept;
     /** @return owned names-file contents. The reference follows model lifetime. */
