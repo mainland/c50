@@ -59,9 +59,10 @@ attributes. Dynamic `discrete N`, implicit, ignored, label, class-attribute,
 date, and time declarations remain available only through the text interface.
 Sparse matrices and memory-mapped out-of-core training are not supported.
 
-Prediction is bounded by `prediction_batch_size`, apart from the caller's input
-and returned score array. Training still requires the complete encoded matrix
-and complete native case store.
+Per-batch case storage is bounded by `prediction_batch_size`, apart from the
+caller's input and returned score array. One parsed predictor is retained for
+the duration of each estimator prediction call. Training still requires the
+complete encoded matrix and complete native case store.
 
 The classifier is retained in the compatible C5.0 serialized tree format.
 The command-line program prints the familiar tree report, while the library
