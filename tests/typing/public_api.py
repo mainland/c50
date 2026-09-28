@@ -47,3 +47,7 @@ assert_type(c50.ModelKind.TREE.value, int)
 assert_type(c50.ModelKind.__members__, dict[str, c50.ModelKind])
 for _member in c50.ModelKind:  # type: ignore[attr-defined]
     pass
+
+
+def _lookup(enumeration: type[c50.TieOrder]) -> None:
+    enumeration["STABLE"]  # type: ignore[index]

@@ -26,6 +26,26 @@ class ModelKind:
     def __hash__(self) -> int: ...
 
 @final
+class TieOrder:
+    """A pybind11 enumeration, not an ``enum.Enum``.
+
+    It cannot be iterated or subscripted. Use the members, ``__members__``,
+    ``name``, and ``value``.
+    """
+
+    REFERENCE: ClassVar[TieOrder]
+    STABLE: ClassVar[TieOrder]
+    __members__: ClassVar[dict[str, TieOrder]]
+    @property
+    def name(self) -> str: ...
+    @property
+    def value(self) -> int: ...
+    def __int__(self) -> int: ...
+    def __index__(self) -> int: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
+
+@final
 class NodeKind:
     """A pybind11 enumeration, not an ``enum.Enum``.
 
@@ -183,6 +203,7 @@ class Options:
     confidence_factor: float
     sample_fraction: float
     random_seed: int
+    ties: TieOrder
 
 @final
 class Predictions:
