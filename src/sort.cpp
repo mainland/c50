@@ -33,6 +33,8 @@
 /*************************************************************************/
 
 
+#include <algorithm>
+#include <cstring>
 #include <utility>
 
 #include "defns.i"
@@ -128,6 +130,112 @@ void Cachesort(CaseNo Fp, CaseNo Lp, SortRec *SRec)
 }
 
 
+
+/*************************************************************************/
+/*									 */
+/*	Sort elements Fp to Lp of SRec, keeping equal values in their	 */
+/*	input order.  The result is the unique stable order, so it does	 */
+/*	not depend on the standard library or the platform.  Ranges	 */
+/*	above StableInsertionLimit use a least-significant-digit radix	 */
+/*	sort on keys whose unsigned order matches the value order.	 */
+/*									 */
+/*************************************************************************/
+
+
+static const CaseNo StableInsertionLimit = 48;
+
+
+static C50SortKey OrderedKey(C50SortValue Value)
+/*                ----------  */
+{
+    const C50SortKey Sign = C50SortKey(1) << (8 * sizeof(C50SortKey) - 1);
+    C50SortKey Bits;
+
+    std::memcpy(&Bits, &Value, sizeof(Bits));
+
+    /*  -0 and +0 compare equal, so they must share a key  */
+
+    if ( Bits == Sign ) Bits = 0;
+
+    return ( Bits & Sign ? ~Bits : Bits | Sign );
+}
+
+
+void StableCachesort(CaseNo Fp, CaseNo Lp, SortRec *SRec,
+		     SortRec *RecordScratch, C50SortKey *Keys,
+		     C50SortKey *KeyScratch)
+/*   ---------------  */
+{
+    const int	Digits = sizeof(C50SortKey);
+    CaseNo	i, j, N;
+    SortRec	*Records, *From, *To, Moved;
+    C50SortKey	*FromKeys, *ToKeys;
+    CaseNo	Count[sizeof(C50SortKey)][256] = {};
+    int		d, b;
+
+    if ( Fp >= Lp ) return;
+
+    Records = SRec + Fp;
+    N = Lp - Fp + 1;
+
+    if ( N <= StableInsertionLimit )
+    {
+	ForEach(i, 1, N-1)
+	{
+	    Moved = Records[i];
+	    for ( j = i ; j > 0 && Moved.V < Records[j-1].V ; j-- )
+	    {
+		Records[j] = Records[j-1];
+	    }
+	    Records[j] = Moved;
+	}
+	return;
+    }
+
+    ForEach(i, 0, N-1)
+    {
+	Keys[i] = OrderedKey(Records[i].V);
+	ForEach(d, 0, Digits-1)
+	{
+	    Count[d][(Keys[i] >> (8 * d)) & 255]++;
+	}
+    }
+
+    From = Records;
+    To = RecordScratch;
+    FromKeys = Keys;
+    ToKeys = KeyScratch;
+
+    ForEach(d, 0, Digits-1)
+    {
+	CaseNo Next[256], Start = 0;
+
+	/*  A digit shared by every key leaves the order unchanged  */
+
+	if ( Count[d][(FromKeys[0] >> (8 * d)) & 255] == N ) continue;
+
+	ForEach(b, 0, 255)
+	{
+	    Next[b] = Start;
+	    Start += Count[d][b];
+	}
+
+	ForEach(i, 0, N-1)
+	{
+	    j = Next[(FromKeys[i] >> (8 * d)) & 255]++;
+	    To[j] = From[i];
+	    ToKeys[j] = FromKeys[i];
+	}
+
+	std::swap(From, To);
+	std::swap(FromKeys, ToKeys);
+    }
+
+    if ( From != Records )
+    {
+	std::copy(From, From + N, Records);
+    }
+}
 
 /*************************************************************************/
 /*									 */

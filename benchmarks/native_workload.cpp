@@ -33,6 +33,8 @@ struct configuration
     std::uint64_t seed = 1729;
     std::size_t split_workers = 1;
     bool subsets = false;
+    bool stable_ties = false;
+    std::size_t value_levels = 0;
     bool quiet = false;
 };
 
@@ -91,6 +93,10 @@ configuration parse_arguments(int argc, char **argv)
                    "(default 1729)\n"
                 << "  --workers N               Split workers (1 to 8, default 1)\n"
                 << "  --subsets                 Enable subset splits\n"
+                << "  --ties ORDER              Tie order: reference or stable "
+                   "(default reference)\n"
+                << "  --value-levels N          Round continuous values to N "
+                   "levels (0 disables, default 0)\n"
                 << "  --quiet                   Suppress the JSON result\n";
             std::exit(0);
         }
@@ -134,6 +140,19 @@ configuration parse_arguments(int argc, char **argv)
         {
             config.split_workers = parse_size(option, value);
         }
+        else if ( option == "--ties" )
+        {
+            if ( value != "reference" && value != "stable" )
+            {
+                throw std::invalid_argument(
+                    "ties must be reference or stable");
+            }
+            config.stable_ties = value == "stable";
+        }
+        else if ( option == "--value-levels" )
+        {
+            config.value_levels = parse_size(option, value);
+        }
         else
         {
             throw std::invalid_argument("unknown option: " +
@@ -154,6 +173,10 @@ configuration parse_arguments(int argc, char **argv)
     {
         throw std::invalid_argument(
             "categorical-features must not exceed features");
+    }
+    if ( config.value_levels == 1 )
+    {
+        throw std::invalid_argument("value-levels must be 0 or at least two");
     }
     if ( config.categories < 2 )
     {
@@ -211,6 +234,14 @@ void generate_data(const configuration &config, std::vector<double> &values,
             if ( feature < categorical_start )
             {
                 value = 2.0 * generator.unit_interval() - 1.0;
+                if ( config.value_levels )
+                {
+                    // Evenly spaced levels in [-1, 1] create equal values.
+                    const double steps =
+                        static_cast<double>(config.value_levels - 1);
+                    value = std::round((value + 1.0) / 2.0 * steps) /
+                                steps * 2.0 - 1.0;
+                }
             }
             else
             {
@@ -267,6 +298,8 @@ int run(const configuration &config)
     c50::options options;
     options.minimum_cases = 20;
     options.subset_splits = config.subsets;
+    options.ties = config.stable_ties ? c50::tie_order::stable
+                                      : c50::tie_order::reference;
 
     const auto start = std::chrono::steady_clock::now();
     const auto model = c50::model::train(context, c50::model_kind::tree,
@@ -298,7 +331,10 @@ int run(const configuration &config)
             << "    \"rows\": " << config.rows << ",\n"
             << "    \"seed\": " << config.seed << ",\n"
             << "    \"split_workers\": " << config.split_workers << ",\n"
-            << "    \"subsets\": " << (config.subsets ? "true" : "false") << "\n"
+            << "    \"subsets\": " << (config.subsets ? "true" : "false") << ",\n"
+            << "    \"ties\": \""
+            << (config.stable_ties ? "stable" : "reference") << "\",\n"
+            << "    \"value_levels\": " << config.value_levels << "\n"
             << "  }\n"
             << "}\n";
     }
