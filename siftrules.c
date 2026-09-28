@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: remove unused bookkeeping. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -411,7 +412,7 @@ void SetInitialTheory()
 /*   ----------------  */
 {
     ClassNo	c;
-    RuleNo	r, Active=0;
+    RuleNo	r;
 
     ForEach(c, 1, MaxClass)
     {
@@ -422,7 +423,7 @@ void SetInitialTheory()
 
     ForEach(r, 1, NRules)
     {
-	if ( (RuleIn[r] &= 1) ) Active++;
+	RuleIn[r] &= 1;
     }
 }
 
