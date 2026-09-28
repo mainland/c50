@@ -379,7 +379,10 @@ typedef	 struct _split_workspace
 			*ValFreq;		/* cases with val i */
 	    ClassNo	HighClass, LowClass;	/* class after/before cut */
 	    ContValue	HighVal, LowVal;	/* values after/before cut */
-	    SortRec	*SRec;			/* for Cachesort() */
+	    SortRec	*SRec,			/* for Cachesort() */
+			*SortScratch;		/* for StableCachesort() */
+	    C50SortKey	*SortKeys,		/* ditto */
+			*SortKeyScratch;
 	    Set		**Subset,		/* Subset[att][number] */
 			*WSubset;		/* working subsets */
 	    int		*Subsets,		/* no of subsets for att */

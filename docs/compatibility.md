@@ -29,6 +29,27 @@ The `soft-threshold-ties` command-line fixture retains that case with output
 from the unmodified imported program. The native sort properties compare each
 permutation with a reference copy of the original algorithm.
 
+## Stable tie order
+
+The library option `ties` selects how continuous split evaluation orders equal
+values. The default, `reference`, uses the RuleQuest order. `stable` keeps
+equal values in case order and sorts with a radix sort. The stable order is
+defined without reference to the sorting algorithm, so training remains
+deterministic across platforms, standard libraries, and split-worker counts.
+Soft-threshold bounds and the final cut values always use the reference
+order. The command-line program always uses the reference order.
+
+The stable order may produce a classifier that differs from the reference
+learner. Two mechanisms are known. The number of candidate cuts, which sets
+the threshold cost, can differ by one when the minimum-split boundary falls on
+the first case of a group of equal values. Sums of fractional case weights can
+also round differently. Either changes a split only when attribute gains are
+nearly tied. In 38,800 randomized trainings with ties, case weights, missing
+values, boosting, soft thresholds, winnowing, subsets, sampling, and rules,
+both orders produced identical classifiers. That evidence does not establish
+equality for all data. Use `reference` when a classifier must match the
+reference learner.
+
 Run the compatibility oracle with:
 
 ```sh
