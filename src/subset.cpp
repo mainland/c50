@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: use portable finiteness tests. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -32,6 +33,8 @@
 /*									 */
 /*************************************************************************/
 
+
+#include <cmath>
 
 #include "defns.i"
 #include "extern.i"
@@ -202,7 +205,7 @@ void EvalSubset(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Re
     {
 	PrevInfo = TotalInfo(Workspace.ValFreq, 0, Workspace.Blocks) / Cases;
 
-	Penalty  = ( finite(Context->splits.bell_numbers[InitialBlocks][Workspace.Blocks]) ?
+	Penalty  = ( std::isfinite(Context->splits.bell_numbers[InitialBlocks][Workspace.Blocks]) ?
 			Log(Context->splits.bell_numbers[InitialBlocks][Workspace.Blocks]) :
 			(InitialBlocks-Workspace.Blocks+1) * Log(Workspace.Blocks) );
 
@@ -303,7 +306,7 @@ void EvalSubset(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Re
 	/*  Determine penalty as log of Context->splits.bell_numbers number.  If number is too
 	    large, use an approximation of log  */
 
-	Penalty  = ( finite(Context->splits.bell_numbers[InitialBlocks][Workspace.Blocks-1]) ?
+	Penalty  = ( std::isfinite(Context->splits.bell_numbers[InitialBlocks][Workspace.Blocks-1]) ?
 			Log(Context->splits.bell_numbers[InitialBlocks][Workspace.Blocks-1]) :
 			(InitialBlocks-Workspace.Blocks+1) * Log(Workspace.Blocks-1) );
 

@@ -1,5 +1,30 @@
 # Building and testing
 
+## Support and validation matrix
+
+The native API requires C++17. Installed consumers are compiled as C++17 and
+C++20. The Python package requires Python 3.12 or newer. The estimator's
+minimum dependencies are NumPy 1.26 and scikit-learn 1.6.
+
+| Target | Compiler or dependencies | Validation status |
+| --- | --- | --- |
+| Linux x86-64 | GCC 13, Clang 18 | Locally validated native, installed-consumer, and sanitizer checks |
+| Linux x86-64, Python 3.12 | NumPy 2.x, scikit-learn 1.9 | Locally validated Python and type checks |
+| Linux ARM64 | GCC on `ubuntu-24.04-arm` | Configured CI target, not yet executed |
+| macOS ARM64 | AppleClang on `macos-14` | Configured CI target, not yet executed |
+| Linux x86-64, Python 3.12 | NumPy 1.26.4, scikit-learn 1.6.1 | Configured minimum-dependency check |
+| Linux x86-64, Python 3.13 and 3.14 | Latest compatible dependencies | Configured CI targets, not yet executed |
+
+Hosted CI has not run for this milestone. Configured targets are candidates
+for support until their native and Python checks pass. Windows, free-threaded
+Python, GPU arrays, and other compiler or platform combinations are unverified.
+The Linux-only allocation-injection and ELF writable-global inventory checks
+are omitted on macOS. Portable contract and installed-consumer tests still run.
+
+Native CI configures a C++14 project default to verify that each target declares
+its own C++17 requirement. The platform labels follow the
+[GitHub-hosted runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+
 ## Legacy Make build
 
 The compatibility build requires C and C++17 compilers and `make`:
