@@ -49,6 +49,7 @@ _SCRIPT = textwrap.dedent(
         "ConditionKind": native.ConditionKind.IN_SUBSET,
         "Options": native.Options(),
         "Predictions": tree.predict_details("0.5, ?\\n"),
+        "Predictor": tree.prepare_predictor(),
         "ModelInspection": tree.inspect(),
         "TreeInspection": tree.inspect().trees[0],
         "TreeNode": tree_node,
@@ -88,6 +89,7 @@ def test_every_class_has_a_sample() -> None:
     known = set(_ROUND_TRIP) | {
         "Options",
         "Predictions",
+        "Predictor",
         "ModelInspection",
         "TreeInspection",
         "TreeNode",
