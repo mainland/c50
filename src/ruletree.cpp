@@ -44,6 +44,9 @@
 #include <memory>
 
 namespace {
+struct RuleTreeDepthExceeded {};
+constexpr int MaxRuleTreeDepth = 512;
+
 struct RuleTreeScratch {
     c50_rule_tree_state &state;
     ~RuleTreeScratch()
@@ -89,7 +92,16 @@ void ConstructRuleTree(c50_context *Context, CRuleSet RS)
 
     Context->rule_tree.rule_conditions_satisfied = AllocZero(RS->SNRules+1, int);
 
-    RS->RT = GrowRT(Context, All.get(), RS->SNRules, RS->SRule);
+    try
+    {
+        RS->RT = GrowRT(Context, All.get(), RS->SNRules, RS->SRule);
+    }
+    catch (const RuleTreeDepthExceeded &)
+    {
+        // The tree only accelerates matching. Keep the rules and use the
+        // iterative matcher when their index would exhaust the call stack.
+        RS->RT = Nil;
+    }
 }
 
 
@@ -162,7 +174,8 @@ void SetTestIndex(c50_context *Context, Condition C)
 /*************************************************************************/
 
 
-RuleTree GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule)
+RuleTree GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule,
+                int Depth)
 /*       ------  */
 {
     RuleNo	r;
@@ -171,6 +184,7 @@ RuleTree GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule)
     DiscrValue	v;
 
     if ( RRN <= 0 ) return Nil;
+    if ( Depth >= MaxRuleTreeDepth ) throw RuleTreeDepthExceeded{};
 
     std::unique_ptr<RuleTreeRec, decltype(&FreeRuleTree)> Owner(
         AllocZero(1, RuleTreeRec), &FreeRuleTree);
@@ -209,6 +223,8 @@ RuleTree GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule)
     /*  Choose test for this node  */
 
     TI = SelectTest(Context, RR, RRN, Rule);
+    if ( TI < 0 )
+        Error(Context, MODELFILE, "inconsistent rule conditions", "");
     Context->rule_tree.tests_used[TI] = true;
 
     Node->CondTest = Context->rule_tree.tests[TI];
@@ -251,7 +267,7 @@ RuleTree GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule)
 
 	/*  LR now contains rules with outcome v  */
 
-	Node->Branch[v] = GrowRT(Context, LR.get(), LRN, Rule);
+	Node->Branch[v] = GrowRT(Context, LR.get(), LRN, Rule, Depth + 1);
 
 	if ( v )
 	{

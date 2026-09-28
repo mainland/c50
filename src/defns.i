@@ -126,7 +126,7 @@ using c50_context = c50::detail::context_state;
 
 #define  AllocZero(N,T)		(T *) Pcalloc(Context, N, sizeof(T))
 #define  Alloc(N,T)		AllocZero(N,T) /* for safety */
-#define  Realloc(V,N,T)		V = (T *) Prealloc(Context, V, (N)*sizeof(T))
+#define  Realloc(V,N,T)		V = (T *) PreallocArray(Context, V, N, sizeof(T))
 
 #define	 Max(a,b)               ((a)>(b) ? (a) : (b))
 #define	 Min(a,b)               ((a)<(b) ? (a) : (b))
@@ -486,6 +486,8 @@ Boolean	    ReadNameInput(c50_context *Context, c50_input *f, String s,
 			  int n, char ColonOpt);
 void	    GetNames(c50_context *Context, c50_input *Nf);
 void	    ExplicitAtt(c50_context *Context, c50_input *Nf);
+void	    EnsureDynamicValueSpace(c50_context *Context, Attribute Att,
+				    DiscrValue Value);
 int	    Which(String Val, String *List, int First, int Last);
 void	    ListAttsUsed(c50_context *Context);
 void	    FreeNames(c50_context *Context);
@@ -708,7 +710,9 @@ char	    ProcessOption(c50_context *Context, int Argc, char **Argv,
 void	    *Pmalloc(c50_context *Context, size_t Bytes);
 char *Pstrdup(c50_context *Context, const char *text);
 void	    *Prealloc(c50_context *Context, void *Present, size_t Bytes);
-void	    *Pcalloc(c50_context *Context, size_t Number, unsigned int Size);
+void        *Pcalloc(c50_context *Context, size_t Number, size_t Size);
+void        *PreallocArray(c50_context *Context, void *Present,
+                           size_t Number, size_t Size);
 void	    FreeVector(void **V, int First, int Last);
 DataRec	    NewCase(c50_context *Context);
 void	    FreeCases(c50_context *Context);
@@ -718,21 +722,20 @@ void	    Error(c50_context *Context, int ErrNo, const char *S1,
 void	    ErrorContext(c50_context *Context, int ErrNo, const char *S1,
 			 const char *S2);
 void	    C50Exit(c50_context *Context, int Status);
-String	    CaseLabel(c50_context *Context, CaseNo N);
+const char *CaseLabel(c50_context *Context, CaseNo N);
 FILE *	    GetFile(c50_context *Context, const char *Extension,
 		    const char *RW);
 double	    ExecTime(void);
 int	    Denominator(ContValue Val);
 int	    GetInt(String S, int N);
 int	    DateToDay(String DS);
-void	    DayToDate(int DI, String Date);
+std::string DayToDate(int Day);
 int	    TimeToSecs(String TS);
-void	    SecsToTime(int Secs, String Time);
+std::string SecsToTime(int Seconds);
 void	    SetTSBase(c50_context *Context, int y);
 int	    TStampToMins(c50_context *Context, String TS);
 void	    Check(c50_context *Context, float Val, float Low, float High);
-void	    CValToStr(c50_context *Context, ContValue CV, Attribute Att,
-		      String DS);
+std::string CValToStr(c50_context *Context, ContValue CV, Attribute Att);
 double	    rint(double v);
 void	    Cleanup(c50_context *Context);
 #ifdef UTF8
@@ -809,7 +812,8 @@ void	    FreeSiftRuleData(c50_context *Context);
 
 void	    ConstructRuleTree(c50_context *Context, CRuleSet RS);
 void	    SetTestIndex(c50_context *Context, Condition C);
-RuleTree    GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule);
+RuleTree    GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule,
+                  int Depth = 0);
 int	    DesiredOutcome(c50_context *Context, CRule R, int TI);
 int	    SelectTest(c50_context *Context, RuleNo *RR, int RRN,
 		       CRule *Rule);

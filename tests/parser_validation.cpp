@@ -62,6 +62,24 @@ static void structure(c50::context &context)
         "rules=\"1\" default=\"no\"\nconds=\"0\" cover=\"1\" ok=\"2\" lift=\"1\" class=\"no\"\n",
         "rules=\"1\" default=\"no\"\nconds=\"0\" cover=\"1\" ok=\"1\" lift=\"0\" class=\"no\"\n"})
         rejects([&] { c50::model::load(context, rules, names, header + bad); });
+    rejects([&] { c50::model::load(context, rules, names,
+        "entries=\"1\"\nrules=\"1\" default=\"yes\"\n"
+        "conds=\"100000000\" cover=\"0\" ok=\"0\" lift=\"1\" class=\"no\"\n"); });
+    rejects([&] { c50::model::load(context, rules, names,
+        "entries=\"1\"\nrules=\"100000000\" default=\"yes\"\n"); });
+    std::string growing_rule = header + "rules=\"1\" default=\"no\"\n"
+        "conds=\"101\" cover=\"1\" ok=\"1\" lift=\"1\" class=\"no\"\n";
+    for (int condition = 0; condition < 101; ++condition)
+        growing_rule += "type=\"2\" att=\"x\" cut=\"" +
+                        std::to_string(condition) + "\" result=\">\"\n";
+    c50::model::load(context, rules, names, growing_rule);
+    std::string growing_rules = header + "rules=\"101\" default=\"no\"\n";
+    for (int rule_index = 0; rule_index < 101; ++rule_index)
+        growing_rules +=
+            "conds=\"0\" cover=\"1\" ok=\"1\" lift=\"1\" class=\"no\"\n";
+    c50::model::load(context, rules, names, growing_rules);
+    rejects([&] { c50::model::load(context, rules, names,
+        growing_rules + "trailing"); });
     const std::string rule = header + "rules=\"1\" default=\"no\"\n"
         "conds=\"1\" cover=\"1\" ok=\"1\" lift=\"1\" class=\"no\"\n";
     for (const auto &condition : {"type=\"0\" att=\"x\"\n",
@@ -70,6 +88,12 @@ static void structure(c50::context &context)
         "type=\"2\" att=\"x\" val=\"bad\"\n",
         "type=\"3\" att=\"x\" elts=\"a\"\n"})
         rejects([&] { c50::model::load(context, rules, names, rule + condition); });
+    const std::string duplicate_condition =
+        "type=\"2\" att=\"x\" cut=\"0\" result=\">\"\n";
+    rejects([&] { c50::model::load(context, rules, names,
+        header + "rules=\"1\" default=\"no\"\n"
+        "conds=\"2\" cover=\"1\" ok=\"1\" lift=\"1\" class=\"no\"\n" +
+        duplicate_condition + duplicate_condition); });
 
     // Zero-case child nodes are valid legacy output and use their parent.
     auto empty_child = c50::model::load(context, kind, names, header +
@@ -92,6 +116,40 @@ static void structure(c50::context &context)
     if (default_prediction.class_index(0) != 1 ||
         default_prediction.confidence(0) != 0.5)
         throw std::runtime_error("zero-vote rules did not use the default class");
+
+    std::string deep_tree = header;
+    for (int depth = 0; depth < 1024; ++depth) {
+        deep_tree += "type=\"2\" class=\"no\" att=\"x\" forks=\"3\" "
+                     "cut=\"0\" freq=\"1,1\"\n";
+        deep_tree += leaf;
+    }
+    deep_tree += leaf;
+    for (int depth = 0; depth < 1024; ++depth) deep_tree += leaf;
+    rejects([&] { c50::model::load(context, kind, names, deep_tree); });
+
+    // Distinct attributes prevent the rule index from combining thresholds.
+    constexpr int condition_count = 1100;
+    std::string wide_names = "no, yes.\n";
+    std::string cases;
+    std::string deep_rule = header + "rules=\"1\" default=\"yes\"\n"
+        "conds=\"" + std::to_string(condition_count) +
+        "\" cover=\"1\" ok=\"1\" lift=\"1\" class=\"no\"\n";
+    for (int attribute = 0; attribute < condition_count; ++attribute) {
+        const std::string name = "x" + std::to_string(attribute);
+        wide_names += name + ": continuous.\n";
+        cases += "1, ";
+        deep_rule += "type=\"2\" att=\"" + name +
+                     "\" cut=\"0\" result=\">\"\n";
+    }
+    cases += "?\n";
+    auto deep_rules = c50::model::load(context, rules, wide_names, deep_rule);
+    const auto matched = deep_rules.predict(context, cases);
+    cases.replace(0, 1, "0");
+    const auto unmatched = deep_rules.predict(context, cases);
+    if (matched.class_index(0) != 0 ||
+        matched.confidence(0) < 0.6669 || matched.confidence(0) > 0.6671 ||
+        unmatched.class_index(0) != 1 || unmatched.confidence(0) != 0.5)
+        throw std::runtime_error("deep rule matching changed predictions");
 }
 
 int main()
@@ -100,6 +158,9 @@ int main()
         c50::context context;
         const auto kind = c50::model_kind::tree;
         auto model = c50::model::load(context, kind, names, header + leaf);
+        rejects([&] { c50::model::load(context, kind, names,
+            header + leaf + "trailing"); });
+        c50::model::load(context, kind, names, header + leaf + " \t\n");
         rejects([&] { c50::model::load(context, kind,
             "no, yes.\n" + std::string(2000, 'x') + ": continuous.\n", header + leaf); });
         rejects([&] { model.predict(context, std::string(2000, '1') + ", ?\n"); });
@@ -115,12 +176,94 @@ int main()
         auto short_id = c50::model::load(context, kind, names,
                                          "id=\"x\"\nentries=\"1\"\n" + leaf);
         if (short_id.predict(context, "0, ?\n").class_index(0) != 0) return 1;
+        const std::string timestamp_names = "no, yes.\nx: timestamp.\n";
+        const auto timestamp_model = c50::model::load(context, kind,
+            timestamp_names, "id=\"See5/C5.0 2.07 GPL Edition 2026-10-06\"\n"
+            "entries=\"1\"\n" + leaf);
+        rejects([&] { timestamp_model.predict(context,
+            "9999/12/31 00:00:00, ?\n"); });
+        if (timestamp_model.predict(context, "2026/10/06 12:34:56, ?\n")
+                .class_index(0) != 0)
+            throw std::runtime_error("ordinary timestamp prediction changed");
+        const auto future_base = c50::model::load(context, kind, timestamp_names,
+            "id=\"See5/C5.0 2.07 GPL Edition 9999-01-01\"\n"
+            "entries=\"1\"\n" + leaf);
+        rejects([&] { future_base.predict(context, "0000/03/01 00:00:00, ?\n"); });
+        rejects([&] { c50::model::load(context, kind, timestamp_names,
+            "id=\"999999-1-1\"\nentries=\"1\"\n" + leaf); });
         for (const auto &capacity : {"-1", "1", "2147483647", "999999999999999999999", "2junk"})
             rejects([&] { c50::model::load(context, kind,
                 std::string("no, yes.\nx: discrete ") + capacity + ".\n", header + leaf); });
         const std::string target(995, 'x');
         rejects([&] { c50::model::load(context, kind,
             target + ": 1, 2.\n" + target + ": continuous.\n", header + leaf); });
+        c50::model::load(context, kind,
+            "|" + std::string(9997, 'x') + "\n" + names, header + leaf);
+        const auto long_line_model = c50::model::load(context, kind,
+            "|" + std::string(20000, 'x') + "\n" + names, header + leaf);
+        const auto long_line_predictions = long_line_model.predict(context,
+            "0, ?\n" + std::string(20000, ' ') + "1, ?\n");
+        if (long_line_predictions.size() != 2 ||
+            long_line_predictions.class_index(0) != 0 ||
+            long_line_predictions.class_index(1) != 0)
+            throw std::runtime_error("long input lines changed predictions");
+        for (const auto &threshold : {"nan", "inf", "-inf"})
+            rejects([&] { c50::model::load(context, kind,
+                "y: 1, " + std::string(threshold) + ".\ny: continuous.\nx: continuous.\n",
+                header + leaf); });
+        for (const auto &value : {"?", "N/A"})
+            rejects([&] { c50::model::load(context, kind,
+                "no, yes.\nx: continuous.\nderived := " + std::string(value) + ".\n",
+                header + leaf); });
+        const auto nested_expression = [](int depth) {
+            std::string expression = "x";
+            for (int level = 1; level < depth; ++level)
+                expression = "1 + (" + expression + ")";
+            return expression;
+        };
+        const auto boundary_model = c50::model::load(context, kind,
+            "no, yes.\nx: continuous.\nderived := " + nested_expression(100) + ".\n",
+            header + leaf);
+        if (boundary_model.predict(context, "1, ?\n").class_index(0) != 0)
+            throw std::runtime_error("expression depth boundary changed prediction");
+        rejects([&] { c50::model::load(context, kind,
+            "no, yes.\nx: continuous.\nderived := " + nested_expression(101) + ".\n",
+            header + leaf); });
+        const std::string boundary_expression =
+            "color = \"" + std::string(38, 'a') + "\"";
+        if (boundary_expression.size() != 48) return 1;
+        c50::model::load(context, kind,
+            "no, yes.\nx: continuous.\ncolor: red, blue, green.\nderived := " +
+                boundary_expression + ".\n",
+            header + leaf);
+        c50::model::train(context, kind,
+            "no, yes.\nx: continuous.\ncolor: red, blue, green.\n"
+            "derived := x / 2e22.\n",
+            "0, red, no\n1, blue, no\n2, green, yes\n3, red, yes\n");
+        c50::model::train(context, kind,
+            "no, yes.\nx: continuous.\nderived := x / (8 ^ 8 ^ 8).\n",
+            "1, no\n2, yes\n3, no\n4, yes\n");
+        rejects([&] { c50::model::load(context, kind,
+            "no, yes.\nx: continuous.\nderived := 1e1000.\n", header + leaf); });
+        c50::model::load(context, kind,
+            "no, yes.\nx: discrete 472721496.\n", header + leaf);
+        std::string excessive_classes;
+        for (int class_index = 0; class_index < 4097; ++class_index)
+            excessive_classes += class_index ? ",c" : "c";
+        rejects([&] { c50::model::load(context, kind,
+            excessive_classes + ".\nx: continuous.\n", header + leaf); });
+        const std::string growing_names = "no, yes.\nx: discrete 101.\n";
+        std::string growing_header = "att=\"x\" elts=";
+        std::string growing_data;
+        for (int value = 0; value < 101; ++value) {
+            if (value) growing_header += ',';
+            growing_header += "\"v" + std::to_string(value) + "\"";
+            growing_data +=
+                "v" + std::to_string(value) + (value < 51 ? ", no\n" : ", yes\n");
+        }
+        c50::model::load(context, kind, growing_names,
+                         growing_header + "\n" + header + leaf);
+        c50::model::train(context, kind, growing_names, growing_data);
         structure(context);
         if (model.predict(context, "0, ?\n").class_index(0) != 0) return 1;
     } catch (const std::exception &error) {

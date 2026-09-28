@@ -1,0 +1,3 @@
+entries="1"
+rules="1" default="yes"
+conds="100000000" cover="0" ok="0" lift="1" class="no"

@@ -72,7 +72,7 @@ void c50_record_error(c50_context *context, c50::error_code code,
 {
     if (context->error) return;
     context->error = code;
-    snprintf(context->error_message, sizeof(context->error_message), "%s", message);
+    context->error_message = message;
 }
 
 [[noreturn]] void c50_abort_operation(c50_context *context, int exit_status)
@@ -91,7 +91,7 @@ void c50_run_operation(c50_context *context, c50_operation_fn operation,
         throw c50::exception(c50::error_code::internal_error,
                             "a C5.0 operation is already active on this context");
     context->error.reset();
-    context->error_message[0] = '\0';
+    context->error_message.clear();
     context->operation_active = 1;
     std::exception_ptr failure;
     try {

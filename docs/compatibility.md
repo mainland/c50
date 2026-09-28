@@ -71,22 +71,52 @@ or not diagnostics are printed. Oversized model-property diagnostics are
 bounded. These safety fixes change rejection behavior for malformed input, not
 classifiers or predictions for accepted input. The same bound applies to class
 names generated from continuous-target thresholds. A `discrete N` declaration
-must contain a complete integer from 2 through `INT_MAX - 3`, reserving space
-for the parser's internal entries without signed overflow.
+must contain a complete integer from 2 through `INT_MAX - 3`. Dynamic value
+dictionaries grow with the values read instead of reserving `N` pointer slots
+from the declaration. Input lines may exceed the legacy 9,999-byte read
+buffer. Per-token length checks still apply.
+
+Implicit definitions reject missing and not-applicable literals without a
+preceding operand that determines their type. They also reject nonfinite numeric
+literals and expressions nested beyond 100 levels. Token matching and date and
+time recognition remain within the definition buffer, and division precision
+scaling does not overflow for large finite divisors. These checks make extreme
+or malformed definitions reject instead of exhausting resources or invoking
+undefined behavior. Accepted definitions within these limits retain their
+existing evaluation behavior.
+
+Division by an infinite value, which finite literals can produce through
+exponentiation overflow, yields an unknown value, as division by zero does.
+The imported implementation never finished evaluating such a definition, so
+this change affects no definition that previously completed.
 
 Serialized properties must use the quoted syntax emitted by C5.0. Unquoted
 values, incomplete escapes, and trailing property text produce parse errors.
 Short model identifiers remain accepted without date recovery.
+Recovered timestamp base years must lie between 0 and 9999. Timestamp
+conversion uses checked arithmetic and rejects offsets outside the native
+integer range or at least one billion minutes after the base. Representable
+timestamps retain their existing rounded-minute values.
 
 Model loading rejects inconsistent branch counts, invalid attribute kinds,
 missing required classes or rule fields, nonfinite numeric properties, and
 frequency vectors that disagree with the class schema. Dynamic attribute
-lists must fit their declared capacity. A tree root must have enough total
-class frequency to satisfy the predictor's `1e-4` case threshold; unlike child
-nodes, it has no parent distribution to use below that threshold. Zero-case
+lists must fit their declared capacity. Serialized rule and condition arrays
+grow as records are read instead of reserving space from untrusted declared
+counts. Rules with duplicate conditions are rejected before rule-tree
+construction can exhaust its distinct tests. A tree root must have enough
+total class frequency to satisfy the predictor's `1e-4` case threshold;
+unlike child nodes, it has no parent distribution to use below that threshold. Zero-case
 child nodes remain valid and retain their parent-based prediction behavior.
 These checks reject malformed artifacts before prediction can index their
 internal structures.
+
+Rule indexes are limited to 512 levels. Deeper rulesets use iterative rule
+matching, which preserves their predictions without recursive index traversal.
+Internal tree nodes must have at least `1e-4` total class frequency. Empty
+leaves remain valid and use their parent's distribution. If matching rules
+have zero votes and the default class has no matching rule, prediction uses
+the default class with confidence `0.5`, as it does when no rules match.
 
 Costs must be complete finite nonnegative numbers representable by the native
 cost type. Each actual class requires a finite positive total error cost, and
