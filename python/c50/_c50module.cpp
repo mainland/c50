@@ -417,12 +417,26 @@ void bind_inspection(py::module_ &module)
         .def_readonly("depth", &c50::tree_inspection::depth)
         .def_readonly("supported_depth", &c50::tree_inspection::supported_depth)
         .def_readonly("feature_use", &c50::tree_inspection::feature_use);
+    py::class_<c50::rule_inspection>(module, "RuleInspection",
+        "Owned rule metadata in serialized order.")
+        .def_readonly("conditions", &c50::rule_inspection::conditions)
+        .def_readonly("predicted_class", &c50::rule_inspection::predicted_class)
+        .def_readonly("cover", &c50::rule_inspection::cover)
+        .def_readonly("correct", &c50::rule_inspection::correct)
+        .def_readonly("prior", &c50::rule_inspection::prior)
+        .def_readonly("vote", &c50::rule_inspection::vote);
+    py::class_<c50::ruleset_inspection>(module, "RulesetInspection",
+        "Owned ruleset with ordered rules and a fallback class.")
+        .def_readonly("default_class", &c50::ruleset_inspection::default_class)
+        .def_readonly("rules", &c50::ruleset_inspection::rules)
+        .def_readonly("feature_use", &c50::ruleset_inspection::feature_use);
     py::class_<c50::model_inspection>(module, "ModelInspection",
         "Owned inspection metadata. Fields are read-only and lists are copies.")
         .def_readonly("kind", &c50::model_inspection::kind)
         .def_readonly("class_names", &c50::model_inspection::class_names)
         .def_readonly("feature_names", &c50::model_inspection::feature_names)
-        .def_readonly("trees", &c50::model_inspection::trees);
+        .def_readonly("trees", &c50::model_inspection::trees)
+        .def_readonly("rulesets", &c50::model_inspection::rulesets);
 }
 
 } // namespace

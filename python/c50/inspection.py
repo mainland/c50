@@ -87,6 +87,24 @@ def export_json(
             "feature_names": features,
             "class_names": classes,
             "trees": trees,
+            "rulesets": [
+                {
+                    "default_class": ruleset.default_class,
+                    "feature_use": ruleset.feature_use,
+                    "rules": [
+                        {
+                            "predicted_class": rule.predicted_class,
+                            "cover": rule.cover,
+                            "correct": rule.correct,
+                            "prior": rule.prior,
+                            "vote": rule.vote,
+                            "conditions": [_condition_data(test) for test in rule.conditions],
+                        }
+                        for rule in ruleset.rules
+                    ],
+                }
+                for ruleset in snapshot.rulesets
+            ],
         },
         indent=2, ensure_ascii=True, allow_nan=False,
     ) + "\n"
@@ -115,7 +133,7 @@ def export_text(
     max_depth: int | None = None,
     include_empty: bool = True,
 ) -> str:
-    """Render an inspected tree or ensemble without parsing serialized text.
+    """Render an inspected tree, ruleset, or ensemble without parsing serialized text.
 
     Args:
         snapshot: Owned result of ``Model.inspect()``.
@@ -171,4 +189,18 @@ def export_text(
                 pending.append(
                     (branch.child, depth + 1, _condition_text(branch.condition, features))
                 )
+    for number, ruleset in enumerate(snapshot.rulesets):
+        lines.append(
+            f"ruleset {number}: {len(ruleset.rules)} rules, "
+            f"default={classes[ruleset.default_class]!r}"
+        )
+        for index, rule in enumerate(ruleset.rules):
+            conditions = " and ".join(
+                _condition_text(test, features) for test in rule.conditions
+            ) or "always"
+            lines.append(
+                f"  rule {index}: {conditions} -> {classes[rule.predicted_class]!r} "
+                f"(cover={rule.cover:g}, correct={rule.correct:g}, "
+                f"prior={rule.prior:.9g}, vote={rule.vote}/1000)"
+            )
     return "\n".join(lines) + "\n"

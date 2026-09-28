@@ -95,16 +95,45 @@ c50::tree_inspection inspect_tree(c50_context *Context, Tree root)
     return result;
 }
 
+c50::ruleset_inspection inspect_rules(c50_context *Context, CRuleSet source)
+{
+    c50::ruleset_inspection result;
+    result.default_class = static_cast<std::size_t>(source->SDefault - 1);
+    result.feature_use.resize(Context->schema.max_attribute);
+    for (int index = 1; index <= source->SNRules; ++index) {
+        const auto rule = source->SRule[index];
+        c50::rule_inspection item;
+        item.predicted_class = static_cast<std::size_t>(rule->Rhs - 1);
+        item.cover = rule->Cover;
+        item.correct = rule->Correct;
+        item.prior = rule->Prior;
+        item.vote = rule->Vote;
+        for (int index = 1; index <= rule->Size; ++index) {
+            const auto test = rule->Lhs[index];
+            item.conditions.push_back(condition(Context, test->NodeType, test->Tested,
+                                                test->TestValue, test->Cut, test->Subset));
+            ++result.feature_use[static_cast<std::size_t>(test->Tested - 1)];
+        }
+        result.rules.push_back(std::move(item));
+    }
+    return result;
+}
+
 } // namespace
 
 c50::model_inspection c50_build_inspection(c50_context *Context)
 {
     c50::model_inspection result;
+    result.kind = Context->options.rules ? c50::model_kind::rules : c50::model_kind::tree;
     for (int index = 1; index <= Context->schema.max_class; ++index)
         result.class_names.emplace_back(Context->schema.class_names[index]);
     for (int index = 1; index <= Context->schema.max_attribute; ++index)
         result.feature_names.emplace_back(Context->schema.attribute_names[index]);
-    for (int trial = 0; trial < Context->options.trials; ++trial)
-        result.trees.push_back(inspect_tree(Context, Context->trees.pruned[trial]));
+    for (int trial = 0; trial < Context->options.trials; ++trial) {
+        if (Context->options.rules)
+            result.rulesets.push_back(inspect_rules(Context, Context->rules.sets[trial]));
+        else
+            result.trees.push_back(inspect_tree(Context, Context->trees.pruned[trial]));
+    }
     return result;
 }

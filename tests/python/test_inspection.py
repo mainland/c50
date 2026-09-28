@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import gc
 import json
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from c50 import ConditionKind, Model, NodeKind, export_json, export_text
+from c50 import ConditionKind, Model, ModelKind, NodeKind, Options, export_json, export_text
 
 
 NAMES = "low, high.\nsignal: continuous.\n"
@@ -74,3 +75,32 @@ def test_concurrent_inspection_matches_loaded_model() -> None:
     with ThreadPoolExecutor(max_workers=4) as executor:
         results = list(executor.map(lambda _: export_json(model.inspect()), range(8)))
     assert results == [expected] * 8
+
+
+@pytest.mark.parametrize("kind", [ModelKind.TREE, ModelKind.RULES])
+def test_ensemble_inspection_roundtrip_and_exports(kind: ModelKind) -> None:
+    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "boost"
+    names = (fixture / "boost.names").read_text()
+    data = (fixture / "boost.data").read_text()
+    options = Options()
+    options.trials = 3
+    model = Model.train(names, data, kind, options)
+    original_scores = model.predict_proba(data)
+    snapshot = model.inspect()
+    components = snapshot.trees if kind == ModelKind.TREE else snapshot.rulesets
+    assert len(components) == 3
+    restored = Model.load(names, model.serialized_data, kind)
+    assert export_json(restored.inspect()) == export_json(snapshot)
+    assert model.predict_proba(data) == original_scores
+    text = export_text(snapshot)
+    if kind == ModelKind.RULES:
+        assert not snapshot.trees
+        assert "ruleset 2:" in text
+        assert "default=" in text and "vote=" in text
+        assert len(json.loads(export_json(snapshot))["rulesets"]) == 3
+        for ruleset in snapshot.rulesets:
+            assert all(0 <= rule.correct <= rule.cover for rule in ruleset.rules)
+            assert all(0 <= rule.vote <= 1000 for rule in ruleset.rules)
+    else:
+        assert not snapshot.rulesets
+        assert "tree 2:" in text

@@ -229,6 +229,23 @@ struct tree_inspection {
     std::vector<std::size_t> feature_use; /**< Split counts in attribute-name order. */
 };
 
+/** Owned rule in serialized order, with all its condition metadata. */
+struct rule_inspection {
+    std::vector<split_condition> conditions; /**< Conjunction in serialized order. */
+    std::size_t predicted_class = 0; /**< Zero-based rule conclusion. */
+    double cover = 0; /**< Weighted cases covered by the rule. */
+    double correct = 0; /**< Weighted covered cases with the concluded class. */
+    double prior = 0; /**< Prior reconstructed from serialized cover, correct, and lift. */
+    int vote = 0; /**< Native confidence vote in integer thousandths. */
+};
+
+/** Owned ruleset, including the fallback class for cases matching no rule. */
+struct ruleset_inspection {
+    std::size_t default_class = 0; /**< Zero-based fallback class. */
+    std::vector<rule_inspection> rules; /**< Rules in serialized order. */
+    std::vector<std::size_t> feature_use; /**< Condition counts per schema attribute. */
+};
+
 /**
  * Copyable snapshot owning all model-inspection data. Mutations affect only
  * this value. It may outlive its model and context. Concurrent reads are safe
@@ -238,7 +255,8 @@ struct model_inspection {
     model_kind kind = model_kind::tree; /**< Source classifier representation. */
     std::vector<std::string> class_names; /**< Classes in prediction-score order. */
     std::vector<std::string> feature_names; /**< All schema attributes in source order. */
-    std::vector<tree_inspection> trees; /**< Trees in serialized ensemble order. */
+    std::vector<tree_inspection> trees; /**< Tree components, empty for rules models. */
+    std::vector<ruleset_inspection> rulesets; /**< Ruleset components in serialized order. */
 };
 
 /** Move-only owner of an immutable classifier and its schema and costs. */
@@ -300,10 +318,9 @@ public:
      * @param cases Borrowed dense features, possibly empty.
      * @return An independently owned prediction batch. */
     predictions predict(context &workspace, const dense_dataset &cases) const;
-    /** Inspect retained tree classifiers through the validated native loader.
+    /** Inspect retained classifiers through the validated native loader.
      * @param workspace Exclusive operation workspace.
-     * @return A copyable snapshot independent of this model and workspace.
-     * @throws exception With unsupported for rules models. */
+     * @return A copyable snapshot independent of this model and workspace. */
     model_inspection inspect(context &workspace) const;
     /** @return the classifier representation. */
     model_kind kind() const noexcept;

@@ -106,6 +106,7 @@ int main(int argc, char **argv)
                              category_names, serialized_rules);
         });
         exercise("predict rules", context, [&] { rules.predict(context, category_data); });
+        exercise("inspect rules", context, [&] { rules.inspect(context); });
         c50::options boosted;
         boosted.trials = 3;
         for (auto kind : {c50::model_kind::tree, c50::model_kind::rules}) {
@@ -120,6 +121,7 @@ int main(int argc, char **argv)
                 c50::model::load(context, kind, boost_names, serialized);
             });
             exercise("predict ensemble", context, [&] { ensemble.predict(context, boost_data); });
+            exercise("inspect ensemble", context, [&] { ensemble.inspect(context); });
         }
         const std::string dense_names = "no, yes.\nx: continuous.\ncolor: red, blue.\n";
         const double missing = std::numeric_limits<double>::quiet_NaN();

@@ -1,7 +1,7 @@
 # Model inspection
 
-C++ and Python expose owned tree snapshots and deterministic text and JSON
-exports. Ruleset inspection below remains proposed until its implementation.
+C++ and Python expose owned tree, ruleset, and ensemble snapshots with
+deterministic text and JSON exports.
 
 ## Ownership and operation boundary
 
@@ -36,15 +36,17 @@ Continuous nodes retain the cutoff and lower, middle, and upper soft-threshold
 points. Tree statistics distinguish all leaves from leaves with positive
 training support. Depth is measured in edges from the root, with separate
 maximum depths for all nodes and supported leaves. Per-feature counts count
-split nodes, not statistical feature importance. Stored node classes do not
-replace cost-sensitive or missing-value prediction.
+split nodes in trees and conditions in rulesets. They are not statistical
+feature importance. Stored node classes do not replace cost-sensitive or
+missing-value prediction.
 
 ## Rules and ensembles
 
 Ruleset snapshots preserve serialized rule and condition order, default class,
 covered and correctly classified case weights, derived prior, and integer vote
 in thousandths. Conditions use the same public representation as tree branches.
-Tree and ruleset ensembles preserve serialized component order. C5.0 combines
+Tree and ruleset ensembles preserve serialized component order. Exactly one of
+`trees` and `rulesets` is populated, according to the model kind. C5.0 combines
 per-case component confidences, so inspection does not invent fixed boosting
 weights or represent the ensemble as an additive weighted-tree predictor.
 
@@ -74,8 +76,9 @@ metadata = export_json(snapshot)
 ```
 
 `export_text` accepts `max_depth` to truncate display and `include_empty=False`
-to omit zero-support leaves. Both exports accept `feature_names` and
-`class_names` sequences in schema order. For a fitted estimator, inspect
+to omit zero-support tree leaves. These two options do not filter rules. Both
+exports accept `feature_names` and `class_names` sequences in schema order.
+For a fitted estimator, inspect
 `classifier.model_` and pass string forms of `classifier.classes_` as display
 class names. Feature names may come from `classifier.feature_names_in_`.
 Native tokens remain available in the snapshot. Python fields are read-only,
