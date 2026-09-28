@@ -120,6 +120,7 @@ static void unused_costs()
                                             cost_tree,
                                             "| a comment\nlow, high: 5\n");
     commented_entry.predict(context, "1, ?\n");
+    commented_entry.inspect(context);
 }
 
 /* The diagnostic of a failed operation, without the command-line program's

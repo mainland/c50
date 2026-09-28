@@ -1,7 +1,7 @@
 # Model inspection
 
-Status: proposed API contract. The following interfaces are implemented and
-validated in subsequent commits in this topic.
+The C++ tree snapshot interface is implemented. Rules and Python exports below
+remain proposed until their implementation commits.
 
 ## Ownership and operation boundary
 
