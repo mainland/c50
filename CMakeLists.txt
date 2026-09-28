@@ -569,7 +569,8 @@ if(BUILD_TESTING)
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_install.cmake"
         )
     endif()
-    if(CMAKE_NM AND UNIX)
+    # This inventory uses GNU nm output and ELF symbol conventions.
+    if(CMAKE_NM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_test(
             NAME writable-global-inventory
             COMMAND
