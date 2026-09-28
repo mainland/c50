@@ -1,3 +1,4 @@
+/* Modified 2026 by Geoffrey Mainland: remove unused bookkeeping. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -64,7 +65,7 @@ void ConstructClassifiers()
 /*   --------------------  */
 {
     CaseNo	i, Errs, Cases, Bp, Excl=0;
-    double	ErrWt, ExclWt=0, OKWt, ExtraErrWt, NFact, MinWt=1.0, a, b;
+    double	ErrWt, OKWt, ExtraErrWt, NFact, MinWt=1.0, a, b;
     ClassNo	c, Pred, Real, Best;
     static	ClassNo	*Wrong=Nil;
     int		BaseLeaves;
@@ -238,7 +239,6 @@ void ConstructClassifiers()
 		if ( BVote[Best] > BVote[Real] + (TRIALS-1) - Trial )
 		{
 		    Excl++;
-		    ExclWt += Weight(Case[i]);
 
 		    Weight(Case[i]) = 0;
 		    Case[i]  = Case[Bp];
