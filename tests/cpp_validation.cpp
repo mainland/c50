@@ -139,6 +139,9 @@ static void training_validation()
     options = {};
     options.random_seed = 4096;
     rejects(invalid, [&] { c50::model::train(context, kind, names, dataset, options); });
+    options = {};
+    options.ties = static_cast<c50::tie_order>(2);
+    rejects(invalid, [&] { c50::model::train(context, kind, names, dataset, options); });
     auto bad = dataset;
     bad.row_stride = 1;
     rejects(invalid, [&] { c50::model::train(context, kind, names, bad); });
