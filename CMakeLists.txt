@@ -565,7 +565,7 @@ if(BUILD_TESTING)
             python-api
             PROPERTIES
                 ENVIRONMENT
-                    "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python"
+                    "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python;SCIPY_ARRAY_API=1"
         )
         add_test(
             NAME benchmark-smoke
