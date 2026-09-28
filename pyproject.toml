@@ -73,7 +73,7 @@ dev = [
 [tool.scikit-build]
 minimum-version = "build-system.requires"
 wheel.packages = ["python/c50"]
-wheel.exclude = ["**/_c50module.cpp"]
+wheel.exclude = ["**/*.cpp"]
 install.components = ["python"]
 sdist.exclude = [
     "AGENTS.md",
