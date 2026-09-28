@@ -85,6 +85,12 @@ typedef struct c50_predict_state
     owned_predictions predictions;
 } c50_predict_state;
 
+struct c50_inspect_state
+{
+    const c50_model *model;
+    c50::model_inspection result;
+};
+
 static void RequireInputEnd(c50_context *Context, c50_input *Input)
 {
     int c;
@@ -157,6 +163,13 @@ static void ParseModel(c50_context *Context, const c50_model *model)
         }
     }
     RequireInputEnd(Context, &model_input);
+}
+
+static void InspectModel(c50_context *Context, void *user_data)
+{
+    auto *state = static_cast<c50_inspect_state *>(user_data);
+    ParseModel(Context, state->model);
+    state->result = c50_build_inspection(Context);
 }
 
 static void LoadModel(c50_context *Context, void *user_data)
@@ -633,6 +646,15 @@ model::model(std::unique_ptr<detail::model_data> data) : data_(std::move(data)) 
 model::~model() = default;
 model::model(model &&) noexcept = default;
 model &model::operator=(model &&) noexcept = default;
+model_inspection model::inspect(context &workspace) const
+{
+    if (kind() != model_kind::tree)
+        throw exception(error_code::unsupported, "rules inspection is not implemented");
+    c50_inspect_state state{data_.get(), {}};
+    c50_run_operation(workspace.state_.get(), InspectModel, CleanupModelLoad, &state);
+    return std::move(state.result);
+}
+
 model_kind model::kind() const noexcept { return data_->kind; }
 const std::string &model::names_data() const noexcept { return data_->names_data; }
 const std::string &model::serialized_data() const noexcept { return data_->model_data; }

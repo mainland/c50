@@ -131,6 +131,7 @@ int main(int argc, char **argv)
         });
         auto dense_model = c50::model::train(context, c50::model_kind::tree, dense_names, dense);
         exercise("dense predict", context, [&] { dense_model.predict(context, dense); });
+        exercise("inspect tree", context, [&] { dense_model.inspect(context); });
         exercise("implicit boolean", context, [&] {
             c50::model::train(context, c50::model_kind::tree,
                 "no, yes.\nx: continuous.\nlarge := x > 1.\n", data);
