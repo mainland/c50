@@ -103,3 +103,16 @@ heaptrack_print -f /tmp/c50-native-heaptrack.zst \
     --print-leaks=1 --print-peaks=0 --print-allocators=0 \
     --print-temporary=0
 ```
+
+## Model operation measurements
+
+`large_dataset.py` also records repeated model-load, serialized-string-copy,
+empty-prediction, and small/batched-prediction timings. Set
+`--operation-repetitions N` to change the five repetitions. Predictions are
+warmed before measurement and checked for exact score equality afterward.
+`model_load` includes parsing, validation, and owned copies. Empty prediction
+includes parser/setup costs but no case classification. Retrieving
+`serialized_data` copies an existing string in the Python binding. It does not
+measure native serialization, which runs during training. Use a sampled native
+profile to attribute time within training. These operation boundaries overlap
+and must not be summed as independent training phases.
