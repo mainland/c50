@@ -16,6 +16,79 @@ from numpy.typing import NDArray
 type Array = NDArray[Any]
 type CategoryKey = tuple[type[object], object]
 type UnknownCategoryPolicy = Literal["error", "missing"]
+type RowSelection = slice | NDArray[np.bool_]
+
+
+@dataclass(frozen=True)
+class CodedColumn:
+    """A column stored as integer codes into its distinct values.
+
+    Code -1 marks a missing value. pandas categorical and string columns use
+    this form so that encoding examines each distinct value once instead of
+    every row.
+    """
+
+    codes: NDArray[np.intp]
+    values: Any
+
+    def __len__(self) -> int:
+        """Return the number of rows."""
+        return len(self.codes)
+
+    def __getitem__(self, rows: RowSelection) -> CodedColumn:
+        """Return the selected rows with the same distinct values."""
+        return CodedColumn(self.codes[rows], self.values)
+
+    def present_codes(self) -> NDArray[np.intp]:
+        """Return the codes that occur, in order of first occurrence."""
+        codes, first = np.unique(self.codes[self.codes >= 0], return_index=True)
+        ordered: NDArray[np.intp] = codes[np.argsort(first, kind="stable")]
+        return ordered
+
+    def value(self, code: int | np.integer[Any]) -> object:
+        """Return the normalized value for a code."""
+        return _normalize_scalar(self.values[int(code)])
+
+    def objects(self) -> Array:
+        """Return an object array with ``None`` for missing values."""
+        result = np.full(len(self.codes), None, dtype=object)
+        present = self.codes >= 0
+        result[present] = np.asarray(self.values, dtype=object)[self.codes[present]]
+        return result
+
+
+@dataclass(frozen=True)
+class NullableNumbers:
+    """A pandas numeric extension array, converted once its use is known.
+
+    Continuous features use float64 values with NaN for missing values.
+    Categorical features use the Python values, so integer categories remain
+    integers.
+    """
+
+    array: Any
+
+    def __len__(self) -> int:
+        """Return the number of rows."""
+        return len(self.array)
+
+    def __getitem__(self, rows: RowSelection) -> NullableNumbers:
+        """Return the selected rows."""
+        return NullableNumbers(self.array[rows])
+
+    def floats(self) -> NDArray[np.float64]:
+        """Return float64 values with NaN for missing values."""
+        return np.asarray(
+            self.array.to_numpy(dtype=np.float64, na_value=np.nan),
+            dtype=np.float64,
+        )
+
+    def objects(self) -> Array:
+        """Return the object array that pandas produces for the column."""
+        return np.asarray(self.array.to_numpy(dtype=object), dtype=object)
+
+
+type Column = Array | CodedColumn | NullableNumbers
 
 
 @dataclass(frozen=True)
@@ -26,7 +99,7 @@ class Columns:
     encoded without converting their values to Python objects.
     """
 
-    arrays: tuple[Array, ...]
+    arrays: tuple[Column, ...]
     rows: int
 
     @property
@@ -34,7 +107,7 @@ class Columns:
         """Return the number of rows and features."""
         return self.rows, len(self.arrays)
 
-    def __getitem__(self, rows: slice | NDArray[np.bool_]) -> Self:
+    def __getitem__(self, rows: RowSelection) -> Self:
         """Return a range of rows, or the rows selected by a mask."""
         if isinstance(rows, slice):
             count = len(range(*rows.indices(self.rows)))
@@ -46,14 +119,35 @@ class Columns:
 def dataframe_columns(frame: Any) -> Columns:
     """Convert pandas DataFrame columns without a common dtype.
 
-    NumPy numeric and Boolean columns keep their dtype. Other columns become
-    object arrays, as they would in a conversion of the whole frame.
+    NumPy numeric and Boolean columns keep their dtype. Categorical and string
+    columns become codes into their distinct values, and nullable numeric
+    columns are converted when the schema determines their use. Other columns
+    become object arrays, as they would in a conversion of the whole frame.
     """
-    arrays = []
+    # Only pandas creates DataFrames, so it is already imported.
+    pandas = sys.modules["pandas"]
+    arrays: list[Column] = []
     for position in range(frame.shape[1]):
         column = frame.iloc[:, position]
-        if isinstance(column.dtype, np.dtype) and column.dtype.kind in "iufb":
-            arrays.append(column.to_numpy())
+        dtype = column.dtype
+        if isinstance(dtype, np.dtype):
+            if dtype.kind in "iufb":
+                arrays.append(column.to_numpy())
+            else:
+                arrays.append(column.to_numpy(dtype=object))
+        elif isinstance(dtype, pandas.CategoricalDtype):
+            arrays.append(
+                CodedColumn(
+                    column.cat.codes.to_numpy(dtype=np.intp), dtype.categories
+                )
+            )
+        elif isinstance(dtype, pandas.StringDtype):
+            # Every value is a str, so equal values have equal category keys
+            # and factorize() cannot merge distinct categories.
+            codes, uniques = pandas.factorize(column)
+            arrays.append(CodedColumn(np.asarray(codes, dtype=np.intp), uniques))
+        elif dtype.kind in "iuf":
+            arrays.append(NullableNumbers(column.array))
         else:
             arrays.append(column.to_numpy(dtype=object))
     return Columns(tuple(arrays), frame.shape[0])
@@ -138,7 +232,16 @@ class Schema:
         if self.case_weight:
             encoded[:, -1] = math.nan if case_weights is None else case_weights
         for feature_index, feature in enumerate(self.features):
-            column = columns.arrays[feature_index]
+            stored = columns.arrays[feature_index]
+            if isinstance(stored, CodedColumn) and feature.categorical:
+                encoded[:, feature_index] = _encode_coded(
+                    feature, stored, feature_index, unknown_categories
+                )
+                continue
+            if isinstance(stored, NullableNumbers) and not feature.categorical:
+                column = stored.floats()
+            else:
+                column = _object_values(stored)
             if not feature.categorical and column.dtype.kind in "iuf":
                 converted = np.asarray(column, dtype=np.float64)
                 if np.any(np.isinf(converted)):
@@ -172,7 +275,26 @@ def fit_schema(
     )
 
     features = []
-    for index, column in enumerate(columns.arrays):
+    for index, stored in enumerate(columns.arrays):
+        if isinstance(stored, CodedColumn):
+            categorical = (
+                _infer_coded_categorical(stored)
+                if selected is None
+                else index in selected
+            )
+            if categorical:
+                features.append(_fit_coded(stored, index))
+                continue
+            column = stored.objects()
+        elif isinstance(stored, NullableNumbers):
+            # Every value is a number, so inference selects a continuous
+            # feature, and a selected categorical feature keeps integers.
+            if selected is not None and index in selected:
+                column = stored.objects()
+            else:
+                column = stored.floats()
+        else:
+            column = stored
         categorical = (
             _infer_categorical(column) if selected is None else index in selected
         )
@@ -211,6 +333,55 @@ def encode_costs(class_count: int, cost_matrix: object | None) -> str:
                 f"{_format_number(costs[predicted, actual])}"
             )
     return "\n".join(lines) + ("\n" if lines else "")
+
+
+def _object_values(column: Column) -> Array:
+    return column if isinstance(column, np.ndarray) else column.objects()
+
+
+def _infer_coded_categorical(column: CodedColumn) -> bool:
+    values = [column.value(code) for code in column.present_codes()]
+    return bool(values) and not all(
+        isinstance(value, Real) and not isinstance(value, bool) for value in values
+    )
+
+
+def _fit_coded(column: CodedColumn, feature_index: int) -> FeatureSchema:
+    categories: list[object] = []
+    lookup: dict[CategoryKey, int] = {}
+    for code in column.present_codes():
+        value = column.value(code)
+        key = _category_key(value, feature_index)
+        if key not in lookup:
+            lookup[key] = len(categories)
+            categories.append(value)
+    return FeatureSchema(True, tuple(categories), lookup)
+
+
+def _encode_coded(
+    feature: FeatureSchema,
+    column: CodedColumn,
+    feature_index: int,
+    unknown_categories: UnknownCategoryPolicy,
+) -> NDArray[np.float64]:
+    # Map each code that occurs to its fitted index, or -1 if unseen.
+    mapping = np.full(len(column.values), -1, dtype=np.intp)
+    for code in np.unique(column.codes[column.codes >= 0]):
+        index = feature.lookup.get(_category_key(column.value(code), feature_index))
+        if index is not None:
+            mapping[code] = index
+
+    encoded = np.full(len(column), math.nan)
+    rows = np.flatnonzero(column.codes >= 0)
+    indices = mapping[column.codes[rows]]
+    unseen = indices < 0
+    if unknown_categories == "error" and np.any(unseen):
+        value = column.value(column.codes[rows[np.argmax(unseen)]])
+        raise ValueError(
+            f"X contains unseen category {value!r} in feature {feature_index}"
+        )
+    encoded[rows[~unseen]] = indices[~unseen]
+    return encoded
 
 
 def _as_columns(X: Array | Columns) -> Columns:

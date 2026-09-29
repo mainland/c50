@@ -68,10 +68,15 @@ Nullable pandas columns need no conversion because `pd.NA` is a missing value.
 
 The estimator converts a DataFrame one column at a time. Numeric and Boolean
 columns with NumPy dtypes keep those dtypes, so numeric columns are encoded as
-quickly as a numeric NumPy array. Other columns, including nullable and
-categorical pandas columns, become object arrays and are encoded one value at a
-time. Empty and sparse DataFrames are converted as whole arrays, so they raise
-the same errors as before.
+quickly as a numeric NumPy array. Nullable numeric columns, such as `Int64`
+and `Float64`, are encoded the same way when their features are continuous.
+`category` and `string` columns are encoded from their codes, so each distinct
+value is examined once. Categories are still fitted in order of first
+occurrence, and prediction matches values rather than codes, so a prediction
+frame may order or extend its categories differently. Other columns, including
+object columns, become object arrays and are encoded one value at a time.
+Empty and sparse DataFrames are converted as whole arrays, so they raise the
+same errors as before.
 
 pandas is a test dependency, not a runtime requirement. The estimator uses CPU
 NumPy arrays and returns NumPy arrays. It declares `array_api_support=False`.
