@@ -157,3 +157,62 @@ def test_invalid_weights_are_rejected(
 
     with pytest.raises(ValueError, match=message):
         C50Classifier().fit(X, y, sample_weight=sample_weight)
+
+
+def test_class_weights_are_sample_weights_by_class() -> None:
+    X, y, weights = weighted_problem()
+    by_class = np.where(y == "yes", 3.0, 0.5)
+
+    expected = C50Classifier().fit(X, y, sample_weight=by_class)
+    mapped = C50Classifier(class_weight={"yes": 3.0, "no": 0.5}).fit(X, y)
+    scaled = C50Classifier(class_weight={"yes": 12.0, "no": 2.0}).fit(X, y)
+    partial = C50Classifier(class_weight={"yes": 6.0}).fit(X, y)
+    combined = C50Classifier(class_weight={"yes": 3.0, "no": 0.5}).fit(
+        X, y, sample_weight=weights
+    )
+
+    assert mapped.model_.serialized_data == expected.model_.serialized_data
+    assert scaled.model_.serialized_data == expected.model_.serialized_data
+    assert partial.model_.serialized_data == expected.model_.serialized_data
+    assert (
+        combined.model_.serialized_data
+        == C50Classifier().fit(X, y, sample_weight=weights * by_class)
+        .model_.serialized_data
+    )
+    np.testing.assert_array_equal(mapped.predict_proba(X), expected.predict_proba(X))
+
+
+def test_balanced_class_weights_favor_the_minority_class() -> None:
+    rng = np.random.default_rng(31)
+    X = rng.normal(size=(300, 2))
+    y = np.where(X[:, 0] + rng.normal(scale=0.8, size=300) > 1.2, "rare", "common")
+    counts = {label: np.count_nonzero(y == label) for label in ("common", "rare")}
+    balanced_weights = np.asarray([len(y) / (2 * counts[label]) for label in y])
+
+    plain = C50Classifier().fit(X, y)
+    balanced = C50Classifier(class_weight="balanced").fit(X, y)
+    expected = C50Classifier().fit(X, y, sample_weight=balanced_weights)
+
+    assert balanced.model_.serialized_data == expected.model_.serialized_data
+    assert np.count_nonzero(balanced.predict(X) == "rare") > np.count_nonzero(
+        plain.predict(X) == "rare"
+    )
+
+
+@pytest.mark.parametrize(
+    ("class_weight", "error", "message"),
+    [
+        ({"yes": -1.0}, ValueError, "nonnegative"),
+        ({"yes": np.inf}, ValueError, "finite"),
+        ({"maybe": 2.0}, ValueError, "not in class_weight"),
+        ("uniform", ValueError, "class_weight"),
+        ({"yes": 0.0}, ValueError, "two classes"),
+    ],
+)
+def test_invalid_class_weights_are_rejected(
+    class_weight: object, error: type[Exception], message: str
+) -> None:
+    X, y, _ = weighted_problem()
+
+    with pytest.raises(error, match=message):
+        C50Classifier(class_weight=class_weight).fit(X, y)  # type: ignore[arg-type]

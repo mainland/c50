@@ -161,6 +161,16 @@ instead follows scikit-learn and removes samples with zero weight before
 fitting, so their labels and categories do not appear in `classes_` or
 `categories_`. Negative weights are rejected.
 
+`class_weight` weights samples by class. It accepts a mapping from class label
+to weight, in which unlisted classes have weight one, or `"balanced"`, which
+gives each class the weight `n_samples / (n_classes * n_class_samples)`. The
+estimator computes the class weights with scikit-learn's
+`compute_sample_weight` and multiplies them by `sample_weight`, so the rules
+above apply to the products. Only the ratios between class weights matter, and
+the samples of a class with weight zero are removed. Class weights change the training
+distribution, while `cost_matrix` changes the cost of each error. Both may be
+used together.
+
 ## Split selection and evaluation scoring
 
 `C50Classifier` uses the native C5.0 split-selection policy: gain ratio with
