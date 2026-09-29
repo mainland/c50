@@ -21,7 +21,14 @@ from sklearn.utils.validation import (
 )
 
 from ._c50 import Model, ModelKind, Options, TieOrder
-from ._data import Schema, encode_costs, fit_schema, is_integer_time_dtype
+from ._data import (
+    Columns,
+    Schema,
+    dataframe_columns,
+    encode_costs,
+    fit_schema,
+    is_integer_time_dtype,
+)
 
 type ModelKindName = Literal["tree", "rules"]
 type TieOrderName = Literal["reference", "stable"]
@@ -154,7 +161,13 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         fitted = False
         try:
             self._validate_configuration()
-            if (stamps := _time_frame(X)) is not None:
+            X_checked: NDArray[Any] | Columns
+            if _is_column_frame(X):
+                y_checked = validate_data(self, y=y, reset=True)
+                validate_data(self, X, reset=True, skip_check_array=True)
+                check_consistent_length(X, y_checked)
+                X_checked = dataframe_columns(X)
+            elif (stamps := _time_frame(X)) is not None:
                 y_checked = validate_data(self, y=y, reset=True)
                 validate_data(self, X, reset=True, skip_check_array=True)
                 X_checked = _check_time_frame(self, stamps)
@@ -296,10 +309,15 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         tags.input_tags.string = True
         return tags
 
-    def _validate_prediction_input(self, X: ArrayLike) -> NDArray[Any]:
+    def _validate_prediction_input(
+        self, X: ArrayLike
+    ) -> NDArray[Any] | Columns:
         check_is_fitted(self)
         # set_params() may change prediction parameters after fitting.
         self._validate_prediction_configuration()
+        if _is_column_frame(X):
+            validate_data(self, X, reset=False, skip_check_array=True)
+            return dataframe_columns(X)
         if (stamps := _time_frame(X)) is not None:
             validate_data(self, X, reset=False, skip_check_array=True)
             return _check_time_frame(self, stamps)
@@ -316,7 +334,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
 
     def _prediction_batches(
         self,
-        X: NDArray[Any],
+        X: NDArray[Any] | Columns,
     ) -> Iterator[tuple[slice, NDArray[np.float64]]]:
         batch_size = (
             max(1, X.shape[0])
@@ -386,6 +404,23 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             TieOrder.STABLE if self.ties == "stable" else TieOrder.REFERENCE
         )
         return options
+
+
+def _is_column_frame(X: object) -> bool:
+    """Return whether ``X`` is a DataFrame to convert column by column.
+
+    Empty and sparse frames use the whole-array conversion, which reports
+    their errors.
+    """
+    pandas = sys.modules.get("pandas")
+    return (
+        pandas is not None
+        and isinstance(X, pandas.DataFrame)
+        and 0 not in X.shape
+        and not any(
+            isinstance(dtype, pandas.SparseDtype) for dtype in X.dtypes
+        )
+    )
 
 
 def _is_pandas_object(values: object) -> bool:
