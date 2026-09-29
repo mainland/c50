@@ -104,6 +104,31 @@ are supported in multiclass matrices whose columns satisfy this requirement.
 `ignore_costs=True` ignores costs during both training and prediction. The
 model retains no costs data in this mode.
 
+## Sample weights
+
+`fit` accepts `sample_weight`, either one finite, nonnegative weight per sample
+or a scalar. The estimator passes the weights to C5.0 as its case-weight
+attribute. C5.0 uses case weights when it counts cases but never tests them in
+a classifier. Without `sample_weight`, the names buffer has no case-weight
+attribute, and the classifier is unchanged.
+
+C5.0 divides each case weight by the mean weight, so only the ratios between
+weights matter. Multiplying every weight by a constant does not change the
+classifier. The estimator divides the weights by their mean before training.
+The resulting ratios must fit C5.0's single-precision case weights.
+
+A weight of 2 is therefore not equivalent to repeating a sample. Repetition
+increases the total weight, while C5.0 rescales the weights to the number of
+samples. Case-count thresholds such as `minimum_cases` and pruning estimates
+see different totals. For this reason, scikit-learn's
+`check_sample_weight_equivalence_on_dense_data` check fails with the default
+options.
+
+C5.0 counts a zero or negative case weight as a weight of one. The estimator
+instead follows scikit-learn and removes samples with zero weight before
+fitting, so their labels and categories do not appear in `classes_` or
+`categories_`. Negative weights are rejected.
+
 ## Split selection and evaluation scoring
 
 `C50Classifier` uses the native C5.0 split-selection policy: gain ratio with

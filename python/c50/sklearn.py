@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 from collections.abc import Iterator, Sequence
 from numbers import Integral
@@ -129,7 +130,12 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         self.prediction_batch_size = prediction_batch_size
         self.cost_matrix = cost_matrix
 
-    def fit(self, X: ArrayLike, y: ArrayLike) -> C50Classifier:
+    def fit(
+        self,
+        X: ArrayLike,
+        y: ArrayLike,
+        sample_weight: ArrayLike | None = None,
+    ) -> C50Classifier:
         """Fit a C5.0 classifier.
 
         A failed fit clears all fitted state, including any previous model.
@@ -137,6 +143,10 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         Args:
             X: Dense two-dimensional training data.
             y: One-dimensional class labels.
+            sample_weight: Optional nonnegative weight for each sample. C5.0
+                uses weights relative to their mean, so multiplying every
+                weight by a constant does not change the classifier. Samples
+                with zero weight are removed before fitting.
 
         Returns:
             This fitted estimator.
@@ -166,6 +176,13 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 )
             check_classification_targets(y_checked)
 
+            weights = _relative_sample_weight(sample_weight, y_checked.shape[0])
+            if weights is not None and not np.all(weights > 0):
+                present = weights > 0
+                X_checked = X_checked[present]
+                y_checked = y_checked[present]
+                weights = weights[present]
+
             label_encoder = LabelEncoder().fit(y_checked)
             classes = label_encoder.classes_
             if classes.shape[0] < 2:
@@ -181,8 +198,10 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 self.categorical_features,
                 feature_names,
             )
+            if weights is not None:
+                schema = dataclasses.replace(schema, case_weight=True)
             names_data = schema.names_data(classes.shape[0])
-            training_values = schema.dense_data(X_checked, "error")
+            training_values = schema.dense_data(X_checked, "error", weights)
             native_class_indices = np.asarray(class_indices, dtype=np.uintp)
             costs_data = encode_costs(classes.shape[0], self.cost_matrix)
             options = self._native_options()
@@ -371,6 +390,43 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             TieOrder.STABLE if self.ties == "stable" else TieOrder.REFERENCE
         )
         return options
+
+
+def _relative_sample_weight(
+    sample_weight: ArrayLike | None,
+    sample_count: int,
+) -> NDArray[np.float64] | None:
+    """Validate sample weights and divide them by their mean.
+
+    C5.0 stores case weights in single precision and uses only their ratios.
+    Scaling first keeps uniform large or small weights representable.
+    """
+    if sample_weight is None:
+        return None
+    weights = np.asarray(sample_weight, dtype=np.float64)
+    if weights.ndim == 0:
+        weights = np.full(sample_count, weights)
+    if weights.shape != (sample_count,):
+        raise ValueError(
+            f"sample_weight has shape {weights.shape}, expected ({sample_count},)"
+        )
+    if not np.all(np.isfinite(weights)):
+        raise ValueError("sample_weight must contain only finite values")
+    if np.any(weights < 0):
+        raise ValueError("sample_weight must be nonnegative")
+    positive = weights[weights > 0]
+    if positive.size == 0:
+        raise ValueError("sample_weight cannot be zero for every sample")
+
+    relative: NDArray[np.float64] = weights / positive.mean()
+    limits = np.finfo(np.float32)
+    positive = relative[relative > 0]
+    if positive.min() < limits.tiny or positive.max() > limits.max:
+        raise ValueError(
+            "sample_weight ratios exceed the single-precision range of C5.0 "
+            "case weights"
+        )
+    return relative
 
 
 def _is_column_frame(X: object) -> bool:

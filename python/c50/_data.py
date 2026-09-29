@@ -34,13 +34,13 @@ class Columns:
         """Return the number of rows and features."""
         return self.rows, len(self.arrays)
 
-    def __getitem__(self, rows: slice) -> Self:
-        """Return a range of rows from every column."""
-        start, stop, step = rows.indices(self.rows)
-        return type(self)(
-            tuple(array[rows] for array in self.arrays),
-            len(range(start, stop, step)),
-        )
+    def __getitem__(self, rows: slice | NDArray[np.bool_]) -> Self:
+        """Return a range of rows, or the rows selected by a mask."""
+        if isinstance(rows, slice):
+            count = len(range(*rows.indices(self.rows)))
+        else:
+            count = int(np.count_nonzero(rows))
+        return type(self)(tuple(array[rows] for array in self.arrays), count)
 
 
 def dataframe_columns(frame: Any) -> Columns:
@@ -70,9 +70,14 @@ class FeatureSchema:
 
 @dataclass(frozen=True)
 class Schema:
-    """Fitted conversion between array values and C5.0 case fields."""
+    """Fitted conversion between array values and C5.0 case fields.
+
+    With ``case_weight``, the C5.0 schema ends with a ``case weight``
+    attribute after the features. C5.0 does not use it in classifiers.
+    """
 
     features: tuple[FeatureSchema, ...]
+    case_weight: bool = False
 
     @property
     def categorical_indices(self) -> tuple[int, ...]:
@@ -104,22 +109,34 @@ class Schema:
                 lines.append(f"feature_{index}: {values}.")
             else:
                 lines.append(f"feature_{index}: continuous.")
+        if self.case_weight:
+            lines.append("case weight: continuous.")
         return "\n".join(lines) + "\n"
 
     def dense_data(
         self,
         X: Array | Columns,
         unknown_categories: UnknownCategoryPolicy,
+        case_weights: NDArray[np.float64] | None = None,
     ) -> NDArray[np.float64]:
-        """Encode features as the native dense matrix representation."""
+        """Encode features as the native dense matrix representation.
+
+        A schema with a case-weight attribute encodes ``case_weights`` after
+        the features, or missing values when none are given.
+        """
         columns = _as_columns(X)
         if len(columns.arrays) != len(self.features):
             raise ValueError(
                 f"X has {len(columns.arrays)} features, but the fitted schema "
                 f"expects {len(self.features)}"
             )
+        if case_weights is not None and not self.case_weight:
+            raise ValueError("the fitted schema has no case-weight attribute")
 
-        encoded = np.empty(columns.shape, dtype=np.float64, order="C")
+        width = len(self.features) + self.case_weight
+        encoded = np.empty((columns.rows, width), dtype=np.float64, order="C")
+        if self.case_weight:
+            encoded[:, -1] = math.nan if case_weights is None else case_weights
         for feature_index, feature in enumerate(self.features):
             column = columns.arrays[feature_index]
             if not feature.categorical and column.dtype.kind in "iuf":

@@ -39,6 +39,18 @@ def test_common_estimator_checks() -> None:
     check_estimator(C50Classifier(minimum_cases=1))
 
 
+def test_default_estimator_checks_record_weight_scaling() -> None:
+    check_estimator(
+        C50Classifier(),
+        expected_failed_checks={
+            "check_sample_weight_equivalence_on_dense_data": (
+                "C5.0 rescales case weights to their mean, so a weight is not "
+                "equivalent to repeating a sample."
+            )
+        },
+    )
+
+
 def test_pipeline_and_grid_search() -> None:
     pipeline = Pipeline(
         [
