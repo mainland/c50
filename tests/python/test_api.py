@@ -220,6 +220,23 @@ def test_native_failures_become_python_exceptions() -> None:
         model.predict("malformed")
 
 
+@pytest.mark.parametrize("kind", [c50.ModelKind.TREE, c50.ModelKind.RULES])
+def test_attribute_usage_counts_tested_cases(kind: c50.ModelKind) -> None:
+    options = c50.Options()
+    options.minimum_cases = 1
+    model = c50.Model.train(NAMES, TRAINING, kind, options)
+
+    usage = model.attribute_usage(TRAINING)
+
+    assert usage == [8, 0]
+    assert model.attribute_usage_dense(DENSE_TRAINING) == usage
+    assert model.attribute_usage("?, alpha, ?\n") == [0, 0]
+    assert model.attribute_usage("") == [0, 0]
+    assert model.attribute_usage_dense(np.empty((0, 2))) == [0, 0]
+    with pytest.raises(ValueError, match="two-dimensional"):
+        model.attribute_usage_dense(np.zeros(2))
+
+
 def test_empty_prediction_batch() -> None:
     model = c50.train(NAMES, TRAINING)
 
