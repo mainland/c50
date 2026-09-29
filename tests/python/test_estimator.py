@@ -244,6 +244,54 @@ def test_rules_options_costs_and_refit() -> None:
     assert classifier.classes_.tolist() == ["left", "right"]
 
 
+def test_attribute_usage_and_feature_importances() -> None:
+    rng = np.random.default_rng(3)
+    X = rng.normal(size=(400, 4))
+    y = np.where(X[:, 0] + 0.4 * X[:, 1] > 0, "yes", "no")
+
+    for options in ({}, {"model_kind": "rules"}, {"trials": 4}):
+        classifier = C50Classifier(**options).fit(X, y)
+        counts = classifier.model_.attribute_usage_dense(X)
+        np.testing.assert_array_equal(
+            classifier.attribute_usage_, np.asarray(counts) / len(y)
+        )
+        assert classifier.attribute_usage_[0] == 1
+        assert classifier.feature_importances_.sum() == pytest.approx(1)
+        np.testing.assert_array_equal(
+            classifier.feature_importances_.argsort(),
+            classifier.attribute_usage_.argsort(),
+        )
+        batched = C50Classifier(prediction_batch_size=7, **options).fit(X, y)
+        np.testing.assert_array_equal(
+            batched.attribute_usage_, classifier.attribute_usage_
+        )
+
+
+def test_attribute_usage_excludes_weights_and_zero_weight_samples() -> None:
+    rng = np.random.default_rng(4)
+    X = rng.normal(size=(200, 3))
+    y = np.where(X[:, 0] > 0, 1, 0)
+    weights = rng.uniform(0.5, 2, size=len(y))
+    weights[:50] = 0
+
+    weighted = C50Classifier().fit(X, y, sample_weight=weights)
+    kept = C50Classifier().fit(X[50:], y[50:], sample_weight=weights[50:])
+
+    assert weighted.attribute_usage_.shape == (3,)
+    np.testing.assert_array_equal(weighted.attribute_usage_, kept.attribute_usage_)
+
+
+def test_single_leaf_has_zero_importances() -> None:
+    X = np.arange(8.0).reshape(-1, 1)
+    y = np.asarray([0, 1] * 4)
+
+    classifier = C50Classifier().fit(X, y)
+
+    assert classifier.model_.inspect().trees[0].leaf_count == 1
+    np.testing.assert_array_equal(classifier.attribute_usage_, [0])
+    np.testing.assert_array_equal(classifier.feature_importances_, [0])
+
+
 def test_pickle_round_trip() -> None:
     classifier = C50Classifier().fit(X_BINARY, Y_BINARY)
 

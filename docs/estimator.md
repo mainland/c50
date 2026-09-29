@@ -115,6 +115,22 @@ are supported in multiclass matrices whose columns satisfy this requirement.
 `ignore_costs=True` ignores costs during both training and prediction. The
 model retains no costs data in this mode.
 
+## Feature importances
+
+After `fit`, `attribute_usage_` holds, for each feature, the fraction of
+training samples whose classification tests that feature with a known value.
+These are the values of C5.0's "Attribute usage" report divided by 100. The
+root attribute of a tree has usage one, and the values need not sum to one.
+Samples with zero weight are not counted.
+
+`feature_importances_` divides `attribute_usage_` by its sum, so it sums to
+one, or is all zeros when the classifier tests no feature. It measures how
+often C5.0 consults a feature, not how much the feature reduces impurity, so
+it is not comparable with the impurity-based importances of scikit-learn
+trees. Tools such as `SelectFromModel` use it for relative ranking. Usage is
+computed after training on the training rows, in batches of
+`prediction_batch_size`.
+
 ## Sample weights
 
 `fit` accepts `sample_weight`, either one finite, nonnegative weight per sample

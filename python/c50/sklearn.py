@@ -89,6 +89,12 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         categories_: Categories for every feature. Continuous features have an
             empty category array.
         cost_matrix_: Validated copy of the fitted cost matrix, or ``None``.
+        attribute_usage_: Fraction of training samples whose classification
+            tests each feature with a known value. These are the values of
+            C5.0's "Attribute usage" report divided by 100. Samples with zero
+            weight are not counted.
+        feature_importances_: ``attribute_usage_`` divided by its sum, or
+            zeros when the classifier tests no feature.
     """
 
     classes_: NDArray[Any]
@@ -98,6 +104,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
     categorical_features_: NDArray[np.signedinteger[Any]]
     categories_: tuple[NDArray[Any], ...]
     cost_matrix_: NDArray[np.float64] | None
+    attribute_usage_: NDArray[np.float64]
+    feature_importances_: NDArray[np.float64]
     _label_encoder: LabelEncoder
     _schema: Schema
 
@@ -225,8 +233,17 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 self._native_workers(),
             )
 
+            usage = self._attribute_usage(model, training_values)[
+                : len(schema.features)
+            ]
+            total = usage.sum()
+
             self.classes_ = classes
             self.model_ = model
+            self.attribute_usage_ = usage / training_values.shape[0]
+            self.feature_importances_ = (
+                usage / total if total else np.zeros_like(usage)
+            )
             self.categorical_features_ = np.asarray(
                 schema.categorical_indices,
                 dtype=np.intp,
@@ -256,6 +273,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             "categorical_features_",
             "categories_",
             "cost_matrix_",
+            "attribute_usage_",
+            "feature_importances_",
             "_label_encoder",
             "_schema",
         ):
@@ -335,6 +354,18 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 ensure_all_finite=False,
             ),
         )
+
+    def _attribute_usage(
+        self,
+        model: Model,
+        values: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        """Count, per C5.0 attribute, the training rows that use it."""
+        batch_size = self.prediction_batch_size or max(1, values.shape[0])
+        usage = np.zeros(values.shape[1], dtype=np.float64)
+        for start in range(0, values.shape[0], batch_size):
+            usage += model.attribute_usage_dense(values[start : start + batch_size])
+        return usage
 
     def _prediction_batches(
         self,

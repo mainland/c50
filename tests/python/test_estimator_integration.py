@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 from scipy import sparse
 from sklearn.base import clone
+from sklearn.feature_selection import SelectFromModel
 from sklearn.metrics import balanced_accuracy_score, f1_score
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.pipeline import Pipeline
@@ -71,6 +72,18 @@ def test_pipeline_and_grid_search() -> None:
 
     assert search.best_estimator_.predict(X).shape == Y.shape
     assert 0 <= search.best_score_ <= 1
+
+
+def test_feature_selection_uses_feature_importances() -> None:
+    rng = np.random.default_rng(6)
+    features = rng.normal(size=(300, 5))
+    labels = np.where(features[:, 2] - 0.5 * features[:, 4] > 0, 1, 0)
+
+    selector = SelectFromModel(C50Classifier(), threshold="mean").fit(
+        features, labels
+    )
+
+    assert selector.get_support().tolist() == [False, False, True, False, True]
 
 
 def test_grid_search_accepts_multiple_evaluation_metrics() -> None:
