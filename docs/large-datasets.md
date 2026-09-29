@@ -84,10 +84,11 @@ keeps equal values in case order. Training remains deterministic on every
 platform, but the classifier may differ from the reference learner. See
 {doc}`compatibility`.
 
-Set `split_workers` to 1 through 8 to enable bounded parallel evaluation
-of eligible attribute splits; one worker is the default. Nodes need at least
-10,000 training rows and multiple eligible attributes. Verbose diagnostics and
-legacy split-value subsampling remain serial. Training-row sampling remains
+Set the estimator's `n_jobs`, or the native `split_workers`, to enable bounded
+parallel evaluation of eligible attribute splits. At most 8 workers are used,
+and one worker is the default. Nodes need at least 10,000 training rows and
+multiple eligible attributes. Verbose diagnostics and legacy split-value
+subsampling remain serial. Training-row sampling remains
 eligible. The cross-worker regression test compares exact classifier digests
 across worker counts, including subset splits. Other training phases remain
 serial.
