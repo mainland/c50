@@ -348,6 +348,27 @@ def test_categorical_prediction_uses_fitted_categories() -> None:
     )
 
 
+def test_categorical_features_from_dtype() -> None:
+    frame, labels = coded_frame()
+    frame = frame.drop(columns="word")
+    frame["digits"] = pd.Categorical(np.arange(len(labels)) % 4)
+
+    inferred = C50Classifier(minimum_cases=1).fit(frame, labels)
+    from_dtype = C50Classifier(
+        minimum_cases=1, categorical_features="from_dtype"
+    ).fit(frame, labels)
+
+    assert inferred.categorical_features_.tolist() == [1]
+    assert from_dtype.categorical_features_.tolist() == [1, 4]
+    assert from_dtype.categories_[4].tolist() == [0, 1, 2, 3]
+    with pytest.raises(TypeError, match="continuous"):
+        C50Classifier(categorical_features="from_dtype").fit(
+            frame.to_numpy(dtype=object), labels
+        )
+    numeric = C50Classifier(categorical_features="from_dtype").fit(X, Y)
+    assert numeric.categorical_features_.tolist() == []
+
+
 def test_dataframe_input_errors_match_array_input() -> None:
     frame = pd.DataFrame({"signal": X[:, 0], "noise": X[:, 1]})
     classifier = C50Classifier(minimum_cases=1)
