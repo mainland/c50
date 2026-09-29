@@ -267,6 +267,87 @@ def test_dataframe_columns_match_object_array_conversion() -> None:
     np.testing.assert_array_equal(from_frame.predict_proba(frame), expected)
 
 
+def coded_frame() -> tuple[pd.DataFrame, np.ndarray]:
+    rng = np.random.default_rng(12)
+    count = 240
+    words = rng.choice(["red", "green", "blue"], size=count)
+    frame = pd.DataFrame(
+        {
+            "signal": rng.normal(size=count),
+            "group": pd.Categorical(np.where(rng.random(count) < 0.1, None, words)),
+            "word": pd.array(
+                np.where(rng.random(count) < 0.1, None, words[::-1]), dtype="string"
+            ),
+            "count": pd.array(
+                np.where(rng.random(count) < 0.1, None, rng.integers(0, 9, size=count)),
+                dtype="Int64",
+            ),
+            "level": pd.array(rng.normal(size=count), dtype="Float64"),
+        }
+    )
+    labels = np.where(
+        frame["signal"] + (words == "red") - (words[::-1] == "blue") > 0.2,
+        "yes",
+        "no",
+    )
+    return frame, labels
+
+
+def test_coded_and_nullable_columns_match_object_conversion() -> None:
+    frame, labels = coded_frame()
+    values = frame.to_numpy(dtype=object)
+    weights = np.where(np.arange(len(labels)) % 5 == 0, 0.0, 1.0)
+
+    for options in ({}, {"categorical_features": ["group", "word", "count"]}):
+        from_frame = C50Classifier(minimum_cases=1, **options).fit(
+            frame, labels, sample_weight=weights
+        )
+        indices = [frame.columns.get_loc(name) for name in options.get(
+            "categorical_features", []
+        )]
+        from_values = C50Classifier(
+            minimum_cases=1,
+            categorical_features=indices if options else None,
+        ).fit(values, labels, sample_weight=weights)
+
+        assert from_frame.model_.serialized_data == from_values.model_.serialized_data
+        for frame_categories, value_categories in zip(
+            from_frame.categories_, from_values.categories_, strict=True
+        ):
+            assert [(type(value), value) for value in frame_categories] == [
+                (type(value), value) for value in value_categories
+            ]
+        np.testing.assert_array_equal(
+            from_frame.predict_proba(frame), from_values.predict_proba(values)
+        )
+
+
+def test_categorical_prediction_uses_fitted_categories() -> None:
+    frame, labels = coded_frame()
+    classifier = C50Classifier(minimum_cases=1).fit(frame, labels)
+    expected = classifier.predict_proba(frame)
+
+    recoded = frame.copy()
+    recoded["group"] = recoded["group"].cat.set_categories(
+        ["violet", "blue", "red", "green"]
+    )
+    recoded["word"] = recoded["word"].astype(object)
+    np.testing.assert_array_equal(classifier.predict_proba(recoded), expected)
+
+    unseen = frame.copy()
+    unseen["group"] = unseen["group"].cat.add_categories(["violet"])
+    np.testing.assert_array_equal(classifier.predict_proba(unseen), expected)
+    unseen.loc[[4, 9], "group"] = "violet"
+    with pytest.raises(ValueError, match="unseen category 'violet' in feature 1"):
+        classifier.predict(unseen)
+    classifier.set_params(unknown_categories="missing")
+    missing = frame.copy()
+    missing.loc[[4, 9], "group"] = None
+    np.testing.assert_array_equal(
+        classifier.predict_proba(unseen), classifier.predict_proba(missing)
+    )
+
+
 def test_dataframe_input_errors_match_array_input() -> None:
     frame = pd.DataFrame({"signal": X[:, 0], "noise": X[:, 1]})
     classifier = C50Classifier(minimum_cases=1)
