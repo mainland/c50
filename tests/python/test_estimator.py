@@ -19,7 +19,7 @@ Y_BINARY = np.asarray(["low", "low", "low", "low", "high", "high", "high", "high
 
 def test_constructor_is_cloneable_and_does_not_fit() -> None:
     classifier = C50Classifier(
-        trials=3, split_workers=2, categorical_features=(1,)
+        trials=3, n_jobs=2, categorical_features=(1,)
     )
 
     copied = clone(classifier)
@@ -27,7 +27,7 @@ def test_constructor_is_cloneable_and_does_not_fit() -> None:
     assert copied.get_params() == classifier.get_params()
     assert copied.trials == 3
     assert copied.categorical_features == (1,)
-    assert copied.split_workers == 2
+    assert copied.n_jobs == 2
     assert not hasattr(classifier, "model_")
 
 
@@ -50,11 +50,31 @@ def test_numeric_fit_predict_and_predict_proba() -> None:
 
 
 def test_worker_count_preserves_estimator_model() -> None:
-    serial = C50Classifier(split_workers=1).fit(X_BINARY, Y_BINARY)
-    parallel = C50Classifier(split_workers=2).fit(X_BINARY, Y_BINARY)
+    serial = C50Classifier().fit(X_BINARY, Y_BINARY)
 
-    assert parallel.model_.serialized_data == serial.model_.serialized_data
-    assert parallel.predict(X_BINARY).tolist() == serial.predict(X_BINARY).tolist()
+    for n_jobs in (1, 2, 64, -1, -2):
+        parallel = C50Classifier(n_jobs=n_jobs).fit(X_BINARY, Y_BINARY)
+        assert parallel.model_.serialized_data == serial.model_.serialized_data
+        assert (
+            parallel.predict(X_BINARY).tolist() == serial.predict(X_BINARY).tolist()
+        )
+
+
+@pytest.mark.parametrize(
+    ("n_jobs", "expected"),
+    [(None, 1), (1, 1), (3, 3), (8, 8), (9, 8), (64, 8)],
+)
+def test_n_jobs_selects_native_workers(n_jobs: int | None, expected: int) -> None:
+    assert C50Classifier(n_jobs=n_jobs)._native_workers() == expected
+
+
+def test_n_jobs_follows_joblib_configuration() -> None:
+    joblib = pytest.importorskip("joblib")
+
+    with joblib.parallel_config(n_jobs=3):
+        assert C50Classifier()._native_workers() == 3
+        assert C50Classifier(n_jobs=2)._native_workers() == 2
+    assert 1 <= C50Classifier(n_jobs=-1)._native_workers() <= 8
 
 
 def test_stable_ties_fit_and_validation() -> None:
@@ -67,11 +87,41 @@ def test_stable_ties_fit_and_validation() -> None:
         C50Classifier(ties="fast").fit(X_BINARY, Y_BINARY)  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize("workers", [0, 9, 1.5, True])
-def test_invalid_worker_count(workers: object) -> None:
-    classifier = C50Classifier(split_workers=workers)  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="split_workers"):
+@pytest.mark.parametrize("n_jobs", [0, 1.5, True, "2"])
+def test_invalid_n_jobs(n_jobs: object) -> None:
+    classifier = C50Classifier(n_jobs=n_jobs)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="n_jobs"):
         classifier.fit(X_BINARY, Y_BINARY)
+
+
+def test_random_state_controls_only_sampling() -> None:
+    X = np.linspace(0, 4, 40).reshape(-1, 1)
+    y = np.where(X[:, 0] > 2, "high", "low")
+    y[::7] = "high"
+
+    def model(**parameters: object) -> str:
+        return str(
+            C50Classifier(minimum_cases=1, **parameters)
+            .fit(X, y)
+            .model_.serialized_data
+        )
+
+    state = np.random.RandomState(5)
+    before = state.get_state()[1].copy()
+    assert model(random_state=state) == model()
+    np.testing.assert_array_equal(state.get_state()[1], before)
+
+    sampled = {"sample_fraction": 0.5}
+    assert model(random_state=3, **sampled) == model(random_state=3, **sampled)
+    first = np.random.RandomState(8)
+    second = np.random.RandomState(8)
+    assert model(random_state=first, **sampled) == model(
+        random_state=second, **sampled
+    )
+    assert len({model(random_state=seed, **sampled) for seed in range(8)}) > 1
+
+    with pytest.raises(ValueError):
+        C50Classifier(random_state="seed").fit(X, y)  # type: ignore[arg-type]
 
 
 def test_prediction_batches_preserve_results() -> None:
@@ -241,7 +291,7 @@ def test_ignore_costs_discards_training_and_prediction_costs() -> None:
 @pytest.mark.parametrize(
     ("parameters", "labels"),
     [
-        ({"split_workers": 0}, Y_BINARY),
+        ({"n_jobs": 0}, Y_BINARY),
         ({}, Y_BINARY[:-1]),
         ({}, np.repeat("only", len(Y_BINARY))),
         ({"categorical_features": (2,)}, Y_BINARY),
@@ -267,7 +317,7 @@ def test_failed_refit_clears_model_and_metadata(
     with pytest.raises(NotFittedError):
         classifier.predict_proba(two_features)
 
-    classifier.set_params(split_workers=1, categorical_features=None, cost_matrix=None)
+    classifier.set_params(n_jobs=None, categorical_features=None, cost_matrix=None)
     classifier.fit(two_features, Y_BINARY)
     assert classifier.n_features_in_ == 2
     np.testing.assert_array_equal(classifier.predict(two_features), Y_BINARY)

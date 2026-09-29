@@ -9,10 +9,11 @@ from numbers import Integral
 from typing import Any, Literal, cast
 
 import numpy as np
+from joblib import effective_n_jobs
 from numpy.typing import ArrayLike, NDArray
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.preprocessing import LabelEncoder
-from sklearn.utils import Tags
+from sklearn.utils import Tags, check_random_state
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import (
     check_consistent_length,
@@ -27,6 +28,10 @@ from ._data import Columns, Schema, dataframe_columns, encode_costs, fit_schema
 type ModelKindName = Literal["tree", "rules"]
 type TieOrderName = Literal["reference", "stable"]
 type UnknownCategoryPolicy = Literal["error", "missing"]
+
+# Native limits on the sampling seed and split-evaluation workers.
+_SEED_COUNT = 4096
+_MAX_WORKERS = 8
 
 
 class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
@@ -54,13 +59,18 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         confidence_factor: Pruning confidence factor.
         sample_fraction: Fraction of cases used for training. Zero disables
             sampling.
-        random_seed: Seed used by native sampling.
+        random_state: Controls native sampling when ``sample_fraction`` is
+            positive. An integer or ``numpy.random.RandomState`` draws the
+            native seed from 0 through 4095. ``None`` uses NumPy's global
+            random state.
         ties: Order of equal continuous values when evaluating splits.
             ``"reference"`` reproduces the reference C5.0 learner.
             ``"stable"`` is faster and deterministic on every platform, but
             may build a classifier that differs from the reference learner.
-        split_workers: Number of native split-evaluation workers,
-            from 1 through 8.
+        n_jobs: Number of native split-evaluation workers. ``None`` means
+            one unless a ``joblib.parallel_config`` context sets another
+            value, and ``-1`` means all processors. At most 8 workers are
+            used. The worker count does not change the classifier.
         categorical_features: Categorical column indices or, for inputs with
             string feature names, column names. ``None`` infers feature types.
         unknown_categories: Raise an error for an unseen prediction-time
@@ -104,9 +114,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         minimum_cases: float = 2.0,
         confidence_factor: float = 0.25,
         sample_fraction: float = 0.0,
-        random_seed: int = 0,
+        random_state: int | np.random.RandomState | None = None,
         ties: TieOrderName = "reference",
-        split_workers: int = 1,
+        n_jobs: int | None = None,
         categorical_features: Sequence[int | str] | None = None,
         unknown_categories: UnknownCategoryPolicy = "error",
         prediction_batch_size: int | None = 65536,
@@ -122,9 +132,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         self.minimum_cases = minimum_cases
         self.confidence_factor = confidence_factor
         self.sample_fraction = sample_fraction
-        self.random_seed = random_seed
+        self.random_state = random_state
         self.ties = ties
-        self.split_workers = split_workers
+        self.n_jobs = n_jobs
         self.categorical_features = categorical_features
         self.unknown_categories = unknown_categories
         self.prediction_batch_size = prediction_batch_size
@@ -212,7 +222,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 self._native_model_kind(),
                 options,
                 costs_data,
-                self.split_workers,
+                self._native_workers(),
             )
 
             self.classes_ = classes
@@ -350,12 +360,12 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             raise ValueError("model_kind must be 'tree' or 'rules'")
         if self.ties not in ("reference", "stable"):
             raise ValueError("ties must be 'reference' or 'stable'")
-        if (
-            not isinstance(self.split_workers, Integral)
-            or isinstance(self.split_workers, bool)
-            or not 1 <= self.split_workers <= 8
+        if self.n_jobs is not None and (
+            not isinstance(self.n_jobs, Integral)
+            or isinstance(self.n_jobs, bool)
+            or self.n_jobs == 0
         ):
-            raise ValueError("split_workers must be an integer from 1 through 8")
+            raise ValueError("n_jobs must be None or a nonzero integer")
         self._validate_prediction_configuration()
 
     def _validate_prediction_configuration(self) -> None:
@@ -371,6 +381,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         ):
             raise ValueError("prediction_batch_size must be a positive integer or None")
 
+    def _native_workers(self) -> int:
+        return min(int(effective_n_jobs(self.n_jobs)), _MAX_WORKERS)
+
     def _native_model_kind(self) -> ModelKind:
         return ModelKind.TREE if self.model_kind == "tree" else ModelKind.RULES
 
@@ -385,7 +398,11 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         options.minimum_cases = self.minimum_cases
         options.confidence_factor = self.confidence_factor
         options.sample_fraction = self.sample_fraction
-        options.random_seed = self.random_seed
+        random_state = check_random_state(self.random_state)
+        # Sampling is the only native use of the seed. Without it, leave
+        # a supplied RandomState unchanged.
+        if self.sample_fraction:
+            options.random_seed = int(random_state.randint(_SEED_COUNT))
         options.ties = (
             TieOrder.STABLE if self.ties == "stable" else TieOrder.REFERENCE
         )
