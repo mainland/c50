@@ -75,6 +75,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             used. The worker count does not change the classifier.
         categorical_features: Categorical column indices or, for inputs with
             string feature names, column names. ``None`` infers feature types.
+            ``"from_dtype"`` selects exactly the DataFrame columns with a
+            pandas ``category`` dtype.
         unknown_categories: Raise an error for an unseen prediction-time
             category or pass it to C5.0 as a missing value.
         prediction_batch_size: Maximum rows converted and predicted in one
@@ -132,7 +134,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         random_state: int | np.random.RandomState | None = None,
         ties: TieOrderName = "reference",
         n_jobs: int | None = None,
-        categorical_features: Sequence[int | str] | None = None,
+        categorical_features: Sequence[int | str] | Literal["from_dtype"] | None = None,
         unknown_categories: UnknownCategoryPolicy = "error",
         prediction_batch_size: int | None = 65536,
         cost_matrix: ArrayLike | None = None,

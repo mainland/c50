@@ -30,6 +30,7 @@ class CodedColumn:
 
     codes: NDArray[np.intp]
     values: Any
+    categorical_dtype: bool
 
     def __len__(self) -> int:
         """Return the number of rows."""
@@ -37,7 +38,7 @@ class CodedColumn:
 
     def __getitem__(self, rows: RowSelection) -> CodedColumn:
         """Return the selected rows with the same distinct values."""
-        return CodedColumn(self.codes[rows], self.values)
+        return CodedColumn(self.codes[rows], self.values, self.categorical_dtype)
 
     def present_codes(self) -> NDArray[np.intp]:
         """Return the codes that occur, in order of first occurrence."""
@@ -138,14 +139,22 @@ def dataframe_columns(frame: Any) -> Columns:
         elif isinstance(dtype, pandas.CategoricalDtype):
             arrays.append(
                 CodedColumn(
-                    column.cat.codes.to_numpy(dtype=np.intp), dtype.categories
+                    column.cat.codes.to_numpy(dtype=np.intp),
+                    dtype.categories,
+                    categorical_dtype=True,
                 )
             )
         elif isinstance(dtype, pandas.StringDtype):
             # Every value is a str, so equal values have equal category keys
             # and factorize() cannot merge distinct categories.
             codes, uniques = pandas.factorize(column)
-            arrays.append(CodedColumn(np.asarray(codes, dtype=np.intp), uniques))
+            arrays.append(
+                CodedColumn(
+                    np.asarray(codes, dtype=np.intp),
+                    uniques,
+                    categorical_dtype=False,
+                )
+            )
         elif dtype.kind in "iuf":
             arrays.append(NullableNumbers(column.array))
         else:
@@ -263,16 +272,26 @@ class Schema:
 
 def fit_schema(
     X: Array | Columns,
-    categorical_features: Sequence[int | str] | None,
+    categorical_features: Sequence[int | str] | Literal["from_dtype"] | None,
     feature_names: Sequence[str] | None = None,
 ) -> Schema:
-    """Infer or apply categorical feature selection and fit value mappings."""
+    """Infer or apply categorical feature selection and fit value mappings.
+
+    ``"from_dtype"`` selects exactly the pandas categorical columns.
+    """
     columns = _as_columns(X)
-    selected = _resolve_categorical_features(
-        categorical_features,
-        len(columns.arrays),
-        feature_names,
-    )
+    if isinstance(categorical_features, str) and categorical_features == "from_dtype":
+        selected: set[int] | None = {
+            index
+            for index, column in enumerate(columns.arrays)
+            if isinstance(column, CodedColumn) and column.categorical_dtype
+        }
+    else:
+        selected = _resolve_categorical_features(
+            categorical_features,
+            len(columns.arrays),
+            feature_names,
+        )
 
     features = []
     for index, stored in enumerate(columns.arrays):

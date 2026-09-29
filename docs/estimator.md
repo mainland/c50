@@ -39,7 +39,11 @@ With `categorical_features=None`, numeric columns are continuous, and Boolean
 or non-numeric columns are categorical. Set `categorical_features` to a
 sequence of zero-based indices to override inference. String column names may
 also be used when the input exposes string feature names. When an explicit
-sequence is present, every unlisted column is continuous.
+sequence is present, every unlisted column is continuous. Set
+`categorical_features="from_dtype"` to treat exactly the DataFrame columns with
+a pandas `category` dtype as categorical, as `HistGradientBoostingClassifier`
+does. Every other column, and every column of non-DataFrame input, is then
+continuous.
 
 `None`, numeric NaN, `pd.NA`, and `pd.NaT` represent missing feature values.
 Infinite continuous values are rejected. An unseen prediction-time category
