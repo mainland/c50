@@ -131,9 +131,9 @@ The estimator supports dense numeric and categorical inputs, missing values,
 native training options, misclassification costs, pipelines, and grid search.
 It uses the typed native data path rather than materializing a whole-dataset
 text buffer and batches prediction to bound temporary native storage. Training
-remains in-memory. Set `split_workers` to 1 through 8 to enable bounded
-parallel evaluation of eligible attribute splits; the default is one. Other
-training phases remain serial. The detailed input, concurrency, and
+remains in-memory. Set `n_jobs` to enable bounded parallel evaluation of
+eligible attribute splits with up to 8 workers. The default is one worker.
+Other training phases remain serial. The detailed input, concurrency, and
 [large-dataset](docs/large-datasets.md) contracts are in the project
 documentation.
 

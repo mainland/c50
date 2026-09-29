@@ -34,11 +34,13 @@ Issues = "https://github.com/mainland/c50/issues"
 
 [project.optional-dependencies]
 sklearn = [
+    "joblib>=1.3",
     "numpy>=1.26",
     "scikit-learn>=1.6",
 ]
 test = [
     "hypothesis>=6.112",
+    "joblib>=1.3",
     "mypy>=1.11",
     "numpy>=1.26",
     "pandas>=2.2",
@@ -49,6 +51,7 @@ test = [
 docs = [
     "breathe",
     "furo",
+    "joblib>=1.3",
     "myst-parser",
     "numpy>=1.26",
     "scikit-learn>=1.6",
@@ -92,5 +95,5 @@ python_version = "3.12"
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["sklearn", "sklearn.*"]
+module = ["joblib", "joblib.*", "sklearn", "sklearn.*"]
 ignore_missing_imports = true

@@ -89,9 +89,20 @@ The estimator exposes the low-level training options as cloneable constructor
 parameters. `model_kind="tree"` builds a tree, and `model_kind="rules"` builds
 a rule set. The remaining parameters control boosting, subset splits,
 winnowing, pruning, probabilistic thresholds, sampling, and their corresponding
-native numeric settings. Set `split_workers` to 1 through 8 to configure
-the maximum number of native split-evaluation workers. The default is one;
-only eligible large nodes use multiple workers.
+native numeric settings.
+
+`n_jobs` sets the maximum number of native split-evaluation workers. `None`
+means one worker unless a `joblib.parallel_config` context sets another value,
+and negative values count back from the number of processors, so `-1` uses all
+of them. At most 8 workers are used, and only eligible large nodes use more
+than one. The worker count does not change the classifier.
+
+`random_state` controls training-row sampling, which is the only native use
+of randomness. When `sample_fraction` is positive, the estimator draws the
+native seed, an integer from 0 through 4095, from
+`check_random_state(random_state)`. An integer therefore gives reproducible
+sampling, and `None` draws from NumPy's global random state. Without sampling,
+no seed is drawn, and a supplied `RandomState` is not advanced.
 
 `cost_matrix` accepts an optional square array in predicted-by-actual order.
 Entry `[predicted, actual]` is the cost of predicting the row class when the

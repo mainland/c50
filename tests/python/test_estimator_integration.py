@@ -152,7 +152,7 @@ def test_sampling_is_reproducible_for_a_fixed_seed() -> None:
     parameters = {
         "minimum_cases": 1,
         "sample_fraction": 0.75,
-        "random_seed": 13,
+        "random_state": 13,
     }
 
     first = C50Classifier(**parameters).fit(X, Y)
