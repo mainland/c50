@@ -197,6 +197,7 @@ static void dense_support_checks()
             const c50::dense_dataset training(values, 2, width, classes);
             const auto unsupported = c50::error_code::unsupported;
             rejects(unsupported, [&] { model.predict(context, cases); });
+            rejects(unsupported, [&] { model.attribute_usage(context, cases); });
             rejects(unsupported, [&] {
                 c50::model::train(context, c50::model_kind::tree, schema.names, training);
             });
@@ -208,6 +209,7 @@ static void dense_support_checks()
         const c50::dense_dataset cases(values, 2, width);
         const c50::dense_dataset training(values, 2, width, classes);
         rejects(invalid, [&] { model.predict(context, cases); });
+        rejects(invalid, [&] { model.attribute_usage(context, cases); });
         rejects(invalid, [&] {
             c50::model::train(context, c50::model_kind::tree, names, training);
         });
