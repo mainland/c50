@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import sys
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from numbers import Integral
 from typing import Any, Literal, cast
 
@@ -14,6 +14,7 @@ from numpy.typing import ArrayLike, NDArray
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.preprocessing import LabelEncoder
 from sklearn.utils import Tags, check_random_state
+from sklearn.utils.class_weight import compute_sample_weight
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import (
     check_consistent_length,
@@ -28,6 +29,7 @@ from ._data import Columns, Schema, dataframe_columns, encode_costs, fit_schema
 type ModelKindName = Literal["tree", "rules"]
 type TieOrderName = Literal["reference", "stable"]
 type UnknownCategoryPolicy = Literal["error", "missing"]
+type ClassWeight = Mapping[Any, float] | Literal["balanced"]
 
 # Native limits on the sampling seed and split-evaluation workers.
 _SEED_COUNT = 4096
@@ -79,6 +81,11 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             native call. ``None`` processes all prediction rows together.
         cost_matrix: Optional predicted-by-actual misclassification-cost
             matrix. Its shape must be ``(n_classes, n_classes)``.
+        class_weight: Optional weights for classes, as a mapping from class
+            label to weight or ``"balanced"``, which weights each class by
+            ``n_samples / (n_classes * n_class_samples)``. Class weights
+            multiply ``sample_weight``, and C5.0 uses the products relative
+            to their mean.
 
     Attributes:
         classes_: Original class labels in probability-column order.
@@ -129,6 +136,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         unknown_categories: UnknownCategoryPolicy = "error",
         prediction_batch_size: int | None = 65536,
         cost_matrix: ArrayLike | None = None,
+        class_weight: ClassWeight | None = None,
     ) -> None:
         self.model_kind = model_kind
         self.trials = trials
@@ -147,6 +155,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         self.unknown_categories = unknown_categories
         self.prediction_batch_size = prediction_batch_size
         self.cost_matrix = cost_matrix
+        self.class_weight = class_weight
 
     def fit(
         self,
@@ -194,7 +203,11 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 )
             check_classification_targets(y_checked)
 
-            weights = _relative_sample_weight(sample_weight, y_checked.shape[0])
+            weights = _relative_sample_weight(
+                sample_weight,
+                _class_sample_weight(self.class_weight, y_checked),
+                y_checked.shape[0],
+            )
             if weights is not None and not np.all(weights > 0):
                 present = weights > 0
                 X_checked = X_checked[present]
@@ -440,35 +453,75 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         return options
 
 
+def _class_sample_weight(
+    class_weight: ClassWeight | None,
+    y: NDArray[Any],
+) -> NDArray[np.float64] | None:
+    """Return the class weight of each sample, or ``None`` without weights."""
+    if class_weight is None:
+        return None
+    weights = np.asarray(compute_sample_weight(class_weight, y), dtype=np.float64)
+    if not np.all(np.isfinite(weights)) or np.any(weights < 0):
+        raise ValueError("class_weight values must be finite and nonnegative")
+    return weights
+
+
 def _relative_sample_weight(
     sample_weight: ArrayLike | None,
+    class_weights: NDArray[np.float64] | None,
     sample_count: int,
 ) -> NDArray[np.float64] | None:
-    """Validate sample weights and divide them by their mean.
+    """Validate sample weights, apply class weights, and divide by the mean.
 
     C5.0 stores case weights in single precision and uses only their ratios.
     Scaling first keeps uniform large or small weights representable.
     """
     if sample_weight is None:
-        return None
-    weights = np.asarray(sample_weight, dtype=np.float64)
-    if weights.ndim == 0:
-        weights = np.full(sample_count, weights)
-    if weights.shape != (sample_count,):
-        raise ValueError(
-            f"sample_weight has shape {weights.shape}, expected ({sample_count},)"
-        )
-    if not np.all(np.isfinite(weights)):
-        raise ValueError("sample_weight must contain only finite values")
-    if np.any(weights < 0):
-        raise ValueError("sample_weight must be nonnegative")
-    positive = weights[weights > 0]
-    if positive.size == 0:
+        if class_weights is None:
+            return None
+        weights = class_weights
+    else:
+        weights = np.asarray(sample_weight, dtype=np.float64)
+        if weights.ndim == 0:
+            weights = np.full(sample_count, weights)
+        if weights.shape != (sample_count,):
+            raise ValueError(
+                f"sample_weight has shape {weights.shape}, "
+                f"expected ({sample_count},)"
+            )
+        if not np.all(np.isfinite(weights)):
+            raise ValueError("sample_weight must contain only finite values")
+        if np.any(weights < 0):
+            raise ValueError("sample_weight must be nonnegative")
+    nonzero = weights > 0
+    factors = class_weights if sample_weight is not None else None
+    if factors is not None:
+        nonzero &= factors > 0
+    if not np.any(nonzero):
         raise ValueError("sample_weight cannot be zero for every sample")
 
-    relative: NDArray[np.float64] = weights / positive.mean()
+    # Keep ordinary arithmetic unchanged. Rescale mantissas and exponents
+    # only when the product or mean becomes subnormal or overflows.
+    with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+        combined = weights if factors is None else weights * factors
+        mean = combined[nonzero].mean()
+    if not np.isfinite(mean) or np.any(
+        combined[nonzero] < np.finfo(np.float64).tiny
+    ):
+        mantissas, exponents = np.frexp(weights[nonzero])
+        if factors is not None:
+            factor_mantissas, factor_exponents = np.frexp(factors[nonzero])
+            mantissas *= factor_mantissas
+            exponents += factor_exponents
+        with np.errstate(under="ignore"):
+            scaled = np.ldexp(mantissas, exponents - exponents.max())
+        combined = np.zeros(sample_count, dtype=np.float64)
+        combined[nonzero] = scaled
+        mean = scaled.mean()
+    with np.errstate(under="ignore"):
+        relative: NDArray[np.float64] = combined / mean
     limits = np.finfo(np.float32)
-    positive = relative[relative > 0]
+    positive = relative[nonzero]
     if positive.min() < limits.tiny or positive.max() > limits.max:
         raise ValueError(
             "sample_weight ratios exceed the single-precision range of C5.0 "
