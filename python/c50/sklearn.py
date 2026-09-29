@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 from collections.abc import Iterator, Sequence
-from numbers import Integral
+from decimal import Decimal
+from numbers import Integral, Real
 from typing import Any, Literal, cast
 
 import numpy as np
@@ -139,7 +141,12 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         self.prediction_batch_size = prediction_batch_size
         self.cost_matrix = cost_matrix
 
-    def fit(self, X: ArrayLike, y: ArrayLike) -> C50Classifier:
+    def fit(
+        self,
+        X: ArrayLike,
+        y: ArrayLike,
+        sample_weight: ArrayLike | None = None,
+    ) -> C50Classifier:
         """Fit a C5.0 classifier.
 
         A failed fit clears all fitted state, including any previous model.
@@ -147,14 +154,27 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         Args:
             X: Dense two-dimensional training data.
             y: One-dimensional class labels.
+            sample_weight: Optional nonnegative weight for each sample. C5.0
+                uses weights relative to their mean, so multiplying every
+                weight by a constant does not change the classifier. Samples
+                with zero weight are removed before fitting. A weight is a real
+                number, including a ``bool`` or ``decimal.Decimal``, or a
+                string that parses as one. Arrays of other kinds and objects
+                such as ``None``, ``pandas.NA``, dates, times, timedeltas, and
+                complex numbers are rejected.
 
         Returns:
             This fitted estimator.
 
         Raises:
-            TypeError: If a continuous feature contains a non-numeric value.
+            TypeError: If a continuous feature contains a non-numeric value, or
+                if ``sample_weight`` is an array of datetime, timedelta,
+                complex, or structured kind or holds an object other than a
+                real number, ``decimal.Decimal``, or a string.
             ValueError: If the data, schema, options, or cost matrix is
-                invalid, or if the first conversion of a data frame fails.
+                invalid, if the first conversion of a data frame fails, or if
+                ``sample_weight`` contains a string that does not parse as a
+                number.
             MemoryError: If conversion of a data frame exhausts memory.
         """
         self._clear_fitted_state()
@@ -183,6 +203,15 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 )
             check_classification_targets(y_checked)
 
+            weights = _relative_sample_weight(
+                sample_weight, y_checked.shape[0]
+            )
+            if weights is not None and not np.all(weights > 0):
+                present = weights > 0
+                X_checked = X_checked[present]
+                y_checked = y_checked[present]
+                weights = weights[present]
+
             label_encoder = LabelEncoder().fit(y_checked)
             classes = label_encoder.classes_
             if classes.shape[0] < 2:
@@ -198,8 +227,10 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 self.categorical_features,
                 feature_names,
             )
+            if weights is not None:
+                schema = dataclasses.replace(schema, case_weight=True)
             names_data = schema.names_data(classes.shape[0])
-            training_values = schema.dense_data(X_checked, "error")
+            training_values = schema.dense_data(X_checked, "error", weights)
             native_class_indices = np.asarray(class_indices, dtype=np.uintp)
             costs_data = encode_costs(classes.shape[0], self.cost_matrix)
             options = self._native_options()
@@ -404,6 +435,154 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             TieOrder.STABLE if self.ties == "stable" else TieOrder.REFERENCE
         )
         return options
+
+
+def _is_weight_type(kind: type) -> bool:
+    """Return whether objects of a type are acceptable weights.
+
+    A weight is a real number, a ``decimal.Decimal``, or a string.
+    ``numpy.timedelta64`` subclasses ``numpy.signedinteger``, so it needs an
+    explicit exclusion.
+    """
+    if issubclass(kind, np.timedelta64):
+        return False
+    return issubclass(kind, (Real, Decimal, np.bool_, str, bytes))
+
+
+def _is_weight_number(element: object) -> bool:
+    """Return whether an object element of ``sample_weight`` is acceptable."""
+    return _is_weight_type(type(element))
+
+
+def _checked_weight_objects(values: NDArray[Any]) -> NDArray[Any]:
+    """Return an object array of weights after checking each element.
+
+    Checking each distinct type once keeps the check fast for a long list of
+    one type. A failure reports the first element of an unacceptable type.
+    """
+    flat = values.ravel()
+    if all(_is_weight_type(kind) for kind in set(map(type, flat))):
+        return values
+    for element in flat:
+        if not _is_weight_number(element):
+            raise TypeError(
+                "sample_weight must hold numbers or strings, not "
+                f"{type(element).__name__}"
+            )
+    return values
+
+
+def _unwrap_zero_dimensional_elements(values: NDArray[Any]) -> NDArray[Any]:
+    """Return an object array with each 0-d array element replaced.
+
+    The scalar that a 0-d array holds keeps its dtype, so that the element
+    check judges it like any other element. A sequence or an array with
+    dimensions stays in place, and the element check rejects it.
+    """
+    flat = values.ravel()
+    if not any(issubclass(kind, np.ndarray) for kind in set(map(type, flat))):
+        return values
+    unwrapped = flat.copy()
+    for index, element in enumerate(flat):
+        if isinstance(element, np.ndarray) and element.ndim == 0:
+            unwrapped[index] = element[()]
+    return unwrapped.reshape(values.shape)
+
+
+def _checked_weight_values(sample_weight: ArrayLike) -> NDArray[Any]:
+    """Return the weights as an array, or raise unless they are numbers.
+
+    The check runs before any conversion to ``float64``, which would turn
+    dates, ``None``, and other objects into numbers or NaN, and would drop the
+    imaginary part of complex numbers. The caller converts the returned array,
+    never the original object, so that the checked elements are the converted
+    ones.
+
+    Only a NumPy or pandas object has a ``dtype`` that this function reads. A
+    NumPy array keeps its dtype. Arrays of boolean, integer, unsigned, float,
+    and string kinds pass. A variable-width string array is read as an object
+    array of its elements. In an object array, each element must be a real
+    number, a ``decimal.Decimal``, or a string. A 0-d array element is replaced
+    by the scalar that it holds, so that its dtype decides. Any other sequence
+    or array element has no accepted type.
+
+    A pandas object with an extension dtype, such as ``Int64``, converts its
+    missing values to NaN under a default ``numpy.asarray``. It is converted to
+    an object array instead, so that ``pandas.NA`` is rejected like any other
+    object. A list, a tuple, or a scalar becomes an object array of its
+    original elements, because NumPy's dtype inference turns a mixture of
+    strings and complex numbers into strings.
+    """
+    pandas = sys.modules.get("pandas")
+    dtype = (
+        getattr(sample_weight, "dtype", None)
+        if isinstance(sample_weight, (np.ndarray, np.generic))
+        or _is_pandas_object(sample_weight)
+        else None
+    )
+    values: NDArray[Any]
+    if pandas is not None and isinstance(
+        dtype, pandas.api.extensions.ExtensionDtype
+    ):
+        # An extension dtype belongs to a pandas object, which has `to_numpy`.
+        values = np.asarray(cast(Any, sample_weight).to_numpy(dtype=object))
+    elif isinstance(dtype, np.dtype):
+        values = np.asarray(sample_weight)
+    else:
+        values = np.asarray(sample_weight, dtype=object)
+    kind = values.dtype.kind
+    if kind == "T":
+        values = values.astype(object)
+        kind = "O"
+    if kind in "biufUS":
+        return values
+    if kind == "O":
+        return _checked_weight_objects(
+            _unwrap_zero_dimensional_elements(values)
+        )
+    raise TypeError(
+        f"sample_weight must hold numbers or strings, not dtype {values.dtype}"
+    )
+
+
+def _relative_sample_weight(
+    sample_weight: ArrayLike | None,
+    sample_count: int,
+) -> NDArray[np.float64] | None:
+    """Validate sample weights and divide them by their mean.
+
+    C5.0 stores case weights in single precision and uses only their ratios.
+    Scaling first keeps uniform large or small weights representable.
+    """
+    if sample_weight is None:
+        return None
+    weights = np.asarray(
+        _checked_weight_values(sample_weight), dtype=np.float64
+    )
+    if weights.ndim == 0:
+        weights = np.full(sample_count, weights)
+    if weights.shape != (sample_count,):
+        raise ValueError(
+            f"sample_weight has shape {weights.shape}, "
+            f"expected ({sample_count},)"
+        )
+    if not np.all(np.isfinite(weights)):
+        raise ValueError("sample_weight must contain only finite values")
+    if np.any(weights < 0):
+        raise ValueError("sample_weight must be nonnegative")
+    positive = weights[weights > 0]
+    if positive.size == 0:
+        raise ValueError("sample_weight cannot be zero for every sample")
+
+    relative: NDArray[np.float64] = weights / positive.mean()
+    limits = np.finfo(np.float32)
+    positive = relative[relative > 0]
+    if positive.min() < limits.tiny or positive.max() > limits.max:
+        raise ValueError(
+            "sample_weight ratios exceed the single-precision range of C5.0 "
+            "case weights"
+        )
+    return relative
 
 
 def _is_column_frame(X: object) -> bool:
