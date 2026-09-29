@@ -361,6 +361,27 @@ public:
      * @param cases Borrowed dense features, possibly empty.
      * @return An independently owned prediction batch. */
     predictions predict(context &workspace, const dense_dataset &cases) const;
+    /** Count the cases whose classification tests each attribute.
+     *
+     * A case counts for an attribute when classifying it tests that
+     * attribute and the case's value is known. For implicit attributes, the
+     * attributes used by the definition also count. These are the counts
+     * behind C5.0's "Attribute usage" report, which divides them by the
+     * number of cases.
+     * @param workspace Exclusive operation workspace.
+     * @param cases Data-file contents, possibly empty.
+     * @return One count per attribute of the names data, in declaration
+     *         order. */
+    std::vector<std::size_t> attribute_usage(context &workspace,
+                                             std::string_view cases) const;
+    /** Count the cases whose classification tests each attribute.
+     * @param workspace Exclusive operation workspace.
+     * @param cases Borrowed dense features, possibly empty. Class indices are
+     *        ignored.
+     * @return One count per attribute of the names data, in declaration
+     *         order, as for the data-file overload. */
+    std::vector<std::size_t> attribute_usage(context &workspace,
+                                             const dense_dataset &cases) const;
     /** Inspect retained classifiers through the validated native loader.
      * @param workspace Exclusive operation workspace.
      * @return A copyable snapshot independent of this model and workspace. */
