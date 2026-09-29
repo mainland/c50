@@ -94,6 +94,16 @@ def test_schema_rejects_nonfinite_continuous_values() -> None:
         )
 
 
+def test_strings_are_categories_not_missing_values() -> None:
+    X = np.asarray([["nan"], [b"nan"], [""], [None], [np.nan]], dtype=object)
+
+    schema = fit_schema(X, categorical_features=None)
+
+    assert schema.categories == (("nan", b"nan", ""),)
+    encoded = schema.dense_data(X, "error")[:, 0]
+    np.testing.assert_array_equal(encoded, [0, 1, 2, np.nan, np.nan])
+
+
 def test_dataframe_columns_keep_numeric_dtypes() -> None:
     frame = pd.DataFrame(
         {
