@@ -202,6 +202,66 @@ def test_nullable_dataframe_values_are_missing() -> None:
     assert np.isfinite(classifier.predict_proba(frame)).all()
 
 
+def test_dataframe_columns_match_object_array_conversion() -> None:
+    rng = np.random.default_rng(11)
+    count = 200
+    frame = pd.DataFrame(
+        {
+            "real": rng.normal(size=count),
+            "narrow": rng.normal(size=count).astype(np.float32),
+            "count": rng.integers(-3, 4, size=count),
+            "flag": rng.integers(0, 2, size=count).astype(bool),
+            "word": rng.choice(["x", "y", "z"], size=count),
+            "group": pd.Categorical(rng.choice(["p", "q", None], size=count)),
+            "gap": np.where(
+                rng.random(count) < 0.2, np.nan, rng.normal(size=count)
+            ),
+        }
+    )
+    labels = np.where(
+        frame["real"] + 0.3 * frame["count"] + (frame["word"] == "x") > 0.5,
+        "yes",
+        "no",
+    )
+    values = frame.to_numpy(dtype=object)
+
+    from_frame = C50Classifier(minimum_cases=1).fit(frame, labels)
+    from_values = C50Classifier(minimum_cases=1).fit(values, labels)
+
+    assert from_frame.model_.serialized_data == from_values.model_.serialized_data
+    assert from_frame.categorical_features_.tolist() == [3, 4, 5]
+    for frame_categories, value_categories in zip(
+        from_frame.categories_, from_values.categories_, strict=True
+    ):
+        assert [(type(value), value) for value in frame_categories] == [
+            (type(value), value) for value in value_categories
+        ]
+    expected = from_values.predict_proba(values)
+    np.testing.assert_array_equal(from_frame.predict_proba(frame), expected)
+    from_frame.set_params(prediction_batch_size=7)
+    np.testing.assert_array_equal(from_frame.predict_proba(frame), expected)
+
+
+def test_dataframe_input_errors_match_array_input() -> None:
+    frame = pd.DataFrame({"signal": X[:, 0], "noise": X[:, 1]})
+    classifier = C50Classifier(minimum_cases=1)
+
+    with pytest.raises(ValueError, match="1d array"):
+        classifier.fit(frame, np.column_stack([Y, Y]))
+    with pytest.raises(ValueError, match="inconsistent numbers of samples"):
+        classifier.fit(frame, Y[:-1])
+    with pytest.raises(ValueError, match="contains NaN"):
+        classifier.fit(frame, np.where(Y == 0, np.nan, 1.0))
+    with pytest.raises(ValueError, match="0 sample"):
+        classifier.fit(frame.iloc[:0], Y[:0])
+
+    classifier.fit(frame, Y)
+    with pytest.raises(ValueError, match="0 sample"):
+        classifier.predict(frame.iloc[:0])
+    with pytest.raises(ValueError, match="seen at fit time, yet now missing"):
+        classifier.predict(frame[["signal"]])
+
+
 def test_estimator_declares_numpy_only_array_support() -> None:
     assert not get_tags(C50Classifier()).array_api_support
     classifier = C50Classifier(minimum_cases=1).fit(X, Y)

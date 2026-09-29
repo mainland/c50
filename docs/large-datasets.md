@@ -34,10 +34,11 @@ values, and NaN denotes a missing value.
 
 The Python estimator encodes array input directly into this dense
 representation. It no longer builds a second, whole-dataset C5.0 text buffer.
-Numeric NumPy columns use vectorized conversion; categorical columns retain a
-fitted index mapping. Prediction conversion and native prediction are split
-into batches of 65,536 rows by default. Set `prediction_batch_size` to another
-positive integer, or to `None` to process one prediction batch.
+Numeric NumPy columns, including DataFrame columns with numeric NumPy dtypes,
+use vectorized conversion. Categorical columns retain a fitted index mapping.
+Prediction conversion and native prediction are split into batches of 65,536
+rows by default. Set `prediction_batch_size` to another positive integer, or to
+`None` to process one prediction batch.
 
 The original text APIs remain available for file-format compatibility. A
 differential native test trains equivalent text and dense inputs and requires
