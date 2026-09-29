@@ -50,6 +50,24 @@ Tree and ruleset ensembles preserve serialized component order. Exactly one of
 per-case component confidences, so inspection does not invent fixed boosting
 weights or represent the ensemble as an additive weighted-tree predictor.
 
+## Attribute usage
+
+`model.attribute_usage(context, cases)` classifies each case and counts, for
+every attribute, the cases whose classification tests that attribute with a
+known value. For an implicit attribute, the attributes used by its definition
+also count. The result has one count per attribute in schema order, like the
+snapshot's feature names. Both data-file and dense overloads are available.
+Python exposes them as `Model.attribute_usage` and
+`Model.attribute_usage_dense`.
+
+These are the counts behind the command-line program's "Attribute usage"
+report, which divides them by the number of training cases and omits
+attributes below one percent. A test trains the regression fixtures through
+the library and requires the same report as the imported program for trees,
+rules, subsets, winnowing, soft thresholds, boosting, implicit attributes,
+case weights, and costs. Like prediction, the operation uses an exclusive
+context, and separate contexts may run it on one model concurrently.
+
 ## Python and readable output
 
 Python exposes the same native snapshot and deterministic text and JSON
