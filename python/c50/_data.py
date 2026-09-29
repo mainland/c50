@@ -7,7 +7,7 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from numbers import Integral, Real
-from typing import Any, Literal, cast
+from typing import Any, Literal, Self, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -16,6 +16,47 @@ from numpy.typing import NDArray
 type Array = NDArray[Any]
 type CategoryKey = tuple[type[object], object]
 type UnknownCategoryPolicy = Literal["error", "missing"]
+
+
+@dataclass(frozen=True)
+class Columns:
+    """Two-dimensional input stored as one array per feature.
+
+    A column keeps its own dtype, so numeric columns of a mixed table can be
+    encoded without converting their values to Python objects.
+    """
+
+    arrays: tuple[Array, ...]
+    rows: int
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        """Return the number of rows and features."""
+        return self.rows, len(self.arrays)
+
+    def __getitem__(self, rows: slice) -> Self:
+        """Return a range of rows from every column."""
+        start, stop, step = rows.indices(self.rows)
+        return type(self)(
+            tuple(array[rows] for array in self.arrays),
+            len(range(start, stop, step)),
+        )
+
+
+def dataframe_columns(frame: Any) -> Columns:
+    """Convert pandas DataFrame columns without a common dtype.
+
+    NumPy numeric and Boolean columns keep their dtype. Other columns become
+    object arrays, as they would in a conversion of the whole frame.
+    """
+    arrays = []
+    for position in range(frame.shape[1]):
+        column = frame.iloc[:, position]
+        if isinstance(column.dtype, np.dtype) and column.dtype.kind in "iufb":
+            arrays.append(column.to_numpy())
+        else:
+            arrays.append(column.to_numpy(dtype=object))
+    return Columns(tuple(arrays), frame.shape[0])
 
 
 @dataclass(frozen=True)
@@ -67,21 +108,20 @@ class Schema:
 
     def dense_data(
         self,
-        X: Array,
+        X: Array | Columns,
         unknown_categories: UnknownCategoryPolicy,
     ) -> NDArray[np.float64]:
         """Encode features as the native dense matrix representation."""
-        if X.ndim != 2:
-            raise ValueError("X must be a two-dimensional array")
-        if X.shape[1] != len(self.features):
+        columns = _as_columns(X)
+        if len(columns.arrays) != len(self.features):
             raise ValueError(
-                f"X has {X.shape[1]} features, but the fitted schema expects "
-                f"{len(self.features)}"
+                f"X has {len(columns.arrays)} features, but the fitted schema "
+                f"expects {len(self.features)}"
             )
 
-        encoded = np.empty(X.shape, dtype=np.float64, order="C")
+        encoded = np.empty(columns.shape, dtype=np.float64, order="C")
         for feature_index, feature in enumerate(self.features):
-            column = X[:, feature_index]
+            column = columns.arrays[feature_index]
             if not feature.categorical and column.dtype.kind in "iuf":
                 converted = np.asarray(column, dtype=np.float64)
                 if np.any(np.isinf(converted)):
@@ -102,20 +142,20 @@ class Schema:
 
 
 def fit_schema(
-    X: Array,
+    X: Array | Columns,
     categorical_features: Sequence[int | str] | None,
     feature_names: Sequence[str] | None = None,
 ) -> Schema:
     """Infer or apply categorical feature selection and fit value mappings."""
+    columns = _as_columns(X)
     selected = _resolve_categorical_features(
         categorical_features,
-        X.shape[1],
+        len(columns.arrays),
         feature_names,
     )
 
     features = []
-    for index in range(X.shape[1]):
-        column = X[:, index]
+    for index, column in enumerate(columns.arrays):
         categorical = (
             _infer_categorical(column) if selected is None else index in selected
         )
@@ -154,6 +194,17 @@ def encode_costs(class_count: int, cost_matrix: object | None) -> str:
                 f"{_format_number(costs[predicted, actual])}"
             )
     return "\n".join(lines) + ("\n" if lines else "")
+
+
+def _as_columns(X: Array | Columns) -> Columns:
+    if isinstance(X, Columns):
+        return X
+    if X.ndim != 2:
+        raise ValueError("X must be a two-dimensional array")
+    return Columns(
+        tuple(X[:, index] for index in range(X.shape[1])),
+        X.shape[0],
+    )
 
 
 def _resolve_categorical_features(

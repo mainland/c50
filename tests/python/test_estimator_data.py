@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 
-from c50._data import encode_costs, fit_schema
+from c50._data import dataframe_columns, encode_costs, fit_schema
 
 
 def test_schema_encodes_continuous_and_categorical_features() -> None:
@@ -91,6 +92,38 @@ def test_schema_rejects_nonfinite_continuous_values() -> None:
             np.asarray([[1.0], [np.inf]]),
             categorical_features=(),
         )
+
+
+def test_dataframe_columns_keep_numeric_dtypes() -> None:
+    frame = pd.DataFrame(
+        {
+            "real": [0.5, 1.5, 2.5],
+            "count": np.asarray([1, 2, 3], dtype=np.uint8),
+            "flag": [True, False, True],
+            "word": ["a", "b", "a"],
+            "nullable": pd.array([1, None, 3], dtype="Int64"),
+        }
+    )
+
+    columns = dataframe_columns(frame)
+
+    assert columns.shape == (3, 5)
+    assert [array.dtype for array in columns.arrays] == [
+        np.dtype(np.float64),
+        np.dtype(np.uint8),
+        np.dtype(bool),
+        np.dtype(object),
+        np.dtype(object),
+    ]
+    assert columns[1:].shape == (2, 5)
+    assert columns[1:].arrays[1].tolist() == [2, 3]
+
+    schema = fit_schema(columns, categorical_features=None)
+    assert schema.categorical_indices == (2, 3)
+    np.testing.assert_array_equal(
+        schema.dense_data(columns[1:], "error"),
+        np.asarray([[1.5, 2, 1, 1, np.nan], [2.5, 3, 0, 0, 3]]),
+    )
 
 
 def test_cost_matrix_encoding_uses_predicted_by_actual_order() -> None:

@@ -66,6 +66,13 @@ Boolean, string, and categorical columns use the same encoding rules as NumPy
 arrays. Prediction requires the fitted column names in their original order.
 Nullable pandas columns need no conversion because `pd.NA` is a missing value.
 
+The estimator converts a DataFrame one column at a time. Numeric and Boolean
+columns with NumPy dtypes keep those dtypes, so numeric columns are encoded as
+quickly as a numeric NumPy array. Other columns, including nullable and
+categorical pandas columns, become object arrays and are encoded one value at a
+time. Empty and sparse DataFrames are converted as whole arrays, so they raise
+the same errors as before.
+
 pandas is a test dependency, not a runtime requirement. The estimator uses CPU
 NumPy arrays and returns NumPy arrays. It declares `array_api_support=False`.
 It does not promise preservation of another array namespace, device, or dtype.
