@@ -341,6 +341,9 @@ def _normalize_scalar(value: object) -> object:
 def _is_missing(value: object) -> bool:
     if value is None:
         return True
+    if isinstance(value, (str, bytes)):
+        # np.isnan() would reject these by raising, at a much higher cost.
+        return False
     if type(value).__module__.startswith("pandas."):
         # Only pandas creates these values, so it is already imported.
         missing = sys.modules["pandas"].isna(value)
