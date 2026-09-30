@@ -38,6 +38,7 @@
 #include "c50_api_internal.h"
 #include <stdint.h>
 #include <chrono>
+#include <cmath>
 #include <limits>
 
 
@@ -328,6 +329,31 @@ void ResetKR(KRState *State, int Seed)
     {
 	KRandom(State);
     }
+}
+
+
+
+/*  C5.0 Release 2.07 called drand48() without seeding it.  Reproduce
+    the GNU C library sequence exactly:  X' = (0x5DEECE66D X + 0xB)
+    mod 2^48, starting from X = 0, and return X' / 2^48, which a double
+    represents exactly.  BSD C libraries, including macOS, start from
+    0x1234ABCD330E instead, so their held-out cases differed.  */
+
+void ResetDrand48(Drand48State *State)
+/*   ------------  */
+{
+    State->x = 0;
+}
+
+
+
+double Drand48(Drand48State *State)
+/*     -------  */
+{
+    const uint64_t Mask = (UINT64_C(1) << 48) - 1;
+
+    State->x = (UINT64_C(0x5DEECE66D) * State->x + UINT64_C(0xB)) & Mask;
+    return std::ldexp((double) State->x, -48);
 }
 
 
