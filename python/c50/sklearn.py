@@ -196,7 +196,12 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         A failed fit clears all fitted state, including any previous model.
 
         Args:
-            X: Dense two-dimensional training data.
+            X: Dense two-dimensional training data. ``X``, ``y``, and
+                ``sample_weight`` may be NumPy arrays, pandas objects, or
+                arrays such as PyTorch CPU tensors that implement
+                ``__array_namespace__`` or ``__array__``. The estimator
+                converts such tensors and Array API arrays with
+                :func:`numpy.asarray`.
             y: One-dimensional class labels.
             sample_weight: Optional nonnegative weight for each sample. C5.0
                 uses weights relative to their mean, so multiplying every
@@ -216,15 +221,20 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 complex, or structured kind or holds an object other than a
                 real number, ``decimal.Decimal``, or a string.
             ValueError: If the data, schema, options, or cost matrix is
-                invalid, if the first conversion of a data frame fails, or if
-                ``sample_weight`` contains a string that does not parse as a
-                number.
-            MemoryError: If conversion of a data frame exhausts memory.
+                invalid, or if an input conversion to NumPy raises an
+                ``Exception`` other than ``MemoryError``, as for a tensor in
+                device memory. An invalid numeric string in ``sample_weight``
+                also raises ``ValueError``.
+            MemoryError: If an input conversion exhausts memory. Other
+                exceptions outside the ``Exception`` hierarchy also propagate.
         """
         self._clear_fitted_state()
         fitted = False
         try:
             self._validate_configuration()
+            X = _host_array(X, "X")
+            y = _host_array(y, "y")
+            sample_weight = _host_array(sample_weight, "sample_weight")
             X_checked: NDArray[Any] | Columns
             if _is_column_frame(X):
                 y_checked = validate_data(self, y=y, reset=True)
@@ -345,13 +355,14 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         """Predict a class label for each row in ``X``.
 
         Args:
-            X: Dense two-dimensional prediction data.
+            X: Dense two-dimensional prediction data, as for :meth:`fit`.
 
         Returns:
             An array of labels with the fitted class-label dtype.
 
         Raises:
-            ValueError: If the input shape or a feature value is invalid.
+            ValueError: If the input shape or a feature value is invalid, or if
+                an array cannot be converted to NumPy.
         """
         X_checked = self._validate_prediction_input(X)
         indices = np.empty(X_checked.shape[0], dtype=np.intp)
@@ -367,14 +378,15 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         """Return class scores in ``classes_`` order.
 
         Args:
-            X: Dense two-dimensional prediction data.
+            X: Dense two-dimensional prediction data, as for :meth:`fit`.
 
         Returns:
             A two-dimensional array with one row per input and one column per
             fitted class.
 
         Raises:
-            ValueError: If the input shape or a feature value is invalid.
+            ValueError: If the input shape or a feature value is invalid, or if
+                an array cannot be converted to NumPy.
         """
         X_checked = self._validate_prediction_input(X)
         scores = np.empty(
@@ -391,14 +403,15 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         """Return the logarithms of :meth:`predict_proba`.
 
         Args:
-            X: Dense two-dimensional prediction data.
+            X: Dense two-dimensional prediction data, as for :meth:`fit`.
 
         Returns:
             An array with the shape of :meth:`predict_proba`. A zero score
             becomes ``-inf``.
 
         Raises:
-            ValueError: If the input shape or a feature value is invalid.
+            ValueError: If the input shape or a feature value is invalid, or if
+                an array cannot be converted to NumPy.
         """
         probabilities = self.predict_proba(X)
         with np.errstate(divide="ignore"):
@@ -503,6 +516,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         check_is_fitted(self)
         # set_params() may change prediction parameters after fitting.
         self._validate_prediction_configuration()
+        X = _host_array(X, "X")
         if _is_column_frame(X):
             validate_data(self, X, reset=False, skip_check_array=True)
             return dataframe_columns(X)
@@ -834,6 +848,47 @@ def _relative_sample_weight(
     return relative
 
 
+def _host_array(values: Any, name: str) -> Any:
+    """Convert a CPU array from another library to NumPy.
+
+    C5.0 runs on the CPU, so arrays that implement ``__array_namespace__`` or
+    ``__array__`` are converted through NumPy's array protocol. The array's
+    library decides whether conversion is possible, which excludes arrays in
+    device memory, arrays that require gradients, and dtypes that NumPy lacks.
+    NumPy arrays and scalars and pandas objects keep their usual validation.
+    The ``__array__`` path leaves data frames for frame validation.
+
+    Args:
+        values: The input.
+        name: The name of the parameter, for error messages.
+
+    Returns:
+        The input, or a NumPy array that holds it.
+
+    Raises:
+        ValueError: If conversion raises an ``Exception`` other than
+            ``MemoryError``, whatever its type.
+        MemoryError: If the conversion exhausts memory. It propagates, as does
+            a ``BaseException`` that is not an ``Exception``.
+    """
+    if isinstance(values, (np.ndarray, np.generic)) or _is_pandas_object(
+        values
+    ):
+        return values
+    if not hasattr(values, "__array_namespace__") and (
+        not hasattr(values, "__array__") or _is_data_frame(values)
+    ):
+        return values
+    try:
+        return np.asarray(values)
+    except MemoryError:
+        # Exhausted memory is not a problem of the input, as the package
+        # documentation promises.
+        raise
+    except Exception as exc:
+        raise _conversion_error(name, exc) from exc
+
+
 def _is_column_frame(X: object) -> bool:
     """Return whether ``X`` is a DataFrame to convert column by column.
 
@@ -930,8 +985,9 @@ def _time_frame(X: object) -> NDArray[Any] | None:
 
     Raises:
         ValueError: If the conversion raises an ``Exception`` other than
-            ``MemoryError``. A conversion that fails once is not retried,
-            because a retry that succeeds would discard the error.
+            ``MemoryError``, as ``_host_array`` does. A conversion that fails
+            once is not retried, because a retry that succeeds would discard
+            the error.
         MemoryError: If the conversion exhausts memory. It propagates, as does
             a ``BaseException`` that is not an ``Exception``.
     """

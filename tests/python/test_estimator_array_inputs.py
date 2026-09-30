@@ -7,11 +7,13 @@
 from __future__ import annotations
 
 import datetime
+import os
 import warnings
 from typing import Any
 
 import numpy as np
 import pytest
+import sklearn
 from c50.sklearn import C50Classifier
 from model_text import without_date
 
@@ -20,6 +22,8 @@ X = _rng.normal(size=(60, 3))
 Y = (X[:, 0] + 0.5 * X[:, 1] + _rng.normal(scale=0.5, size=60) > 0).astype(
     np.int64
 )
+
+W = np.linspace(0.5, 2.0, 60)
 
 
 class _Dtype:
@@ -54,6 +58,15 @@ class _PolarsLike(_TensorLike):
         return self._values
 
 
+class _Refusing(_TensorLike):
+    """Refuses its conversion, as a tensor in device memory does."""
+
+    def __array__(
+        self, dtype: Any = None, copy: bool | None = None
+    ) -> np.ndarray:
+        raise RuntimeError("cannot convert a device array to NumPy")
+
+
 def test_foreign_dtype_does_not_prevent_fit_or_prediction() -> None:
     values = _PolarsLike(X)
     classifier = C50Classifier(minimum_cases=1).fit(values, Y)
@@ -70,11 +83,61 @@ def test_foreign_dtype_does_not_prevent_fit_or_prediction() -> None:
     )
 
 
-def _call(role: str, values: Any) -> Any:
-    classifier = C50Classifier(minimum_cases=1)
+def _fit(X: Any = X, y: Any = Y, sample_weight: Any = W) -> C50Classifier:
+    return C50Classifier(minimum_cases=1).fit(
+        X, y, sample_weight=sample_weight
+    )
+
+
+_reference = _fit()
+
+
+def _same_classifier(a: C50Classifier, b: C50Classifier) -> None:
+    assert without_date(a.model_.serialized_data) == without_date(
+        b.model_.serialized_data
+    )
+    np.testing.assert_array_equal(a.classes_, b.classes_)
+    np.testing.assert_array_equal(a.predict_proba(X), b.predict_proba(X))
+    np.testing.assert_array_equal(a.predict(X), b.predict(X))
+
+
+ROLES = (
+    "fit_X",
+    "y",
+    "sample_weight",
+    "predict_X",
+    "predict_proba_X",
+    "predict_log_proba_X",
+    "score_X",
+)
+_DIMENSIONS = {"y": 1, "sample_weight": 1}
+
+
+def _call(role: str, value: Any) -> object:
     if role == "fit_X":
-        return classifier.fit(values, Y)
-    return classifier.fit(X, Y).predict(values)
+        return _fit(X=value)
+    if role == "y":
+        return _fit(y=value)
+    if role == "sample_weight":
+        return _fit(sample_weight=value)
+    if role == "predict_X":
+        return _reference.predict(value)
+    if role == "predict_proba_X":
+        return _reference.predict_proba(value)
+    if role == "predict_log_proba_X":
+        return _reference.predict_log_proba(value)
+    return _reference.score(value, Y)
+
+
+_NAMES = {
+    "fit_X": "X",
+    "y": "y",
+    "sample_weight": "sample_weight",
+    "predict_X": "X",
+    "predict_proba_X": "X",
+    "predict_log_proba_X": "X",
+    "score_X": "X",
+}
 
 
 class _FailsOnce:
@@ -359,3 +422,120 @@ def test_polars_and_pyarrow_missing_weights_raise_value_error() -> None:
     ):
         with pytest.raises(ValueError, match="finite"):
             _fit_with_weights(weights)
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_cpu_tensor_protocol_gives_the_numpy_result(role: str) -> None:
+    values = {"y": Y, "sample_weight": W}.get(role, X)
+    actual = _call(role, _TensorLike(values))
+    expected = _call(role, values)
+    if isinstance(expected, C50Classifier):
+        assert isinstance(actual, C50Classifier)
+        _same_classifier(actual, expected)
+    else:
+        np.testing.assert_array_equal(actual, expected)
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_refused_conversion_raises_value_error(role: str) -> None:
+    values = X if _DIMENSIONS.get(role, 2) == 2 else Y.astype(float)
+    with pytest.raises(ValueError, match=_NAMES[role]) as caught:
+        _call(role, _Refusing(values))
+    assert "cannot be converted to a NumPy array" in str(caught.value)
+    assert isinstance(caught.value.__cause__, RuntimeError)
+
+
+class _LibraryError(Exception):
+    """An exception type of a library, as polars raises its own."""
+
+
+class _RaisesOwnError(_TensorLike):
+    """Refuses its conversion with an exception of its own kind."""
+
+    def __array__(
+        self, dtype: Any = None, copy: bool | None = None
+    ) -> np.ndarray:
+        raise _LibraryError("the library cannot convert this array")
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_any_exception_of_a_conversion_raises_value_error(role: str) -> None:
+    values = X if _DIMENSIONS.get(role, 2) == 2 else Y.astype(float)
+    with pytest.raises(ValueError, match=_NAMES[role]) as caught:
+        _call(role, _RaisesOwnError(values))
+    assert "cannot be converted to a NumPy array" in str(caught.value)
+    assert isinstance(caught.value.__cause__, _LibraryError)
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_exhausted_memory_propagates_from_a_conversion(role: str) -> None:
+    class OutOfMemory(_TensorLike):
+        def __array__(
+            self, dtype: Any = None, copy: bool | None = None
+        ) -> np.ndarray:
+            raise MemoryError("the array does not fit")
+
+    values = X if _DIMENSIONS.get(role, 2) == 2 else Y.astype(float)
+    with pytest.raises(MemoryError, match="does not fit"):
+        _call(role, OutOfMemory(values))
+
+
+def test_an_exception_that_is_not_an_exception_propagates() -> None:
+    class Panic(BaseException):
+        pass
+
+    class Panicking(_TensorLike):
+        def __array__(
+            self, dtype: Any = None, copy: bool | None = None
+        ) -> np.ndarray:
+            raise Panic
+
+    with pytest.raises(Panic):
+        _fit(X=Panicking(X))
+
+
+@pytest.mark.parametrize("dispatch", [False, True])
+def test_dispatch_setting_does_not_change_conversion(dispatch: bool) -> None:
+    if dispatch and os.environ.get("SCIPY_ARRAY_API") != "1":
+        pytest.skip("array_api_dispatch requires SCIPY_ARRAY_API=1")
+    with sklearn.config_context(array_api_dispatch=dispatch):
+        _same_classifier(
+            _fit(
+                X=_TensorLike(X),
+                y=_TensorLike(Y),
+                sample_weight=_TensorLike(W),
+            ),
+            _reference,
+        )
+
+
+def test_torch_cpu_tensors_work_as_x_y_and_weights() -> None:
+    torch = pytest.importorskip("torch")
+    candidate = _fit(
+        X=torch.tensor(X), y=torch.tensor(Y), sample_weight=torch.tensor(W)
+    )
+    _same_classifier(candidate, _reference)
+    probabilities = candidate.predict_proba(torch.tensor(X))
+    assert isinstance(probabilities, np.ndarray)
+    np.testing.assert_array_equal(probabilities, _reference.predict_proba(X))
+    assert candidate.score(torch.tensor(X), Y) == (_reference.score(X, Y))
+    flags = _fit(X=torch.tensor(X > 0), y=torch.tensor(Y > 0))
+    assert flags.predict(torch.tensor(X > 0)).shape == (60,)
+
+
+def test_torch_tensors_that_cannot_convert_raise_value_error() -> None:
+    torch = pytest.importorskip("torch")
+    cases = {
+        "meta": torch.empty((60, 3), device="meta"),
+        "gradient": torch.tensor(X, requires_grad=True),
+        "bfloat16": torch.tensor(X, dtype=torch.bfloat16),
+    }
+    for tensor in cases.values():
+        with pytest.raises(ValueError, match="X cannot be converted"):
+            _fit(X=tensor)
+        with pytest.raises(ValueError, match="X cannot be converted"):
+            _reference.predict(tensor)
+    with pytest.raises(ValueError, match="sample_weight cannot be converted"):
+        _fit(sample_weight=torch.tensor(W, requires_grad=True))
+    with pytest.raises(ValueError, match="finite"):
+        _fit(sample_weight=torch.tensor(np.where(W > 1, np.inf, W)))
