@@ -85,8 +85,13 @@ same errors as before.
 pandas is a test dependency, not a runtime requirement. The estimator uses CPU
 NumPy arrays and returns NumPy arrays. It declares `array_api_support=False`.
 It does not promise preservation of another array namespace, device, or dtype.
-GPU and device-preserving Array API execution are unsupported. Convert inputs
-to CPU NumPy arrays explicitly before using this estimator. See the
+
+C5.0 runs on the CPU. Arrays from other Array API libraries, such as PyTorch
+CPU tensors, are converted to NumPy arrays with `numpy.asarray` for `X`, `y`,
+and `sample_weight`, with or without `array_api_dispatch`. Results are NumPy
+arrays. The array's library decides whether it can be converted. An array in
+GPU or other device memory raises `ValueError`, so move it to CPU memory
+first. See the
 [scikit-learn Array API contract](https://scikit-learn.org/stable/modules/array_api.html).
 
 CI installs pandas and sets `SCIPY_ARRAY_API=1` before importing SciPy or

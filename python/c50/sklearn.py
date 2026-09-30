@@ -198,6 +198,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         fitted = False
         try:
             self._validate_configuration()
+            X = _host_array(X, "X")
+            y = _host_array(y, "y")
+            sample_weight = _host_array(sample_weight, "sample_weight")
             X_checked: NDArray[Any] | Columns
             if _is_column_frame(X):
                 y_checked = validate_data(self, y=y, reset=True)
@@ -446,6 +449,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         check_is_fitted(self)
         # set_params() may change prediction parameters after fitting.
         self._validate_prediction_configuration()
+        X = _host_array(X, "X")
         if _is_column_frame(X):
             validate_data(self, X, reset=False, skip_check_array=True)
             return dataframe_columns(X)
@@ -615,6 +619,24 @@ def _relative_sample_weight(
             "case weights"
         )
     return relative
+
+
+def _host_array(values: Any, name: str) -> Any:
+    """Convert an array from another Array API library to NumPy.
+
+    C5.0 runs on the CPU, so such arrays are converted through NumPy's array
+    protocol. The array's library decides whether that is possible, which
+    excludes arrays in GPU or other device memory.
+    """
+    if isinstance(values, np.ndarray) or not hasattr(values, "__array_namespace__"):
+        return values
+    try:
+        return np.asarray(values)
+    except (BufferError, RuntimeError, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{name} cannot be converted to a NumPy array: {exc} C5.0 runs on "
+            "the CPU, so move the array to CPU memory first."
+        ) from exc
 
 
 def _is_column_frame(X: object) -> bool:
