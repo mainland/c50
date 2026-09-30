@@ -311,3 +311,51 @@ def test_cost_matrix_with_a_nullable_pandas_value_raises_value_error() -> None:
     with pytest.raises(ValueError, match=_CONVERSION_MESSAGE) as excinfo:
         _fit_costs(matrix)
     assert excinfo.value.__cause__ is not None
+
+
+# Weight conversion must use the foreign array protocol. Its to_numpy method
+# does not accept the keyword used for a pandas extension dtype.
+def test_polars_like_weights_do_not_use_the_pandas_conversion() -> None:
+    W = np.linspace(0.5, 2.0, 60)
+    _same_weighted_classifier(_PolarsLike(W), W)
+
+
+def _fit_with_weights(weights: Any) -> C50Classifier:
+    return C50Classifier(minimum_cases=1).fit(X, Y, sample_weight=weights)
+
+
+def _same_weighted_classifier(weights: Any, expected: np.ndarray) -> None:
+    fitted = _fit_with_weights(weights)
+    reference = _fit_with_weights(expected)
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
+    np.testing.assert_array_equal(fitted.predict(X), reference.predict(X))
+    np.testing.assert_array_equal(
+        fitted.predict_proba(X), reference.predict_proba(X)
+    )
+
+
+def test_polars_series_weights_train() -> None:
+    pl = pytest.importorskip("polars")
+    W = np.linspace(0.5, 2.0, 60)
+    for make in (pl.Series, lambda w: pl.DataFrame({"w": w})["w"]):
+        _same_weighted_classifier(make(W), W)
+    ints = np.arange(60) % 3 + 1
+    _same_weighted_classifier(pl.Series(ints), ints)
+    _same_weighted_classifier(pl.Series(ints % 2 == 0), ints % 2 == 0)
+
+
+def test_polars_and_pyarrow_missing_weights_raise_value_error() -> None:
+    pl = pytest.importorskip("polars")
+    pa = pytest.importorskip("pyarrow")
+    W = np.linspace(0.5, 2.0, 60)
+    nulls = [None if i == 3 else float(w) for i, w in enumerate(W)]
+    for weights in (
+        pl.Series(nulls),
+        pl.Series([np.nan, *W[1:]]),
+        pa.array(nulls),
+        pa.chunked_array([nulls]),
+    ):
+        with pytest.raises(ValueError, match="finite"):
+            _fit_with_weights(weights)
