@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any, assert_type
+import sys
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
 
 import c50
 from c50.sklearn import C50Classifier
+
+if sys.version_info >= (3, 11):
+    from typing import assert_type
+else:
+    from typing_extensions import assert_type
 
 
 options = c50.Options()

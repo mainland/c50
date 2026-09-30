@@ -7,16 +7,16 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from numbers import Integral, Real
-from typing import Any, Literal, Self, cast
+from typing import Any, Literal, TypeAlias, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
 
-type Array = NDArray[Any]
-type CategoryKey = tuple[type[object], object]
-type UnknownCategoryPolicy = Literal["error", "missing"]
-type RowSelection = slice | NDArray[np.bool_]
+Array: TypeAlias = NDArray[Any]
+CategoryKey: TypeAlias = tuple[type[object], object]
+UnknownCategoryPolicy: TypeAlias = Literal["error", "missing"]
+RowSelection: TypeAlias = slice | NDArray[np.bool_]
 
 
 @dataclass(frozen=True)
@@ -89,7 +89,7 @@ class NullableNumbers:
         return np.asarray(self.array.to_numpy(dtype=object), dtype=object)
 
 
-type Column = Array | CodedColumn | NullableNumbers
+Column: TypeAlias = Array | CodedColumn | NullableNumbers
 
 
 @dataclass(frozen=True)
@@ -108,13 +108,13 @@ class Columns:
         """Return the number of rows and features."""
         return self.rows, len(self.arrays)
 
-    def __getitem__(self, rows: RowSelection) -> Self:
+    def __getitem__(self, rows: RowSelection) -> Columns:
         """Return a range of rows, or the rows selected by a mask."""
         if isinstance(rows, slice):
             count = len(range(*rows.indices(self.rows)))
         else:
             count = int(np.count_nonzero(rows))
-        return type(self)(tuple(array[rows] for array in self.arrays), count)
+        return Columns(tuple(array[rows] for array in self.arrays), count)
 
 
 def dataframe_columns(frame: Any) -> Columns:

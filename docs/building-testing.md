@@ -3,7 +3,7 @@
 ## Support and validation matrix
 
 The native API requires C++17. Installed consumers are compiled as C++17 and
-C++20. The Python package requires Python 3.12 or newer. The estimator's
+C++20. The Python package requires Python 3.10 or newer. The estimator's
 minimum dependencies are joblib 1.3, NumPy 1.26, and scikit-learn 1.6.
 
 | Target | Compiler or dependencies | Validation status |
@@ -142,10 +142,10 @@ setarch "$(uname -m)" -R \
 
 ### Installed package
 
-Install the test extra into a Python 3.12-or-newer environment and run pytest:
+Install the test extra into a Python 3.10-or-newer environment and run pytest:
 
 ```sh
-python3.12 -m venv .venv
+python3 -m venv .venv
 .venv/bin/python -m pip install '.[test]'
 .venv/bin/python -m pytest
 ```
@@ -265,7 +265,7 @@ Breathe is under `build/docs/docs/doxygen/xml`.
 Build the complete Sphinx site with:
 
 ```sh
-python3.12 -m venv .venv
+python3 -m venv .venv
 .venv/bin/python -m pip install '.[docs]'
 .venv/bin/python -m sphinx -W --keep-going \
     -b html docs docs/_build/html

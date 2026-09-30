@@ -109,7 +109,7 @@ target_compile_features(c50_cpp INTERFACE cxx_std_17)
 target_link_libraries(c50_cpp INTERFACE C50::core)
 
 if(C50_BUILD_PYTHON)
-    find_package(Python 3.12 REQUIRED COMPONENTS Interpreter Development.Module)
+    find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
     find_package(pybind11 CONFIG REQUIRED)
     pybind11_add_module(c50_python MODULE python/c50/_c50module.cpp)
     target_compile_features(c50_python PRIVATE cxx_std_17)

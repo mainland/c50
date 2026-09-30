@@ -45,11 +45,11 @@ int main()
 
 ## Install the Python package
 
-Python 3.12 or later is required. The package build compiles the pybind11
+Python 3.10 or later is required. The package build compiles the pybind11
 extension and links it to the same core through the C++ API:
 
 ```sh
-python3.12 -m venv .venv
+python3 -m venv .venv
 .venv/bin/python -m pip install .
 ```
 
