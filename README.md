@@ -4,7 +4,7 @@ This repository modernizes the single-threaded C5.0 Release 2.07 GPL Edition
 while preserving its learning behavior and model compatibility. It provides a
 compiled C++17 library, compatible command-line programs, and Python bindings.
 
-The [project documentation](docs/index.md) contains build and testing guides,
+The [project documentation](https://github.com/mainland/c50/blob/main/docs/index.md) contains build and testing guides,
 ownership and concurrency contracts, and generated C++ and Python API
 references. The repository includes configuration for publishing that site on
 Read the Docs.
@@ -70,8 +70,17 @@ when the library changes.
 ## Python
 
 The Python bindings require Python 3.10 or later. They are implemented with
-pybind11 and call the compiled C++ API.
-Build and install them from the repository root with:
+pybind11 and call the compiled C++ API. Install a published release from PyPI
+with:
+
+```sh
+python -m pip install --pre c50
+```
+
+`--pre` is needed while only prerelease versions, such as `1.0.0a1`, are
+published. Releases include wheels for Linux x86-64 and ARM64, macOS arm64 and
+x86-64, and Windows x86-64. To build and install from a source checkout
+instead, run this from the repository root:
 
 ```sh
 python -m pip install .
@@ -134,7 +143,7 @@ text buffer and batches prediction to bound temporary native storage. Training
 remains in-memory. Set `n_jobs` to enable bounded parallel evaluation of
 eligible attribute splits with up to 8 workers. The default is one worker.
 Other training phases remain serial. The detailed input, concurrency, and
-[large-dataset](docs/large-datasets.md) contracts are in the project
+[large-dataset](https://github.com/mainland/c50/blob/main/docs/large-datasets.md) contracts are in the project
 documentation.
 
 Run `./c5.0 -h` to see the available command-line options. C5.0 uses a file stem
@@ -163,7 +172,7 @@ ctest --test-dir build --output-on-failure
 ```
 
 Optional Catch2 3.x sort-correctness tests and a profiling workload are
-enabled with `-DC50_BUILD_BENCHMARKS=ON`. See the [benchmark guide](benchmarks/README.md)
+enabled with `-DC50_BUILD_BENCHMARKS=ON`. See the [benchmark guide](https://github.com/mainland/c50/blob/main/benchmarks/README.md)
 for the `perf` and Heaptrack workflows.
 
 Configure an AddressSanitizer and UndefinedBehaviorSanitizer build with:
@@ -191,7 +200,7 @@ ctest --test-dir build/tsan --output-on-failure
 ## License
 
 The imported C5.0 source is distributed under the GNU General Public License,
-version 3 or, at your option, any later version. See [gpl.txt](gpl.txt) and the
+version 3 or, at your option, any later version. See [gpl.txt](https://github.com/mainland/c50/blob/main/gpl.txt) and the
 notices in the source files.
 
 C5.0 and RuleQuest are associated with RuleQuest Research Pty Ltd. This
