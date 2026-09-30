@@ -51,7 +51,7 @@ static void ownership_and_recovery()
     }
 }
 
-static void concurrency()
+static void shared_model_concurrency()
 {
     auto shared = train(c50::model_kind::tree);
     std::promise<void> start;
@@ -308,7 +308,7 @@ int main()
 {
     try {
         ownership_and_recovery();
-        concurrency();
+        shared_model_concurrency();
         parallel_equivalence();
         parallel_schema_equivalence();
         concurrent_parallel_fits();
