@@ -88,6 +88,45 @@ def test_stable_ties_fit_and_validation() -> None:
         C50Classifier(ties="fast").fit(X_BINARY, Y_BINARY)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize(
+    ("parameters", "name"),
+    [
+        ({"trials": 1.5}, "trials"),
+        ({"trials": 0}, "trials"),
+        ({"trials": True}, "trials"),
+        ({"subset_splits": "yes"}, "subset_splits"),
+        ({"global_pruning": None}, "global_pruning"),
+        ({"winnow": 1}, "winnow"),
+        ({"minimum_cases": "2"}, "minimum_cases"),
+        ({"confidence_factor": None}, "confidence_factor"),
+        ({"sample_fraction": False}, "sample_fraction"),
+    ],
+)
+def test_invalid_parameter_types_name_the_parameter(
+    parameters: dict[str, object], name: str
+) -> None:
+    with pytest.raises(ValueError, match=name):
+        C50Classifier(**parameters).fit(X_BINARY, Y_BINARY)  # type: ignore[arg-type]
+
+
+def test_numpy_scalar_parameters_match_python_scalars() -> None:
+    X = np.linspace(0, 4, 40).reshape(-1, 1)
+    y = np.where(X[:, 0] > 2, "high", "low")
+    y[::7] = "high"
+    python = C50Classifier(
+        trials=3, winnow=True, minimum_cases=1.0, sample_fraction=0.5, random_state=2
+    ).fit(X, y)
+    numpy = C50Classifier(
+        trials=np.int64(3),
+        winnow=np.bool_(True),
+        minimum_cases=np.float32(1.0),
+        sample_fraction=np.float64(0.5),
+        random_state=np.int64(2),
+    ).fit(X, y)
+
+    assert numpy.model_.serialized_data == python.model_.serialized_data
+
+
 @pytest.mark.parametrize("n_jobs", [0, 1.5, True, "2"])
 def test_invalid_n_jobs(n_jobs: object) -> None:
     classifier = C50Classifier(n_jobs=n_jobs)  # type: ignore[arg-type]
