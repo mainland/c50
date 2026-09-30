@@ -7,7 +7,7 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from numbers import Integral, Real
-from typing import Any, Literal, cast
+from typing import Any, Literal, Self, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -16,6 +16,150 @@ from numpy.typing import NDArray
 type Array = NDArray[Any]
 type CategoryKey = tuple[type[object], object]
 type UnknownCategoryPolicy = Literal["error", "missing"]
+type RowSelection = slice | NDArray[np.bool_]
+
+
+@dataclass(frozen=True)
+class CodedColumn:
+    """A column stored as integer codes into its distinct values.
+
+    Code -1 marks a missing value. pandas categorical and string columns use
+    this form so that encoding examines each distinct value once instead of
+    every row.
+    """
+
+    codes: NDArray[np.intp]
+    values: Any
+    categorical_dtype: bool
+
+    def __len__(self) -> int:
+        """Return the number of rows."""
+        return len(self.codes)
+
+    def __getitem__(self, rows: RowSelection) -> CodedColumn:
+        """Return the selected rows with the same distinct values."""
+        return CodedColumn(self.codes[rows], self.values, self.categorical_dtype)
+
+    def present_codes(self) -> NDArray[np.intp]:
+        """Return the codes that occur, in order of first occurrence."""
+        codes, first = np.unique(self.codes[self.codes >= 0], return_index=True)
+        ordered: NDArray[np.intp] = codes[np.argsort(first, kind="stable")]
+        return ordered
+
+    def value(self, code: int | np.integer[Any]) -> object:
+        """Return the normalized value for a code."""
+        return _normalize_scalar(self.values[int(code)])
+
+    def objects(self) -> Array:
+        """Return an object array with ``None`` for missing values."""
+        result = np.full(len(self.codes), None, dtype=object)
+        present = self.codes >= 0
+        result[present] = np.asarray(self.values, dtype=object)[self.codes[present]]
+        return result
+
+
+@dataclass(frozen=True)
+class NullableNumbers:
+    """A pandas numeric extension array, converted once its use is known.
+
+    Continuous features use float64 values with NaN for missing values.
+    Categorical features use the Python values, so integer categories remain
+    integers.
+    """
+
+    array: Any
+
+    def __len__(self) -> int:
+        """Return the number of rows."""
+        return len(self.array)
+
+    def __getitem__(self, rows: RowSelection) -> NullableNumbers:
+        """Return the selected rows."""
+        return NullableNumbers(self.array[rows])
+
+    def floats(self) -> NDArray[np.float64]:
+        """Return float64 values with NaN for missing values."""
+        return np.asarray(
+            self.array.to_numpy(dtype=np.float64, na_value=np.nan),
+            dtype=np.float64,
+        )
+
+    def objects(self) -> Array:
+        """Return the object array that pandas produces for the column."""
+        return np.asarray(self.array.to_numpy(dtype=object), dtype=object)
+
+
+type Column = Array | CodedColumn | NullableNumbers
+
+
+@dataclass(frozen=True)
+class Columns:
+    """Two-dimensional input stored as one array per feature.
+
+    A column keeps its own dtype, so numeric columns of a mixed table can be
+    encoded without converting their values to Python objects.
+    """
+
+    arrays: tuple[Column, ...]
+    rows: int
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        """Return the number of rows and features."""
+        return self.rows, len(self.arrays)
+
+    def __getitem__(self, rows: RowSelection) -> Self:
+        """Return a range of rows, or the rows selected by a mask."""
+        if isinstance(rows, slice):
+            count = len(range(*rows.indices(self.rows)))
+        else:
+            count = int(np.count_nonzero(rows))
+        return type(self)(tuple(array[rows] for array in self.arrays), count)
+
+
+def dataframe_columns(frame: Any) -> Columns:
+    """Convert pandas DataFrame columns without a common dtype.
+
+    NumPy numeric and Boolean columns keep their dtype. Categorical and string
+    columns become codes into their distinct values, and nullable numeric
+    columns are converted when the schema determines their use. Other columns
+    become object arrays, as they would in a conversion of the whole frame.
+    """
+    # Only pandas creates DataFrames, so it is already imported.
+    pandas = sys.modules["pandas"]
+    arrays: list[Column] = []
+    for position in range(frame.shape[1]):
+        column = frame.iloc[:, position]
+        dtype = column.dtype
+        if isinstance(dtype, np.dtype):
+            if dtype.kind in "iufb":
+                arrays.append(column.to_numpy())
+            else:
+                arrays.append(column.to_numpy(dtype=object))
+        elif isinstance(dtype, pandas.CategoricalDtype):
+            arrays.append(
+                CodedColumn(
+                    column.cat.codes.to_numpy(dtype=np.intp),
+                    dtype.categories,
+                    categorical_dtype=True,
+                )
+            )
+        elif isinstance(dtype, pandas.StringDtype):
+            # Every value is a str, so equal values have equal category keys
+            # and factorize() cannot merge distinct categories.
+            codes, uniques = pandas.factorize(column)
+            arrays.append(
+                CodedColumn(
+                    np.asarray(codes, dtype=np.intp),
+                    uniques,
+                    categorical_dtype=False,
+                )
+            )
+        elif dtype.kind in "iuf":
+            arrays.append(NullableNumbers(column.array))
+        else:
+            arrays.append(column.to_numpy(dtype=object))
+    return Columns(tuple(arrays), frame.shape[0])
 
 
 @dataclass(frozen=True)
@@ -29,9 +173,14 @@ class FeatureSchema:
 
 @dataclass(frozen=True)
 class Schema:
-    """Fitted conversion between array values and C5.0 case fields."""
+    """Fitted conversion between array values and C5.0 case fields.
+
+    With ``case_weight``, the C5.0 schema ends with a ``case weight``
+    attribute after the features. C5.0 does not use it in classifiers.
+    """
 
     features: tuple[FeatureSchema, ...]
+    case_weight: bool = False
 
     @property
     def categorical_indices(self) -> tuple[int, ...]:
@@ -63,25 +212,45 @@ class Schema:
                 lines.append(f"feature_{index}: {values}.")
             else:
                 lines.append(f"feature_{index}: continuous.")
+        if self.case_weight:
+            lines.append("case weight: continuous.")
         return "\n".join(lines) + "\n"
 
     def dense_data(
         self,
-        X: Array,
+        X: Array | Columns,
         unknown_categories: UnknownCategoryPolicy,
+        case_weights: NDArray[np.float64] | None = None,
     ) -> NDArray[np.float64]:
-        """Encode features as the native dense matrix representation."""
-        if X.ndim != 2:
-            raise ValueError("X must be a two-dimensional array")
-        if X.shape[1] != len(self.features):
-            raise ValueError(
-                f"X has {X.shape[1]} features, but the fitted schema expects "
-                f"{len(self.features)}"
-            )
+        """Encode features as the native dense matrix representation.
 
-        encoded = np.empty(X.shape, dtype=np.float64, order="C")
+        A schema with a case-weight attribute encodes ``case_weights`` after
+        the features, or missing values when none are given.
+        """
+        columns = _as_columns(X)
+        if len(columns.arrays) != len(self.features):
+            raise ValueError(
+                f"X has {len(columns.arrays)} features, but the fitted schema "
+                f"expects {len(self.features)}"
+            )
+        if case_weights is not None and not self.case_weight:
+            raise ValueError("the fitted schema has no case-weight attribute")
+
+        width = len(self.features) + self.case_weight
+        encoded = np.empty((columns.rows, width), dtype=np.float64, order="C")
+        if self.case_weight:
+            encoded[:, -1] = math.nan if case_weights is None else case_weights
         for feature_index, feature in enumerate(self.features):
-            column = X[:, feature_index]
+            stored = columns.arrays[feature_index]
+            if isinstance(stored, CodedColumn) and feature.categorical:
+                encoded[:, feature_index] = _encode_coded(
+                    feature, stored, feature_index, unknown_categories
+                )
+                continue
+            if isinstance(stored, NullableNumbers) and not feature.categorical:
+                column = stored.floats()
+            else:
+                column = _object_values(stored)
             if not feature.categorical and column.dtype.kind in "iuf":
                 converted = np.asarray(column, dtype=np.float64)
                 if np.any(np.isinf(converted)):
@@ -102,20 +271,49 @@ class Schema:
 
 
 def fit_schema(
-    X: Array,
-    categorical_features: Sequence[int | str] | None,
+    X: Array | Columns,
+    categorical_features: Sequence[int | str] | Literal["from_dtype"] | None,
     feature_names: Sequence[str] | None = None,
 ) -> Schema:
-    """Infer or apply categorical feature selection and fit value mappings."""
-    selected = _resolve_categorical_features(
-        categorical_features,
-        X.shape[1],
-        feature_names,
-    )
+    """Infer or apply categorical feature selection and fit value mappings.
+
+    ``"from_dtype"`` selects exactly the pandas categorical columns.
+    """
+    columns = _as_columns(X)
+    if isinstance(categorical_features, str) and categorical_features == "from_dtype":
+        selected: set[int] | None = {
+            index
+            for index, column in enumerate(columns.arrays)
+            if isinstance(column, CodedColumn) and column.categorical_dtype
+        }
+    else:
+        selected = _resolve_categorical_features(
+            categorical_features,
+            len(columns.arrays),
+            feature_names,
+        )
 
     features = []
-    for index in range(X.shape[1]):
-        column = X[:, index]
+    for index, stored in enumerate(columns.arrays):
+        if isinstance(stored, CodedColumn):
+            categorical = (
+                _infer_coded_categorical(stored)
+                if selected is None
+                else index in selected
+            )
+            if categorical:
+                features.append(_fit_coded(stored, index))
+                continue
+            column = stored.objects()
+        elif isinstance(stored, NullableNumbers):
+            # Every value is a number, so inference selects a continuous
+            # feature, and a selected categorical feature keeps integers.
+            if selected is not None and index in selected:
+                column = stored.objects()
+            else:
+                column = stored.floats()
+        else:
+            column = stored
         categorical = (
             _infer_categorical(column) if selected is None else index in selected
         )
@@ -154,6 +352,66 @@ def encode_costs(class_count: int, cost_matrix: object | None) -> str:
                 f"{_format_number(costs[predicted, actual])}"
             )
     return "\n".join(lines) + ("\n" if lines else "")
+
+
+def _object_values(column: Column) -> Array:
+    return column if isinstance(column, np.ndarray) else column.objects()
+
+
+def _infer_coded_categorical(column: CodedColumn) -> bool:
+    values = [column.value(code) for code in column.present_codes()]
+    return bool(values) and not all(
+        isinstance(value, Real) and not isinstance(value, bool) for value in values
+    )
+
+
+def _fit_coded(column: CodedColumn, feature_index: int) -> FeatureSchema:
+    categories: list[object] = []
+    lookup: dict[CategoryKey, int] = {}
+    for code in column.present_codes():
+        value = column.value(code)
+        key = _category_key(value, feature_index)
+        if key not in lookup:
+            lookup[key] = len(categories)
+            categories.append(value)
+    return FeatureSchema(True, tuple(categories), lookup)
+
+
+def _encode_coded(
+    feature: FeatureSchema,
+    column: CodedColumn,
+    feature_index: int,
+    unknown_categories: UnknownCategoryPolicy,
+) -> NDArray[np.float64]:
+    # Map each code that occurs to its fitted index, or -1 if unseen.
+    mapping = np.full(len(column.values), -1, dtype=np.intp)
+    for code in np.unique(column.codes[column.codes >= 0]):
+        index = feature.lookup.get(_category_key(column.value(code), feature_index))
+        if index is not None:
+            mapping[code] = index
+
+    encoded = np.full(len(column), math.nan)
+    rows = np.flatnonzero(column.codes >= 0)
+    indices = mapping[column.codes[rows]]
+    unseen = indices < 0
+    if unknown_categories == "error" and np.any(unseen):
+        value = column.value(column.codes[rows[np.argmax(unseen)]])
+        raise ValueError(
+            f"X contains unseen category {value!r} in feature {feature_index}"
+        )
+    encoded[rows[~unseen]] = indices[~unseen]
+    return encoded
+
+
+def _as_columns(X: Array | Columns) -> Columns:
+    if isinstance(X, Columns):
+        return X
+    if X.ndim != 2:
+        raise ValueError("X must be a two-dimensional array")
+    return Columns(
+        tuple(X[:, index] for index in range(X.shape[1])),
+        X.shape[0],
+    )
 
 
 def _resolve_categorical_features(
@@ -290,6 +548,9 @@ def _normalize_scalar(value: object) -> object:
 def _is_missing(value: object) -> bool:
     if value is None:
         return True
+    if isinstance(value, (str, bytes)):
+        # np.isnan() would reject these by raising, at a much higher cost.
+        return False
     if type(value).__module__.startswith("pandas."):
         # Only pandas creates these values, so it is already imported.
         missing = sys.modules["pandas"].isna(value)

@@ -202,6 +202,7 @@ class Model:
         options: Options = ...,
         costs: str = "",
         split_workers: int = 1,
+        copy: bool = True,
     ) -> Model: ...
     @staticmethod
     def load(
@@ -226,6 +227,8 @@ class Model:
     def predict_details_dense(
         self, values: NDArray[np.float64]
     ) -> Predictions: ...
+    def attribute_usage(self, cases: str) -> list[int]: ...
+    def attribute_usage_dense(self, values: NDArray[np.float64]) -> list[int]: ...
     def predict(self, cases: str) -> list[str]: ...
     def predict_proba(self, cases: str) -> list[list[float]]: ...
 
@@ -248,6 +251,7 @@ def train_dense(
     options: Options = ...,
     costs: str = "",
     split_workers: int = 1,
+    copy: bool = True,
 ) -> Model: ...
 
 

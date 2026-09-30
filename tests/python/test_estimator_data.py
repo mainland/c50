@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 
-from c50._data import encode_costs, fit_schema
+from c50._data import dataframe_columns, encode_costs, fit_schema
 
 
 def test_schema_encodes_continuous_and_categorical_features() -> None:
@@ -91,6 +92,85 @@ def test_schema_rejects_nonfinite_continuous_values() -> None:
             np.asarray([[1.0], [np.inf]]),
             categorical_features=(),
         )
+
+
+def test_strings_are_categories_not_missing_values() -> None:
+    X = np.asarray([["nan"], [b"nan"], [""], [None], [np.nan]], dtype=object)
+
+    schema = fit_schema(X, categorical_features=None)
+
+    assert schema.categories == (("nan", b"nan", ""),)
+    encoded = schema.dense_data(X, "error")[:, 0]
+    np.testing.assert_array_equal(encoded, [0, 1, 2, np.nan, np.nan])
+
+
+def test_dataframe_columns_keep_numeric_dtypes() -> None:
+    frame = pd.DataFrame(
+        {
+            "real": [0.5, 1.5, 2.5],
+            "count": np.asarray([1, 2, 3], dtype=np.uint8),
+            "flag": [True, False, True],
+            "word": pd.Series(["a", "b", "a"], dtype=object),
+            "when": pd.to_datetime([0, 1, 0], unit="D"),
+        }
+    )
+
+    columns = dataframe_columns(frame)
+
+    assert columns.shape == (3, 5)
+    assert [getattr(array, "dtype", None) for array in columns.arrays] == [
+        np.dtype(np.float64),
+        np.dtype(np.uint8),
+        np.dtype(bool),
+        np.dtype(object),
+        np.dtype(object),
+    ]
+    assert columns[1:].shape == (2, 5)
+    assert columns[1:].arrays[1].tolist() == [2, 3]
+
+    schema = fit_schema(columns, categorical_features=None)
+    assert schema.categorical_indices == (2, 3, 4)
+    np.testing.assert_array_equal(
+        schema.dense_data(columns[1:], "error"),
+        np.asarray([[1.5, 2, 1, 1, 1], [2.5, 3, 0, 0, 0]]),
+    )
+
+
+def test_coded_columns_keep_first_occurrence_order() -> None:
+    frame = pd.DataFrame(
+        {
+            "group": pd.Categorical(
+                ["b", None, "c", "b", "a"], categories=["a", "b", "c", "d"]
+            ),
+            "word": pd.array(["y", "x", None, "y", "z"], dtype="string"),
+            "count": pd.array([1, None, 3, 4, 5], dtype="Int64"),
+        }
+    )
+
+    columns = dataframe_columns(frame)
+    schema = fit_schema(columns[1:], categorical_features=None)
+
+    assert [type(array).__name__ for array in columns.arrays] == [
+        "CodedColumn",
+        "CodedColumn",
+        "NullableNumbers",
+    ]
+    assert schema.categories == (("c", "b", "a"), ("x", "y", "z"), ())
+    np.testing.assert_array_equal(
+        schema.dense_data(columns, "error"),
+        np.asarray(
+            [
+                [1, 1, 1],
+                [np.nan, 0, np.nan],
+                [0, np.nan, 3],
+                [1, 1, 4],
+                [2, 2, 5],
+            ]
+        ),
+    )
+    declared = fit_schema(columns, categorical_features=(0, 1, 2))
+    assert declared.categories[2] == (1, 3, 4, 5)
+    assert all(type(value) is int for value in declared.categories[2])
 
 
 def test_cost_matrix_encoding_uses_predicted_by_actual_order() -> None:
