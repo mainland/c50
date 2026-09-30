@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import struct
 from collections.abc import Mapping, Sequence
 
 from ._c50 import ConditionKind, ModelInspection, NodeKind, SplitCondition
@@ -151,6 +152,20 @@ def export_json(
     ) + "\n"
 
 
+def _single(value: float) -> str:
+    """Return the shortest text that reads back as the same float32 value.
+
+    C5.0 stores thresholds and priors in single precision, so printing the
+    widened double would show digits that the model does not hold.
+    """
+    stored = struct.unpack("f", struct.pack("f", value))[0]
+    for digits in range(1, 9):
+        text = f"{stored:.{digits}g}"
+        if struct.unpack("f", struct.pack("f", float(text)))[0] == stored:
+            return text
+    return f"{stored:.9g}"
+
+
 def _condition_text(
     condition: SplitCondition,
     names: list[str],
@@ -168,7 +183,7 @@ def _condition_text(
             values.insert(0, "N/A")
         return f"{feature} in {{{', '.join(values)}}}"
     comparison = "<=" if condition.kind == ConditionKind.LESS_EQUAL else ">"
-    return f"{feature} {comparison} {condition.cut:.9g}"
+    return f"{feature} {comparison} {_single(condition.cut)}"
 
 
 def export_text(
@@ -256,6 +271,6 @@ def export_text(
             lines.append(
                 f"  rule {index}: {conditions} -> {classes[rule.predicted_class]!r} "
                 f"(cover={rule.cover:g}, correct={rule.correct:g}, "
-                f"prior={rule.prior:.9g}, vote={rule.vote}/1000)"
+                f"prior={_single(rule.prior)}, vote={rule.vote}/1000)"
             )
     return "\n".join(lines) + "\n"

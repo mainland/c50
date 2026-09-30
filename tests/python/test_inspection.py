@@ -45,6 +45,19 @@ def test_snapshot_lifetime_and_readonly_metadata() -> None:
         root.case_weight = 99
 
 
+def test_text_shows_single_precision_values_without_widening_digits() -> None:
+    names = "low, high.\n\nvalue: continuous.\n"
+    data = "42.0, low\n42.2, low\n42.3, high\n42.5, high\n"
+    options = Options()
+    options.minimum_cases = 1
+    tree = Model.train(names, data, options=options).inspect()
+    assert "'value' <= 42.2 ->" in export_text(tree)
+    rules = Model.train(names, data, ModelKind.RULES, options=options).inspect()
+    text = export_text(rules)
+    assert "<= 42.2 ->" in text
+    assert "prior=0.5," in text
+
+
 def test_json_and_text_preserve_structure_and_escape_display_names() -> None:
     model = Model.train(NAMES, DATA)
     before = model.predict_proba("0, ?\n5, ?\n?, ?\n")
