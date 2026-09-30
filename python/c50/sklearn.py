@@ -24,6 +24,8 @@ from sklearn.utils.validation import (
 
 from ._c50 import Model, ModelKind, Options, TieOrder
 from ._data import Columns, Schema, dataframe_columns, encode_costs, fit_schema
+from .inspection import export_json as _export_json
+from .inspection import export_text as _export_text
 
 
 type ModelKindName = Literal["tree", "rules"]
@@ -341,6 +343,66 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             details = predictor.predict_details_dense(values)
             scores[row_slice] = np.asarray(details.scores, dtype=np.float64)
         return scores
+
+    def export_text(
+        self,
+        *,
+        max_depth: int | None = None,
+        include_empty: bool = True,
+    ) -> str:
+        """Render the fitted classifier with the original names and labels.
+
+        Features use ``feature_names_in_`` when available and otherwise
+        ``feature_<index>``. Classes and categories use the string forms of
+        ``classes_`` and ``categories_``.
+
+        Args:
+            max_depth: Maximum displayed tree depth, or ``None`` for all nodes.
+            include_empty: Whether to display tree leaves without training
+                support.
+
+        Returns:
+            The text produced by :func:`c50.export_text`.
+        """
+        check_is_fitted(self)
+        return _export_text(
+            self.model_.inspect(),
+            **self._display_names(),
+            max_depth=max_depth,
+            include_empty=include_empty,
+        )
+
+    def export_json(self) -> str:
+        """Export the fitted classifier's structure with original names.
+
+        Names follow :meth:`export_text`. The result is metadata, not a
+        loadable model. Persist the estimator or ``model_`` instead.
+
+        Returns:
+            The JSON produced by :func:`c50.export_json`.
+        """
+        check_is_fitted(self)
+        return _export_json(self.model_.inspect(), **self._display_names())
+
+    def _display_names(self) -> dict[str, Any]:
+        """Map native schema names to the estimator's original names."""
+        feature_names = (
+            [str(name) for name in self.feature_names_in_]
+            if hasattr(self, "feature_names_in_")
+            else [f"feature_{index}" for index in range(self.n_features_in_)]
+        )
+        value_names: list[dict[str, str] | None] = [
+            {f"value_{index}": str(value) for index, value in enumerate(categories)}
+            for categories in self.categories_
+        ]
+        if self._schema.case_weight:
+            feature_names.append("case weight")
+            value_names.append(None)
+        return {
+            "feature_names": feature_names,
+            "class_names": [str(label) for label in self.classes_],
+            "value_names": value_names,
+        }
 
     def __sklearn_is_fitted__(self) -> bool:
         """Return whether native model state has been fitted."""

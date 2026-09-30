@@ -198,6 +198,7 @@ def test_pandas_categories_names_and_missing_values() -> None:
     assert classifier.feature_names_in_.tolist() == ["signal", "group"]
     assert classifier.categorical_features_.tolist() == [1]
     assert classifier.categories_[1].tolist() == ["a", "b"]
+    assert "'signal'" in classifier.export_text()
     np.testing.assert_array_equal(classifier.predict(frame), Y)
     restored = pickle.loads(pickle.dumps(classifier))
     np.testing.assert_array_equal(
