@@ -50,6 +50,17 @@ def test_numeric_fit_predict_and_predict_proba() -> None:
     ]
 
 
+def test_predict_log_proba_is_the_log_of_predict_proba() -> None:
+    classifier = C50Classifier(minimum_cases=1).fit(X_BINARY, Y_BINARY)
+    probabilities = classifier.predict_proba(X_BINARY)
+
+    with np.errstate(divide="ignore"):
+        expected = np.log(probabilities)
+    np.testing.assert_array_equal(classifier.predict_log_proba(X_BINARY), expected)
+    with pytest.raises(NotFittedError):
+        C50Classifier().predict_log_proba(X_BINARY)
+
+
 def test_worker_count_preserves_estimator_model() -> None:
     serial = C50Classifier().fit(X_BINARY, Y_BINARY)
 
