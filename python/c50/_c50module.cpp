@@ -49,6 +49,13 @@ one nonnegative zero-based class index per
 row.
 ``split_workers`` selects 1 through 8 native split-evaluation workers;
 the default is one.
+
+Training runs without the global interpreter lock, so by default it copies
+``values`` first. With ``copy=False``, training reads a float64, C-contiguous
+``values`` array directly, which avoids holding a second copy of the matrix.
+The caller must then ensure that no thread modifies ``values`` until the call
+returns. Arrays with another dtype or layout are always converted into a
+temporary array that no other code can modify.
 )doc";
 
 const char predict_details_dense_doc[] = R"doc(
@@ -56,6 +63,22 @@ Predict a dense NumPy feature matrix.
 
 The matrix uses the same continuous, categorical, and missing-value encoding
 as ``train_dense``.
+)doc";
+
+const char attribute_usage_doc[] = R"doc(
+Count the cases whose classification tests each attribute.
+
+A case counts for an attribute when classifying it tests that attribute and
+the case's value is known. The result has one count per attribute of
+``names_data``, in declaration order. These are the counts behind C5.0's
+"Attribute usage" report, which divides them by the number of cases.
+)doc";
+
+const char attribute_usage_dense_doc[] = R"doc(
+Count attribute usage for a dense NumPy feature matrix.
+
+The matrix uses the same encoding as ``predict_details_dense``. The result
+matches ``attribute_usage`` for the equivalent data-file contents.
 )doc";
 
 template<class T>
@@ -171,7 +194,8 @@ public:
                                     c50::model_kind kind,
                                     const c50::options &options,
                                     const std::string &costs,
-                                    unsigned int split_workers)
+                                    unsigned int split_workers,
+                                    bool copy)
     {
         if ( values.ndim() != 2 )
         {
@@ -188,10 +212,17 @@ public:
         }
 
         const auto indices = checked_classes(class_indices);
-        std::vector<double> value_copy(static_cast<std::size_t>(values.size()));
-        std::copy_n(values.data(), value_copy.size(), value_copy.data());
+        // The argument keeps values alive while the GIL is released. Without
+        // a copy, the caller guarantees that no thread modifies it.
+        std::vector<double> value_copy;
+        const double *data = values.data();
+        if ( copy )
+        {
+            value_copy.assign(data, data + values.size());
+            data = value_copy.data();
+        }
         const c50::dense_dataset dataset(
-            value_copy.data(), static_cast<std::size_t>(values.shape(0)),
+            data, static_cast<std::size_t>(values.shape(0)),
             static_cast<std::size_t>(values.shape(1)), indices.data());
         c50::context context;
         context.split_workers(split_workers);
@@ -251,6 +282,31 @@ public:
         c50::context context;
         py::gil_scoped_release release;
         return model_.predict(context, dataset);
+    }
+
+    std::vector<std::size_t> attribute_usage(const std::string &cases) const
+    {
+        c50::context context;
+        py::gil_scoped_release release;
+        return model_.attribute_usage(context, cases);
+    }
+
+    std::vector<std::size_t> attribute_usage_dense(
+        const dense_values<double> &values) const
+    {
+        if ( values.ndim() != 2 )
+        {
+            throw py::value_error("values must be a two-dimensional array");
+        }
+
+        std::vector<double> value_copy(static_cast<std::size_t>(values.size()));
+        std::copy_n(values.data(), value_copy.size(), value_copy.data());
+        const c50::dense_dataset dataset(
+            value_copy.data(), static_cast<std::size_t>(values.shape(0)),
+            static_cast<std::size_t>(values.shape(1)));
+        c50::context context;
+        py::gil_scoped_release release;
+        return model_.attribute_usage(context, dataset);
     }
 
     std::vector<std::string> predict(const std::string &cases) const
@@ -601,7 +657,8 @@ GIL while training, loading, or predicting.
                     py::arg("kind") = c50::model_kind::tree,
                     py::arg("options") = c50::options(),
                     py::arg("costs") = "",
-                    py::arg("split_workers") = 1)
+                    py::arg("split_workers") = 1,
+                    py::arg("copy") = true)
         .def_static("load", &python_model::load,
                     load_doc,
                     py::arg("names"), py::arg("serialized_data"),
@@ -630,6 +687,10 @@ GIL while training, loading, or predicting.
              predict_details_doc, py::arg("cases"))
         .def("predict_details_dense", &python_model::predict_details_dense,
              predict_details_dense_doc, py::arg("values"))
+        .def("attribute_usage", &python_model::attribute_usage,
+             attribute_usage_doc, py::arg("cases"))
+        .def("attribute_usage_dense", &python_model::attribute_usage_dense,
+             attribute_usage_dense_doc, py::arg("values"))
         .def("predict", &python_model::predict,
              predict_doc, py::arg("cases"))
         .def("predict_proba", &python_model::predict_proba,
@@ -666,7 +727,8 @@ GIL while training, loading, or predicting.
                py::arg("kind") = c50::model_kind::tree,
                py::arg("options") = c50::options(),
                py::arg("costs") = "",
-               py::arg("split_workers") = 1);
+               py::arg("split_workers") = 1,
+               py::arg("copy") = true);
     module.def("load", &python_model::load,
                load_doc,
                py::arg("names"), py::arg("serialized_data"),

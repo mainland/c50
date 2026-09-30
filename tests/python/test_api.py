@@ -176,6 +176,26 @@ def test_dense_training_matches_text_training(
     assert details.scores == [[1.0, 0.0], [0.0, 1.0]]
 
 
+def test_dense_training_without_copy_matches_copy() -> None:
+    expected = c50.Model.train_dense(NAMES, DENSE_TRAINING, DENSE_CLASSES)
+
+    for values in (
+        DENSE_TRAINING,
+        np.asfortranarray(DENSE_TRAINING),
+        DENSE_TRAINING.astype(np.float32),
+        np.repeat(DENSE_TRAINING, 2, axis=1)[:, ::2],
+    ):
+        model = c50.Model.train_dense(
+            NAMES, values, DENSE_CLASSES, copy=False
+        )
+        assert model.serialized_data == expected.serialized_data
+    assert (
+        c50.train_dense(NAMES, DENSE_TRAINING, DENSE_CLASSES, copy=False)
+        .serialized_data
+        == expected.serialized_data
+    )
+
+
 @pytest.mark.parametrize("workers", [1, 2, 4])
 def test_training_worker_count_preserves_model(workers: int) -> None:
     text_model = c50.train(NAMES, TRAINING, split_workers=workers)
@@ -218,6 +238,23 @@ def test_native_failures_become_python_exceptions() -> None:
     model = c50.train(NAMES, TRAINING)
     with pytest.raises(ValueError):
         model.predict("malformed")
+
+
+@pytest.mark.parametrize("kind", [c50.ModelKind.TREE, c50.ModelKind.RULES])
+def test_attribute_usage_counts_tested_cases(kind: c50.ModelKind) -> None:
+    options = c50.Options()
+    options.minimum_cases = 1
+    model = c50.Model.train(NAMES, TRAINING, kind, options)
+
+    usage = model.attribute_usage(TRAINING)
+
+    assert usage == [8, 0]
+    assert model.attribute_usage_dense(DENSE_TRAINING) == usage
+    assert model.attribute_usage("?, alpha, ?\n") == [0, 0]
+    assert model.attribute_usage("") == [0, 0]
+    assert model.attribute_usage_dense(np.empty((0, 2))) == [0, 0]
+    with pytest.raises(ValueError, match="two-dimensional"):
+        model.attribute_usage_dense(np.zeros(2))
 
 
 def test_empty_prediction_batch() -> None:

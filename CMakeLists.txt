@@ -256,6 +256,12 @@ if(BUILD_TESTING)
     list(APPEND C50_EXECUTABLE_TARGETS c50_model_inspection)
     add_test(NAME model-inspection COMMAND c50_model_inspection
              "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")
+    add_executable(c50_attribute_usage tests/attribute_usage.cpp)
+    target_link_libraries(c50_attribute_usage PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_attribute_usage)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_attribute_usage)
+    add_test(NAME attribute-usage COMMAND c50_attribute_usage
+             "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     add_executable(c50_predictor tests/predictor.cpp)
     target_link_libraries(c50_predictor PRIVATE C50::cpp)
     list(APPEND C50_COMPILE_TARGETS c50_predictor)

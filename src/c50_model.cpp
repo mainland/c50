@@ -98,6 +98,8 @@ typedef struct c50_predict_state
     size_t cases_size;
     const c50_dense_dataset *dense_dataset;
     owned_predictions predictions;
+    /* When set, count attribute usage instead of storing predictions. */
+    std::vector<std::size_t> *attribute_usage;
 } c50_predict_state;
 
 struct c50_inspect_state
@@ -590,6 +592,25 @@ static void PredictParsedModel(c50_context *Context, void *user_data)
         GetDataInput(Context, &cases_input, false, true);
     }
 
+    if ( state->attribute_usage )
+    {
+        /* Count usage as Evaluate does for the "Attribute usage" report.
+           Classification marks each attribute it tests, and Cleanup releases
+           the marks. */
+        std::vector<CaseNo> usage(Context->schema.max_attribute + 1);
+        Context->splits.tested_attributes =
+            AllocZero(Context->schema.max_attribute + 1, Byte);
+        ForEach(row, 0, Context->cases.max_case)
+        {
+            memset(Context->splits.tested_attributes, 0,
+                   Context->schema.max_attribute + 1);
+            Classify(Context, Context->cases.records[row]);
+            RecordAttUsage(Context, Context->cases.records[row], usage.data());
+        }
+        state->attribute_usage->assign(usage.begin() + 1, usage.end());
+        return;
+    }
+
     state->predictions = std::make_unique<c50_predictions>();
     predictions = state->predictions.get();
     ForEach(class_number, 1, Context->schema.max_class)
@@ -834,6 +855,33 @@ predictions model::predict(context &workspace, const dense_dataset &cases) const
     state.dense_dataset = &dataset;
     c50_run_operation(workspace.state_.get(), PredictModel, CleanupPrediction, &state);
     return predictions(std::move(state.predictions));
+}
+
+std::vector<std::size_t> model::attribute_usage(context &workspace,
+                                                std::string_view cases) const
+{
+    validate_text(cases);
+    std::vector<std::size_t> usage;
+    c50_predict_state state{};
+    state.model = data_.get();
+    state.cases_data = cases.data();
+    state.cases_size = cases.size();
+    state.attribute_usage = &usage;
+    c50_run_operation(workspace.state_.get(), PredictModel, CleanupPrediction, &state);
+    return usage;
+}
+
+std::vector<std::size_t> model::attribute_usage(context &workspace,
+                                                const dense_dataset &cases) const
+{
+    auto dataset = validate_dense(cases, false);
+    std::vector<std::size_t> usage;
+    c50_predict_state state{};
+    state.model = data_.get();
+    state.dense_dataset = &dataset;
+    state.attribute_usage = &usage;
+    c50_run_operation(workspace.state_.get(), PredictModel, CleanupPrediction, &state);
+    return usage;
 }
 
 predictions::predictions(std::unique_ptr<detail::prediction_data> data)
