@@ -68,11 +68,16 @@ wheel.packages = ["python/c50"]
 wheel.exclude = ["**/*.cpp"]
 install.components = ["python"]
 sdist.exclude = [
+    ".hypothesis/**",
+    ".mypy_cache/**",
+    ".venv/**",
     "AGENTS.md",
     "build*/**",
+    "dist/**",
     "docs/_build/**",
     "notes/**",
     "python/*.egg-info/**",
+    "wheelhouse/**",
 ]
 
 [tool.scikit-build.cmake.define]
@@ -100,3 +105,24 @@ strict = true
 [[tool.mypy.overrides]]
 module = ["joblib", "joblib.*", "sklearn", "sklearn.*"]
 ignore_missing_imports = true
+
+[tool.cibuildwheel]
+# Build the supported CPython versions only. Free-threaded builds and
+# prerelease interpreters are not validated.
+build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
+skip = "*-musllinux_*"
+build-frontend = "build"
+test-extras = ["test"]
+test-command = "python -m pytest {project}/tests/python"
+test-environment = { SCIPY_ARRAY_API = "1" }
+
+[tool.cibuildwheel.linux]
+archs = ["native"]
+
+[tool.cibuildwheel.macos]
+archs = ["arm64", "x86_64"]
+# C++17 library features such as std::optional need macOS 10.14 or newer.
+environment = { MACOSX_DEPLOYMENT_TARGET = "11.0" }
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
