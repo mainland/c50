@@ -4,7 +4,7 @@
 
 The native API requires C++17. Installed consumers are compiled as C++17 and
 C++20. The Python package requires Python 3.12 or newer. The estimator's
-minimum dependencies are NumPy 1.26 and scikit-learn 1.6.
+minimum dependencies are joblib 1.3, NumPy 1.26, and scikit-learn 1.6.
 
 | Target | Compiler or dependencies | Validation status |
 | --- | --- | --- |

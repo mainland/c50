@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from typing import cast
 
 from ._c50 import ConditionKind, ModelInspection, NodeKind, SplitCondition
 
@@ -19,12 +20,46 @@ def _names(supplied: Sequence[str] | None, native: list[str]) -> list[str]:
     return names
 
 
-def _condition_data(condition: SplitCondition) -> dict[str, object]:
+def _value_names(
+    supplied: Sequence[Mapping[str, str] | None] | None,
+    feature_count: int,
+) -> list[Mapping[str, str]]:
+    if supplied is None:
+        return [{} for _ in range(feature_count)]
+    # The annotation describes valid input. Other types reach the checks.
+    names: list[object] = [
+        {} if mapping is None else mapping for mapping in supplied
+    ]
+    if len(names) != feature_count or any(
+        not isinstance(mapping, Mapping)
+        or any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in mapping.items()
+        )
+        for mapping in names
+    ):
+        raise ValueError(
+            "value names must be string mappings or None matching the "
+            "schema length"
+        )
+    return cast("list[Mapping[str, str]]", names)
+
+
+def _condition_values(
+    condition: SplitCondition, value_names: list[Mapping[str, str]]
+) -> list[str]:
+    names = value_names[condition.feature]
+    return [names.get(value, value) for value in condition.values]
+
+
+def _condition_data(
+    condition: SplitCondition, value_names: list[Mapping[str, str]]
+) -> dict[str, object]:
     return {
         "feature": condition.feature,
         "kind": condition.kind.name.lower(),
         "cut": condition.cut,
-        "values": condition.values,
+        "values": _condition_values(condition, value_names),
         "includes_not_applicable": condition.includes_not_applicable,
     }
 
@@ -34,6 +69,7 @@ def export_json(
     *,
     feature_names: Sequence[str] | None = None,
     class_names: Sequence[str] | None = None,
+    value_names: Sequence[Mapping[str, str] | None] | None = None,
 ) -> str:
     """Export structural metadata as deterministic JSON, not a loadable model.
 
@@ -41,6 +77,9 @@ def export_json(
         snapshot: Owned result of ``Model.inspect()``.
         feature_names: Optional display names in schema order.
         class_names: Optional display names in class-score order.
+        value_names: Optional per-feature mappings, in schema order, from
+            native categorical value names to display names. ``None`` or an
+            unlisted value keeps the native name.
 
     Returns:
         Versioned JSON containing all nodes, branches, and structural
@@ -51,6 +90,7 @@ def export_json(
     """
     features = _names(feature_names, snapshot.feature_names)
     classes = _names(class_names, snapshot.class_names)
+    values = _value_names(value_names, len(snapshot.feature_names))
     trees = []
     for tree in snapshot.trees:
         nodes = []
@@ -74,7 +114,9 @@ def export_json(
                     "branches": [
                         {
                             "child": branch.child,
-                            "condition": _condition_data(branch.condition),
+                            "condition": _condition_data(
+                                branch.condition, values
+                            ),
                         }
                         for branch in node.branches
                     ],
@@ -110,7 +152,7 @@ def export_json(
                                 "prior": rule.prior,
                                 "vote": rule.vote,
                                 "conditions": [
-                                    _condition_data(test)
+                                    _condition_data(test, values)
                                     for test in rule.conditions
                                 ],
                             }
@@ -128,14 +170,19 @@ def export_json(
     )
 
 
-def _condition_text(condition: SplitCondition, names: list[str]) -> str:
+def _condition_text(
+    condition: SplitCondition,
+    names: list[str],
+    value_names: list[Mapping[str, str]],
+) -> str:
     feature = repr(names[condition.feature])
+    shown = _condition_values(condition, value_names)
     if condition.kind == ConditionKind.NOT_APPLICABLE:
         return f"{feature} is N/A"
     if condition.kind == ConditionKind.EQUALS:
-        return f"{feature} == {condition.values[0]!r}"
+        return f"{feature} == {shown[0]!r}"
     if condition.kind == ConditionKind.IN_SUBSET:
-        values = [repr(value) for value in condition.values]
+        values = [repr(value) for value in shown]
         if condition.includes_not_applicable:
             values.insert(0, "N/A")
         return f"{feature} in {{{', '.join(values)}}}"
@@ -148,6 +195,7 @@ def export_text(
     *,
     feature_names: Sequence[str] | None = None,
     class_names: Sequence[str] | None = None,
+    value_names: Sequence[Mapping[str, str] | None] | None = None,
     max_depth: int | None = None,
     include_empty: bool = True,
 ) -> str:
@@ -159,6 +207,9 @@ def export_text(
         snapshot: Owned result of ``Model.inspect()``.
         feature_names: Optional display names in schema order.
         class_names: Optional display names in class-score order.
+        value_names: Optional per-feature mappings, in schema order, from
+            native categorical value names to display names. ``None`` or an
+            unlisted value keeps the native name.
         max_depth: Maximum displayed edge depth, or ``None`` for all nodes.
         include_empty: Whether to display leaves with zero training support.
 
@@ -171,6 +222,7 @@ def export_text(
     """
     features = _names(feature_names, snapshot.feature_names)
     classes = _names(class_names, snapshot.class_names)
+    values = _value_names(value_names, len(snapshot.feature_names))
     # The annotation describes valid input. Check the value passed.
     depth: object = max_depth
     if depth is not None and (
@@ -218,7 +270,7 @@ def export_text(
                     (
                         branch.child,
                         depth + 1,
-                        _condition_text(branch.condition, features),
+                        _condition_text(branch.condition, features, values),
                     )
                 )
     for number, ruleset in enumerate(snapshot.rulesets):
@@ -229,7 +281,8 @@ def export_text(
         for index, rule in enumerate(ruleset.rules):
             conditions = (
                 " and ".join(
-                    _condition_text(test, features) for test in rule.conditions
+                    _condition_text(test, features, values)
+                    for test in rule.conditions
                 )
                 or "always"
             )
