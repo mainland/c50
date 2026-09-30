@@ -175,6 +175,24 @@ the samples of a class with weight zero are removed. Class weights change the tr
 distribution, while `cost_matrix` changes the cost of each error. Both may be
 used together.
 
+## Scikit-learn workflows
+
+Tests fit the estimator in pipelines with a pandas `ColumnTransformer`, grid
+search, cross-validation with worker processes, permutation importance,
+probability calibration, and bagging, AdaBoost, and stacking ensembles.
+
+With metadata routing enabled, request `sample_weight` for fitting with
+`set_fit_request(sample_weight=True)`. Search and cross-validation tools also
+pass `sample_weight` to scoring, so request or decline it there with
+`set_score_request`. Without routing, pass weights to a pipeline step as
+`step__sample_weight`.
+
+`BaggingClassifier` passes each bootstrap sample to estimators that accept
+`sample_weight` as weights, the number of times each sample was drawn. C5.0
+rescales those weights to their mean, so a sample drawn twice is not the same
+as a repeated sample, as described above. `AdaBoostClassifier`
+rejects missing values in its own input validation, before C5.0 receives them.
+
 ## Split selection and evaluation scoring
 
 `C50Classifier` uses the native C5.0 split-selection policy: gain ratio with
