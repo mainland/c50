@@ -79,11 +79,6 @@ using c50_context = c50::detail::context_state;
 #endif
 
 
-/*  Alternative random number generator  */
-
-#define AltRandom		drand48()
-#define	AltSeed(x)		srand48(x)
-
 #define Free(x)			{free(x); x=0;}
 
 
