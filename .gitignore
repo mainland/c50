@@ -14,3 +14,8 @@ __pycache__/
 /cmake-build-*/
 /docs/_build/
 /.pytest_cache/
+/.venv/
+/.mypy_cache/
+/.hypothesis/
+/dist/
+/wheelhouse/
