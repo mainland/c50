@@ -15,6 +15,7 @@ minimum dependencies are joblib 1.3, NumPy 1.26, and scikit-learn 1.6.
 | Linux x86-64, Python 3.10 | NumPy 1.26.4, pandas 2.2.3, scikit-learn 1.6.1 | Locally validated installed package, runtime tests, and typing |
 | Linux x86-64, Python 3.11 | NumPy 2.4.6, scikit-learn 1.9.1 | Locally validated installed package, runtime tests, and typing |
 | Linux x86-64, Python 3.13 and 3.14 | NumPy 2.5.3, scikit-learn 1.9.1 | Locally validated installed wheels, runtime tests, and typing |
+| Windows x86-64, Python 3.12 | MSVC 19.44 on `windows-2022` | Hosted native, installed-consumer, shell regression, and Python checks passed |
 
 The [hosted validation run at `ff5b953`](https://github.com/mainland/c50/actions/runs/36495390708)
 passed native checks with GCC and Clang on Linux x86-64, GCC on Linux ARM64,
@@ -24,14 +25,42 @@ configurations and the AFL++ seed replay. The
 passed the address, undefined-behavior, and leak configuration and the
 ThreadSanitizer configuration. The macOS build previously failed because its
 math library does not provide `finite()`. Those calls now use C++
-`std::isfinite`. Windows, free-threaded Python, GPU arrays, and other compiler
-or platform combinations are unverified.
+`std::isfinite`. Free-threaded Python, GPU arrays, and other compiler or
+platform combinations are unverified.
 The Linux-only allocation-injection and ELF writable-global inventory checks
-are omitted on macOS. Portable contract and installed-consumer tests still run.
+are omitted on macOS and Windows. Portable contract and installed-consumer tests
+still run.
+
+A [hosted Windows run](https://github.com/mainland/c50/actions/runs/36728151998) built the library, programs, and Python package
+with MSVC at warning level 4 and passed all 18 CTest tests and the Python test
+suite. The reference-compatibility digests and the CLI, report, and prediction
+fixtures matched without Windows-specific exceptions. MSVC still reports about
+250 warnings, mostly narrowing conversions in the imported sources. The
+Windows job does not build the optional Catch2 benchmarks, so it does not run
+the parallel-workload equivalence test.
 
 Native CI configures a C++14 project default to verify that each target declares
 its own C++17 requirement. The platform labels follow the
 [GitHub-hosted runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+
+## Windows
+
+Build with Visual Studio 2022 or newer and CMake. The shell regression tests
+run under the POSIX `sh` from [Git for Windows](https://gitforwindows.org),
+which CMake finds in its default installation directory or on `PATH`:
+
+```sh
+cmake -S . -B build
+cmake --build build --config Release
+ctest --test-dir build --build-config Release --output-on-failure
+```
+
+`.gitattributes` checks out text files with LF line endings on every platform,
+so the fixtures compare byte for byte. The programs write model files in
+binary mode, so `.tree` and `.rules` files are identical to those written on
+other platforms. Console output and `-o` output files use Windows CRLF line
+endings, and the shell tests remove carriage returns before comparing them.
+The root `Makefile` and the `xval` script are not supported on Windows.
 
 ## Legacy Make build
 
