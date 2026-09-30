@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import pickle
 from typing import Any
 
@@ -308,6 +309,41 @@ def test_single_leaf_has_zero_importances() -> None:
     np.testing.assert_array_equal(classifier.feature_importances_, [0])
 
 
+def test_exports_use_original_names_and_labels() -> None:
+    rng = np.random.default_rng(8)
+    count = 300
+    color = rng.choice(["red", "green", "blue"], size=count)
+    size = rng.normal(size=count)
+    X = np.column_stack((size.astype(object), color))
+    y = np.where((color == "red") | (size > 1), 1, 0)
+
+    for options in ({"subset_splits": True}, {"model_kind": "rules"}):
+        classifier = C50Classifier(categorical_features=[1], **options).fit(
+            X, y
+        )
+        text = classifier.export_text()
+        exported = json.loads(classifier.export_json())
+
+        assert "'feature_1'" in text
+        assert "'red'" in text
+        assert "value_" not in text
+        assert "class_" not in text
+        assert exported["feature_names"] == ["feature_0", "feature_1"]
+        assert exported["class_names"] == ["0", "1"]
+        assert "value_" not in classifier.export_json()
+
+    weighted = C50Classifier().fit(
+        X, y, sample_weight=rng.uniform(0.5, 2, count)
+    )
+    assert json.loads(weighted.export_json())["feature_names"] == [
+        "feature_0",
+        "feature_1",
+    ]
+    assert "children omitted" in weighted.export_text(max_depth=0)
+    with pytest.raises(NotFittedError):
+        C50Classifier().export_text()
+
+
 def test_pickle_round_trip() -> None:
     classifier = C50Classifier().fit(X_BINARY, Y_BINARY)
 
@@ -458,3 +494,55 @@ def test_native_workers_receive_a_python_int(
 
     assert received
     assert all(type(item) in (int, type(None)) for item in received)
+
+
+def _condition_features(document: dict[str, Any]) -> set[int]:
+    features = {
+        branch["condition"]["feature"]
+        for tree in document["trees"]
+        for node in tree["nodes"]
+        for branch in node["branches"]
+    }
+    return features | {
+        test["feature"]
+        for ruleset in document["rulesets"]
+        for rule in ruleset["rules"]
+        for test in rule["conditions"]
+    }
+
+
+@pytest.mark.parametrize("model_kind", ["tree", "rules"])
+@pytest.mark.parametrize("weighting", ["sample_weight", "class_weight"])
+def test_weighted_export_json_lists_only_input_features(
+    model_kind: str, weighting: str
+) -> None:
+    rng = np.random.default_rng(9)
+    count = 300
+    X = np.column_stack(
+        (
+            rng.normal(size=count),
+            rng.normal(size=count),
+            rng.normal(size=count),
+        )
+    )
+    y = (X[:, 0] + X[:, 1] > 0).astype(int)
+    plain = C50Classifier(model_kind=model_kind).fit(X, y)
+    if weighting == "sample_weight":
+        weighted = C50Classifier(model_kind=model_kind).fit(
+            X, y, sample_weight=rng.uniform(0.5, 2, count)
+        )
+    else:
+        weighted = C50Classifier(
+            model_kind=model_kind, class_weight={0: 1, 1: 3}
+        ).fit(X, y)
+    assert weighted._schema.case_weight
+
+    base = json.loads(plain.export_json())
+    exported = json.loads(weighted.export_json())
+    assert exported["feature_names"] == base["feature_names"]
+    assert len(exported["feature_names"]) == weighted.n_features_in_
+    for group in (*exported["trees"], *exported["rulesets"]):
+        assert len(group["feature_use"]) == weighted.n_features_in_
+    assert _condition_features(exported) <= set(range(weighted.n_features_in_))
+    assert "case weight" not in weighted.export_json()
+    assert "case weight" not in weighted.export_text()

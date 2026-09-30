@@ -96,8 +96,18 @@ metadata = export_json(snapshot)
 `export_text` accepts `max_depth` to truncate display and `include_empty=False`
 to omit zero-support tree leaves. These two options do not filter rules. Both
 exports accept `feature_names` and `class_names` sequences in schema order.
-For a fitted estimator, inspect
-`classifier.model_` and pass string forms of `classifier.classes_` as display
-class names. Feature names may come from `classifier.feature_names_in_`.
-Native tokens remain available in the snapshot. Python fields are read-only,
-and list accessors return copies.
+They also accept `value_names`, one mapping or `None` per schema attribute,
+from native categorical value names to display names. Native tokens remain
+available in the snapshot. Python fields are read-only, and list accessors
+return copies.
+
+A fitted estimator encodes names, labels, and categories as internal tokens.
+Its `export_text()` and `export_json()` methods supply the original feature
+names, class labels, and categories as display names. Features without string
+names are shown as `feature_<index>`.
+
+The estimator's `export_json()` lists `n_features_in_` entries in each
+per-feature list, with or without `sample_weight`. It omits the case-weight
+attribute that a weighted fit adds to the native schema, which no condition
+tests. `c50.export_json` applied to `model_.inspect()` keeps that entry,
+because the native schema includes it.
