@@ -48,7 +48,12 @@ continuous.
 `None`, numeric NaN, `pd.NA`, and `pd.NaT` represent missing feature values.
 Infinite continuous values are rejected. An unseen prediction-time category
 raises `ValueError` by default. Set `unknown_categories="missing"` to pass
-unseen categories to C5.0 as missing values.
+unseen categories to C5.0 as missing values. A category that a pandas
+`category` dtype declared during fitting, but that no training row used, is
+always passed as a missing value, as in `HistGradientBoostingClassifier`.
+Such categories are not in `categories_` and do not change the classifier, so
+a filtered DataFrame that keeps unused categories trains the same classifier
+as one without them.
 
 The adapter maps class labels and categorical values to internal tokens before
 constructing the C5.0 names buffer and dense feature matrix. Delimiters and

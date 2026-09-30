@@ -187,3 +187,50 @@ def test_cost_matrix_validation() -> None:
         encode_costs(2, [[0, -1], [1, 0]])
     with pytest.raises(ValueError, match="diagonal"):
         encode_costs(2, [[1, 1], [1, 0]])
+
+
+def test_declared_unused_categories_predict_as_missing() -> None:
+    from c50.sklearn import C50Classifier
+
+    colors = ["red", "red", "blue", "blue", "red", "blue"] * 3
+    size = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] * 3
+    y = ["a", "a", "b", "b", "a", "b"] * 3
+    used = pd.CategoricalDtype(["blue", "red"])
+    declared = pd.CategoricalDtype(["blue", "green", "red"])
+    train_used = pd.DataFrame(
+        {"color": pd.Series(colors, dtype=used), "size": size}
+    )
+    train_declared = train_used.astype({"color": declared})
+
+    options = {"categorical_features": "from_dtype", "minimum_cases": 1}
+    reference = C50Classifier(**options).fit(train_used, y)
+    fitted = C50Classifier(**options).fit(train_declared, y)
+    # Declared categories do not change the classifier or fitted categories.
+    assert fitted.model_.names_data == reference.model_.names_data
+    assert fitted.model_.serialized_data == reference.model_.serialized_data
+    assert [list(c) for c in fitted.categories_] == [
+        list(c) for c in reference.categories_
+    ]
+
+    green = pd.DataFrame(
+        {"color": pd.Series(["green", "green"], dtype=declared), "size": [1.0, 6.0]}
+    )
+    missing = pd.DataFrame(
+        {"color": pd.Series([None, None], dtype=declared), "size": [1.0, 6.0]}
+    )
+    np.testing.assert_array_equal(
+        fitted.predict_proba(green), fitted.predict_proba(missing)
+    )
+    # Object arrays carry no dtype, but the category was declared in fitting.
+    np.testing.assert_array_equal(
+        fitted.predict_proba(green.astype({"color": object})),
+        fitted.predict_proba(missing),
+    )
+
+    undeclared = pd.DataFrame(
+        {"color": pd.Series(["purple"], dtype="category"), "size": [1.0]}
+    )
+    with pytest.raises(ValueError, match="unseen category 'purple'"):
+        fitted.predict(undeclared)
+    with pytest.raises(ValueError, match="unseen category 'green'"):
+        reference.predict(green)
