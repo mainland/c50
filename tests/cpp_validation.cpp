@@ -211,6 +211,8 @@ static void dense_support_checks()
                 auto predictor = model.prepare_predictor();
                 rejects(expected, [&] { model.predict(context, cases); },
                         where + ", predict");
+                rejects(expected, [&] { model.attribute_usage(context, cases); },
+                        where + ", attribute usage");
                 rejects(expected, [&] { predictor.predict(cases); },
                         where + ", predictor");
                 rejects(expected, [&] {
@@ -235,6 +237,7 @@ static void dense_support_checks()
         const c50::dense_dataset training(values, 2, width, classes);
         auto predictor = model.prepare_predictor();
         rejects(invalid, [&] { model.predict(context, cases); }, label);
+        rejects(invalid, [&] { model.attribute_usage(context, cases); }, label);
         rejects(invalid, [&] { predictor.predict(cases); }, label);
         rejects(invalid, [&] {
             c50::model::train(context, c50::model_kind::tree, dense_schema, training);
