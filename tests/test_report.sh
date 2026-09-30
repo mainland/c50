@@ -21,6 +21,19 @@ fi
 test_dir=$(mktemp -d "${TMPDIR:-/tmp}/c50-report-test.XXXXXX")
 trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
 
+# Windows programs write CRLF line endings to text streams. Compare the text
+# without carriage returns so that the fixtures apply on every platform.
+diff_text()
+{
+    tr -d '\r' < "$1" > "$test_dir/diff-text.expected"
+    tr -d '\r' < "$2" > "$test_dir/diff-text.actual"
+    if ! diff -u "$test_dir/diff-text.expected" "$test_dir/diff-text.actual"
+    then
+        printf 'output differs: %s %s\n' "$1" "$2" >&2
+        return 1
+    fi
+}
+
 "$binary" 20 2 1 0 > "$test_dir/output.raw" <<'EOF'
 3 1 (10.0%)
 5 2 (20.0%)
@@ -28,7 +41,7 @@ EOF
 
 sed -e 's/[[:space:]]*$//' "$test_dir/output.raw" \
     > "$test_dir/output.actual"
-diff -u "$expected" "$test_dir/output.actual"
+diff_text "$expected" "$test_dir/output.actual"
 
 "$binary" 20 2 1 0 > "$test_dir/marked.raw" <<'EOF'
 3 1 (10.0%)   <<
@@ -37,7 +50,7 @@ EOF
 
 sed -e 's/[[:space:]]*$//' "$test_dir/marked.raw" \
     > "$test_dir/marked.actual"
-diff -u "$expected" "$test_dir/marked.actual"
+diff_text "$expected" "$test_dir/marked.actual"
 
 run_cross_validation()
 {
@@ -64,7 +77,7 @@ run_cross_validation()
         > "$case_dir/marked.output"
     "$binary" "$cases" 2 1 "$rules" < "$case_dir/folds.plain" \
         > "$case_dir/plain.output"
-    diff -u "$case_dir/plain.output" "$case_dir/marked.output"
+    diff_text "$case_dir/plain.output" "$case_dir/marked.output"
 }
 
 run_cross_validation basic tree 0
@@ -89,7 +102,7 @@ run_failure()
         return 1
     fi
 
-    diff -u "$script_dir/expected/report/$expected_name.output" \
+    diff_text "$script_dir/expected/report/$expected_name.output" \
         "$test_dir/$case_name.actual"
 }
 
@@ -106,7 +119,7 @@ normalize_output()
     sed -e 's/[[:space:]]*$//' "$1"
 }
 normalize_output "$test_dir/long-line.raw" > "$test_dir/long-line.actual"
-diff -u "$expected" "$test_dir/long-line.actual"
+diff_text "$expected" "$test_dir/long-line.actual"
 
 set +e
 printf '%s\n' 'composite malformed' '5 2 (20.0%)' | \

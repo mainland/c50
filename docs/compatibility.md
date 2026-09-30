@@ -184,3 +184,18 @@ child ownership or branch counts. Allocation failure previously let cleanup
 scan a smaller array using the original count and leaked recursive scratch.
 The repaired failure path raises `std::bad_alloc` and permits context reuse.
 The merge order and floating-point arithmetic of successful runs are unchanged.
+
+## Held-out cases with sampling
+
+With `-S` below 50 percent, the command-line program evaluates a random subset
+of the cases that sampling did not select for training. C5.0 Release 2.07 draws
+that subset with the C library's `drand48()` without seeding it. The GNU C
+library starts that generator from state zero, but BSD C libraries, including
+macOS, start from the POSIX default seed, so the evaluated cases and the
+printed test results differed between Linux and macOS. The classifier does not
+depend on this subset.
+
+This project reproduces the GNU C library sequence on every platform and keeps
+the generator state in each context. It resets the state before each read of
+held-out cases, which matches the single read of the imported program. The
+`multiclass` `sample` fixture was captured on Linux with the GNU C library.

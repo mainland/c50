@@ -485,6 +485,7 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
     DiscrValue	v;
     int		ValCeiling=100, BaseYear;
     time_t	clock;
+    struct tm	Now;
 
     /*  Read attribute type or first discrete value  */
 
@@ -512,7 +513,17 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
 	    if ( ! Context->io.timestamp_base )
 	    {
 		clock = time(0);
-		BaseYear = gmtime(&clock)->tm_year + 1900;
+#ifdef _WIN32
+		if ( gmtime_s(&Now, &clock) )
+#else
+		if ( ! gmtime_r(&clock, &Now) )
+#endif
+		{
+		    c50_record_error(Context, c50::error_code::internal_error,
+				     "could not determine the timestamp base year");
+		    C50Exit(Context, 1);
+		}
+		BaseYear = Now.tm_year + 1900;
 		SetTSBase(Context, BaseYear);
 	    }
 	}

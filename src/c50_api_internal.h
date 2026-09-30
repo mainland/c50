@@ -327,6 +327,7 @@ struct c50::detail::context_state
     struct _rulerec **most_specific_rules;
     int default_class;
     KRState random;
+    Drand48State held_out_random;
 };
 
 typedef void (*c50_operation_fn)(c50_context *context, void *user_data);

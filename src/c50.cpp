@@ -41,9 +41,9 @@
 #include <cerrno>
 #include <limits>
 
-#include <sys/unistd.h>
-#include <sys/time.h>
+#if !defined(_WIN32)
 #include <sys/resource.h>
+#endif
 
 #define SetFOpt(V)	if ( ! ParseFloatOption(Context->io.option_argument, V) ) break;\
 			ArgOK = true
@@ -104,6 +104,7 @@ void Run(c50_context *Context, void *UserData)
     CaseNo		SaveMaxCase;
     Attribute		Att;
 
+#if !defined(_WIN32)
     struct rlimit RL;
 
     /*  Make sure there is a largish runtime stack  */
@@ -118,6 +119,7 @@ void Run(c50_context *Context, void *UserData)
     }
 
     setrlimit(RLIMIT_STACK, &RL);
+#endif
 
 
     /*  Check for output to be saved to a file  */
