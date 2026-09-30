@@ -93,6 +93,9 @@ print(export_text(snapshot, include_empty=False))
 metadata = export_json(snapshot)
 ```
 
+`export_text` prints thresholds and rule priors, which C5.0 stores in single
+precision, with the fewest digits that read back as the stored value. JSON
+exports keep the full double-precision values of the snapshot.
 `export_text` accepts `max_depth` to truncate display and `include_empty=False`
 to omit zero-support tree leaves. These two options do not filter rules. Both
 exports accept `feature_names` and `class_names` sequences in schema order.
