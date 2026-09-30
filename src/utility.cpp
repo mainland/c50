@@ -37,6 +37,7 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 #include <stdint.h>
+#include <chrono>
 #include <limits>
 
 
@@ -608,16 +609,13 @@ FILE *GetFile(c50_context *Context, const char *Extension, const char *RW)
 /*************************************************************************/
 
 
-#include <sys/time.h>
-
 double  ExecTime()
 /*      --------  */
 {
-    struct timeval	TV;
-    struct timezone	TZ={0,0};
+    /*  Only differences are reported, so use a monotonic clock.  */
 
-    gettimeofday(&TV, &TZ);
-    return TV.tv_sec + TV.tv_usec / 1000000.0;
+    return std::chrono::duration<double>(
+	std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
 
