@@ -106,6 +106,7 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 	else
 	{
 	    ResetKR(&Context->random, Context->io.random_initial_seed);	/* restore  KRandom() */
+	    ResetDrand48(&Context->held_out_random);
 	}
 
 	WantTrain = Context->sample_from * Context->options.sample_fraction + 0.5;
@@ -137,7 +138,7 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 	    }
 
 	    if ( SelectTrain != Train ||
-		 ( ! Train && AltRandom >= WantTest / (float) LeftTest-- ) )
+		 ( ! Train && Drand48(&Context->held_out_random) >= WantTest / (float) LeftTest-- ) )
 	    {
 		FreeLastCase(Context, DVec);
 		continue;
