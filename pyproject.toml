@@ -11,7 +11,7 @@ name = "c50"
 dynamic = ["version"]
 description = "Python bindings for the C5.0 Release 2.07 GPL Edition core"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
 license-files = ["gpl.txt"]
 authors = [
@@ -21,6 +21,8 @@ classifiers = [
     "Programming Language :: C",
     "Programming Language :: C++",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
@@ -93,7 +95,6 @@ testpaths = ["tests/python"]
 [tool.mypy]
 files = ["python/c50", "tests/typing"]
 mypy_path = "python"
-python_version = "3.12"
 strict = true
 
 [[tool.mypy.overrides]]
