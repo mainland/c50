@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import pickle
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pandas as pd
 import pytest
+import sklearn
 from scipy import sparse
 from sklearn.base import clone
 from sklearn.feature_selection import SelectFromModel
@@ -395,3 +397,25 @@ def test_estimator_declares_numpy_only_array_support() -> None:
     classifier = C50Classifier(minimum_cases=1).fit(X, Y)
     assert isinstance(classifier.predict(X), np.ndarray)
     assert isinstance(classifier.predict_proba(X), np.ndarray)
+
+
+@pytest.mark.parametrize("dispatch", [False, True])
+def test_array_api_cpu_arrays_are_converted_to_numpy(dispatch: bool) -> None:
+    xp = pytest.importorskip("array_api_strict")
+    if dispatch and os.environ.get("SCIPY_ARRAY_API") != "1":
+        pytest.skip("array_api_dispatch requires SCIPY_ARRAY_API=1")
+    weights = np.linspace(0.5, 2.0, len(Y))
+    expected = C50Classifier(minimum_cases=1).fit(X, Y, sample_weight=weights)
+
+    with sklearn.config_context(array_api_dispatch=dispatch):
+        classifier = C50Classifier(minimum_cases=1).fit(
+            xp.asarray(X), xp.asarray(Y), sample_weight=xp.asarray(weights)
+        )
+        probabilities = classifier.predict_proba(xp.asarray(X))
+
+    assert classifier.model_.serialized_data == expected.model_.serialized_data
+    assert isinstance(probabilities, np.ndarray)
+    np.testing.assert_array_equal(probabilities, expected.predict_proba(X))
+    other_device = xp.asarray(X, device=xp.Device("device1"))
+    with pytest.raises(ValueError, match="CPU memory"):
+        classifier.predict(other_device)
