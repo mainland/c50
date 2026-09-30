@@ -44,9 +44,9 @@
 #include <limits>
 #include <type_traits>
 
-#include <sys/unistd.h>
-#include <sys/time.h>
+#if !defined(_WIN32)
 #include <sys/resource.h>
+#endif
 
 // A value that is not a number at all, or that has trailing text, ends the
 // option list as an unrecognized option, as in Release 2.07. Empty text is the
@@ -159,6 +159,7 @@ void Run(c50_context *Context, void *UserData)
     CaseNo		SaveMaxCase;
     Attribute		Att;
 
+#if !defined(_WIN32)
     struct rlimit RL;
 
     /*  Make sure there is a largish runtime stack  */
@@ -173,6 +174,7 @@ void Run(c50_context *Context, void *UserData)
     }
 
     setrlimit(RLIMIT_STACK, &RL);
+#endif
 
 
     /*  Check for output to be saved to a file  */
