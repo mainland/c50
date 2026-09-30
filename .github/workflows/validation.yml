@@ -72,12 +72,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - python: '3.12'
+          - python: '3.10'
+            dependencies: minimum
+            constraints: 'joblib==1.3.0 numpy==1.26.4 pandas==2.2.3 scikit-learn==1.6.1'
+          - python: '3.11'
             dependencies: latest
             constraints: ''
           - python: '3.12'
-            dependencies: minimum
-            constraints: 'joblib==1.3.0 numpy==1.26.4 scikit-learn==1.6.1'
+            dependencies: latest
+            constraints: ''
           - python: '3.13'
             dependencies: latest
             constraints: ''
