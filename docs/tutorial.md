@@ -42,8 +42,8 @@ into a missing value:
 X = X.assign(sex=X["sex"].cat.remove_categories("_"))
 ```
 
-Without this step, the estimator would learn `_` as a category if that penguin
-is in the training data, and reject it as an unseen category if it is not.
+Without this step, the estimator would learn `_` as a category whenever that
+penguin is in the training data.
 
 ## Fit a tree
 

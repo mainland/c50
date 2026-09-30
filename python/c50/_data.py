@@ -164,11 +164,17 @@ def dataframe_columns(frame: Any) -> Columns:
 
 @dataclass(frozen=True)
 class FeatureSchema:
-    """Encoding state for one input feature."""
+    """Encoding state for one input feature.
+
+    ``declared`` holds the keys of categories that a pandas categorical dtype
+    declared during fitting but that no training row used. Prediction treats
+    them as missing values instead of unseen categories.
+    """
 
     categorical: bool
     categories: tuple[object, ...]
     lookup: dict[CategoryKey, int]
+    declared: frozenset[CategoryKey] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -374,7 +380,17 @@ def _fit_coded(column: CodedColumn, feature_index: int) -> FeatureSchema:
         if key not in lookup:
             lookup[key] = len(categories)
             categories.append(value)
-    return FeatureSchema(True, tuple(categories), lookup)
+    declared: frozenset[CategoryKey] = frozenset()
+    if column.categorical_dtype:
+        declared = frozenset(
+            key
+            for key in (
+                _category_key(_normalize_scalar(value), feature_index)
+                for value in column.values
+            )
+            if key not in lookup
+        )
+    return FeatureSchema(True, tuple(categories), lookup, declared)
 
 
 def _encode_coded(
@@ -383,15 +399,20 @@ def _encode_coded(
     feature_index: int,
     unknown_categories: UnknownCategoryPolicy,
 ) -> NDArray[np.float64]:
-    # Map each code that occurs to its fitted index, or -1 if unseen.
+    # Map each code that occurs to its fitted index, to -2 if its category was
+    # declared but unused in training, or to -1 if it is unseen.
     mapping = np.full(len(column.values), -1, dtype=np.intp)
     for code in np.unique(column.codes[column.codes >= 0]):
-        index = feature.lookup.get(_category_key(column.value(code), feature_index))
+        key = _category_key(column.value(code), feature_index)
+        index = feature.lookup.get(key)
         if index is not None:
             mapping[code] = index
+        elif key in feature.declared:
+            mapping[code] = -2
 
     encoded = np.full(len(column), math.nan)
     rows = np.flatnonzero(column.codes >= 0)
+    rows = rows[mapping[column.codes[rows]] != -2]
     indices = mapping[column.codes[rows]]
     unseen = indices < 0
     if unknown_categories == "error" and np.any(unseen):
@@ -507,10 +528,11 @@ def _encode_dense_value(
         return _continuous_value(raw_value, feature_index)
 
     value = _normalize_scalar(raw_value)
-    value_index = feature.lookup.get(_category_key(value, feature_index))
+    key = _category_key(value, feature_index)
+    value_index = feature.lookup.get(key)
     if value_index is not None:
         return float(value_index)
-    if unknown_categories == "missing":
+    if unknown_categories == "missing" or key in feature.declared:
         return math.nan
     raise ValueError(
         f"X contains unseen category {value!r} in feature {feature_index}"
