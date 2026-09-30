@@ -352,6 +352,23 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             scores[row_slice] = np.asarray(details.scores, dtype=np.float64)
         return scores
 
+    def predict_log_proba(self, X: ArrayLike) -> NDArray[np.float64]:
+        """Return the logarithms of the class scores from :meth:`predict_proba`.
+
+        Args:
+            X: Dense two-dimensional prediction data.
+
+        Returns:
+            An array with the shape of :meth:`predict_proba`. A zero score
+            becomes ``-inf``.
+
+        Raises:
+            ValueError: If the input shape or a feature value is invalid.
+        """
+        probabilities = self.predict_proba(X)
+        with np.errstate(divide="ignore"):
+            return np.log(probabilities)
+
     def export_text(
         self,
         *,
