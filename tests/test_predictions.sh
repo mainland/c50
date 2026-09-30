@@ -21,6 +21,19 @@ fi
 test_dir=$(mktemp -d "${TMPDIR:-/tmp}/c50-prediction-test.XXXXXX")
 trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
 
+# Windows programs write CRLF line endings to text streams. Compare the text
+# without carriage returns so that the fixtures apply on every platform.
+diff_text()
+{
+    tr -d '\r' < "$1" > "$test_dir/diff-text.expected"
+    tr -d '\r' < "$2" > "$test_dir/diff-text.actual"
+    if ! diff -u "$test_dir/diff-text.expected" "$test_dir/diff-text.actual"
+    then
+        printf 'output differs: %s %s\n' "$1" "$2" >&2
+        return 1
+    fi
+}
+
 run_case()
 {
     fixture_name=$1
@@ -42,7 +55,7 @@ run_case()
         "$predictor" "$case_dir/$fixture_name" "$mode"
     ) > "$case_dir/predictions.actual"
 
-    diff -u "$expected" "$case_dir/predictions.actual"
+    diff_text "$expected" "$case_dir/predictions.actual"
 
     if test -n "$api_predictor"; then
         awk -F, 'BEGIN { OFS="," }
@@ -53,7 +66,7 @@ run_case()
             }' "$expected" > "$case_dir/api-predictions.expected"
         "$api_predictor" "$case_dir/$fixture_name" "$mode" \
             > "$case_dir/api-predictions.actual"
-        diff -u "$case_dir/api-predictions.expected" \
+        diff_text "$case_dir/api-predictions.expected" \
             "$case_dir/api-predictions.actual"
     fi
 }
@@ -86,7 +99,7 @@ run_invalid_model()
         return 1
     fi
 
-    diff -u "$expected" "$case_dir/output.actual"
+    diff_text "$expected" "$case_dir/output.actual"
 }
 
 run_case basic tree

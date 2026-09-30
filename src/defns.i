@@ -79,11 +79,6 @@ using c50_context = c50::detail::context_state;
 #endif
 
 
-/*  Alternative random number generator  */
-
-#define AltRandom		drand48()
-#define	AltSeed(x)		srand48(x)
-
 #define Free(x)			{free(x); x=0;}
 
 
@@ -739,7 +734,6 @@ void	    SetTSBase(c50_context *Context, int y);
 int	    TStampToMins(c50_context *Context, String TS);
 void	    Check(c50_context *Context, float Val, float Low, float High);
 std::string CValToStr(c50_context *Context, ContValue CV, Attribute Att);
-double	    rint(double v);
 void	    Cleanup(c50_context *Context);
 #ifdef UTF8
 int	    UTF8CharWidth(unsigned char *U);

@@ -221,7 +221,7 @@ void WriteFilePrefix(c50_context *Context, const char *Extension)
 
     if ( ! Context->classifier_output_active )
     {
-	FILE *ModelFile = GetFile(Context, Extension, "w");
+	FILE *ModelFile = GetFile(Context, Extension, "wb");
 	if ( ! ModelFile ) Error(Context, NOFILE, Context->io.file_name.c_str(), E_ForWrite);
 	c50_output_init_file(&Context->classifier_output, ModelFile, true);
 	Context->classifier_output_active = true;

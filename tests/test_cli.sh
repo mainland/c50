@@ -160,6 +160,7 @@ run_case winnow-case-weight-costs winnow tree --with-costs -w
 run_case implicit implicit tree
 run_case multiclass tree tree
 run_case multiclass rules rules -r
+run_case multiclass sample tree -S 30 -I 17
 run_invalid_definition
 run_missing_file_format
 
