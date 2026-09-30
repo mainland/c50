@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import pickle
 
 import numpy as np
@@ -290,6 +291,36 @@ def test_single_leaf_has_zero_importances() -> None:
     assert classifier.model_.inspect().trees[0].leaf_count == 1
     np.testing.assert_array_equal(classifier.attribute_usage_, [0])
     np.testing.assert_array_equal(classifier.feature_importances_, [0])
+
+
+def test_exports_use_original_names_and_labels() -> None:
+    rng = np.random.default_rng(8)
+    count = 300
+    color = rng.choice(["red", "green", "blue"], size=count)
+    size = rng.normal(size=count)
+    X = np.column_stack((size.astype(object), color))
+    y = np.where((color == "red") | (size > 1), 1, 0)
+
+    for options in ({"subset_splits": True}, {"model_kind": "rules"}):
+        classifier = C50Classifier(categorical_features=[1], **options).fit(X, y)
+        text = classifier.export_text()
+        exported = json.loads(classifier.export_json())
+
+        assert "'feature_1'" in text and "'red'" in text
+        assert "value_" not in text and "class_" not in text
+        assert exported["feature_names"] == ["feature_0", "feature_1"]
+        assert exported["class_names"] == ["0", "1"]
+        assert "value_" not in classifier.export_json()
+
+    weighted = C50Classifier().fit(X, y, sample_weight=rng.uniform(0.5, 2, count))
+    assert json.loads(weighted.export_json())["feature_names"] == [
+        "feature_0",
+        "feature_1",
+        "case weight",
+    ]
+    assert "children omitted" in weighted.export_text(max_depth=0)
+    with pytest.raises(NotFittedError):
+        C50Classifier().export_text()
 
 
 def test_pickle_round_trip() -> None:

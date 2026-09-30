@@ -104,3 +104,41 @@ def test_ensemble_inspection_roundtrip_and_exports(kind: ModelKind) -> None:
     else:
         assert not snapshot.rulesets
         assert "tree 2:" in text
+
+
+@pytest.mark.parametrize("kind", [ModelKind.TREE, ModelKind.RULES])
+def test_value_names_replace_native_category_names(kind: ModelKind) -> None:
+    names = "no, yes.\nsize: continuous.\ncolor: red, green, blue.\n"
+    rows = [
+        f"{size}, {color}, {'yes' if color == 'red' else 'no'}"
+        for size in range(4)
+        for color in ("red", "green", "blue")
+    ]
+    options = Options()
+    options.subset_splits = True
+    options.minimum_cases = 1
+    snapshot = Model.train(names, "\n".join(rows) + "\n", kind, options).inspect()
+    value_names = [None, {"red": "Rot", "green": "Gruen"}]
+
+    text = export_text(snapshot, value_names=value_names)
+    exported = json.loads(export_json(snapshot, value_names=value_names))
+
+    assert "'Rot'" in text
+    assert "'red'" not in text
+    conditions = [
+        branch["condition"]
+        for tree in exported["trees"]
+        for node in tree["nodes"]
+        for branch in node["branches"]
+    ] + [
+        condition
+        for ruleset in exported["rulesets"]
+        for rule in ruleset["rules"]
+        for condition in rule["conditions"]
+    ]
+    shown = {value for condition in conditions for value in condition["values"]}
+    assert "Rot" in shown
+    assert not shown & {"red", "green"}
+    for invalid in ([None], [None, {"red": 1}], [None, ["red"]]):
+        with pytest.raises(ValueError, match="value names"):
+            export_text(snapshot, value_names=invalid)  # type: ignore[arg-type]
