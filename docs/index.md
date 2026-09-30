@@ -15,6 +15,7 @@ large-datasets
 building-testing
 ownership-concurrency
 model-inspection
+algorithm
 compatibility
 ```
 
