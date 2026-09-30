@@ -1,0 +1,2 @@
+# Keep test fixtures and shell scripts byte-identical on every platform.
+* text=auto eol=lf
