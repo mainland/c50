@@ -69,7 +69,7 @@ when the library changes.
 
 ## Python
 
-The Python bindings require Python 3.12 or later. They are implemented with
+The Python bindings require Python 3.10 or later. They are implemented with
 pybind11 and call the compiled C++ API.
 Build and install them from the repository root with:
 
