@@ -17,14 +17,14 @@ static void require(bool condition, const char *message)
     if (!condition) throw std::runtime_error(message);
 }
 
-static const std::string names = "low, high.\nsignal: continuous.\n";
-static const std::string data =
+static const std::string signal_names = "low, high.\nsignal: continuous.\n";
+static const std::string signal_data =
     "0, low\n1, low\n2, low\n3, high\n4, high\n5, high\n";
 
 static c50::model train(c50::model_kind kind)
 {
     c50::context context;
-    return c50::model::train(context, kind, names, data);
+    return c50::model::train(context, kind, signal_names, signal_data);
 }
 
 static void ownership_and_recovery()
@@ -65,8 +65,8 @@ static void shared_model_concurrency()
                 const bool reverse = index % 2;
                 auto own = c50::model::train(
                     context, i % 2 ? c50::model_kind::tree : c50::model_kind::rules,
-                    names, reverse ?
-                    "0, high\n1, high\n2, high\n3, low\n4, low\n5, low\n" : data);
+                    signal_names, reverse ?
+                    "0, high\n1, high\n2, high\n3, low\n4, low\n5, low\n" : signal_data);
                 auto prediction = own.predict(context, "0, ?\n");
                 require(prediction.class_index(0) == (reverse ? 1u : 0u),
                         "concurrent training");
