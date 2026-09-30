@@ -51,7 +51,12 @@ range of about 3.4e38, are rejected with a `ValueError` that names the feature
 and, for numeric columns, the first row. C5.0 stores continuous values as
 single-precision floats. An unseen prediction-time category raises
 `ValueError` by default. Set `unknown_categories="missing"` to pass
-unseen categories to C5.0 as missing values.
+unseen categories to C5.0 as missing values. A category that a pandas
+`category` dtype declared during fitting, but that no training row used, is
+always passed as a missing value, as in `HistGradientBoostingClassifier`.
+Such categories are not in `categories_` and do not change the classifier, so
+a filtered DataFrame that keeps unused categories trains the same classifier
+as one without them.
 
 Categories match by value. An integer category matches an equal float, so a
 model fitted on an integer column accepts the float column that results when
