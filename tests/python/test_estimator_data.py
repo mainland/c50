@@ -227,6 +227,8 @@ def test_prediction_range_errors_name_the_row_in_x(
 
     with pytest.raises(ValueError, match=r"feature 1 .* in row 5$"):
         getattr(classifier, method)(cases)
+    with pytest.raises(ValueError, match=r"feature 1 .* in row 5$"):
+        classifier.predict_log_proba(cases)
 
 
 def test_object_values_beyond_single_precision_name_the_feature() -> None:
