@@ -116,5 +116,6 @@ labels = classifier.predict([[0.25], [2.75]])
 scores = classifier.predict_proba([[0.25], [2.75]])
 ```
 
-See {doc}`estimator` for the array, categorical-value, missing-value, and cost
-matrix contracts, and {doc}`large-datasets` for the scale target and benchmark.
+See {doc}`tutorial` for a walkthrough on public datasets, {doc}`estimator` for
+the array, categorical-value, missing-value, and cost matrix contracts, and
+{doc}`large-datasets` for the scale target and benchmark.
