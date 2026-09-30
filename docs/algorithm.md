@@ -444,7 +444,9 @@ has exactly the requested size. The random numbers come from `KRandom` in
 `src/utility.cpp`, a subtractive lagged-Fibonacci generator after Knuth.
 `ResetKR` seeds it by discarding $1000 + s$ values, where the command line uses
 only the low 12 bits of the seed $s$ given with `-I`. The command line then
-evaluates the classifier on the cases that were not sampled.
+evaluates the classifier on the cases that were not sampled. Below 50%, it
+evaluates a random subset of them. See {doc}`compatibility` for how this
+project draws that subset.
 
 The command line's `-X` option performs cross-validation. `Prepare` in
 `src/xval.cpp` shuffles the cases, groups them by class, and deals them into
