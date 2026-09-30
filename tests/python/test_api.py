@@ -176,6 +176,26 @@ def test_dense_training_matches_text_training(
     assert details.scores == [[1.0, 0.0], [0.0, 1.0]]
 
 
+def test_dense_training_without_copy_matches_copy() -> None:
+    expected = c50.Model.train_dense(NAMES, DENSE_TRAINING, DENSE_CLASSES)
+
+    for values in (
+        DENSE_TRAINING,
+        np.asfortranarray(DENSE_TRAINING),
+        DENSE_TRAINING.astype(np.float32),
+        np.repeat(DENSE_TRAINING, 2, axis=1)[:, ::2],
+    ):
+        model = c50.Model.train_dense(
+            NAMES, values, DENSE_CLASSES, copy=False
+        )
+        assert model.serialized_data == expected.serialized_data
+    assert (
+        c50.train_dense(NAMES, DENSE_TRAINING, DENSE_CLASSES, copy=False)
+        .serialized_data
+        == expected.serialized_data
+    )
+
+
 @pytest.mark.parametrize("workers", [1, 2, 4])
 def test_training_worker_count_preserves_model(workers: int) -> None:
     text_model = c50.train(NAMES, TRAINING, split_workers=workers)

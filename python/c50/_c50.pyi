@@ -202,6 +202,7 @@ class Model:
         options: Options = ...,
         costs: str = "",
         split_workers: int = 1,
+        copy: bool = True,
     ) -> Model: ...
     @staticmethod
     def load(
@@ -250,6 +251,7 @@ def train_dense(
     options: Options = ...,
     costs: str = "",
     split_workers: int = 1,
+    copy: bool = True,
 ) -> Model: ...
 
 
