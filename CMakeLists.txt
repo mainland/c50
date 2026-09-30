@@ -14,6 +14,13 @@ if(C50_ENABLE_SANITIZERS AND C50_ENABLE_THREAD_SANITIZER)
     message(FATAL_ERROR "AddressSanitizer and ThreadSanitizer cannot be combined")
 endif()
 
+# MSVC deprecates standard C functions such as fopen and sscanf in favor of
+# its bounds-checked extensions, and POSIX names such as strdup in favor of
+# underscored ones. The sources use the standard and POSIX names.
+if(MSVC)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_WARNINGS)
+endif()
+
 include(CTest)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)

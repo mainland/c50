@@ -77,12 +77,20 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
+      - name: Install Catch2 for the native benchmarks
+        run: vcpkg install catch2:x64-windows
+      # Match the GCC and Clang policy of -Wall -Wextra without -Wconversion:
+      # C4244, C4267, and C4305 report implicit narrowing conversions, which
+      # the imported sources use deliberately to store values as float. Every
+      # other level-4 warning is an error.
       - name: Configure
         run: >-
           cmake -S . -B build
           -DCMAKE_CXX_STANDARD=14
-          -DCMAKE_C_FLAGS='/W4'
-          -DCMAKE_CXX_FLAGS='/W4 /EHsc'
+          -DCMAKE_C_FLAGS='/W4 /WX /wd4244 /wd4267 /wd4305'
+          -DCMAKE_CXX_FLAGS='/W4 /WX /wd4244 /wd4267 /wd4305 /EHsc'
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DC50_BUILD_BENCHMARKS=ON
       # PowerShell reports only the exit status of a step's last command, so
       # give each command its own step.
       - name: Build
