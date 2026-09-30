@@ -937,7 +937,7 @@ CRule InRuleAt(c50_context *Context, c50_input *Input, CRule *Slot)
     CRule	R;
     int		d, ConditionCount=0;
     char	Delim, *Unquoted;
-    float	Lift;
+    float	Lift=0;
 
     R = Alloc(1, RuleRec);
     *Slot = R;
