@@ -64,6 +64,12 @@ native context. Native work releases the Python GIL. Independent operations can
 therefore execute concurrently, and the binding does not depend on hidden
 process-global classifier state.
 
+`train_dense` copies `values` before releasing the GIL. With `copy=False`, it
+reads a float64, C-contiguous array directly, and the caller must ensure that no
+thread modifies the array until training returns. Other dtypes and layouts are
+converted into a temporary array. The scikit-learn estimator uses `copy=False`
+for its private encoded matrix.
+
 Python `Model` objects expose immutable classifier data. `Options` remains a
 mutable value object, so callers must not modify one instance concurrently with
 a training call that uses it.

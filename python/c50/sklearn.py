@@ -246,6 +246,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 options,
                 costs_data,
                 self._native_workers(),
+                # training_values is private to this call, so no thread can
+                # modify it while training runs without the GIL.
+                copy=False,
             )
 
             usage = self._attribute_usage(model, training_values)[

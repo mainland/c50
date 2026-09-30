@@ -49,6 +49,13 @@ one nonnegative zero-based class index per
 row.
 ``split_workers`` selects 1 through 8 native split-evaluation workers;
 the default is one.
+
+Training runs without the global interpreter lock, so by default it copies
+``values`` first. With ``copy=False``, training reads a float64, C-contiguous
+``values`` array directly, which avoids holding a second copy of the matrix.
+The caller must then ensure that no thread modifies ``values`` until the call
+returns. Arrays with another dtype or layout are always converted into a
+temporary array that no other code can modify.
 )doc";
 
 const char predict_details_dense_doc[] = R"doc(
@@ -187,7 +194,8 @@ public:
                                     c50::model_kind kind,
                                     const c50::options &options,
                                     const std::string &costs,
-                                    unsigned int split_workers)
+                                    unsigned int split_workers,
+                                    bool copy)
     {
         if ( values.ndim() != 2 )
         {
@@ -204,10 +212,17 @@ public:
         }
 
         const auto indices = checked_classes(class_indices);
-        std::vector<double> value_copy(static_cast<std::size_t>(values.size()));
-        std::copy_n(values.data(), value_copy.size(), value_copy.data());
+        // The argument keeps values alive while the GIL is released. Without
+        // a copy, the caller guarantees that no thread modifies it.
+        std::vector<double> value_copy;
+        const double *data = values.data();
+        if ( copy )
+        {
+            value_copy.assign(data, data + values.size());
+            data = value_copy.data();
+        }
         const c50::dense_dataset dataset(
-            value_copy.data(), static_cast<std::size_t>(values.shape(0)),
+            data, static_cast<std::size_t>(values.shape(0)),
             static_cast<std::size_t>(values.shape(1)), indices.data());
         c50::context context;
         context.split_workers(split_workers);
@@ -642,7 +657,8 @@ GIL while training, loading, or predicting.
                     py::arg("kind") = c50::model_kind::tree,
                     py::arg("options") = c50::options(),
                     py::arg("costs") = "",
-                    py::arg("split_workers") = 1)
+                    py::arg("split_workers") = 1,
+                    py::arg("copy") = true)
         .def_static("load", &python_model::load,
                     load_doc,
                     py::arg("names"), py::arg("serialized_data"),
@@ -711,7 +727,8 @@ GIL while training, loading, or predicting.
                py::arg("kind") = c50::model_kind::tree,
                py::arg("options") = c50::options(),
                py::arg("costs") = "",
-               py::arg("split_workers") = 1);
+               py::arg("split_workers") = 1,
+               py::arg("copy") = true);
     module.def("load", &python_model::load,
                load_doc,
                py::arg("names"), py::arg("serialized_data"),
