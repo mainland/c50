@@ -39,7 +39,7 @@ This builds:
 - `c5.0`, the classifier training and evaluation program.
 - `report`, the cross-validation report generator.
 
-CMake is also supported:
+CMake is also supported, and is required on Windows with Visual Studio:
 
 ```sh
 cmake -S . -B build
