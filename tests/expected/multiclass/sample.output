@@ -1,0 +1,48 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `multiclass'
+	Use 30% of data for training
+	Random seed 17
+
+Read 7 cases (2 attributes) from multiclass.data
+
+Decision tree:
+ green (7/3)
+
+
+Evaluation on training data (7 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     1    3(42.9%)   <<
+
+
+	   (a)   (b)   (c)    <-classified as
+	  ----  ----  ----
+	           2          (a): class red
+	           4          (b): class green
+	           1          (c): class blue
+
+
+Evaluation on test data (7 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     1    5(71.4%)   <<
+
+
+	   (a)   (b)   (c)    <-classified as
+	  ----  ----  ----
+	           5          (a): class red
+	           2          (b): class green
+	                      (c): class blue
+
+
+Time: <elapsed> secs
