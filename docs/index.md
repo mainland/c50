@@ -10,6 +10,7 @@ compiled C++17 library, compatible command-line programs, and Python
 :caption: Guide
 
 quickstart
+tutorial
 estimator
 large-datasets
 building-testing
