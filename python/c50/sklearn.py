@@ -7,7 +7,7 @@ import json
 import sys
 from collections.abc import Iterator, Mapping, Sequence
 from numbers import Integral, Real
-from typing import Any, Literal, cast
+from typing import Any, Literal, TypeAlias, cast
 
 import numpy as np
 from joblib import effective_n_jobs
@@ -28,10 +28,10 @@ from ._data import Columns, Schema, dataframe_columns, encode_costs, fit_schema
 from .inspection import export_json as _export_json
 from .inspection import export_text as _export_text
 
-type ModelKindName = Literal["tree", "rules"]
-type TieOrderName = Literal["reference", "stable"]
-type UnknownCategoryPolicy = Literal["error", "missing"]
-type ClassWeight = Mapping[Any, float] | Literal["balanced"]
+ModelKindName: TypeAlias = Literal["tree", "rules"]
+TieOrderName: TypeAlias = Literal["reference", "stable"]
+UnknownCategoryPolicy: TypeAlias = Literal["error", "missing"]
+ClassWeight: TypeAlias = Mapping[Any, float] | Literal["balanced"]
 
 # Native limits on the boosting trials, sampling seed, and split workers.
 _SEED_COUNT = 4096
