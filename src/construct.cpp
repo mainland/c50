@@ -503,7 +503,7 @@ void EvaluateSingle(c50_context *Context, int Flags)
 {
     ClassNo	RealClass, PredClass;
     int		x, u, SaveUtility=0;
-    CaseNo	*ConfusionMat, *Usage, i, RawErrs=0, Errs=0;
+    CaseNo	*ConfusionMat=Nil, *Usage=Nil, i, RawErrs=0, Errs=0;
     double	ECost=0, Tests;
     Boolean	CMInfo, UsageInfo;
     [[maybe_unused]] const char *const StdR[] = { "   Before Pruning   ",
@@ -694,7 +694,7 @@ void EvaluateBoost(c50_context *Context, int Flags)
 {
     ClassNo	RealClass, PredClass;
     int		t;
-    CaseNo	*ConfusionMat, *Usage, i, *Errs, BoostErrs=0;
+    CaseNo	*ConfusionMat=Nil, *Usage=Nil, i, *Errs, BoostErrs=0;
     double	*ECost, BoostECost=0, Tests;
     Boolean	CMInfo, UsageInfo;
     const char *const Multi[] = { F_Trial, F_UTrial, "" };

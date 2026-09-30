@@ -108,8 +108,8 @@ c50::ruleset_inspection inspect_rules(c50_context *Context, CRuleSet source)
         item.correct = rule->Correct;
         item.prior = rule->Prior;
         item.vote = rule->Vote;
-        for (int index = 1; index <= rule->Size; ++index) {
-            const auto test = rule->Lhs[index];
+        for (int term = 1; term <= rule->Size; ++term) {
+            const auto test = rule->Lhs[term];
             item.conditions.push_back(condition(Context, test->NodeType, test->Tested,
                                                 test->TestValue, test->Cut, test->Subset));
             ++result.feature_use[static_cast<std::size_t>(test->Tested - 1)];
