@@ -151,6 +151,14 @@ python3 -m venv .venv
 .venv/bin/python -m pytest
 ```
 
+The tutorial test runs the code in {doc}`tutorial` and checks the results that
+its text reports. It downloads two datasets from OpenML on first use, so it is
+skipped unless `C50_NETWORK_TESTS=1` is set:
+
+```sh
+C50_NETWORK_TESTS=1 .venv/bin/python -m pytest tests/python/test_tutorial.py
+```
+
 The package includes the PEP 561 `py.typed` marker, inline annotations for the
 estimator, and a stub for the compiled extension. Run the strict source and
 public-API type checks with:
@@ -289,7 +297,8 @@ ASAN_OPTIONS=detect_leaks=1 \
 including the optional native correctness workloads and installed C++17/C++20
 consumers. The GCC job also exercises production and verbose Make builds. A
 separate job installs the Python package, runs the estimator and typing checks,
-and builds warning-strict Doxygen and Sphinx documentation.
+and builds warning-strict Doxygen and Sphinx documentation. Its Python 3.12 job
+also runs the tutorial test, with the OpenML data cached between runs.
 
 The workflow runs on pull requests, pushes to `main`, `dev`, and topic branches,
 and manual dispatch. It uses read-only repository permissions and pinned action

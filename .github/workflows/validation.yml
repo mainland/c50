@@ -103,9 +103,19 @@ jobs:
           python -m pip install '.[test,docs]' ${{ matrix.constraints }}
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: '2'
+      # The tutorial test downloads its data from OpenML. Run it in one job
+      # and cache the data so that most runs need no network access.
+      - name: Cache the tutorial data
+        if: matrix.python == '3.12' && matrix.dependencies == 'latest'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/scikit_learn_data
+          key: openml-tutorial-${{ hashFiles('docs/tutorial.md') }}
+          restore-keys: openml-tutorial-
       - name: Test the installed Python package and public types
         env:
           SCIPY_ARRAY_API: '1'
+          C50_NETWORK_TESTS: ${{ matrix.python == '3.12' && matrix.dependencies == 'latest' && '1' || '' }}
         run: |
           python -m pytest
           python -m mypy
