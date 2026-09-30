@@ -42,9 +42,18 @@ type TieOrderName = Literal["reference", "stable"]
 type UnknownCategoryPolicy = Literal["error", "missing"]
 type ClassWeight = Mapping[Any, float] | Literal["balanced"]
 
-# Native limits on the sampling seed and split-evaluation workers.
+# Native limits on the boosting trials, sampling seed, and split workers.
 _SEED_COUNT = 4096
+_MAX_TRIALS = 1000
 _MAX_WORKERS = 8
+_BOOLEAN_PARAMETERS = (
+    "subset_splits",
+    "winnow",
+    "global_pruning",
+    "probabilistic_thresholds",
+    "ignore_costs",
+)
+_REAL_PARAMETERS = ("minimum_cases", "confidence_factor", "sample_fraction")
 
 
 class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
@@ -61,7 +70,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
 
     Args:
         model_kind: Build a decision tree or a rule set.
-        trials: Number of boosting trials. One disables boosting.
+        trials: Number of boosting trials, from 1 through 1000. One disables
+            boosting.
         subset_splits: Allow subset splits for categorical features.
         winnow: Enable attribute winnowing.
         global_pruning: Enable global tree pruning.
@@ -531,6 +541,34 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             )
 
     def _validate_configuration(self) -> None:
+        # Check types here so that errors name the estimator parameter. The
+        # native options validate numeric ranges.
+        for name in _BOOLEAN_PARAMETERS:
+            if not isinstance(getattr(self, name), (bool, np.bool_)):
+                raise ValueError(f"{name} must be a Boolean")
+        # Parameters hold whatever `set_params` stored, whatever their
+        # annotations say.
+        trials: object = self.trials
+        if (
+            isinstance(trials, (bool, np.bool_))
+            or not isinstance(trials, Integral)
+            or not 1 <= int(trials) <= _MAX_TRIALS
+        ):
+            raise ValueError(
+                f"trials must be an integer from 1 through {_MAX_TRIALS}"
+            )
+        for name in _REAL_PARAMETERS:
+            value = getattr(self, name)
+            if isinstance(value, (bool, np.bool_)) or not isinstance(
+                value, Real
+            ):
+                raise ValueError(f"{name} must be a real number")
+            try:
+                float(value)
+            except (OverflowError, ValueError, TypeError) as error:
+                raise ValueError(
+                    f"{name} cannot be represented as a float"
+                ) from error
         if self.model_kind not in ("tree", "rules"):
             raise ValueError("model_kind must be 'tree' or 'rules'")
         if self.ties not in ("reference", "stable"):
@@ -570,15 +608,15 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
 
     def _native_options(self) -> Options:
         options = Options()
-        options.trials = self.trials
-        options.subset_splits = self.subset_splits
-        options.winnow = self.winnow
-        options.global_pruning = self.global_pruning
-        options.probabilistic_thresholds = self.probabilistic_thresholds
-        options.ignore_costs = self.ignore_costs
-        options.minimum_cases = self.minimum_cases
-        options.confidence_factor = self.confidence_factor
-        options.sample_fraction = self.sample_fraction
+        options.trials = int(self.trials)
+        options.subset_splits = bool(self.subset_splits)
+        options.winnow = bool(self.winnow)
+        options.global_pruning = bool(self.global_pruning)
+        options.probabilistic_thresholds = bool(self.probabilistic_thresholds)
+        options.ignore_costs = bool(self.ignore_costs)
+        options.minimum_cases = float(self.minimum_cases)
+        options.confidence_factor = float(self.confidence_factor)
+        options.sample_fraction = float(self.sample_fraction)
         random_state = check_random_state(self.random_state)
         # Sampling is the only native use of the seed. Without it, leave
         # a supplied RandomState unchanged.
