@@ -12,7 +12,8 @@ minimum dependencies are joblib 1.3, NumPy 1.26, and scikit-learn 1.6.
 | Linux x86-64, Python 3.12 | NumPy 2.x, scikit-learn 1.9 | Locally validated Python and type checks |
 | Linux ARM64 | GCC on `ubuntu-24.04-arm` | Hosted native and installed-consumer checks passed at `ff5b953` |
 | macOS ARM64 | AppleClang on `macos-14` | Hosted native and installed-consumer checks passed at `ff5b953` |
-| Linux x86-64, Python 3.12 | NumPy 1.26.4, scikit-learn 1.6.1 | Locally validated installed wheel, runtime tests, and typing |
+| Linux x86-64, Python 3.10 | NumPy 1.26.4, pandas 2.2.3, scikit-learn 1.6.1 | Locally validated installed package, runtime tests, and typing |
+| Linux x86-64, Python 3.11 | NumPy 2.4.6, scikit-learn 1.9.1 | Locally validated installed package, runtime tests, and typing |
 | Linux x86-64, Python 3.13 and 3.14 | NumPy 2.5.3, scikit-learn 1.9.1 | Locally validated installed wheels, runtime tests, and typing |
 
 The [hosted validation run at `ff5b953`](https://github.com/mainland/c50/actions/runs/36495390708)
