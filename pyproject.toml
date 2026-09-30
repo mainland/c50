@@ -9,7 +9,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "c50"
 dynamic = ["version"]
-description = "Python bindings for the C5.0 Release 2.07 GPL Edition core"
+description = "C5.0 decision trees and rulesets, with a scikit-learn estimator"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-3.0-or-later"
@@ -17,7 +17,14 @@ license-files = ["gpl.txt"]
 authors = [
     {name = "Geoffrey Mainland"},
 ]
+keywords = ["C5.0", "decision trees", "rule learning", "classification", "scikit-learn"]
 classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: C",
     "Programming Language :: C++",
     "Programming Language :: Python :: 3",
@@ -26,6 +33,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
 ]
 
