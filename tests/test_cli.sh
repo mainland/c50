@@ -461,6 +461,7 @@ run_case implicit-divide-zero tree - --status 1
 run_case implicit-power tree tree
 run_case multiclass tree tree
 run_case multiclass rules rules -r
+run_case multiclass sample tree -S 30 -I 17
 # Bad values in the data. The expected files and statuses come from Release
 # 2.07, which continues with each bad value as unknown and exits 0 below ten
 # errors, and stops with exit 1 at the tenth.
