@@ -71,7 +71,7 @@ training_data = """0, no
 
 model = c50.train(names, training_data)
 labels = model.predict("0, ?\n3, ?\n")
-scores = model.predict_proba("0, ?\n3, ?\n")
+scores = model.predict_scores("0, ?\n3, ?\n")
 ```
 
 With NumPy installed, the low-level dense interface avoids constructing data
