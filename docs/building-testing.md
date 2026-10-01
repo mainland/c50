@@ -271,6 +271,36 @@ before publishing them. Read the installed package version with:
 .venv/bin/python -c 'from importlib.metadata import version; print(version("c50"))'
 ```
 
+Check that a source distribution holds exactly the tracked files, plus the
+generated `PKG-INFO`, from a checkout of the revision that built it:
+
+```sh
+.venv/bin/python tests/check_sdist.py dist/c50-*.tar.gz
+```
+
+### Release wheels
+
+`.github/workflows/wheels.yml` builds the source distribution, checks it, and
+then uses [cibuildwheel](https://cibuildwheel.pypa.io) to build and test wheels
+from it, which verifies that the source distribution is complete. It builds
+CPython 3.10 through 3.14 wheels for manylinux x86-64 and ARM64, macOS arm64
+and x86-64, and Windows AMD64. Each wheel is installed in a clean environment
+and must pass the Python test suite. The macOS x86-64 wheels build in their
+own job on an arm64 runner and are tested under Rosetta 2. The workflow runs on integration branches, topic
+branches, pull requests, and `v`-prefixed tags, and its last job records the
+SHA-256 digests of every tested distribution in `SHA256SUMS`. It does not
+publish packages.
+
+`[tool.cibuildwheel]` in `pyproject.toml` holds the configuration, so a local
+Linux build with Docker uses the same settings:
+
+```sh
+uvx cibuildwheel --only cp312-manylinux_x86_64 dist/c50-*.tar.gz
+```
+
+musllinux, free-threaded CPython, and prerelease CPython versions are not
+built.
+
 ## Native benchmarks and profiling
 
 The native sort-correctness tests and profiling workload are optional and
