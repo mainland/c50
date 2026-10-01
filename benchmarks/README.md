@@ -1,9 +1,13 @@
 # Benchmarks
 
-The benchmark suite measures the released behavior of the library. It asks how
-the library's `c5.0` program compares with the imported C5.0 Release 2.07
-program in time and peak memory, and whether both programs write the same
-classifier.
+The benchmark suite measures the released behavior of the library. It answers
+two questions:
+
+1. How does the library's `c5.0` program compare with the imported C5.0
+   Release 2.07 program in time and peak memory, and do both programs write
+   the same classifier?
+2. How does training time change with the number of split workers and with
+   the tie order, and is the classifier the same for every worker count?
 
 `run.py` runs a suite and writes one JSON result.
 
@@ -19,11 +23,18 @@ process that started it, so `run.py` starts each measured process through
 `measure.c`, a small launcher. The comparison requires the serialized
 classifiers to be identical apart from the dated `id` line.
 
+The worker measurements train a tree through the low-level Python function
+`c50.train` with 1, 2, 4, and 8 split workers, in a fresh process for each run.
+The recorded time covers only the `train` call, which parses the data text and
+trains the classifier. Each worker count must produce the same classifier. The
+stable tie order may produce a classifier that differs from the reference
+order, and the result records whether it does.
+
 Every result records the source commit, the release tag when a clean checkout
 of exactly one tag was measured, the compiler and the command that compiled a
-learner source file, checksums of the measured programs, the archive checksum
-of the reference program, the CPU and its frequency governor, the load average
-before each run, and every sample.
+learner source file, checksums of the measured programs and Python module, the
+archive checksum of the reference program, the CPU and its frequency governor,
+the load average before each run, and every sample.
 
 ## Datasets
 
@@ -46,7 +57,7 @@ are downloaded on first use.
 ## Running the suite
 
 The suite requires Linux or macOS, CMake, a C++17 compiler, GCC for the
-reference program, and Python with NumPy, pandas, and scikit-learn.
+reference program, and Python with NumPy, pandas, scikit-learn, and pybind11.
 The development environment described in `docs/building-testing.md` provides
 them.
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Run the benchmark smoke suite and check its result.
 
-The suite builds the command-line program from this checkout, so it needs
-CMake, a C++ compiler, NumPy, and pandas. It runs on POSIX systems only.
+The suite builds the command-line program from this checkout and trains
+with the installed or ``PYTHONPATH`` c50 package, so it needs CMake, a C++
+compiler, NumPy, and pandas. It runs on POSIX systems only.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ def main() -> None:
                 str(REPOSITORY / "benchmarks" / "run.py"),
                 "--suite",
                 "smoke",
+                "--installed-python",
                 "--allow-dirty",
                 "--jobs",
                 "2",
@@ -48,6 +50,10 @@ def main() -> None:
         (sample,) = comparison["samples"]["c50"]
         assert sample["wall_seconds"] > 0
         assert sample["peak_rss_bytes"] > 0
+    assert [w["ties"] for w in result["workers"]] == ["reference", "stable"]
+    for scaling in result["workers"]:
+        assert scaling["same_classifier"], scaling["ties"]
+        assert sorted(scaling["samples"]) == ["1", "2"]
     assert len(result["source"]["commit"]) == 40
 
 

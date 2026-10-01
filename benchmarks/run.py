@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Run a benchmark suite and write one JSON result.
 
-The suite compares this library's ``c5.0`` program with the imported C5.0
-Release 2.07 program on the same input files, in time and peak memory, and
-checks that both write the same classifier.
+The suite answers two questions on the same input files:
+
+* How does this library's ``c5.0`` program compare with the imported C5.0
+  Release 2.07 program in time and peak memory, and do both write the same
+  classifier?
+* How does training time change with the number of split workers and the
+  tie order, and is the classifier the same for every worker count?
 
 The driver builds both programs itself, from the current checkout and from
 the canonical upstream archive, and records their provenance with every
@@ -14,6 +18,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.machinery
+import importlib.metadata
 import json
 import os
 import platform
@@ -36,6 +42,8 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 ARCHIVE_SHA256 = "309db588eda420c06701bf8ae74c06a6c923e9a06e714a598ea761bcadfc5e2e"
 REFERENCE_CC = ["gcc", "-ffloat-store"]
 REFERENCE_CFLAGS = ["-O3"]
+WORKER_COUNTS = (1, 2, 4, 8)
+TIE_ORDERS = ("reference", "stable")
 
 # The launcher that measured() runs commands through. main() builds it.
 LAUNCHER: Path | None = None
@@ -51,9 +59,11 @@ class Comparison:
 
 @dataclass(frozen=True)
 class Suite:
-    """A named set of comparisons."""
+    """A named set of comparisons and worker-scaling workloads."""
 
     comparisons: tuple[Comparison, ...]
+    worker_datasets: tuple[str | SyntheticSpec, ...]
+    worker_counts: tuple[int, ...]
     repeats: int
     boost_trials: int
     needs_network: bool = field(default=False)
@@ -67,6 +77,8 @@ SUITES = {
         comparisons=(
             Comparison(SyntheticSpec(2000, 12, 2), ("tree", "rules", "boost")),
         ),
+        worker_datasets=(SyntheticSpec(20_000, 12, 4),),
+        worker_counts=(1, 2),
         repeats=1,
         boost_trials=3,
     ),
@@ -76,6 +88,8 @@ SUITES = {
             Comparison("covertype", ("tree", "rules", "boost")),
             Comparison(SCALE, ("tree",)),
         ),
+        worker_datasets=("covertype", SCALE),
+        worker_counts=WORKER_COUNTS,
         repeats=5,
         boost_trials=10,
         needs_network=True,
@@ -167,8 +181,9 @@ def compiler_version(compiler: str) -> str:
     return run([compiler, "--version"]).splitlines()[0]
 
 
-def build_library(work: Path, jobs: int) -> dict[str, Any]:
-    """Build the command-line program in Release mode."""
+def build_library(work: Path, jobs: int, python_module: bool) -> dict[str, Any]:
+    """Build the command-line program, and optionally the Python module, in
+    Release mode."""
     build = work / "build"
     configure: list[str | Path] = [
         "cmake",
@@ -180,8 +195,18 @@ def build_library(work: Path, jobs: int) -> dict[str, Any]:
         "-DBUILD_TESTING=OFF",
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
     ]
+    targets = ["c50_cli"]
+    if python_module:
+        import pybind11
+
+        configure += [
+            "-DC50_BUILD_PYTHON=ON",
+            f"-DPython_EXECUTABLE={sys.executable}",
+            f"-Dpybind11_DIR={pybind11.get_cmake_dir()}",
+        ]
+        targets.append("c50_python")
     run(configure)
-    run(["cmake", "--build", build, "--parallel", str(jobs), "--target", "c50_cli"])
+    run(["cmake", "--build", build, "--parallel", str(jobs), "--target", *targets])
     cache = (build / "CMakeCache.txt").read_text()
 
     def setting(name: str) -> str:
@@ -201,7 +226,24 @@ def build_library(work: Path, jobs: int) -> dict[str, Any]:
         "learner_compile_command": command,
         "program_sha256": sha256(program),
     }
-    return {"program": program, "record": record}
+    python_path = None
+    if python_module:
+        python_path = build / "python"
+        # Match the extension by its import suffix. The package also holds
+        # the _c50.pyi stub.
+        record["python_module_sha256"] = sha256(
+            next(
+                path
+                for suffix in importlib.machinery.EXTENSION_SUFFIXES
+                if (path := python_path / "c50" / f"_c50{suffix}").exists()
+            )
+        )
+    else:
+        import c50._c50
+
+        record["installed_python_package"] = importlib.metadata.version("c50")
+        record["python_module_sha256"] = sha256(Path(c50._c50.__file__))
+    return {"program": program, "python_path": python_path, "record": record}
 
 
 def build_reference(archive: Path, work: Path) -> dict[str, Any]:
@@ -344,6 +386,127 @@ def compare(
     return results
 
 
+# Set in child processes to the directory of the Python module that the
+# driver built.
+MODULE_DIRECTORY = "C50_BENCHMARK_MODULE_DIRECTORY"
+
+
+def import_c50() -> Any:
+    """Import ``c50`` from the module directory that the driver built.
+
+    An editable install adds an import finder that runs before the path
+    search, so ``PYTHONPATH`` alone does not select the built module. Drop
+    every finder that would import ``c50`` from elsewhere.
+    """
+    directory = os.environ.get(MODULE_DIRECTORY)
+    if directory:
+        root = Path(directory).resolve()
+        sys.path.insert(0, str(root))
+
+        def elsewhere(finder: Any) -> bool:
+            if finder is importlib.machinery.PathFinder:
+                return False
+            try:
+                spec = finder.find_spec("c50", None)
+            except (AttributeError, ImportError, TypeError, ValueError):
+                return False
+            origin = None if spec is None else spec.origin
+            return origin is not None and not Path(origin).resolve().is_relative_to(root)
+
+        sys.meta_path[:] = [finder for finder in sys.meta_path if not elsewhere(finder)]
+    import c50
+    import c50._c50
+
+    return c50
+
+
+def module_digest(c50: Any) -> str:
+    """Hash the native extension that a child process loaded."""
+    return sha256(Path(c50._c50.__file__))
+
+
+def check_module(sample: dict[str, Any], expected: str) -> None:
+    """Fail unless a child process loaded the module being measured."""
+    loaded = sample.pop("python_module_sha256")
+    if loaded != expected:
+        raise SystemExit(
+            f"a child process loaded the c50 extension {loaded[:12]}, "
+            f"not the measured extension {expected[:12]}"
+        )
+
+
+def train_child(names: Path, data: Path, ties: str, workers: int) -> None:
+    """Train once in this process and print the timing as JSON."""
+    c50 = import_c50()
+
+    names_text = names.read_text()
+    data_text = data.read_text()
+    options = c50.Options()
+    options.ties = {"reference": c50.TieOrder.REFERENCE, "stable": c50.TieOrder.STABLE}[ties]
+    start = time.perf_counter()
+    model = c50.train(names_text, data_text, c50.ModelKind.TREE, options, "", workers)
+    seconds = time.perf_counter() - start
+    print(
+        json.dumps(
+            {
+                "training_seconds": seconds,
+                "classifier_sha256": classifier_digest(model.serialized_data),
+                "python_module_sha256": module_digest(c50),
+            }
+        )
+    )
+
+
+def scale_workers(
+    suite: Suite, dataset: Dataset, library: dict[str, Any], work: Path
+) -> list[dict[str, Any]]:
+    """Train through the library with each tie order and worker count."""
+    env = dict(os.environ)
+    if library["python_path"] is not None:
+        env[MODULE_DIRECTORY] = str(library["python_path"])
+    results = []
+    for ties in TIE_ORDERS:
+        samples: dict[str, list[dict[str, Any]]] = {
+            str(count): [] for count in suite.worker_counts
+        }
+        for repeat in range(suite.repeats):
+            counts = list(suite.worker_counts)
+            if repeat % 2:
+                counts.reverse()
+            for count in counts:
+                progress(f"{dataset.name} ties={ties} workers={count} {repeat + 1}/{suite.repeats}")
+                directory = Path(tempfile.mkdtemp(dir=work))
+                try:
+                    sample = measured(
+                        [
+                            sys.executable,
+                            Path(__file__).resolve(),
+                            "_train",
+                            dataset.names_path,
+                            dataset.data_path,
+                            ties,
+                            str(count),
+                        ],
+                        directory,
+                        env,
+                    )
+                    sample.update(json.loads((directory / "stdout.txt").read_text()))
+                finally:
+                    shutil.rmtree(directory)
+                check_module(sample, library["record"]["python_module_sha256"])
+                samples[str(count)].append(sample)
+        digests = {s["classifier_sha256"] for runs in samples.values() for s in runs}
+        results.append(
+            {
+                "dataset": dataset.name,
+                "ties": ties,
+                "same_classifier": len(digests) == 1,
+                "samples": samples,
+            }
+        )
+    return results
+
+
 def progress(message: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {message}", file=sys.stderr, flush=True)
 
@@ -368,6 +531,12 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--repeats", type=int, help="override the suite's repeats")
     parser.add_argument("--jobs", type=int, default=os.cpu_count() or 1)
     parser.add_argument(
+        "--installed-python",
+        action="store_true",
+        help="train the worker-scaling workloads with the installed c50 package "
+        "instead of building the Python module from this checkout",
+    )
+    parser.add_argument(
         "--allow-dirty",
         action="store_true",
         help="measure a working tree with uncommitted changes",
@@ -377,6 +546,10 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 
 def main(argv: Sequence[str]) -> int:
     global LAUNCHER
+    if argv[:1] == ["_train"]:
+        names, data, ties, count = argv[1:]
+        train_child(Path(names), Path(data), ties, int(count))
+        return 0
     args = parse_args(argv)
     suite = SUITES[args.suite]
     if args.repeats is not None:
@@ -393,7 +566,7 @@ def main(argv: Sequence[str]) -> int:
     work.mkdir(parents=True, exist_ok=True)
     progress(f"building in {work}")
     LAUNCHER = build_launcher(work)
-    library = build_library(work, args.jobs)
+    library = build_library(work, args.jobs, not args.installed_python)
     programs = {"c50": library["program"]}
     builds: dict[str, Any] = {"c50": library["record"]}
     if args.reference_archive is not None:
@@ -416,6 +589,9 @@ def main(argv: Sequence[str]) -> int:
         comparisons += compare(
             suite, comparison, dataset(comparison.dataset), programs, work
         )
+    workers: list[dict[str, Any]] = []
+    for name in suite.worker_datasets:
+        workers += scale_workers(suite, dataset(name), library, work)
 
     result = {
         "format_version": FORMAT_VERSION,
@@ -429,6 +605,7 @@ def main(argv: Sequence[str]) -> int:
         "builds": builds,
         "datasets": [d.record() for d in prepared.values()],
         "comparisons": comparisons,
+        "workers": workers,
     }
     text = json.dumps(result, indent=2, sort_keys=True) + "\n"
     if args.output:
@@ -437,7 +614,7 @@ def main(argv: Sequence[str]) -> int:
         sys.stdout.write(text)
     mismatches = [
         f"{c['dataset']} {c['classifier']}" for c in comparisons if not c["same_classifier"]
-    ]
+    ] + [f"{w['dataset']} ties={w['ties']}" for w in workers if not w["same_classifier"]]
     for mismatch in mismatches:
         progress(f"classifiers differ: {mismatch}")
     return 1 if mismatches else 0
