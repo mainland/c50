@@ -18,6 +18,7 @@ ownership-concurrency
 model-inspection
 algorithm
 compatibility
+stability
 ```
 
 ```{toctree}
