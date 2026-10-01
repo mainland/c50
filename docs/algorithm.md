@@ -504,10 +504,10 @@ the votes divided by their sum.
   C5.0 extends the gain ratio criterion, handling of unknown values,
   pessimistic pruning, and rule generation described there.
 - J. R. Quinlan, "Improved use of continuous attributes in C4.5," *Journal of
-  Artificial Intelligence Research* 4 (1996): 77–90. It introduces the
+  Artificial Intelligence Research* 4 (1996): 77--90. It introduces the
   threshold cost that `EvalContinuousAtt` subtracts from the gain.
 - Y. Freund, "An adaptive version of the boost by majority algorithm,"
-  *Machine Learning* 43 (2001): 293–318. `src/construct.cpp` cites this
+  *Machine Learning* 43 (2001): 293--318. `src/construct.cpp` cites this
   BrownBoost approach for dropping cases in later trials.
 - RuleQuest Research, "C5.0: An Informal Tutorial,"
   <https://www.rulequest.com/see5-unix.html>. It describes the command-line
