@@ -156,15 +156,17 @@ print(rules.export_text())
 
 ```text
 ruleset 0: 4 rules, default='Adelie'
-  rule 0: 'island' == 'Torgersen' -> 'Adelie' (cover=39, correct=39, prior=0.4418603, vote=976/1000)
-  rule 1: 'flipper_length_mm' <= 205 -> 'Adelie' (cover=157, correct=111, prior=0.44186163, vote=704/1000)
-  rule 2: 'island' == 'Dream' and 'culmen_length_mm' > 42.2 -> 'Chinstrap' (cover=51, correct=50, prior=0.1976746, vote=962/1000)
-  rule 3: 'island' == 'Biscoe' and 'flipper_length_mm' > 205 -> 'Gentoo' (cover=93, correct=93, prior=0.36046532, vote=989/1000)
+  rule 0: 'island' == 'Torgersen' -> 'Adelie' (cover=39, correct=39, lift=2.20796, vote=976/1000)
+  rule 1: 'flipper_length_mm' <= 205 -> 'Adelie' (cover=157, correct=111, lift=1.59417, vote=704/1000)
+  rule 2: 'island' == 'Dream' and 'culmen_length_mm' > 42.2 -> 'Chinstrap' (cover=51, correct=50, lift=4.86792, vote=962/1000)
+  rule 3: 'island' == 'Biscoe' and 'flipper_length_mm' > 205 -> 'Gentoo' (cover=93, correct=93, lift=2.74499, vote=989/1000)
 ```
 
 Each rule lists the training penguins it covers and how many of them belong to
 its class. Its vote is the Laplace estimate of its accuracy,
-$(\mathit{correct} + 1) / (\mathit{cover} + 2)$, times 1000. A penguin can
+$(\mathit{correct} + 1) / (\mathit{cover} + 2)$, times 1000. Its lift divides
+that accuracy by the share of its class in the training data: rule 2 identifies
+Chinstrap penguins almost five times as reliably as guessing. A penguin can
 satisfy several rules, so the rules vote, and a penguin that satisfies none
 gets the default class. Rule 0 shows that every penguin from Torgersen in the
 training data is an Adelie penguin, a pattern the tree expressed only deep in
