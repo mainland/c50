@@ -246,6 +246,8 @@ interpreter and sets `PYTHONPATH` for runtime checks to import this build.
 The filter runs `python-api` (pytest), `benchmark-smoke`, `python-typecheck`
 (mypy), and `python-stubtest`. The two typing checks are registered only in
 non-sanitizer builds.
+`benchmark-smoke` is registered only on Linux and macOS, because the benchmark
+suite requires one of them. On Windows the filter runs the other three tests.
 
 To run the native tests as well, build all targets before running CTest without
 its filter:
