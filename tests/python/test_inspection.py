@@ -61,7 +61,7 @@ def test_text_shows_single_precision_values_without_widening_digits() -> None:
 
 def test_json_and_text_preserve_structure_and_escape_display_names() -> None:
     model = Model.train(NAMES, DATA)
-    before = model.predict_proba("0, ?\n5, ?\n?, ?\n")
+    before = model.predict_scores("0, ?\n5, ?\n?, ?\n")
     snapshot = model.inspect()
     exported = export_json(snapshot, feature_names=['received "power"\n'])
     document = json.loads(exported)
@@ -75,7 +75,7 @@ def test_json_and_text_preserve_structure_and_escape_display_names() -> None:
     assert "is N/A" not in export_text(snapshot, include_empty=False)
     assert "children omitted" in export_text(snapshot, max_depth=0)
     assert "'received power' <=" in export_text(snapshot, feature_names=["received power"])
-    assert model.predict_proba("0, ?\n5, ?\n?, ?\n") == before
+    assert model.predict_scores("0, ?\n5, ?\n?, ?\n") == before
     with pytest.raises(ValueError, match="schema length"):
         export_json(snapshot, feature_names=[])
     with pytest.raises(ValueError, match="max_depth"):
@@ -99,13 +99,13 @@ def test_ensemble_inspection_roundtrip_and_exports(kind: ModelKind) -> None:
     options = Options()
     options.trials = 3
     model = Model.train(names, data, kind, options)
-    original_scores = model.predict_proba(data)
+    original_scores = model.predict_scores(data)
     snapshot = model.inspect()
     components = snapshot.trees if kind == ModelKind.TREE else snapshot.rulesets
     assert len(components) == 3
     restored = Model.load(names, model.serialized_data, kind)
     assert export_json(restored.inspect()) == export_json(snapshot)
-    assert model.predict_proba(data) == original_scores
+    assert model.predict_scores(data) == original_scores
     text = export_text(snapshot)
     if kind == ModelKind.RULES:
         assert not snapshot.trees
