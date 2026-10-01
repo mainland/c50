@@ -20,7 +20,7 @@ cmake --install build --prefix <prefix>
 CMake consumers link `C50::cpp`:
 
 ```cmake
-find_package(C50 2.07 CONFIG REQUIRED)
+find_package(C50 1.0 CONFIG REQUIRED)
 target_link_libraries(my_program PRIVATE C50::cpp)
 ```
 
