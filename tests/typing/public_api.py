@@ -28,7 +28,7 @@ model = c50.train(
 )
 assert_type(model, c50.Model)
 assert_type(model.predict("0, ?\n"), list[str])
-assert_type(model.predict_proba("0, ?\n"), list[list[float]])
+assert_type(model.predict_scores("0, ?\n"), list[list[float]])
 
 X: NDArray[np.float64] = np.asarray([[0.0], [1.0], [2.0], [3.0]])
 y: NDArray[np.str_] = np.asarray(["no", "no", "yes", "yes"])

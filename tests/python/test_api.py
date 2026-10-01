@@ -118,9 +118,9 @@ def test_training_prediction_and_serialization(
     model = factory(NAMES, TRAINING)
 
     assert model.kind == c50.ModelKind.TREE
-    assert model.classes_ == ["low", "high"]
+    assert model.class_names == ["low", "high"]
     assert model.predict(CASES) == ["low", "high"]
-    assert model.predict_proba(CASES) == [[1.0, 0.0], [0.0, 1.0]]
+    assert model.predict_scores(CASES) == [[1.0, 0.0], [0.0, 1.0]]
     assert model.names_data == NAMES
     assert 'entries="1"' in model.serialized_data
     assert model.costs_data == ""
@@ -261,7 +261,7 @@ def test_empty_prediction_batch() -> None:
     model = c50.train(NAMES, TRAINING)
 
     assert model.predict("") == []
-    assert model.predict_proba("") == []
+    assert model.predict_scores("") == []
     assert len(model.predict_details("")) == 0
 
 

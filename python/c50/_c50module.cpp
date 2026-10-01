@@ -127,10 +127,12 @@ Each case row uses C5.0 data-file syntax and includes a final class field,
 which may be ``?`` when unknown.
 )doc";
 
-const char predict_proba_doc[] = R"doc(
+const char predict_scores_doc[] = R"doc(
 Return C5.0's per-class scores for each case row.
 
-Columns follow ``classes_`` order. Each case row uses C5.0 data-file syntax
+The scores are C5.0's native class scores, not normalized probabilities: a
+ruleset's scores, for example, sum to less than one. Columns follow
+``class_names`` order. Each case row uses C5.0 data-file syntax
 and includes a final class field, which may be ``?`` when unknown.
 )doc";
 
@@ -323,7 +325,7 @@ public:
         return labels;
     }
 
-    std::vector<std::vector<double>> predict_proba(
+    std::vector<std::vector<double>> predict_scores(
         const std::string &cases) const
     {
         c50::predictions predictions = predict_details(cases);
@@ -677,7 +679,7 @@ GIL while training, loading, or predicting.
             "costs_data", &python_model::costs_data,
             "Retained costs-file contents, or an empty string.")
         .def_property_readonly(
-            "classes_", &python_model::classes,
+            "class_names", &python_model::classes,
             "Class names in score-column order.")
         .def("prepare_predictor", &python_model::prepare_predictor,
              "Create an independent parsed classifier for repeated prediction calls.")
@@ -693,8 +695,8 @@ GIL while training, loading, or predicting.
              attribute_usage_dense_doc, py::arg("values"))
         .def("predict", &python_model::predict,
              predict_doc, py::arg("cases"))
-        .def("predict_proba", &python_model::predict_proba,
-             predict_proba_doc, py::arg("cases"))
+        .def("predict_scores", &python_model::predict_scores,
+             predict_scores_doc, py::arg("cases"))
         .def(py::pickle(
             [](const python_model &model) {
                 return py::make_tuple(model.kind(), model.names_data(),
