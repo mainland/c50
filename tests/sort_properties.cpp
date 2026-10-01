@@ -5,18 +5,29 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
 #include <iterator>
 #include <limits>
+#include <stdexcept>
+#include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
 
 #include "c50_sort.h"
 
-#include <catch2/catch_test_macros.hpp>
-
 namespace
 {
+
+void require(bool condition, const std::string &what)
+{
+    if ( !condition ) throw std::runtime_error(what);
+}
+
+std::string context(const char *name, std::size_t value)
+{
+    return std::string(name) + " " + std::to_string(value);
+}
 
 using record_key = std::tuple<C50SortValue, int, float>;
 
@@ -136,16 +147,18 @@ bool same_order(const std::vector<SortRec> &left,
                       });
 }
 
-void require_rulequest_order(std::vector<SortRec> records)
+void require_rulequest_order(std::vector<SortRec> records,
+                             const std::string &what)
 {
     std::vector<SortRec> expected = records;
     rulequest_cachesort(0, static_cast<int>(expected.size()) - 1,
                         expected.data());
     sort_records(records);
-    REQUIRE(same_order(records, expected));
+    require(same_order(records, expected), "RuleQuest order, " + what);
 }
 
-void require_stable_order(std::vector<SortRec> records, int first = 0)
+void require_stable_order(std::vector<SortRec> records,
+                          const std::string &what, int first = 0)
 {
     const int last = static_cast<int>(records.size()) - 1;
     std::vector<SortRec> expected = records;
@@ -163,7 +176,7 @@ void require_stable_order(std::vector<SortRec> records, int first = 0)
     std::vector<C50SortKey> key_scratch(records.size());
     StableCachesort(first, last, records.data(), record_scratch.data(),
                     keys.data(), key_scratch.data());
-    REQUIRE(same_order(records, expected));
+    require(same_order(records, expected), "stable order, " + what);
 }
 
 std::vector<SortRec> numbered(std::vector<SortRec> records)
@@ -175,9 +188,7 @@ std::vector<SortRec> numbered(std::vector<SortRec> records)
     return records;
 }
 
-} // namespace
-
-TEST_CASE("StableCachesort matches std::stable_sort", "[sort][property]")
+void stable_matches_std_stable_sort()
 {
     constexpr std::array<C50SortValue, 3> alphabet = {-1.0F, 0.0F, 1.0F};
     std::size_t combinations = 1;
@@ -195,8 +206,9 @@ TEST_CASE("StableCachesort matches std::stable_sort", "[sort][property]")
                      static_cast<int>(index + 1), 1.0F});
                 remaining /= alphabet.size();
             }
-            CAPTURE(length, encoded);
-            require_stable_order(records);
+            require_stable_order(
+                records, context("length", length) + ", " +
+                             context("encoding", encoded));
         }
         combinations *= alphabet.size();
     }
@@ -206,15 +218,15 @@ TEST_CASE("StableCachesort matches std::stable_sort", "[sort][property]")
     {
         for ( const std::size_t distinct_values : {2U, 8U, 1000U, 100000U} )
         {
-            CAPTURE(count, distinct_values);
             require_stable_order(
-                numbered(random_records(count, distinct_values)));
+                numbered(random_records(count, distinct_values)),
+                context("count", count) + ", " +
+                    context("distinct values", distinct_values));
         }
     }
 }
 
-TEST_CASE("StableCachesort orders signed zeros and extremes as equal values",
-          "[sort][property]")
+void stable_orders_extremes()
 {
     const C50SortValue maximum = std::numeric_limits<C50SortValue>::max();
     const C50SortValue denormal =
@@ -233,13 +245,13 @@ TEST_CASE("StableCachesort orders signed zeros and extremes as equal values",
             records.push_back(
                 {values[generator.next() % values.size()], 0, 1.0F});
         }
-        CAPTURE(count);
-        require_stable_order(numbered(records));
-        require_stable_order(numbered(records), static_cast<int>(count / 3));
+        require_stable_order(numbered(records), context("count", count));
+        require_stable_order(numbered(records), context("count", count),
+                             static_cast<int>(count / 3));
     }
 }
 
-TEST_CASE("Cachesort reproduces the RuleQuest tie order", "[sort][property]")
+void reproduces_rulequest_order()
 {
     constexpr std::array<C50SortValue, 3> alphabet = {-1.0F, 0.0F, 1.0F};
     std::size_t combinations = 1;
@@ -258,8 +270,9 @@ TEST_CASE("Cachesort reproduces the RuleQuest tie order", "[sort][property]")
                      static_cast<int>(index + 1), 1.0F});
                 remaining /= alphabet.size();
             }
-            CAPTURE(length, encoded);
-            require_rulequest_order(records);
+            require_rulequest_order(
+                records, context("length", length) + ", " +
+                             context("encoding", encoded));
         }
         combinations *= alphabet.size();
     }
@@ -272,12 +285,12 @@ TEST_CASE("Cachesort reproduces the RuleQuest tie order", "[sort][property]")
         {
             records[index].C = static_cast<int>(index + 1);
         }
-        CAPTURE(distinct_values);
-        require_rulequest_order(records);
+        require_rulequest_order(records,
+                                context("distinct values", distinct_values));
     }
 }
 
-TEST_CASE("Cachesort preserves and orders records", "[sort][property]")
+void preserves_and_orders_records()
 {
     constexpr std::array<C50SortValue, 3> alphabet = {-1.0F, 0.0F, 1.0F};
     std::size_t combinations = 1;
@@ -301,14 +314,15 @@ TEST_CASE("Cachesort preserves and orders records", "[sort][property]")
 
             const std::vector<SortRec> original = records;
             sort_records(records);
-            CAPTURE(length, encoded);
-            REQUIRE(valid_sort(original, records));
+            require(valid_sort(original, records),
+                    "sorted records, " + context("length", length) + ", " +
+                        context("encoding", encoded));
         }
         combinations *= alphabet.size();
     }
 }
 
-TEST_CASE("Cachesort handles representative large inputs", "[sort][property]")
+void handles_large_inputs()
 {
     for ( const std::size_t distinct_values : {8U, 1000U, 100000U} )
     {
@@ -316,13 +330,12 @@ TEST_CASE("Cachesort handles representative large inputs", "[sort][property]")
             random_records(100000, distinct_values);
         const std::vector<SortRec> original = records;
         sort_records(records);
-        CAPTURE(distinct_values);
-        REQUIRE(valid_sort(original, records));
+        require(valid_sort(original, records),
+                "large input, " + context("distinct values", distinct_values));
     }
 }
 
-TEST_CASE("Cachesort handles finite floating-point extremes",
-          "[sort][property]")
+void handles_extremes()
 {
     const C50SortValue maximum =
         std::numeric_limits<C50SortValue>::max();
@@ -352,7 +365,28 @@ TEST_CASE("Cachesort handles finite floating-point extremes",
 
         const std::vector<SortRec> original = records;
         sort_records(records);
-        CAPTURE(repetition);
-        REQUIRE(valid_sort(original, records));
+        require(valid_sort(original, records),
+                "extremes, " + context("repetition", repetition));
     }
+}
+
+} // namespace
+
+int main()
+{
+    try
+    {
+        stable_matches_std_stable_sort();
+        stable_orders_extremes();
+        reproduces_rulequest_order();
+        preserves_and_orders_records();
+        handles_large_inputs();
+        handles_extremes();
+    }
+    catch ( const std::exception &error )
+    {
+        std::cerr << "sort property failed: " << error.what() << '\n';
+        return 1;
+    }
+    return 0;
 }

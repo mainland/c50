@@ -36,14 +36,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Install native test dependencies
-        run: sudo apt-get update && sudo apt-get install -y catch2
       - name: Configure and build
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=${{ matrix.cc }} \
             -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
-            -D${{ matrix.option }}=ON -DC50_BUILD_BENCHMARKS=ON
+            -D${{ matrix.option }}=ON
           cmake --build build --parallel 2
       - name: Check address, undefined behavior, and leaks
         if: matrix.kind == 'address-undefined-leak'
