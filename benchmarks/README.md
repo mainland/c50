@@ -1,50 +1,98 @@
-# Large-dataset benchmark
+# Benchmarks
 
-`large_dataset.py` measures the Python estimator's dense training path and
-batched prediction path. It generates a deterministic mixed continuous and
-categorical workload and writes one JSON result to standard output. The result
-includes wall and CPU time, peak-RSS checkpoints, and SHA-256 digests of stable
-serialized model content and prediction scores.
+The benchmark suite measures the released behavior of the library. It asks how
+the library's `c5.0` program compares with the imported C5.0 Release 2.07
+program in time and peak memory, and whether both programs write the same
+classifier.
 
-Run a quick development workload from an installed development environment:
+`run.py` runs a suite and writes one JSON result.
+
+## Measurements
+
+The comparison trains each dataset with both command-line programs, alternating
+their order in successive repetitions. Both programs read the same `.names` and
+`.data` files in a fresh directory. The recorded time is the wall time of the
+whole process, which includes reading the data and evaluating the classifier on
+the training cases. Peak memory is the process's maximum resident set size.
+On Linux, the peak that `wait4` reports for a child includes the memory of the
+process that started it, so `run.py` starts each measured process through
+`measure.c`, a small launcher. The comparison requires the serialized
+classifiers to be identical apart from the dated `id` line.
+
+Every result records the source commit, the release tag when a clean checkout
+of exactly one tag was measured, the compiler and the command that compiled a
+learner source file, checksums of the measured programs, the archive checksum
+of the reference program, the CPU and its frequency governor, the load average
+before each run, and every sample.
+
+## Datasets
+
+| Name | Source | Rows | Attributes | Classes |
+| --- | --- | ---: | ---: | ---: |
+| `adult` | OpenML dataset 1590, version 2 | 48,842 | 14 | 2 |
+| `covertype` | OpenML dataset 1596, version 4 | 581,012 | 54 | 7 |
+| `synthetic-1000000x100-c10` | `datasets.py`, seed 1729 | 1,000,000 | 100 | 3 |
+
+The synthetic workload has 90 continuous attributes, 10 categorical attributes
+with eight values each, and 1% missing values. Its class depends on a weighted
+sum of eight continuous attributes. It matches the scale target in
+`docs/large-datasets.md`.
+
+`datasets.py` writes each dataset once as C5.0 files and records their SHA-256
+digests. Categorical values and classes become generated tokens such as `v3`
+and `c1`, so no value can change the C5.0 input grammar. The OpenML datasets
+are downloaded on first use.
+
+## Running the suite
+
+The suite requires Linux or macOS, CMake, a C++17 compiler, GCC for the
+reference program, and Python with NumPy, pandas, and scikit-learn.
+The development environment described in `docs/building-testing.md` provides
+them.
+
+The `smoke` suite trains small synthetic datasets in a few seconds and needs no
+network access. CI runs it through `tests/benchmark_smoke.py`:
 
 ```sh
-python benchmarks/large_dataset.py \
-    --rows 100000 --features 50 --categorical-features 5
+python benchmarks/run.py --suite smoke --output smoke.json
 ```
 
-Run the current target envelope with one exact, pruned tree:
+The `release` suite requires the canonical upstream archive, `C50.tgz`, whose
+SHA-256 digest must be
+`309db588eda420c06701bf8ae74c06a6c923e9a06e714a598ea761bcadfc5e2e`:
 
 ```sh
-python benchmarks/large_dataset.py \
-    --rows 1000000 --features 100 --categorical-features 10 \
-    >large-dataset.json
+python benchmarks/run.py --suite release \
+    --reference-archive ../archive/C50.tgz \
+    --output benchmarks/results/release.json
 ```
 
-Record the commit, compiler, build type, and command alongside retained JSON
-results. Do not compare peak RSS values across operating systems without
-accounting for their different resource-reporting semantics.
+The driver builds the library from the checkout in `Release` mode, and builds
+the reference program as the upstream Makefile builds its production
+`c5.0`, with `gcc -ffloat-store -O3` on the concatenated sources. It refuses to
+measure a working tree with uncommitted changes unless `--allow-dirty` is
+given. Datasets are cached in `~/.cache/c50-benchmarks` unless `--cache`
+names another directory.
 
-`run_matrix.py` runs each workload in a fresh process so peak RSS is local to
-that workload. The default smoke profile is suitable for development:
+The release suite repeats each measurement five times and takes several
+hours. Run it on an otherwise idle machine. The result
+records the load average and frequency governor, but it cannot correct for
+contention.
+
+## Interpretation
+
+Each table entry is the median of the repetitions on one machine. The results
+describe that machine, compiler, and these datasets. They are not general time
+or memory bounds. Peak resident set size has different semantics on Linux and
+macOS, so do not compare memory across operating systems.
+
+## Profiling
+
+To profile training, run the built program on a cached dataset. For example,
+sample the CPU with `perf` on Linux:
 
 ```sh
-python benchmarks/run_matrix.py --profile smoke >benchmark-matrix.json
+perf record -g -o /tmp/c50.perf -- \
+    build/c5.0 -f ~/.cache/c50-benchmarks/files/covertype/covertype
+perf report -i /tmp/c50.perf
 ```
-
-The `standard` profile adds medium continuous and mixed workloads. The `large`
-profile additionally runs the million-row target envelope and therefore
-requires substantially more time and memory.
-
-## Model operation measurements
-
-`large_dataset.py` also records repeated model-load, serialized-string-copy,
-empty-prediction, and small/batched-prediction timings. Set
-`--operation-repetitions N` to change the five repetitions. Predictions are
-warmed before measurement and checked for exact score equality afterward.
-`model_load` includes parsing, validation, and owned copies. Empty prediction
-includes parser/setup costs but no case classification. Retrieving
-`serialized_data` copies an existing string in the Python binding. It does not
-measure native serialization, which runs during training. Use a sampled native
-profile to attribute time within training. These operation boundaries overlap
-and must not be summed as independent training phases.

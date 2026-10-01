@@ -94,8 +94,6 @@ jobs:
         env:
           SCIPY_ARRAY_API: '1'
         run: python -m pytest
-      - name: Run the benchmark smoke test
-        run: python tests/benchmark_smoke.py
 
   python-and-docs:
     runs-on: ubuntu-24.04
