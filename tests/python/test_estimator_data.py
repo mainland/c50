@@ -239,6 +239,42 @@ def test_declared_unused_categories_predict_as_missing() -> None:
         reference.predict(green)
 
 
+def test_ordered_categoricals_are_ordered_attributes() -> None:
+    from c50.sklearn import C50Classifier
+
+    levels = ["tiny", "small", "medium", "large", "huge"]
+    rng = np.random.default_rng(1)
+    values = np.asarray(levels)[rng.integers(0, len(levels), 300)]
+    y = np.where(np.isin(values, ["large", "huge"]), "big", "little")
+
+    def fit(ordered: bool) -> C50Classifier:
+        dtype = pd.CategoricalDtype(levels, ordered=ordered)
+        X = pd.DataFrame({"size": pd.Series(values, dtype=dtype)})
+        return C50Classifier(categorical_features="from_dtype").fit(X, y)
+
+    ordered = fit(True)
+    unordered = fit(False)
+    assert "feature_0: [ordered] value_0," in ordered.model_.names_data
+    assert "[ordered]" not in unordered.model_.names_data
+    # Ordered categories follow the dtype rather than their first occurrence.
+    assert list(ordered.categories_[0]) == levels
+    assert list(unordered.categories_[0]) != levels
+
+    # An ordered test has three branches: N/A, at or below a cut, and above.
+    root = ordered.model_.inspect().trees[0].nodes[0]
+    assert len(root.branches) == 3
+    assert "'size' in {'tiny', 'small', 'medium'}" in ordered.export_text()
+    query = pd.DataFrame(
+        {
+            "size": pd.Series(
+                ["small", "huge"],
+                dtype=pd.CategoricalDtype(levels, ordered=True),
+            )
+        }
+    )
+    assert ordered.predict(query).tolist() == ["little", "big"]
+
+
 @pytest.mark.parametrize("value", [1e300, -1e300, 3.5e38, -3.5e38])
 def test_values_beyond_single_precision_name_the_feature(value: float) -> None:
     X = np.asarray([[0.0, 1.0], [1.0, 2.0], [2.0, value]])
