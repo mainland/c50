@@ -185,7 +185,7 @@ folds = StratifiedKFold(n_splits=10, shuffle=True, random_state=0)
 for trials in (1, 10):
     model = C50Classifier(trials=trials, categorical_features="from_dtype")
     accuracy = cross_val_score(model, X, y, cv=folds)
-    print(f"trials={trials}: {accuracy.mean():.3f} ± {accuracy.std():.3f}")
+    print(f"trials={trials}: {accuracy.mean():.3f} +/- {accuracy.std():.3f}")
 ```
 
 On these folds, boosting raises the mean accuracy from about 96.8% to 97.7%.

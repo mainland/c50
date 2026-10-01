@@ -5,7 +5,7 @@ reasonably large in-memory datasets without changing the classifier produced
 by the reference GPL implementation. The current measurement envelope is:
 
 - 1,000,000 rows;
-- 50–100 input attributes;
+- 50--100 input attributes;
 - no more than 10 classes;
 - mixed continuous and categorical values;
 - one pruned tree, with sampling disabled; and
