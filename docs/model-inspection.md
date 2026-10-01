@@ -44,7 +44,11 @@ missing-value prediction.
 
 Ruleset snapshots preserve serialized rule and condition order, default class,
 covered and correctly classified case weights, derived prior, and integer vote
-in thousandths. Conditions use the same public representation as tree branches.
+in thousandths. A rules model stores each rule's lift, the ratio of its Laplace
+accuracy to its class's prior probability, to six significant digits, and not
+the prior. The loader derives the prior from the lift, so rules of the same
+class can report priors that differ in about the sixth significant digit.
+Predictions do not use the prior or the lift. Conditions use the same public representation as tree branches.
 Tree and ruleset ensembles preserve serialized component order. Exactly one of
 `trees` and `rulesets` is populated, according to the model kind. C5.0 combines
 per-case component confidences, so inspection does not invent fixed boosting
@@ -93,9 +97,11 @@ print(export_text(snapshot, include_empty=False))
 metadata = export_json(snapshot)
 ```
 
-`export_text` prints thresholds and rule priors, which C5.0 stores in single
-precision, with the fewest digits that read back as the stored value. JSON
-exports keep the full double-precision values of the snapshot.
+`export_text` prints thresholds, which C5.0 stores in single precision, with
+the fewest digits that read back as the stored value. For rules it prints the
+lift to the six significant digits that the model stores, as the command-line
+program reports rules, rather than the derived prior. JSON exports keep the
+full double-precision values of the snapshot, including the prior.
 `export_text` accepts `max_depth` to truncate display and `include_empty=False`
 to omit zero-support tree leaves. These two options do not filter rules. Both
 exports accept `feature_names` and `class_names` sequences in schema order.

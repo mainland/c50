@@ -55,7 +55,8 @@ def test_text_shows_single_precision_values_without_widening_digits() -> None:
     rules = Model.train(names, data, ModelKind.RULES, options=options).inspect()
     text = export_text(rules)
     assert "<= 42.2 ->" in text
-    assert "prior=0.5," in text
+    # Each rule covers its two cases correctly, and each class has prior 1/2.
+    assert "lift=1.5," in text
 
 
 def test_json_and_text_preserve_structure_and_escape_display_names() -> None:
