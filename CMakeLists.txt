@@ -1,6 +1,19 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(C50 VERSION 2.07 LANGUAGES C CXX)
+# The library and Python package share a version, which differs from the
+# imported C5.0 release number. CMake versions have no prerelease labels, so
+# prereleases such as 1.0.0a1 use the version they precede.
+project(C50 VERSION 1.0.0 LANGUAGES C CXX)
+
+# A Python build from a release tag must match the library version. Builds
+# between tags have development versions and are not checked.
+if(DEFINED SKBUILD_PROJECT_VERSION_FULL
+   AND NOT SKBUILD_PROJECT_VERSION_FULL MATCHES "dev|\\+"
+   AND NOT SKBUILD_PROJECT_VERSION VERSION_EQUAL PROJECT_VERSION)
+    message(FATAL_ERROR
+            "Python package version ${SKBUILD_PROJECT_VERSION_FULL} does not "
+            "match the library version ${PROJECT_VERSION} in CMakeLists.txt")
+endif()
 
 option(C50_ENABLE_SANITIZERS
        "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
