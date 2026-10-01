@@ -4,7 +4,7 @@ project(C50InstallConsumer LANGUAGES C CXX)
 
 include(CTest)
 
-find_package(C50 2.07 CONFIG REQUIRED)
+find_package(C50 1.0 CONFIG REQUIRED)
 
 foreach(standard IN ITEMS 17 20)
     add_executable(c50_install_cpp${standard} cpp_consumer.cpp)
