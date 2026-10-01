@@ -95,6 +95,7 @@ sdist.exclude = [
     ".mypy_cache/**",
     ".venv/**",
     "AGENTS.md",
+    "benchmarks/results/**",
     "build*/**",
     "dist/**",
     "docs/_build/**",
