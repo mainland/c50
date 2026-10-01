@@ -1,0 +1,41 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, cite it as below. For the C5.0 algorithm, also
+  cite the references.
+type: software
+title: "c50: C5.0 decision trees and rulesets"
+abstract: >-
+  A modernization of C5.0 Release 2.07 GPL Edition as a C++17 library, a
+  compatibility command-line interface, Python bindings, and a scikit-learn
+  estimator.
+authors:
+  - given-names: Geoffrey
+    family-names: Mainland
+version: 1.0.0a1
+license: GPL-3.0-or-later
+repository-code: "https://github.com/mainland/c50"
+keywords:
+  - C5.0
+  - decision trees
+  - rule learning
+  - classification
+  - scikit-learn
+references:
+  - type: book
+    title: "C4.5: Programs for Machine Learning"
+    authors:
+      - given-names: J. Ross
+        family-names: Quinlan
+    publisher:
+      name: Morgan Kaufmann
+    year: 1993
+    isbn: "1-55860-238-0"
+  - type: software
+    title: C5.0 Release 2.07 GPL Edition
+    authors:
+      - given-names: J. Ross
+        family-names: Quinlan
+    publisher:
+      name: RuleQuest Research
+    version: "2.07"
+    url: "https://www.rulequest.com/"
