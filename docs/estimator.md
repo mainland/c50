@@ -45,6 +45,13 @@ a pandas `category` dtype as categorical, as `HistGradientBoostingClassifier`
 does. Every other column, and every column of non-DataFrame input, is then
 continuous.
 
+A categorical column with an ordered pandas `category` dtype becomes a C5.0
+ordered discrete attribute. Its categories keep the dtype's order, and C5.0
+tests it with one three-way split at a cut between consecutive categories
+instead of one branch per category. Use an unordered dtype to treat the
+categories as unordered. C5.0 treats an ordered attribute with fewer than three
+categories in the training data as unordered.
+
 `None`, numeric NaN, `pd.NA`, and `pd.NaT` represent missing feature values.
 Infinite continuous values are rejected. An unseen prediction-time category
 raises `ValueError` by default. Set `unknown_categories="missing"` to pass

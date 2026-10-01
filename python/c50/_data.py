@@ -25,12 +25,14 @@ class CodedColumn:
 
     Code -1 marks a missing value. pandas categorical and string columns use
     this form so that encoding examines each distinct value once instead of
-    every row.
+    every row. ``ordered`` marks an ordered categorical dtype, whose codes
+    follow the order of its categories.
     """
 
     codes: NDArray[np.intp]
     values: Any
     categorical_dtype: bool
+    ordered: bool = False
 
     def __len__(self) -> int:
         """Return the number of rows."""
@@ -38,7 +40,9 @@ class CodedColumn:
 
     def __getitem__(self, rows: RowSelection) -> CodedColumn:
         """Return the selected rows with the same distinct values."""
-        return CodedColumn(self.codes[rows], self.values, self.categorical_dtype)
+        return CodedColumn(
+            self.codes[rows], self.values, self.categorical_dtype, self.ordered
+        )
 
     def present_codes(self) -> NDArray[np.intp]:
         """Return the codes that occur, in order of first occurrence."""
@@ -142,6 +146,7 @@ def dataframe_columns(frame: Any) -> Columns:
                     column.cat.codes.to_numpy(dtype=np.intp),
                     dtype.categories,
                     categorical_dtype=True,
+                    ordered=bool(dtype.ordered),
                 )
             )
         elif isinstance(dtype, pandas.StringDtype):
@@ -168,13 +173,16 @@ class FeatureSchema:
 
     ``declared`` holds the keys of categories that a pandas categorical dtype
     declared during fitting but that no training row used. Prediction treats
-    them as missing values instead of unseen categories.
+    them as missing values instead of unseen categories. An ``ordered``
+    feature lists its categories in increasing order and is a C5.0 ordered
+    discrete attribute.
     """
 
     categorical: bool
     categories: tuple[object, ...]
     lookup: dict[CategoryKey, int]
     declared: frozenset[CategoryKey] = frozenset()
+    ordered: bool = False
 
 
 @dataclass(frozen=True)
@@ -215,7 +223,8 @@ class Schema:
                     _category_token(value_index)
                     for value_index in range(value_count)
                 )
-                lines.append(f"feature_{index}: {values}.")
+                ordered = "[ordered] " if feature.ordered else ""
+                lines.append(f"feature_{index}: {ordered}{values}.")
             else:
                 lines.append(f"feature_{index}: continuous.")
         if self.case_weight:
@@ -374,7 +383,13 @@ def _infer_coded_categorical(column: CodedColumn) -> bool:
 def _fit_coded(column: CodedColumn, feature_index: int) -> FeatureSchema:
     categories: list[object] = []
     lookup: dict[CategoryKey, int] = {}
-    for code in column.present_codes():
+    # Codes of an ordered dtype follow its category order, which C5.0 needs.
+    codes = (
+        np.unique(column.codes[column.codes >= 0])
+        if column.ordered
+        else column.present_codes()
+    )
+    for code in codes:
         value = column.value(code)
         key = _category_key(value, feature_index)
         if key not in lookup:
@@ -390,7 +405,7 @@ def _fit_coded(column: CodedColumn, feature_index: int) -> FeatureSchema:
             )
             if key not in lookup
         )
-    return FeatureSchema(True, tuple(categories), lookup, declared)
+    return FeatureSchema(True, tuple(categories), lookup, declared, column.ordered)
 
 
 def _encode_coded(
