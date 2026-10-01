@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the benchmark smoke suite and check its result.
+"""Run the benchmark smoke suite and check its result and report.
 
 The suite builds the command-line program from this checkout and trains
 with the installed or ``PYTHONPATH`` c50 package, so it needs CMake, a C++
@@ -41,6 +41,22 @@ def main() -> None:
             check=True,
         )
         result = json.loads(output.read_text())
+        report = subprocess.run(
+            [sys.executable, str(REPOSITORY / "benchmarks" / "report.py"), str(output)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        portable = scratch_path / "portable.json"
+        result["machine"].update(cpu=None, cpu_governor=None, memory_bytes=None)
+        portable.write_text(json.dumps(result))
+        portable_report = subprocess.run(
+            [sys.executable, str(REPOSITORY / "benchmarks/report.py"), str(portable)],
+            check=True, capture_output=True, text=True,
+        ).stdout
+        assert "an unreported CPU" in portable_report
+        assert "frequency governor" not in portable_report
+        assert "GiB of memory" not in portable_report
 
     assert result["format_version"] == 1
     assert result["suite"] == "smoke"
@@ -54,7 +70,10 @@ def main() -> None:
     for scaling in result["workers"]:
         assert scaling["same_classifier"], scaling["ties"]
         assert sorted(scaling["samples"]) == ["1", "2"]
+    assert "| synthetic-2000x12-c2 (2,000 rows, 12 attributes, 3 classes) | tree |" in report
+    assert "### Split workers and tie order" in report
     assert len(result["source"]["commit"]) == 40
+    assert result["source"]["commit"][:7] not in report
 
 
 if __name__ == "__main__":
