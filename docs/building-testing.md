@@ -241,6 +241,15 @@ version from Git tags beginning with `v` and a digit, such as `v1.0.0a1`.
 The upstream `c5.0-2.07` tag does not participate in package version discovery.
 Commits after a package tag receive development versions with a commit identifier.
 
+The native library and its CMake package share this version, so C++ consumers
+request it with `find_package(C50 1.0 CONFIG REQUIRED)`. Packages with the same
+major version are compatible. CMake versions have no prerelease labels, so a
+prerelease such as `1.0.0a1` has the CMake version of the release it precedes,
+`1.0.0`. Before tagging a release, set the version in the `project()` command in
+`CMakeLists.txt` to the tag's release number. A Python build from a release tag
+fails at configuration when the two differ. The command-line programs and
+serialized models keep the upstream identifier `2.07`.
+
 Build from a clean checkout of the package release tag when preparing a release.
 The checkout must include Git history and tags. Source distributions retain the
 resolved version in `PKG-INFO`, so wheels built from them do not require Git.
