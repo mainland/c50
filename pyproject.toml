@@ -76,6 +76,7 @@ wheel.packages = ["python/c50"]
 wheel.exclude = ["**/*.cpp"]
 install.components = ["python"]
 sdist.exclude = [
+    ".claude/**",
     ".hypothesis/**",
     ".mypy_cache/**",
     ".venv/**",
