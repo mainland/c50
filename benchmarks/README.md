@@ -9,7 +9,8 @@ two questions:
 2. How does training time change with the number of split workers and with
    the tie order, and is the classifier the same for every worker count?
 
-`run.py` runs a suite and writes one JSON result.
+`run.py` runs a suite and writes one JSON result. `report.py` renders a result
+as Markdown tables.
 
 ## Measurements
 
@@ -34,7 +35,9 @@ Every result records the source commit, the release tag when a clean checkout
 of exactly one tag was measured, the compiler and the command that compiled a
 learner source file, checksums of the measured programs and Python module, the
 archive checksum of the reference program, the CPU and its frequency governor,
-the load average before each run, and every sample.
+the load average before each run, and every sample. The rendered report names
+the tag but not the commit, because a history rewrite would invalidate a
+commit hash in the documentation.
 
 ## Datasets
 
@@ -89,6 +92,12 @@ The release suite repeats each measurement five times and takes several
 hours. Run it on an otherwise idle machine. The result
 records the load average and frequency governor, but it cannot correct for
 contention.
+
+## Results
+
+`report.py` renders a result as Markdown tables. With `--update PAGE`, it
+replaces the text between the page's two generated-results marker comments.
+With `--check PAGE`, it fails when that text differs from the result.
 
 ## Interpretation
 
