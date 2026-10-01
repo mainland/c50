@@ -450,3 +450,46 @@ def test_failed_refit_clears_model_and_metadata(
     classifier.fit(two_features, Y_BINARY)
     assert classifier.n_features_in_ == 2
     np.testing.assert_array_equal(classifier.predict(two_features), Y_BINARY)
+
+
+@pytest.mark.parametrize(
+    "parameters",
+    [
+        {"model_kind": "rules"},
+        {"model_kind": "rules", "trials": 5},
+        {"probabilistic_thresholds": True},
+    ],
+)
+def test_predict_proba_rows_are_probabilities(parameters: dict[str, object]) -> None:
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(400, 4))
+    y = np.where(
+        X[:, 0] + 0.3 * rng.normal(size=400) > 0,
+        "a",
+        np.where(X[:, 1] > 0.5, "b", "c"),
+    )
+    classifier = C50Classifier(**parameters).fit(X, y)
+    X_test = 3 * rng.normal(size=(2000, 4))
+
+    probabilities = classifier.predict_proba(X_test)
+    native = np.asarray(
+        classifier.model_.predict_details_dense(X_test).scores, dtype=np.float64
+    )
+    np.testing.assert_allclose(probabilities.sum(axis=1), 1.0, rtol=1e-12)
+    np.testing.assert_allclose(
+        probabilities, native / native.sum(axis=1, keepdims=True), rtol=1e-12
+    )
+    assert np.all(
+        classifier.classes_[probabilities.argmax(axis=1)] == classifier.predict(X_test)
+    )
+    if parameters.get("model_kind") == "rules" and "trials" not in parameters:
+        # Rule votes are Laplace accuracies, so native rows sum to less than one.
+        assert native.sum(axis=1).max() < 1
+
+
+def test_rows_without_scores_give_the_predicted_class_probability_one() -> None:
+    from c50.sklearn import _normalize_scores
+
+    scores = np.asarray([[0.0, 0.0, 0.0], [0.2, 0.6, 0.0]])
+    normalized = _normalize_scores(scores, np.asarray([2, 1], dtype=np.intp))
+    np.testing.assert_allclose(normalized, [[0.0, 0.0, 1.0], [0.25, 0.75, 0.0]])

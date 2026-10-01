@@ -457,7 +457,9 @@ results for each fold and the average.
 ## Classification
 
 `Classify` in `src/classify.cpp` returns a class and fills a score for each
-class. The C++ and Python prediction interfaces return these scores.
+class. The C++ and low-level Python prediction interfaces return these scores.
+The scikit-learn estimator divides each row by its sum so that it can report
+probabilities.
 
 ### Trees
 

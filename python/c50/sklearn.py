@@ -332,7 +332,14 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         return self.classes_[indices]
 
     def predict_proba(self, X: ArrayLike) -> NDArray[np.float64]:
-        """Return class scores in ``classes_`` order.
+        """Return class probabilities in ``classes_`` order.
+
+        C5.0's native class scores need not sum to one: a ruleset averages the
+        votes of the rules that match a case, and soft thresholds drop small
+        branch weights. Each row is divided by its sum, which keeps the order
+        of the classes. A row without any score assigns probability one to
+        the predicted class. ``Model.predict_details`` returns the native
+        scores.
 
         Args:
             X: Dense two-dimensional prediction data.
@@ -349,11 +356,13 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             (X_checked.shape[0], self.classes_.shape[0]),
             dtype=np.float64,
         )
+        predicted = np.empty(X_checked.shape[0], dtype=np.intp)
         predictor = self.model_.prepare_predictor()
         for row_slice, values in self._prediction_batches(X_checked):
             details = predictor.predict_details_dense(values)
             scores[row_slice] = np.asarray(details.scores, dtype=np.float64)
-        return scores
+            predicted[row_slice] = np.asarray(details.class_indices, dtype=np.intp)
+        return _normalize_scores(scores, predicted)
 
     def predict_log_proba(self, X: ArrayLike) -> NDArray[np.float64]:
         """Return the logarithms of the class scores from :meth:`predict_proba`.
@@ -562,6 +571,19 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             TieOrder.STABLE if self.ties == "stable" else TieOrder.REFERENCE
         )
         return options
+
+
+def _normalize_scores(
+    scores: NDArray[np.float64], predicted: NDArray[np.intp]
+) -> NDArray[np.float64]:
+    """Scale each row of native class scores to sum to one, in place."""
+    totals = scores.sum(axis=1)
+    scored = totals > 0
+    scores[scored] /= totals[scored, np.newaxis]
+    unscored = np.flatnonzero(~scored)
+    scores[unscored] = 0.0
+    scores[unscored, predicted[unscored]] = 1.0
+    return scores
 
 
 def _class_sample_weight(
