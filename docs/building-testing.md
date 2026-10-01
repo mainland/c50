@@ -29,8 +29,6 @@ inventory checks are omitted on macOS and Windows, where the portable contract
 and installed-consumer tests still run. The Windows job treats level-4
 warnings as errors, except C4244, C4267, and C4305, which report the implicit
 narrowing conversions that the imported sources use to store values as float.
-The Windows job does not build the optional Catch2 benchmarks, so it does not
-run the parallel-workload equivalence test.
 
 Native CI configures a C++14 project default to verify that each target declares
 its own C++17 requirement. The platform labels follow the
@@ -294,29 +292,16 @@ uvx cibuildwheel --only cp312-manylinux_x86_64 dist/c50-*.tar.gz
 musllinux, free-threaded CPython, and prerelease CPython versions are not
 built.
 
-## Native benchmarks and profiling
+## Sort and worker-equivalence tests
 
-The native sort-correctness tests and profiling workload are optional and
-require Catch2 3.x:
-
-```sh
-cmake -S . -B build/benchmarks \
-    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-    -DC50_BUILD_BENCHMARKS=ON
-cmake --build build/benchmarks -j
-ctest --test-dir build/benchmarks -R native-sort-properties \
-    --output-on-failure
-```
-
-The same build provides `c50-native-workload`, a deterministic dense training
-driver without Python runtime allocations. Use it for `perf` and Heaptrack
-profiles. Set `--workers N` (1 through 8) to measure split-evaluation
-parallelism; the default is one. CTest runs `parallel-workload-equivalence`
-when native benchmarks are enabled. That test compares exact serialized
-classifier digests at 9,999, 10,000, and 20,000 rows with one, two,
-four, and eight workers, including a subset-split case. See
-{doc}`large-datasets` and the repository's
-`benchmarks/README.md` for the complete commands and interpretation rules.
+The default CTest run includes two tests of training internals.
+`sort-properties` checks that the continuous-value sorts order and preserve
+records. It requires the RuleQuest tie order from the reference sort and the
+case order from the stable sort, exhaustively for short inputs and on large
+random and floating-point-extreme inputs. `parallel-workload-equivalence`
+trains a deterministic dense workload with one, two, four, and eight split
+workers. It requires the same serialized classifier at 9,999, 10,000, and
+20,000 rows, with subset splits, and with the stable tie order on tied values.
 
 ## API documentation
 

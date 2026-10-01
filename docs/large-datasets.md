@@ -130,10 +130,3 @@ python benchmarks/run_matrix.py --profile smoke >benchmark-matrix.json
 The `standard` profile adds two medium workloads. The `large` profile also runs
 the million-row target envelope and is intended for deliberate baseline runs,
 not routine tests.
-
-For native CPU and allocation profiles, configure with
-`C50_BUILD_BENCHMARKS=ON` and use `c50-native-workload`. This removes Python,
-NumPy, and scikit-learn allocations from the profile while retaining the public
-dense training path. The native generator is deterministic but differs from
-the Python generator, so its model hashes form a separate baseline. See
-`benchmarks/README.md` for the Catch2, `perf`, and Heaptrack commands.
