@@ -134,6 +134,19 @@ are supported in multiclass matrices whose columns satisfy this requirement.
 `ignore_costs=True` ignores costs during both training and prediction. The
 model retains no costs data in this mode.
 
+## Class probabilities
+
+`predict_proba` returns rows that sum to one. C5.0's native class scores need
+not: a ruleset averages the Laplace accuracies of the rules that match a case,
+so its scores sum to less than one, and soft thresholds drop branches that
+receive less than 1% of a case. The estimator divides each row by its sum,
+which keeps the order of the classes, so the class with the highest
+probability is the class that `predict` returns unless a cost matrix is in
+use. A case with no score at all receives probability one for its predicted
+class. The low-level `Model.predict_details` and `predict_details_dense`
+methods return the native scores. See {doc}`algorithm` for how C5.0 computes
+them.
+
 ## Feature importances
 
 After `fit`, `attribute_usage_` holds, for each feature, the fraction of
