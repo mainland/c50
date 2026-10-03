@@ -236,7 +236,7 @@ def test_categorical_features_and_missing_values() -> None:
     classifier = C50Classifier(categorical_features=(1,)).fit(X, Y_BINARY)
 
     assert classifier.categorical_features_.tolist() == [1]
-    assert classifier.categories_[1].tolist() == ["red", "blue"]
+    assert classifier.categories_[1].tolist() == ["blue", "red"]
     assert classifier.predict([[0.25, "red"], [3.75, None]]).tolist() == [
         "low",
         "high",

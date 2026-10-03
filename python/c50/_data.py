@@ -382,19 +382,27 @@ def _infer_coded_categorical(column: CodedColumn) -> bool:
 
 def _fit_coded(column: CodedColumn, feature_index: int) -> FeatureSchema:
     categories: list[object] = []
-    lookup: dict[CategoryKey, int] = {}
-    # Codes of an ordered dtype follow its category order, which C5.0 needs.
+    keys: set[CategoryKey] = set()
+    # The codes of a pandas categorical dtype follow its category order, which
+    # an ordered attribute needs and an unordered one keeps. Other coded
+    # columns, such as strings, are sorted like object columns.
     codes = (
         np.unique(column.codes[column.codes >= 0])
-        if column.ordered
+        if column.categorical_dtype
         else column.present_codes()
     )
     for code in codes:
         value = column.value(code)
         key = _category_key(value, feature_index)
-        if key not in lookup:
-            lookup[key] = len(categories)
+        if key not in keys:
+            keys.add(key)
             categories.append(value)
+    if not column.categorical_dtype:
+        categories = _canonical_order(categories)
+    lookup = {
+        _category_key(value, feature_index): index
+        for index, value in enumerate(categories)
+    }
     declared: frozenset[CategoryKey] = frozenset()
     if column.categorical_dtype:
         declared = frozenset(
@@ -508,16 +516,44 @@ def _fit_categories(
     feature_index: int,
 ) -> tuple[tuple[object, ...], dict[CategoryKey, int]]:
     categories: list[object] = []
-    lookup: dict[CategoryKey, int] = {}
+    keys: set[CategoryKey] = set()
     for raw_value in column:
         if _is_missing(raw_value):
             continue
         value = _normalize_scalar(raw_value)
         key = _category_key(value, feature_index)
-        if key not in lookup:
-            lookup[key] = len(categories)
+        if key not in keys:
+            keys.add(key)
             categories.append(value)
+    categories = _canonical_order(categories)
+    lookup = {
+        _category_key(value, feature_index): index
+        for index, value in enumerate(categories)
+    }
     return tuple(categories), lookup
+
+
+def _canonical_order(categories: list[object]) -> list[object]:
+    """Order distinct categories independently of the training rows.
+
+    C5.0 can build a different classifier when the same discrete values are
+    declared in another order, so the declared order must not depend on the
+    order of the rows. Values are grouped by type, with types ordered by
+    module and qualified name, and sorted within each type. Values of a type
+    that cannot be sorted keep their order of first occurrence.
+    """
+    groups: dict[type[object], list[object]] = {}
+    for value in categories:
+        groups.setdefault(type(value), []).append(value)
+    ordered: list[object] = []
+    for kind in sorted(groups, key=lambda kind: (kind.__module__, kind.__qualname__)):
+        group = groups[kind]
+        try:
+            group = sorted(cast(list[Any], group))
+        except TypeError:
+            pass
+        ordered.extend(group)
+    return ordered
 
 
 def _validate_continuous(column: Array, feature_index: int) -> None:

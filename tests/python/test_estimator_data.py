@@ -22,14 +22,14 @@ def test_schema_encodes_continuous_and_categorical_features() -> None:
     schema = fit_schema(X, categorical_features=(1,))
 
     assert schema.categorical_indices == (1,)
-    assert schema.categories == ((), ("red", "blue"))
+    assert schema.categories == ((), ("blue", "red"))
     assert schema.names_data(2) == (
         "class_0, class_1.\n\n"
         "feature_0: continuous.\n"
         "feature_1: value_0, value_1.\n"
     )
     assert schema.dense_data(X, "error") == pytest.approx(
-        np.asarray([[0.5, 0], [1.25, 1], [2, 0]], dtype=float)
+        np.asarray([[0.5, 1], [1.25, 0], [2, 1]], dtype=float)
     )
 
 
@@ -99,9 +99,9 @@ def test_strings_are_categories_not_missing_values() -> None:
 
     schema = fit_schema(X, categorical_features=None)
 
-    assert schema.categories == (("nan", b"nan", ""),)
+    assert schema.categories == ((b"nan", "", "nan"),)
     encoded = schema.dense_data(X, "error")[:, 0]
-    np.testing.assert_array_equal(encoded, [0, 1, 2, np.nan, np.nan])
+    np.testing.assert_array_equal(encoded, [2, 0, 1, np.nan, np.nan])
 
 
 def test_dataframe_columns_keep_numeric_dtypes() -> None:
@@ -132,17 +132,17 @@ def test_dataframe_columns_keep_numeric_dtypes() -> None:
     assert schema.categorical_indices == (2, 3, 4)
     np.testing.assert_array_equal(
         schema.dense_data(columns[1:], "error"),
-        np.asarray([[1.5, 2, 1, 1, 1], [2.5, 3, 0, 0, 0]]),
+        np.asarray([[1.5, 2, 0, 1, 1], [2.5, 3, 1, 0, 0]]),
     )
 
 
-def test_coded_columns_keep_first_occurrence_order() -> None:
+def test_coded_columns_use_dtype_or_sorted_order() -> None:
     frame = pd.DataFrame(
         {
             "group": pd.Categorical(
                 ["b", None, "c", "b", "a"], categories=["a", "b", "c", "d"]
             ),
-            "word": pd.array(["y", "x", None, "y", "z"], dtype="string"),
+            "word": pd.array(["y", "z", None, "y", "x"], dtype="string"),
             "count": pd.array([1, None, 3, 4, 5], dtype="Int64"),
         }
     )
@@ -155,16 +155,18 @@ def test_coded_columns_keep_first_occurrence_order() -> None:
         "CodedColumn",
         "NullableNumbers",
     ]
-    assert schema.categories == (("c", "b", "a"), ("x", "y", "z"), ())
+    # A categorical dtype declares its order, and strings are sorted, so
+    # neither depends on the order of the rows.
+    assert schema.categories == (("a", "b", "c"), ("x", "y", "z"), ())
     np.testing.assert_array_equal(
         schema.dense_data(columns, "error"),
         np.asarray(
             [
                 [1, 1, 1],
-                [np.nan, 0, np.nan],
-                [0, np.nan, 3],
+                [np.nan, 2, np.nan],
+                [2, np.nan, 3],
                 [1, 1, 4],
-                [2, 2, 5],
+                [0, 0, 5],
             ]
         ),
     )
@@ -254,9 +256,9 @@ def test_ordered_categoricals_are_ordered_attributes() -> None:
     unordered = fit(False)
     assert "feature_0: [ordered] value_0," in ordered.model_.names_data
     assert "[ordered]" not in unordered.model_.names_data
-    # Ordered categories follow the dtype rather than their first occurrence.
+    # Both follow the dtype's category order rather than first occurrence.
     assert list(ordered.categories_[0]) == levels
-    assert list(unordered.categories_[0]) != levels
+    assert list(unordered.categories_[0]) == levels
 
     # An ordered test has three branches: N/A, at or below a cut, and above.
     root = ordered.model_.inspect().trees[0].nodes[0]
@@ -266,3 +268,67 @@ def test_ordered_categoricals_are_ordered_attributes() -> None:
         {"size": pd.Series(["small", "huge"], dtype=pd.CategoricalDtype(levels, ordered=True))}
     )
     assert ordered.predict(query).tolist() == ["little", "big"]
+
+
+def test_category_order_does_not_depend_on_row_order() -> None:
+    frame = pd.DataFrame(
+        {
+            "word": pd.Series(["pear", "fig", None, "apple", "fig"], dtype=object),
+            "text": pd.array(["y", "z", None, "y", "x"], dtype="string"),
+            "group": pd.Categorical(
+                ["b", None, "c", "b", "a"], categories=["c", "a", "b", "d"]
+            ),
+            "mixed": pd.Series(["b", 2, "a", 1, True], dtype=object),
+        }
+    )
+    reversed_frame = frame.iloc[::-1].reset_index(drop=True)
+
+    schema = fit_schema(dataframe_columns(frame), categorical_features=None)
+    reversed_schema = fit_schema(
+        dataframe_columns(reversed_frame), categorical_features=None
+    )
+
+    # Strings sort, a categorical dtype keeps its declared order without unused
+    # categories, and mixed values group by type name: bool, int, then str.
+    assert schema.categories == (
+        ("apple", "fig", "pear"),
+        ("x", "y", "z"),
+        ("c", "a", "b"),
+        (True, 1, 2, "a", "b"),
+    )
+    assert reversed_schema.categories == schema.categories
+    assert reversed_schema.names_data(2) == schema.names_data(2)
+
+
+def test_permuted_training_rows_train_the_same_classifier() -> None:
+    from c50.sklearn import C50Classifier
+
+    rng = np.random.default_rng(7)
+    rows = 600
+    colors = np.asarray(["red", "green", "blue", "cyan", "gray", "pink"])
+    shapes = ["circle", "square", "star", "hex"]
+    color = colors[rng.integers(0, len(colors), rows)]
+    shape = np.asarray(shapes)[rng.integers(0, len(shapes), rows)]
+    size = rng.normal(size=rows)
+    y = np.where(
+        np.isin(color, ["red", "pink"]) ^ (shape == "star") ^ (size > 0.5),
+        "yes",
+        "no",
+    )
+    frame = pd.DataFrame(
+        {
+            "color": pd.Series(color, dtype=object),
+            "shape": pd.Categorical(shape, categories=shapes),
+            "size": size,
+        }
+    )
+
+    def body(X: pd.DataFrame, labels: np.ndarray) -> str:
+        model = C50Classifier(minimum_cases=1).fit(X, labels).model_
+        return model.serialized_data.split("\n", 1)[1]
+
+    reference = body(frame, y)
+    for seed in range(3):
+        order = np.random.default_rng(seed).permutation(rows)
+        permuted = frame.iloc[order].reset_index(drop=True)
+        assert body(permuted, y[order]) == reference

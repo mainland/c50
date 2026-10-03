@@ -87,12 +87,21 @@ columns with NumPy dtypes keep those dtypes, so numeric columns are encoded as
 quickly as a numeric NumPy array. Nullable numeric columns, such as `Int64`
 and `Float64`, are encoded the same way when their features are continuous.
 `category` and `string` columns are encoded from their codes, so each distinct
-value is examined once. Categories are still fitted in order of first
-occurrence, and prediction matches values rather than codes, so a prediction
-frame may order or extend its categories differently. Other columns, including
+value is examined once. Prediction matches values rather than codes, so a
+prediction frame may order or extend its categories differently. Other columns, including
 object columns, become object arrays and are encoded one value at a time.
 Empty and sparse DataFrames are converted as whole arrays, so they raise the
 same errors as before.
+
+The order in which categories are declared to C5.0 can change the classifier,
+as {doc}`compatibility` describes. The estimator therefore derives the order
+from the training values, not from the order of the rows. A pandas `category`
+column keeps its dtype's order, without unused categories. Other categorical
+values are grouped by type, with types ordered by module and name, and sorted
+within each type. `categories_` lists each feature's categories in this order.
+Values of a type that cannot be sorted keep their order of first occurrence.
+On the OpenML adult data, four random permutations of the training rows each
+trained the same classifier as the original order.
 
 pandas is a test dependency, not a runtime requirement. The estimator uses CPU
 NumPy arrays and returns NumPy arrays. It declares `array_api_support=False`.
