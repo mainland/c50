@@ -1,13 +1,15 @@
 # Benchmarks
 
 The benchmark suite measures the released behavior of the library. It answers
-two questions:
+three questions:
 
 1. How does the library's `c5.0` program compare with the imported C5.0
    Release 2.07 program in time and peak memory, and do both programs write
    the same classifier?
 2. How does training time change with the number of split workers and with
    the tie order, and is the classifier the same for every worker count?
+3. How much time and memory does the scikit-learn estimator `C50Classifier`
+   add to the low-level interface, and does it predict the same classes?
 
 `run.py` runs a suite and writes one JSON result. `report.py` renders a result
 as Markdown tables.
@@ -30,6 +32,24 @@ The recorded time covers only the `train` call, which parses the data text and
 trains the classifier. Each worker count must produce the same classifier. The
 stable tie order may produce a classifier that differs from the reference
 order, and the result records whether it does.
+
+The estimator measurements compare `C50Classifier` with the low-level
+interface on the comparison datasets, alternating the two in successive
+repetitions, each in a fresh process. The low-level run times `c50.train` on
+the data text and then `Model.predict_details` on the same text. The estimator
+run reads the files into a DataFrame with pandas categorical columns, which
+is not timed, and then times `fit` with `categorical_features="from_dtype"`
+and `predict_proba` on the training rows. `fit` includes the DataFrame
+conversion, encoding, training, and the attribute-usage pass behind
+`feature_importances_`. Peak memory covers the whole process, including the
+input. Both interfaces must predict the same class for every training case.
+
+The DataFrame gives each categorical column the values that the `.names`
+file declares, in the same order, and `C50Classifier` keeps a categorical
+dtype's order. Both interfaces therefore declare the same values in the same
+order. This matters because C5.0 can build a different classifier when the
+same values are declared in another order, as `docs/compatibility.md`
+describes.
 
 Every result records the source commit, the release tag when a clean checkout
 of exactly one tag was measured, the compiler and the command that compiled a
