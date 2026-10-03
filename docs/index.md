@@ -13,6 +13,7 @@ quickstart
 tutorial
 estimator
 large-datasets
+performance
 building-testing
 ownership-concurrency
 model-inspection

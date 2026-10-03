@@ -12,7 +12,7 @@ three questions:
    add to the low-level interface, and does it predict the same classes?
 
 `run.py` runs a suite and writes one JSON result. `report.py` renders a result
-as Markdown tables.
+as the tables in `docs/performance.md`.
 
 ## Measurements
 
@@ -115,9 +115,21 @@ contention.
 
 ## Results
 
-`report.py` renders a result as Markdown tables. With `--update PAGE`, it
-replaces the text between the page's two generated-results marker comments.
-With `--check PAGE`, it fails when that text differs from the result.
+Retained results are under `benchmarks/results/`. Each release documents one
+result in `docs/performance.md`. After running the release suite, regenerate the
+page's tables:
+
+```sh
+python benchmarks/report.py benchmarks/results/release.json \
+    --update docs/performance.md
+```
+
+Check that the page still matches the retained result with `--check`:
+
+```sh
+python benchmarks/report.py benchmarks/results/release.json \
+    --check docs/performance.md
+```
 
 ## Interpretation
 
