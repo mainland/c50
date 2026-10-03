@@ -98,6 +98,6 @@ serial.
 
 The release benchmark suite trains the scale-target workload, a synthetic
 dataset with 1,000,000 rows and 100 attributes, and two public datasets with
-both this library and the imported C5.0 program. See the repository's
-`benchmarks/README.md` for the datasets, the measurement protocol, and the
-commands.
+both this library and the imported C5.0 program. {doc}`performance` reports
+the results. See the repository's `benchmarks/README.md` for the datasets, the
+measurement protocol, and the commands.

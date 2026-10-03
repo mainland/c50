@@ -9,6 +9,8 @@ Usage:
 The page holds the generated text between two marker comments. ``--update``
 replaces it, ``--check`` fails when it differs from the results, and without
 an option the text is printed.
+Before a release result exists, ``--check`` accepts only the unchanged
+no-results placeholder.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from typing import Any
 
 BEGIN = "<!-- begin generated benchmark results -->"
 END = "<!-- end generated benchmark results -->"
+PENDING = "No release result has been retained yet.\n"
 REPOSITORY = Path(__file__).resolve().parents[1]
 MIB = 1024 * 1024
 
@@ -185,6 +188,13 @@ def main(argv: list[str]) -> int:
     action.add_argument("--update", type=Path, metavar="PAGE")
     action.add_argument("--check", type=Path, metavar="PAGE")
     args = parser.parse_args(argv)
+    if args.check and not args.results.exists():
+        page = args.check.read_text()
+        if replace_block(page, PENDING) == page:
+            print(f"{args.check}: no release result has been retained yet")
+            return 0
+        print(f"{args.results} is missing but {args.check} reports results", file=sys.stderr)
+        return 1
     results = json.loads(args.results.read_text())
     try:
         path = args.results.resolve().relative_to(REPOSITORY).as_posix()

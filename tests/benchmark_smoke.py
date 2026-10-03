@@ -57,6 +57,21 @@ def main() -> None:
         assert "an unreported CPU" in portable_report
         assert "frequency governor" not in portable_report
         assert "GiB of memory" not in portable_report
+        pending = scratch_path / "pending.md"
+        pending.write_text(
+            "<!-- begin generated benchmark results -->\n\n"
+            "No release result has been retained yet.\n\n"
+            "<!-- end generated benchmark results -->\n"
+        )
+        pending_check = [sys.executable, str(REPOSITORY / "benchmarks/report.py"),
+                         str(scratch_path / "missing.json"), "--check", str(pending)]
+        subprocess.run(pending_check, check=True, capture_output=True, text=True)
+        pending.write_text(pending.read_text().replace(
+            "No release result has been retained yet.", "Measured results are here."
+        ))
+        stale = subprocess.run(pending_check, capture_output=True, text=True)
+        assert stale.returncode == 1
+        assert "is missing" in stale.stderr
 
     assert result["format_version"] == 2
     assert result["suite"] == "smoke"
