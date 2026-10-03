@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import math
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from numbers import Integral, Real
 from typing import Any, Literal, TypeAlias, cast
 
@@ -438,15 +440,23 @@ def _infer_coded_categorical(column: CodedColumn) -> bool:
 
 def _fit_coded(column: CodedColumn, feature_index: int) -> FeatureSchema:
     categories: list[object] = []
-    lookup: dict[CategoryKey, int] = {}
-    # Codes of an ordered dtype follow its category order, which C5.0 needs.
+    keys: dict[CategoryKey, int] = {}
+    # The codes of a pandas categorical dtype follow its category order, which
+    # an ordered attribute needs and an unordered one keeps. Other coded
+    # columns, such as strings, are sorted like object columns.
     codes = (
         np.unique(column.codes[column.codes >= 0])
-        if column.ordered
+        if column.categorical_dtype
         else column.present_codes()
     )
     for code in codes:
-        _add_category(categories, lookup, column.value(code), feature_index)
+        _add_category(categories, keys, column.value(code), feature_index)
+    if not column.categorical_dtype:
+        categories = _canonical_order(categories)
+    lookup = {
+        _category_key(value, feature_index): index
+        for index, value in enumerate(categories)
+    }
     declared: frozenset[CategoryKey] = frozenset()
     if column.categorical_dtype:
         declared = frozenset(
@@ -570,13 +580,18 @@ def _fit_categories(
     feature_index: int,
 ) -> tuple[tuple[object, ...], dict[CategoryKey, int]]:
     categories: list[object] = []
-    lookup: dict[CategoryKey, int] = {}
+    keys: dict[CategoryKey, int] = {}
     for raw_value in column:
         if _is_missing(raw_value):
             continue
         _add_category(
-            categories, lookup, _normalize_scalar(raw_value), feature_index
+            categories, keys, _normalize_scalar(raw_value), feature_index
         )
+    categories = _canonical_order(categories)
+    lookup = {
+        _category_key(value, feature_index): index
+        for index, value in enumerate(categories)
+    }
     return tuple(categories), lookup
 
 
@@ -586,15 +601,92 @@ def _add_category(
     value: object,
     feature_index: int,
 ) -> None:
-    """Append a category unless an equal one is already present.
+    """Append a category, or keep the preferred form of an equal one.
 
-    Equal numbers of different types share a key, so the first of them
-    stays.
+    Real numbers other than `bool` share a key when they are equal, whatever
+    their types, so `1` and `1.0` are one category. Any other value shares a
+    key only with an equal value of its own type. In particular, `1` and
+    `Decimal(1)` are separate categories, because `Decimal` is not a
+    `numbers.Real`, and `True` and `1` are separate.
+
+    The stored form of a category must not depend on which equal value occurs
+    first for these types. An `int` replaces an equal `float`, and other ties
+    between real types go to the type with the smaller module and qualified
+    name. Negative zero is stored as positive zero, because it equals zero and
+    its sign would otherwise depend on which occurs first. Equal `Decimal` and
+    `complex` values can differ in form, such as `Decimal("1.0")` and
+    `Decimal("1")`, so the form with the shortest `repr` is kept, and the
+    smaller one among equal lengths.
+
+    Every other type keeps the form of its first occurrence, so `categories_`
+    can depend on row order for it. Equal aware `datetime` values in different
+    time zones, and the tuples `(1,)` and `(1.0,)`, are examples. The
+    classifier and its predictions do not depend on the stored form.
     """
+    if isinstance(value, (float, np.floating)) and value == 0:
+        value = type(value)(0)
     key = _category_key(value, feature_index)
-    if key not in keys:
+    position = keys.get(key)
+    if position is None:
         keys[key] = len(categories)
         categories.append(value)
+    else:
+        stored = categories[position]
+        if type(value) is not type(stored):
+            preferred = _representative_rank(value) < _representative_rank(
+                stored
+            )
+        else:
+            preferred = isinstance(value, (Decimal, complex)) and _form_rank(
+                value
+            ) < _form_rank(stored)
+        if preferred:
+            categories[position] = value
+
+
+def _representative_rank(value: object) -> tuple[bool, str, str]:
+    kind = type(value)
+    return (
+        not isinstance(value, Integral),
+        kind.__module__,
+        kind.__qualname__,
+    )
+
+
+def _form_rank(value: object) -> tuple[int, str]:
+    form = repr(value)
+    return len(form), form
+
+
+def _canonical_order(categories: list[object]) -> list[object]:
+    """Order distinct categories independently of the training rows.
+
+    C5.0 can build a different classifier when the same discrete values are
+    declared in another order, so the declared order must not depend on the
+    order of the rows. Values are grouped by type, with types ordered by module
+    and qualified name, and sorted within each type. Real numbers other than
+    `bool` form one group, ordered as `float`, because they match by value.
+    Every other type is its own group, so `Decimal(1)` and `1` sort in
+    different groups. Values of a type that cannot be sorted, because comparing
+    them raises an exception, keep their order of first occurrence.
+    """
+    groups: dict[type[object], list[object]] = {}
+    for value in categories:
+        groups.setdefault(_category_group(value), []).append(value)
+    ordered: list[object] = []
+    for kind in sorted(
+        groups, key=lambda kind: (kind.__module__, kind.__qualname__)
+    ):
+        group = groups[kind]
+        # Sorting is a best-effort normalization, and a type's comparison may
+        # raise any exception: TypeError, ArithmeticError as
+        # decimal.InvalidOperation does, or ValueError as pandas 2.2 does for
+        # Period values of different frequencies. Any failure means that the
+        # group cannot be sorted, so it keeps its order of first occurrence.
+        with contextlib.suppress(Exception):
+            group = sorted(cast(list[Any], group))
+        ordered.extend(group)
+    return ordered
 
 
 def _check_continuous_range(
@@ -756,6 +848,10 @@ def _is_missing(value: object) -> bool:
     if isinstance(value, (str, bytes)):
         # np.isnan() would reject these by raising, at a much higher cost.
         return False
+    if isinstance(value, Decimal):
+        # np.isnan() rejects Decimal. is_nan() is true for quiet and signaling
+        # NaNs, and unlike a comparison it does not raise for either.
+        return value.is_nan()
     if type(value).__module__.startswith("pandas."):
         # Only pandas creates these values, so it is already imported.
         missing = sys.modules["pandas"].isna(value)
