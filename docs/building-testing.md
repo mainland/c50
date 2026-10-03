@@ -6,38 +6,31 @@ The native API requires C++17. Installed consumers are compiled as C++17 and
 C++20. The Python package requires Python 3.10 or newer. The estimator's
 minimum dependencies are joblib 1.3, NumPy 1.26, and scikit-learn 1.6.
 
-| Target | Compiler or dependencies | Validation status |
-| --- | --- | --- |
-| Linux x86-64 | GCC 13, Clang 18 | Locally validated native, installed-consumer, and sanitizer checks |
-| Linux x86-64, Python 3.12 | NumPy 2.x, scikit-learn 1.9 | Locally validated Python and type checks |
-| Linux ARM64 | GCC on `ubuntu-24.04-arm` | Hosted native and installed-consumer checks passed at `ff5b953` |
-| macOS ARM64 | AppleClang on `macos-14` | Hosted native and installed-consumer checks passed at `ff5b953` |
-| Linux x86-64, Python 3.10 | NumPy 1.26.4, pandas 2.2.3, scikit-learn 1.6.1 | Locally validated installed package, runtime tests, and typing |
-| Linux x86-64, Python 3.11 | NumPy 2.4.6, scikit-learn 1.9.1 | Locally validated installed package, runtime tests, and typing |
-| Linux x86-64, Python 3.13 and 3.14 | NumPy 2.5.3, scikit-learn 1.9.1 | Locally validated installed wheels, runtime tests, and typing |
-| Windows x86-64, Python 3.12 | MSVC 19.44 on `windows-2022` | Hosted native, installed-consumer, shell regression, and Python checks passed |
+The workflows in `.github/workflows` validate each supported target, and the
+repository's [Actions page](https://github.com/mainland/c50/actions) shows
+their current results.
 
-The [hosted validation run at `ff5b953`](https://github.com/mainland/c50/actions/runs/36495390708)
-passed native checks with GCC and Clang on Linux x86-64, GCC on Linux ARM64,
-and AppleClang on macOS ARM64. It also passed all four Python dependency
-configurations and the AFL++ seed replay. The
-[hosted sanitizer run at `ff5b953`](https://github.com/mainland/c50/actions/runs/36495390702)
-passed the address, undefined-behavior, and leak configuration and the
-ThreadSanitizer configuration. The macOS build previously failed because its
-math library does not provide `finite()`. Those calls now use C++
-`std::isfinite`. Free-threaded Python, GPU arrays, and other compiler or
-platform combinations are unverified.
-The Linux-only allocation-injection and ELF writable-global inventory checks
-are omitted on macOS and Windows. Portable contract and installed-consumer tests
-still run.
+| Target | Compiler or dependencies | Workflow and job | Checks |
+| --- | --- | --- | --- |
+| Linux x86-64 | GCC and Clang on `ubuntu-24.04` | `validation.yml`, `native` | Native build, CTest, and installed consumers. With GCC, also the Make workflows and verbose diagnostics. |
+| Linux x86-64 | Clang | `sanitizers.yml`, `native` | CTest under AddressSanitizer with leak detection and UndefinedBehaviorSanitizer |
+| Linux x86-64 | GCC | `sanitizers.yml`, `native` | CTest under ThreadSanitizer |
+| Linux x86-64 | AFL++ `afl-clang-lto` | `sanitizers.yml`, `afl-seed-replay` | Replay of the checked-in fuzz seeds |
+| Linux ARM64 | GCC on `ubuntu-24.04-arm` | `validation.yml`, `native` | Native build, CTest, and installed consumers |
+| macOS ARM64 | AppleClang on `macos-14` | `validation.yml`, `native` | Native build, CTest, and installed consumers |
+| Windows x86-64 | MSVC on `windows-2022`, Python 3.12 | `validation.yml`, `windows` | Native build, CTest, installed consumers, and Python tests |
+| Python 3.10 | joblib 1.3.0, NumPy 1.26.4, pandas 2.2.3, scikit-learn 1.6.1 | `validation.yml`, `python-and-docs` | Python tests, mypy, stubtest, and the benchmark smoke test |
+| Python 3.11 through 3.14 | Latest releases | `validation.yml`, `python-and-docs` | As for Python 3.10. Python 3.12 also runs the tutorial test and builds the documentation. |
+| Wheels for CPython 3.10 through 3.14 | Linux x86-64 and ARM64, macOS arm64 and x86-64, Windows AMD64 | `wheels.yml`, `wheels` | Build from the source distribution and test each wheel |
 
-A [hosted Windows run](https://github.com/mainland/c50/actions/runs/36728151998) built the library, programs, and Python package
-with MSVC at warning level 4 and passed all 18 CTest tests and the Python test
-suite. The reference-compatibility digests and the CLI, report, and prediction
-fixtures matched without Windows-specific exceptions. MSVC still reports about
-250 warnings, mostly narrowing conversions in the imported sources. The
-Windows job does not build the optional Catch2 benchmarks, so it does not run
-the parallel-workload equivalence test.
+Free-threaded Python, GPU arrays, and other compiler or platform combinations
+are not tested. The Linux-only allocation-injection and ELF writable-global
+inventory checks are omitted on macOS and Windows, where the portable contract
+and installed-consumer tests still run. The Windows job treats level-4
+warnings as errors, except C4244, C4267, and C4305, which report the implicit
+narrowing conversions that the imported sources use to store values as float.
+The Windows job does not build the optional Catch2 benchmarks, so it does not
+run the parallel-workload equivalence test.
 
 Native CI configures a C++14 project default to verify that each target declares
 its own C++17 requirement. The platform labels follow the
