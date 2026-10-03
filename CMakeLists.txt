@@ -478,7 +478,10 @@ if(C50_ENABLE_THREAD_SANITIZER)
     endif()
 endif()
 
-if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+# -ffloat-store affects only x87 arithmetic, which keeps excess precision in
+# registers. 64-bit targets evaluate at the declared precision, so the flag is
+# kept only for 32-bit GCC builds, as the imported Makefile used it.
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_SIZEOF_VOID_P EQUAL 4)
     foreach(target IN LISTS C50_COMPILE_TARGETS)
         target_compile_options(${target} PRIVATE -ffloat-store)
     endforeach()

@@ -7,7 +7,10 @@
 
 
 CC	= gcc
-CXX	= g++ -ffloat-store
+#	-ffloat-store affects only x87 arithmetic. 64-bit targets evaluate at
+#	the declared precision, so only 32-bit builds keep it.
+POINTER_SIZE := $(shell echo __SIZEOF_POINTER__ | g++ -E -P -x c++ - 2>/dev/null)
+CXX	= g++ $(if $(filter 8,$(POINTER_SIZE)),,-ffloat-store)
 CXXSTD = -std=c++17
 CXXTHREAD = -pthread
 CXXFLAGS = $(CXXSTD) $(CXXTHREAD) -g -Wall -DVerbOpt -O0
