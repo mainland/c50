@@ -94,46 +94,10 @@ eligible. The cross-worker regression test compares exact classifier digests
 across worker counts, including subset splits. Other training phases remain
 serial.
 
-## Reproducible measurement
+## Measurement
 
-The repository includes `benchmarks/large_dataset.py`. It reports workload
-parameters, platform information, elapsed and CPU time, peak-RSS checkpoints,
-serialized model size, and deterministic model and prediction digests as JSON.
-
-Start with a development-sized run:
-
-```sh
-python benchmarks/large_dataset.py \
-    --rows 100000 --features 50 --categorical-features 5
-```
-
-Then measure the target envelope on a machine with sufficient memory:
-
-```sh
-python benchmarks/large_dataset.py \
-    --rows 1000000 --features 100 --categorical-features 10 \
-    >large-dataset.json
-```
-
-Retain the exact command, Git commit, compiler, optimization level, and JSON
-result. Measure before changing split evaluation, sorting, or allocation
-behavior. An optimization is acceptable only when the compatibility suite and
-dense/text differential tests still pass.
-
-Run the isolated smoke matrix while developing instrumentation or ownership
-changes:
-
-```sh
-python benchmarks/run_matrix.py --profile smoke >benchmark-matrix.json
-```
-
-The `standard` profile adds two medium workloads. The `large` profile also runs
-the million-row target envelope and is intended for deliberate baseline runs,
-not routine tests.
-
-For native CPU and allocation profiles, configure with
-`C50_BUILD_BENCHMARKS=ON` and use `c50-native-workload`. This removes Python,
-NumPy, and scikit-learn allocations from the profile while retaining the public
-dense training path. The native generator is deterministic but differs from
-the Python generator, so its model hashes form a separate baseline. See
-`benchmarks/README.md` for the Catch2, `perf`, and Heaptrack commands.
+The release benchmark suite trains the scale-target workload, a synthetic
+dataset with 1,000,000 rows and 100 attributes, and two public datasets with
+both this library and the imported C5.0 program. {doc}`performance` reports
+the results. See the repository's `benchmarks/README.md` for the datasets, the
+measurement protocol, and the commands.
