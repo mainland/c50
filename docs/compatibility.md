@@ -89,6 +89,23 @@ tie-breaking differences.
 Each training operation starts from the state of a fresh C5.0 process, so
 reusing a context does not change the classifier.
 
+## Order of discrete values
+
+The order in which a `.names` file declares the values of a discrete attribute
+can change the classifier, in this library and in C5.0 Release 2.07. C5.0
+partitions cases among the branches of a discrete test in declaration order.
+Cases with a missing value contribute fractional weights to every branch, and
+the declaration order sets the order of the single-precision sums of those
+weights. When two class frequencies at a leaf are equal apart from rounding,
+the order decides which class the leaf predicts. Branch compression then groups
+that branch with different values.
+
+On the OpenML adult data, the same cases with two declaration orders produced
+trees that predicted 2 of 48,842 training cases differently. Three random
+permutations of the data rows, with the declaration order fixed, produced
+identical classifiers. Keep the `.names` file unchanged when a classifier must
+be reproduced.
+
 ## Winnowing with case weights
 
 This project deliberately differs from C5.0 Release 2.07 when it winnows data
