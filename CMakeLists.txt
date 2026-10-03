@@ -529,7 +529,10 @@ if(C50_ENABLE_THREAD_SANITIZER)
     endif()
 endif()
 
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+# -ffloat-store affects only x87 arithmetic, which keeps excess precision in
+# registers. 64-bit targets evaluate at the declared precision, so the flag is
+# kept only for 32-bit GCC builds, as the imported Makefile used it.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_SIZEOF_VOID_P EQUAL 4)
     foreach(target IN LISTS C50_COMPILE_TARGETS)
         target_compile_options(${target} PRIVATE -ffloat-store)
     endforeach()
@@ -682,6 +685,13 @@ if(BUILD_TESTING)
             ${C50_TEST_SHELL_COMMAND}
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_makefile_headers.sh"
     )
+    add_test(
+        NAME makefile-float-store
+        COMMAND
+            ${C50_TEST_SHELL_COMMAND}
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_makefile_float_store.sh"
+    )
+    set_tests_properties(makefile-float-store PROPERTIES SKIP_RETURN_CODE 77)
     add_test(
         NAME cli-regression
         COMMAND
