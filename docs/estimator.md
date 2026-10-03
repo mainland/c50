@@ -53,6 +53,7 @@ categories as unordered. C5.0 treats an ordered attribute with fewer than three
 categories in the training data as unordered.
 
 `None`, numeric NaN, `pd.NA`, and `pd.NaT` represent missing feature values.
+A `Decimal` NaN, quiet or signaling, is missing like any other numeric NaN.
 Infinite continuous values, and finite values beyond the single-precision
 range of about 3.4e38, are rejected with a `ValueError` that names the feature
 and, for numeric columns, the first row. C5.0 stores continuous values as
@@ -65,15 +66,29 @@ Such categories are not in `categories_` and do not change the classifier, so
 a filtered DataFrame that keeps unused categories trains the same classifier
 as one without them.
 
-Categories match by value. An integer category matches an equal float, so a
-model fitted on an integer column accepts the float column that results when
-a missing value promotes the column to `float64`, and the reverse. An object
-column that holds `1` and `1.0` declares one category. `True` and `1` stay
-distinct, as do strings and numbers. A
-`float32` value converts to the double with the same value, so it matches a
-fitted `float64` category only when the two are equal as doubles. `0.5`
-matches, while `float32(0.1)` does not match `0.1`. A model fitted on
-`float32` data matches `float32` values and the equal doubles.
+Real numbers match by value, and other values match only equal values of
+their own type. An integer category matches an equal float, so a model fitted
+on an integer column accepts the float column that results when a missing
+value promotes the column to `float64`, and the reverse. An object column that
+holds `1` and `1.0` declares one category, and `categories_` keeps the `int`
+form. `Fraction(1)` joins them, because `Fraction` is a real number. `True`
+and `1` stay distinct, as do strings and numbers. `Decimal` and `complex` are
+not real numbers in this sense, so `Decimal(1)` is a separate category from
+`1`, and a model fitted on the integers 1 and 2 rejects `Decimal(1)` as unseen
+under `unknown_categories="error"`. Equal `Decimal` values, and equal `complex`
+values, form one category whose `categories_` entry has a canonical form, such
+as `Decimal("1")` for `Decimal("1.0")`. A `float32` value converts to the
+double with the same value, so it matches a fitted `float64` category only
+when the two are equal as doubles. `0.5` matches, while `float32(0.1)` does not
+match `0.1`. A model fitted on `float32` data matches `float32` values and the
+equal doubles.
+
+Values of any other type keep the form of their first occurrence in
+`categories_`. Equal aware `datetime` values in different time zones, such as
+12:00 UTC and 14:00 at UTC+2, are one category, and `categories_` and the value
+names in `export_text` show the form that occurs first in the training rows.
+The same holds for the tuples `(1,)` and `(1.0,)`. The classifier and its
+predictions do not depend on the form.
 
 Dates and durations are categorical in every unit. NumPy converts most units
 to Python objects when it converts an array to `object`, and the categories are
@@ -123,15 +138,25 @@ Nullable pandas columns need no conversion because `pd.NA` is a missing value.
 
 The estimator converts a DataFrame one column at a time. Numeric and Boolean
 columns with NumPy dtypes keep those dtypes, so numeric columns are encoded as
-quickly as a numeric NumPy array. Nullable numeric columns, such as `Int64`
-and `Float64`, are encoded the same way when their features are continuous.
+quickly as a numeric NumPy array. Nullable numeric columns, such as `Int64` and
+`Float64`, are encoded the same way when their features are continuous.
 `category` and `string` columns are encoded from their codes, so each distinct
-value is examined once. Categories are still fitted in order of first
-occurrence, and prediction matches values rather than codes, so a prediction
-frame may order or extend its categories differently. Other columns, including
-object columns, become object arrays and are encoded one value at a time.
-Empty and sparse DataFrames are converted as whole arrays, so they raise the
-same errors as before.
+value is examined once. Prediction matches values rather than codes, so a
+prediction frame may order or extend its categories differently. Other columns,
+including object columns, become object arrays and are encoded one value at a
+time. Empty and sparse DataFrames are converted as whole arrays, so they raise
+the same errors as before.
+
+The order in which categories are declared to C5.0 can change the classifier,
+as {doc}`compatibility` describes. The estimator therefore derives the order
+from the training values, not from the order of the rows. A pandas `category`
+column keeps its dtype's order, without unused categories. Other categorical
+values are grouped by type, with types ordered by module and name, and sorted
+within each type. All real numbers other than `bool` form one group, so `int`
+and `float` values sort together. `categories_` lists each feature's categories
+in this order. Values of a type that cannot be sorted keep their order of first
+occurrence. On the OpenML adult data, four random permutations of the training
+rows each trained the same classifier as the original order.
 
 pandas is a test dependency, not a runtime requirement. The estimator uses CPU
 NumPy arrays and returns NumPy arrays. It declares `array_api_support=False`.
