@@ -171,10 +171,6 @@ Run the same regression tests through CTest with:
 ctest --test-dir build --output-on-failure
 ```
 
-Optional Catch2 3.x sort-correctness tests and a profiling workload are
-enabled with `-DC50_BUILD_BENCHMARKS=ON`. See the [benchmark guide](https://github.com/mainland/c50/blob/main/benchmarks/README.md)
-for the `perf` and Heaptrack workflows.
-
 Configure an AddressSanitizer and UndefinedBehaviorSanitizer build with:
 
 ```sh

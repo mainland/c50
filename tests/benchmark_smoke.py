@@ -1,73 +1,102 @@
 #!/usr/bin/env python3
-"""Validate the benchmark schema and deterministic workload digests."""
+"""Run the benchmark smoke suite and check its result and report.
+
+The suite builds the command-line program from this checkout and trains
+with the installed or ``PYTHONPATH`` c50 package, so it needs CMake, a C++
+compiler, NumPy, pandas, and scikit-learn. It runs on POSIX systems only.
+"""
 
 from __future__ import annotations
 
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
-from typing import Any
 
-
-def run_smoke_matrix(repository: Path) -> dict[str, Any]:
-    """Run and parse the isolated smoke matrix.
-
-    Args:
-        repository: Repository root containing the benchmark scripts.
-
-    Returns:
-        Parsed matrix result.
-    """
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(repository / "benchmarks" / "run_matrix.py"),
-            "--profile",
-            "smoke",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    result: dict[str, Any] = json.loads(completed.stdout)
-    return result
+REPOSITORY = Path(__file__).resolve().parents[1]
 
 
 def main() -> None:
-    """Require stable digests and ordered resource checkpoints."""
-    repository = Path(__file__).resolve().parents[1]
-    first = run_smoke_matrix(repository)
-    second = run_smoke_matrix(repository)
+    with tempfile.TemporaryDirectory(prefix="c50-benchmark-smoke-") as scratch:
+        scratch_path = Path(scratch)
+        output = scratch_path / "results" / "smoke.json"
+        subprocess.run(
+            [
+                sys.executable,
+                str(REPOSITORY / "benchmarks" / "run.py"),
+                "--suite",
+                "smoke",
+                "--installed-python",
+                "--allow-dirty",
+                "--jobs",
+                "2",
+                "--cache",
+                str(scratch_path / "cache"),
+                "--work",
+                str(scratch_path / "work"),
+                "--output",
+                str(output),
+            ],
+            check=True,
+        )
+        result = json.loads(output.read_text())
+        report = subprocess.run(
+            [sys.executable, str(REPOSITORY / "benchmarks" / "report.py"), str(output)],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        portable = scratch_path / "portable.json"
+        result["machine"].update(cpu=None, cpu_governor=None, memory_bytes=None)
+        portable.write_text(json.dumps(result))
+        portable_report = subprocess.run(
+            [sys.executable, str(REPOSITORY / "benchmarks/report.py"), str(portable)],
+            check=True, capture_output=True, text=True,
+        ).stdout
+        assert "an unreported CPU" in portable_report
+        assert "frequency governor" not in portable_report
+        assert "GiB of memory" not in portable_report
+        pending = scratch_path / "pending.md"
+        pending.write_text(
+            "<!-- begin generated benchmark results -->\n\n"
+            "No release result has been retained yet.\n\n"
+            "<!-- end generated benchmark results -->\n"
+        )
+        pending_check = [sys.executable, str(REPOSITORY / "benchmarks/report.py"),
+                         str(scratch_path / "missing.json"), "--check", str(pending)]
+        subprocess.run(pending_check, check=True, capture_output=True, text=True)
+        pending.write_text(pending.read_text().replace(
+            "No release result has been retained yet.", "Measured results are here."
+        ))
+        stale = subprocess.run(pending_check, capture_output=True, text=True)
+        assert stale.returncode == 1
+        assert "is missing" in stale.stderr
 
-    assert first["matrix_profile"] == "smoke"
-    assert len(first["workloads"]) == 1
-    first_workload = first["workloads"][0]
-    second_workload = second["workloads"][0]
-    assert first_workload["model"]["stable_serialized_sha256"] == (
-        second_workload["model"]["stable_serialized_sha256"]
-    )
-    assert first_workload["workload"]["prediction_sha256"] == (
-        second_workload["workload"]["prediction_sha256"]
-    )
-
-    samples = first_workload["operation_wall_seconds"]
-    assert {
-        "model_load", "serialized_string_copy", "empty_prediction",
-        "prediction_1_rows", "prediction_500_rows",
-    } <= samples.keys()
-    for values in samples.values():
-        assert len(values) == first_workload["workload"]["operation_repetitions"]
-        assert all(value >= 0 for value in values)
-
-    checkpoints = first_workload["resources"]["peak_rss_checkpoints_bytes"]
-    if all(value is not None for value in checkpoints.values()):
-        assert checkpoints["after_data_generation"] <= checkpoints["after_training"]
-        assert checkpoints["after_training"] <= checkpoints["after_prediction"]
-        assert checkpoints["after_prediction"] <= checkpoints["after_operations"]
-        assert first_workload["resources"]["peak_rss_bytes"] == checkpoints[
-            "after_operations"
-        ]
+    assert result["format_version"] == 2
+    assert result["suite"] == "smoke"
+    assert [c["classifier"] for c in result["comparisons"]] == ["tree", "rules", "boost"]
+    for comparison in result["comparisons"]:
+        assert comparison["same_classifier"], comparison["classifier"]
+        (sample,) = comparison["samples"]["c50"]
+        assert sample["wall_seconds"] > 0
+        assert sample["peak_rss_bytes"] > 0
+    assert [w["ties"] for w in result["workers"]] == ["reference", "stable"]
+    for scaling in result["workers"]:
+        assert scaling["same_classifier"], scaling["ties"]
+        assert sorted(scaling["samples"]) == ["1", "2"]
+    assert "| synthetic-2000x12-c2 (2,000 rows, 12 attributes, 3 classes) | tree |" in report
+    assert "### Split workers and tie order" in report
+    assert [e["classifier"] for e in result["estimator"]] == ["tree", "rules", "boost"]
+    for row in result["estimator"]:
+        assert row["same_predictions"], row["classifier"]
+        for interface in ("native", "estimator"):
+            (sample,) = row["samples"][interface]
+            assert sample["fit_seconds"] > 0
+            assert sample["predict_seconds"] > 0
+    assert "### Python estimator and low-level interface" in report
+    assert len(result["source"]["commit"]) == 40
+    assert result["source"]["commit"][:7] not in report
 
 
 if __name__ == "__main__":

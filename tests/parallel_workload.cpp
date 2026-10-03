@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <charconv>
-#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -35,7 +34,6 @@ struct configuration
     bool subsets = false;
     bool stable_ties = false;
     std::size_t value_levels = 0;
-    bool quiet = false;
 };
 
 class deterministic_generator
@@ -82,7 +80,7 @@ configuration parse_arguments(int argc, char **argv)
         if ( option == "--help" )
         {
             std::cout
-                << "Usage: c50-native-workload [OPTIONS]\n"
+                << "Usage: parallel-workload [OPTIONS]\n"
                 << "  --rows N                  Training rows (default 100000)\n"
                 << "  --features N              Feature columns (default 50)\n"
                 << "  --categorical-features N  Trailing categorical columns "
@@ -96,14 +94,8 @@ configuration parse_arguments(int argc, char **argv)
                 << "  --ties ORDER              Tie order: reference or stable "
                    "(default reference)\n"
                 << "  --value-levels N          Round continuous values to N "
-                   "levels (0 disables, default 0)\n"
-                << "  --quiet                   Suppress the JSON result\n";
+                   "levels (0 disables, default 0)\n";
             std::exit(0);
-        }
-        if ( option == "--quiet" )
-        {
-            config.quiet = true;
-            continue;
         }
         if ( option == "--subsets" )
         {
@@ -301,43 +293,32 @@ int run(const configuration &config)
     options.ties = config.stable_ties ? c50::tie_order::stable
                                       : c50::tie_order::reference;
 
-    const auto start = std::chrono::steady_clock::now();
     const auto model = c50::model::train(context, c50::model_kind::tree,
                                         names, dataset, options);
-    const auto finish = std::chrono::steady_clock::now();
     const std::size_t serialized_size = model.serialized_data().size();
-    const double seconds =
-        std::chrono::duration<double>(finish - start).count();
 
-    if ( ! config.quiet )
-    {
-        std::cout
-            << "{\n"
-            << "  \"model\": {\n"
-            << "    \"serialized_bytes\": " << serialized_size << ",\n"
-            << "    \"stable_fnv1a64\": \"" << std::hex
-            << std::setw(16) << std::setfill('0')
-            << stable_model_hash(model) << std::dec << "\"\n"
-            << "  },\n"
-            << "  \"timing_seconds\": {\n"
-            << "    \"training_wall\": " << std::setprecision(9)
-            << seconds << "\n"
-            << "  },\n"
-            << "  \"workload\": {\n"
-            << "    \"categories\": " << config.categories << ",\n"
-            << "    \"categorical_features\": "
-            << config.categorical_features << ",\n"
-            << "    \"features\": " << config.features << ",\n"
-            << "    \"rows\": " << config.rows << ",\n"
-            << "    \"seed\": " << config.seed << ",\n"
-            << "    \"split_workers\": " << config.split_workers << ",\n"
-            << "    \"subsets\": " << (config.subsets ? "true" : "false") << ",\n"
-            << "    \"ties\": \""
-            << (config.stable_ties ? "stable" : "reference") << "\",\n"
-            << "    \"value_levels\": " << config.value_levels << "\n"
-            << "  }\n"
-            << "}\n";
-    }
+    std::cout
+        << "{\n"
+        << "  \"model\": {\n"
+        << "    \"serialized_bytes\": " << serialized_size << ",\n"
+        << "    \"stable_fnv1a64\": \"" << std::hex
+        << std::setw(16) << std::setfill('0')
+        << stable_model_hash(model) << std::dec << "\"\n"
+        << "  },\n"
+        << "  \"workload\": {\n"
+        << "    \"categories\": " << config.categories << ",\n"
+        << "    \"categorical_features\": "
+        << config.categorical_features << ",\n"
+        << "    \"features\": " << config.features << ",\n"
+        << "    \"rows\": " << config.rows << ",\n"
+        << "    \"seed\": " << config.seed << ",\n"
+        << "    \"split_workers\": " << config.split_workers << ",\n"
+        << "    \"subsets\": " << (config.subsets ? "true" : "false") << ",\n"
+        << "    \"ties\": \""
+        << (config.stable_ties ? "stable" : "reference") << "\",\n"
+        << "    \"value_levels\": " << config.value_levels << "\n"
+        << "  }\n"
+        << "}\n";
     return 0;
 }
 
@@ -351,7 +332,7 @@ int main(int argc, char **argv)
     }
     catch ( const std::exception &error )
     {
-        std::cerr << "c50-native-workload: " << error.what() << '\n';
+        std::cerr << "parallel-workload: " << error.what() << '\n';
         return 1;
     }
 }

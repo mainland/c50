@@ -21,7 +21,6 @@ option(C50_ENABLE_THREAD_SANITIZER "Enable ThreadSanitizer" OFF)
 option(C50_BUILD_PYTHON "Build the Python extension module" OFF)
 option(C50_BUILD_DOCUMENTATION "Build the Doxygen API documentation" OFF)
 option(C50_BUILD_FUZZERS "Build AFL++ parser harnesses" OFF)
-option(C50_BUILD_BENCHMARKS "Build native correctness tests and benchmarks" OFF)
 
 if(C50_ENABLE_SANITIZERS AND C50_ENABLE_THREAD_SANITIZER)
     message(FATAL_ERROR "AddressSanitizer and ThreadSanitizer cannot be combined")
@@ -327,80 +326,36 @@ if(BUILD_TESTING)
     add_executable(c50_cpp_api tests/cpp_api.cpp)
     target_compile_features(c50_cpp_api PRIVATE cxx_std_17)
     target_link_libraries(c50_cpp_api PRIVATE C50::cpp)
-    list(
-        APPEND C50_COMPILE_TARGETS
-        c50_input_test
-        c50_output_test
-        c50_data_input_test
-        c50_reference_compatibility
-        c50_cpp_api
-    )
-    list(
-        APPEND C50_EXECUTABLE_TARGETS
-        c50_input_test
-        c50_output_test
-        c50_data_input_test
-        c50_reference_compatibility
-        c50_cpp_api
-    )
-endif()
-
-if(C50_BUILD_BENCHMARKS)
-    find_package(Catch2 3 CONFIG REQUIRED)
-
-    add_executable(c50_native_workload benchmarks/native_workload.cpp)
-    target_compile_features(c50_native_workload PRIVATE cxx_std_17)
-    target_link_libraries(c50_native_workload PRIVATE C50::core)
-    set_target_properties(
-        c50_native_workload
-        PROPERTIES OUTPUT_NAME c50-native-workload
-    )
-
-    add_executable(c50_native_benchmarks benchmarks/native_benchmarks.cpp)
-    target_compile_features(c50_native_benchmarks PRIVATE cxx_std_17)
+    add_executable(c50_sort_properties tests/sort_properties.cpp)
+    target_compile_features(c50_sort_properties PRIVATE cxx_std_17)
     target_include_directories(
-        c50_native_benchmarks
+        c50_sort_properties
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
-    target_link_libraries(
-        c50_native_benchmarks
-        PRIVATE C50::core Catch2::Catch2WithMain
-    )
-    set_target_properties(
-        c50_native_benchmarks
-        PROPERTIES OUTPUT_NAME c50-native-benchmarks
-    )
-
+    target_link_libraries(c50_sort_properties PRIVATE C50::core)
+    add_executable(c50_parallel_workload tests/parallel_workload.cpp)
+    target_compile_features(c50_parallel_workload PRIVATE cxx_std_17)
+    target_link_libraries(c50_parallel_workload PRIVATE C50::core)
     list(
         APPEND C50_COMPILE_TARGETS
-        c50_native_workload
-        c50_native_benchmarks
+        c50_input_test
+        c50_output_test
+        c50_data_input_test
+        c50_reference_compatibility
+        c50_cpp_api
+        c50_sort_properties
+        c50_parallel_workload
     )
     list(
         APPEND C50_EXECUTABLE_TARGETS
-        c50_native_workload
-        c50_native_benchmarks
+        c50_input_test
+        c50_output_test
+        c50_data_input_test
+        c50_reference_compatibility
+        c50_cpp_api
+        c50_sort_properties
+        c50_parallel_workload
     )
-
-    if(BUILD_TESTING)
-        add_test(
-            NAME native-sort-properties
-            COMMAND c50_native_benchmarks "[sort][property]"
-        )
-        add_test(
-            NAME native-workload-smoke
-            COMMAND c50_native_workload
-                    --rows 2000
-                    --features 12
-                    --categorical-features 2
-        )
-        add_test(
-            NAME parallel-workload-equivalence
-            COMMAND ${C50_TEST_SHELL_COMMAND}
-                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_parallel_workload.sh"
-                    "$<TARGET_FILE:c50_native_workload>"
-        )
-    endif()
 endif()
 
 install(
@@ -576,10 +531,19 @@ if(BUILD_TESTING)
     add_test(NAME operation-failure COMMAND c50_operation_failure)
     add_test(NAME cpp-api COMMAND c50_cpp_api)
     add_test(NAME cpp-contracts COMMAND c50_cpp_contracts)
+    add_test(NAME sort-properties COMMAND c50_sort_properties)
+    add_test(
+        NAME parallel-workload-equivalence
+        COMMAND ${C50_TEST_SHELL_COMMAND}
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_parallel_workload.sh"
+                "$<TARGET_FILE:c50_parallel_workload>"
+    )
     if(C50_BUILD_PYTHON)
         add_test(
             NAME python-api
-            COMMAND ${Python_EXECUTABLE} -m pytest
+            COMMAND ${Python_EXECUTABLE}
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_built_python.py"
+                    "${CMAKE_CURRENT_BINARY_DIR}/python" pytest
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/python"
         )
         set_tests_properties(
@@ -591,13 +555,15 @@ if(BUILD_TESTING)
         add_test(
             NAME benchmark-smoke
             COMMAND ${Python_EXECUTABLE}
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_built_python.py"
+                    "${CMAKE_CURRENT_BINARY_DIR}/python"
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmark_smoke.py"
         )
         set_tests_properties(
             benchmark-smoke
             PROPERTIES
                 ENVIRONMENT
-                    "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python"
+                    "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python;C50_BENCHMARK_MODULE_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}/python"
         )
         if(NOT C50_ENABLE_SANITIZERS AND NOT C50_ENABLE_THREAD_SANITIZER)
             add_test(
@@ -612,7 +578,9 @@ if(BUILD_TESTING)
             add_test(
                 NAME python-stubtest
                 COMMAND
-                    ${Python_EXECUTABLE} -m mypy.stubtest
+                    ${Python_EXECUTABLE}
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_built_python.py"
+                    "${CMAKE_CURRENT_BINARY_DIR}/python" mypy.stubtest
                     --allowlist
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/typing/stubtest-allowlist.txt"
                     c50._c50
