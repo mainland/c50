@@ -47,7 +47,7 @@ def yes_no(value: bool) -> str:
 
 def render(results: dict[str, Any], path: str) -> str:
     """Return the generated Markdown for one results file."""
-    if results["format_version"] != 1:
+    if results["format_version"] != 2:
         raise SystemExit(f"unsupported results format {results['format_version']}")
     datasets = {d["name"]: d for d in results["datasets"]}
     machine = results["machine"]
@@ -140,6 +140,32 @@ def render(results: dict[str, Any], path: str) -> str:
             + " | ".join(f"{t:.2f}" for t in times)
             + f" | {times[0] / times[-1]:.2f} | {yes_no(row['same_classifier'])} "
             f"| {same_as_reference} |"
+        )
+
+    lines += [
+        "",
+        "### Python estimator and low-level interface",
+        "",
+        "| Dataset | Classifier | c50.train, s | C50Classifier.fit, s | Fit ratio "
+        "| predict_details, s | predict_proba, s | c50.train peak, MiB "
+        "| C50Classifier peak, MiB | Same predictions |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for row in results["estimator"]:
+        native = row["samples"]["native"]
+        estimator = row["samples"]["estimator"]
+        native_fit = median(native, "fit_seconds")
+        estimator_fit = median(estimator, "fit_seconds")
+        lines.append(
+            f"| {dataset_label(datasets[row['dataset']])} "
+            f"| {classifier_label(row['classifier'], results['boost_trials'])} "
+            f"| {native_fit:.2f} | {estimator_fit:.2f} "
+            f"| {estimator_fit / native_fit:.2f} "
+            f"| {median(native, 'predict_seconds'):.2f} "
+            f"| {median(estimator, 'predict_seconds'):.2f} "
+            f"| {median(native, 'peak_rss_bytes') / MIB:,.0f} "
+            f"| {median(estimator, 'peak_rss_bytes') / MIB:,.0f} "
+            f"| {yes_no(row['same_predictions'])} |"
         )
     return "\n".join(lines) + "\n"
 

@@ -16,6 +16,9 @@ from typing import Any, Callable
 
 import numpy as np
 
+# Increase when the written files change, so that cached files are rewritten.
+WRITER_VERSION = 2
+
 # OpenML datasets: name, dataset ID, and version, which the ID fixes.
 OPENML = {
     "adult": (1590, 2),
@@ -77,6 +80,45 @@ class Dataset:
         }
 
 
+def load_frame(stem: Path) -> tuple[Any, Any]:
+    """Read prepared ``.names`` and ``.data`` files back as estimator input.
+
+    Discrete attributes become pandas categorical columns with the declared
+    values as categories, in declaration order, continuous attributes become
+    float64 columns, and ``?`` becomes a missing value. ``C50Classifier``
+    keeps a categorical dtype's order, so it declares the values to C5.0 in
+    the same order as the ``.names`` file.
+
+    Args:
+        stem: Path without suffix of a prepared dataset's files.
+
+    Returns:
+        The feature frame and an array of class tokens.
+    """
+    import pandas as pd
+
+    names = stem.with_suffix(".names").read_text().splitlines()
+    dtypes: dict[str, Any] = {}
+    for line in names[2:]:
+        attribute, _, rest = line.partition(":")
+        values = rest.split("|")[0].strip().rstrip(".")
+        if values == "continuous":
+            dtypes[attribute] = np.float64
+        else:
+            dtypes[attribute] = pd.CategoricalDtype(
+                [value.strip() for value in values.split(",")]
+            )
+    frame = pd.read_csv(
+        stem.with_suffix(".data"),
+        header=None,
+        names=[*dtypes, "class"],
+        dtype={**dtypes, "class": object},
+        na_values=["?"],
+        keep_default_na=False,
+    )
+    return frame.drop(columns="class"), frame["class"].to_numpy()
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -102,7 +144,9 @@ def _write(frame: Any, target: Any, stem: Path) -> tuple[int, int, int]:
     columns = {}
     lines = []
     classes = pd.Categorical(target)
-    lines.append(", ".join(f"c{i}" for i in range(len(classes.categories))) + ".")
+    width = len(str(len(classes.categories) - 1))
+    class_names = [f"c{i:0{width}}" for i in range(len(classes.categories))]
+    lines.append(", ".join(class_names) + ".")
     lines.append("")
     for index, (name, column) in enumerate(frame.items()):
         attribute = f"a{index}"
@@ -122,9 +166,7 @@ def _write(frame: Any, target: Any, stem: Path) -> tuple[int, int, int]:
             # Keep the column's dtype so float32 values print briefly.
             columns[attribute] = pd.to_numeric(column).to_numpy()
             lines.append(f"{attribute}: continuous.  | {name}")
-    columns["class"] = np.array(
-        [f"c{code}" for code in range(len(classes.categories))], dtype=object
-    )[classes.codes]
+    columns["class"] = np.array(class_names, dtype=object)[classes.codes]
     stem.parent.mkdir(parents=True, exist_ok=True)
     stem.with_suffix(".names").write_text("\n".join(lines) + "\n")
     pd.DataFrame(columns).to_csv(
@@ -192,12 +234,21 @@ def prepare(name: str | SyntheticSpec, cache: Path) -> Dataset:
     """
     if isinstance(name, SyntheticSpec):
         label = name.name
-        source: dict[str, Any] = {"kind": "synthetic", **name.__dict__}
+        source: dict[str, Any] = {
+            "kind": "synthetic",
+            "writer": WRITER_VERSION,
+            **name.__dict__,
+        }
         write = _synthetic(name)
     else:
         label = name
         data_id, version = OPENML[name]
-        source = {"kind": "openml", "data_id": data_id, "version": version}
+        source = {
+            "kind": "openml",
+            "data_id": data_id,
+            "version": version,
+            "writer": WRITER_VERSION,
+        }
         write = _openml(name, cache)
     stem = cache / "files" / label / label
     manifest = stem.with_suffix(".json")

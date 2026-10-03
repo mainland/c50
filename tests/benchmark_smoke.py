@@ -3,7 +3,7 @@
 
 The suite builds the command-line program from this checkout and trains
 with the installed or ``PYTHONPATH`` c50 package, so it needs CMake, a C++
-compiler, NumPy, and pandas. It runs on POSIX systems only.
+compiler, NumPy, pandas, and scikit-learn. It runs on POSIX systems only.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def main() -> None:
         assert "frequency governor" not in portable_report
         assert "GiB of memory" not in portable_report
 
-    assert result["format_version"] == 1
+    assert result["format_version"] == 2
     assert result["suite"] == "smoke"
     assert [c["classifier"] for c in result["comparisons"]] == ["tree", "rules", "boost"]
     for comparison in result["comparisons"]:
@@ -72,6 +72,14 @@ def main() -> None:
         assert sorted(scaling["samples"]) == ["1", "2"]
     assert "| synthetic-2000x12-c2 (2,000 rows, 12 attributes, 3 classes) | tree |" in report
     assert "### Split workers and tie order" in report
+    assert [e["classifier"] for e in result["estimator"]] == ["tree", "rules", "boost"]
+    for row in result["estimator"]:
+        assert row["same_predictions"], row["classifier"]
+        for interface in ("native", "estimator"):
+            (sample,) = row["samples"][interface]
+            assert sample["fit_seconds"] > 0
+            assert sample["predict_seconds"] > 0
+    assert "### Python estimator and low-level interface" in report
     assert len(result["source"]["commit"]) == 40
     assert result["source"]["commit"][:7] not in report
 

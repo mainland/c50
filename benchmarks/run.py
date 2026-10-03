@@ -8,6 +8,8 @@ The suite answers two questions on the same input files:
   classifier?
 * How does training time change with the number of split workers and the
   tie order, and is the classifier the same for every worker count?
+* How much time and memory does ``C50Classifier`` add to low-level training
+  and prediction, and does it predict the same classes?
 
 The driver builds both programs itself, from the current checkout and from
 the canonical upstream archive, and records their provenance with every
@@ -37,7 +39,7 @@ from typing import Any, Sequence
 import datasets
 from datasets import Dataset, SyntheticSpec
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 REPOSITORY = Path(__file__).resolve().parents[1]
 ARCHIVE_SHA256 = "309db588eda420c06701bf8ae74c06a6c923e9a06e714a598ea761bcadfc5e2e"
 REFERENCE_CC = ["gcc", "-ffloat-store"]
@@ -507,6 +509,129 @@ def scale_workers(
     return results
 
 
+def labels_digest(labels: Sequence[str]) -> str:
+    """Hash predicted class labels in case order."""
+    return hashlib.sha256("\n".join(labels).encode()).hexdigest()
+
+
+def native_child(stem: Path, kind: str, trials: int) -> None:
+    """Train and predict once through the low-level interface, and print the
+    timings as JSON."""
+    c50 = import_c50()
+
+    names_text = stem.with_suffix(".names").read_text()
+    data_text = stem.with_suffix(".data").read_text()
+    options = c50.Options()
+    options.trials = trials
+    model_kind = c50.ModelKind.RULES if kind == "rules" else c50.ModelKind.TREE
+    start = time.perf_counter()
+    model = c50.train(names_text, data_text, model_kind, options)
+    fit_seconds = time.perf_counter() - start
+    start = time.perf_counter()
+    details = model.predict_details(data_text)
+    predict_seconds = time.perf_counter() - start
+    print(
+        json.dumps(
+            {
+                "fit_seconds": fit_seconds,
+                "predict_seconds": predict_seconds,
+                "predictions_sha256": labels_digest(details.labels),
+                "python_module_sha256": module_digest(c50),
+            }
+        )
+    )
+
+
+def estimator_child(stem: Path, kind: str, trials: int) -> None:
+    """Fit and predict once with ``C50Classifier`` on a DataFrame, and print
+    the timings as JSON."""
+    c50 = import_c50()
+    from c50.sklearn import C50Classifier
+
+    X, y = datasets.load_frame(stem)
+    classifier = C50Classifier(
+        model_kind="rules" if kind == "rules" else "tree",
+        trials=trials,
+        categorical_features="from_dtype",
+        n_jobs=1,
+    )
+    start = time.perf_counter()
+    classifier.fit(X, y)
+    fit_seconds = time.perf_counter() - start
+    start = time.perf_counter()
+    classifier.predict_proba(X)
+    predict_seconds = time.perf_counter() - start
+    labels = [str(label) for label in classifier.predict(X)]
+    print(
+        json.dumps(
+            {
+                "fit_seconds": fit_seconds,
+                "predict_seconds": predict_seconds,
+                "predictions_sha256": labels_digest(labels),
+                "python_module_sha256": module_digest(c50),
+            }
+        )
+    )
+
+
+def compare_interfaces(
+    suite: Suite,
+    comparison: Comparison,
+    dataset: Dataset,
+    library: dict[str, Any],
+    work: Path,
+) -> list[dict[str, Any]]:
+    """Alternate the low-level interface and the estimator on one dataset.
+
+    Each sample runs in a fresh process, so its peak memory includes Python,
+    the imported modules, and the input that the interface reads: the data
+    text for ``c50.train`` and a DataFrame for ``C50Classifier``.
+    """
+    env = dict(os.environ)
+    if library["python_path"] is not None:
+        env[MODULE_DIRECTORY] = str(library["python_path"])
+    interfaces = ("native", "estimator")
+    results = []
+    for kind in comparison.classifiers:
+        trials = suite.boost_trials if kind == "boost" else 1
+        samples: dict[str, list[dict[str, Any]]] = {name: [] for name in interfaces}
+        for repeat in range(suite.repeats):
+            order = list(interfaces)
+            if repeat % 2:
+                order.reverse()
+            for name in order:
+                progress(f"{dataset.name} {kind} {name} {repeat + 1}/{suite.repeats}")
+                directory = Path(tempfile.mkdtemp(dir=work))
+                try:
+                    sample = measured(
+                        [
+                            sys.executable,
+                            Path(__file__).resolve(),
+                            f"_{name}",
+                            dataset.stem,
+                            kind,
+                            str(trials),
+                        ],
+                        directory,
+                        env,
+                    )
+                    sample.update(json.loads((directory / "stdout.txt").read_text()))
+                finally:
+                    shutil.rmtree(directory)
+                check_module(sample, library["record"]["python_module_sha256"])
+                samples[name].append(sample)
+        digests = {s["predictions_sha256"] for runs in samples.values() for s in runs}
+        results.append(
+            {
+                "dataset": dataset.name,
+                "classifier": kind,
+                "same_predictions": len(digests) == 1,
+                "samples": samples,
+            }
+        )
+    return results
+
+
 def progress(message: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {message}", file=sys.stderr, flush=True)
 
@@ -533,7 +658,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument(
         "--installed-python",
         action="store_true",
-        help="train the worker-scaling workloads with the installed c50 package "
+        help="run the Python workloads with the installed c50 package "
         "instead of building the Python module from this checkout",
     )
     parser.add_argument(
@@ -549,6 +674,11 @@ def main(argv: Sequence[str]) -> int:
     if argv[:1] == ["_train"]:
         names, data, ties, count = argv[1:]
         train_child(Path(names), Path(data), ties, int(count))
+        return 0
+    if argv[:1] in (["_native"], ["_estimator"]):
+        stem, kind, trials = argv[1:]
+        child = native_child if argv[0] == "_native" else estimator_child
+        child(Path(stem), kind, int(trials))
         return 0
     args = parse_args(argv)
     suite = SUITES[args.suite]
@@ -592,6 +722,11 @@ def main(argv: Sequence[str]) -> int:
     workers: list[dict[str, Any]] = []
     for name in suite.worker_datasets:
         workers += scale_workers(suite, dataset(name), library, work)
+    estimator: list[dict[str, Any]] = []
+    for comparison in suite.comparisons:
+        estimator += compare_interfaces(
+            suite, comparison, dataset(comparison.dataset), library, work
+        )
 
     result = {
         "format_version": FORMAT_VERSION,
@@ -606,6 +741,7 @@ def main(argv: Sequence[str]) -> int:
         "datasets": [d.record() for d in prepared.values()],
         "comparisons": comparisons,
         "workers": workers,
+        "estimator": estimator,
     }
     text = json.dumps(result, indent=2, sort_keys=True) + "\n"
     if args.output:
@@ -617,6 +753,12 @@ def main(argv: Sequence[str]) -> int:
     ] + [f"{w['dataset']} ties={w['ties']}" for w in workers if not w["same_classifier"]]
     for mismatch in mismatches:
         progress(f"classifiers differ: {mismatch}")
+    for row in estimator:
+        if not row["same_predictions"]:
+            mismatches.append(f"{row['dataset']} {row['classifier']} estimator")
+            progress(
+                f"predictions differ: {row['dataset']} {row['classifier']} estimator"
+            )
     return 1 if mismatches else 0
 
 
