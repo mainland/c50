@@ -1,124 +1,150 @@
-# Large-dataset benchmark
+# Benchmarks
 
-`large_dataset.py` measures the Python estimator's dense training path and
-batched prediction path. It generates a deterministic mixed continuous and
-categorical workload and writes one JSON result to standard output. The result
-includes wall and CPU time, peak-RSS checkpoints, and SHA-256 digests of stable
-serialized model content and prediction scores.
+The benchmark suite measures the released behavior of the library. It answers
+three questions:
 
-Run a quick development workload from an installed development environment:
+1. How does the library's `c5.0` program compare with the imported C5.0
+   Release 2.07 program in time and peak memory, and do both programs write
+   the same classifier?
+2. How does training time change with the number of split workers and with
+   the tie order, and is the classifier the same for every worker count?
+3. How much time and memory does the scikit-learn estimator `C50Classifier`
+   add to the low-level interface, and does it predict the same classes?
 
-```sh
-python benchmarks/large_dataset.py \
-    --rows 100000 --features 50 --categorical-features 5
-```
+`run.py` runs a suite and writes one JSON result. `report.py` renders a result
+as the tables in `docs/performance.md`.
 
-Run the current target envelope with one exact, pruned tree:
+## Measurements
 
-```sh
-python benchmarks/large_dataset.py \
-    --rows 1000000 --features 100 --categorical-features 10 \
-    >large-dataset.json
-```
+The comparison trains each dataset with both command-line programs, alternating
+their order in successive repetitions. Both programs read the same `.names` and
+`.data` files in a fresh directory. The recorded time is the wall time of the
+whole process, which includes reading the data and evaluating the classifier on
+the training cases. Peak memory is the process's maximum resident set size.
+On Linux, the peak that `wait4` reports for a child includes the memory of the
+process that started it, so `run.py` starts each measured process through
+`measure.c`, a small launcher. The comparison requires the serialized
+classifiers to be identical apart from the dated `id` line.
 
-Record the commit, compiler, build type, and command alongside retained JSON
-results. Do not compare peak RSS values across operating systems without
-accounting for their different resource-reporting semantics.
+The worker measurements train a tree through the low-level Python function
+`c50.train` with 1, 2, 4, and 8 split workers, in a fresh process for each run.
+The recorded time covers only the `train` call, which parses the data text and
+trains the classifier. Each worker count must produce the same classifier. The
+stable tie order may produce a classifier that differs from the reference
+order, and the result records whether it does.
 
-`run_matrix.py` runs each workload in a fresh process so peak RSS is local to
-that workload. The default smoke profile is suitable for development:
+The estimator measurements compare `C50Classifier` with the low-level
+interface on the comparison datasets, alternating the two in successive
+repetitions, each in a fresh process. The low-level run times `c50.train` on
+the data text and then `Model.predict_details` on the same text. The estimator
+run reads the files into a DataFrame with pandas categorical columns, which
+is not timed, and then times `fit` with `categorical_features="from_dtype"`
+and `predict_proba` on the training rows. `fit` includes the DataFrame
+conversion, encoding, training, and the attribute-usage pass behind
+`feature_importances_`. Peak memory covers the whole process, including the
+input. Both interfaces must predict the same class for every training case.
 
-```sh
-python benchmarks/run_matrix.py --profile smoke >benchmark-matrix.json
-```
+The DataFrame gives each categorical column the values that the `.names`
+file declares, in the same order, and `C50Classifier` keeps a categorical
+dtype's order. Both interfaces therefore declare the same values in the same
+order. This matters because C5.0 can build a different classifier when the
+same values are declared in another order, as `docs/compatibility.md`
+describes.
 
-The `standard` profile adds medium continuous and mixed workloads. The `large`
-profile additionally runs the million-row target envelope and therefore
-requires substantially more time and memory.
+Every result records the source commit, the release tag when a clean checkout
+of exactly one tag was measured, the compiler and the command that compiled a
+learner source file, checksums of the measured programs and Python module, the
+archive checksum of the reference program, the CPU and its frequency governor,
+the load average before each run, and every sample. The rendered report names
+the tag but not the commit, because a history rewrite would invalidate a
+commit hash in the documentation.
 
-## Native benchmarks and profiling
+## Datasets
 
-The optional native benchmark targets require Catch2 3.x. Configure an
-optimized build with debug information:
+| Name | Source | Rows | Attributes | Classes |
+| --- | --- | ---: | ---: | ---: |
+| `adult` | OpenML dataset 1590, version 2 | 48,842 | 14 | 2 |
+| `covertype` | OpenML dataset 1596, version 4 | 581,012 | 54 | 7 |
+| `synthetic-1000000x100-c10` | `datasets.py`, seed 1729 | 1,000,000 | 100 | 3 |
 
-```sh
-cmake -S . -B build/benchmarks \
-    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-    -DC50_BUILD_BENCHMARKS=ON
-cmake --build build/benchmarks -j
-```
+The synthetic workload has 90 continuous attributes, 10 categorical attributes
+with eight values each, and 1% missing values. Its class depends on a weighted
+sum of eight continuous attributes. It matches the scale target in
+`docs/large-datasets.md`.
 
-The Catch2 target verifies `Cachesort` exhaustively for short inputs, on larger
-representative distributions, and across finite floating-point extremes,
-including denormal values and signed zero. The properties require sorted
-output with the same records but do not require stable ordering of equal
-values. CTest runs these correctness properties:
+`datasets.py` writes each dataset once as C5.0 files and records their SHA-256
+digests. Categorical values and classes become generated tokens such as `v3`
+and `c1`, so no value can change the C5.0 input grammar. The OpenML datasets
+are downloaded on first use.
 
-```sh
-ctest --test-dir build/benchmarks -R native-sort-properties \
-    --output-on-failure
-```
+## Running the suite
 
-`c50-native-workload` trains one deterministic tree through the public dense C++
-API without importing Python, NumPy, or scikit-learn. Its generator differs
-from the Python large-dataset generator, so compare its model hash only with
-other runs of the native workload:
+The suite requires Linux or macOS, CMake, a C++17 compiler, GCC for the
+reference program, and Python with NumPy, pandas, scikit-learn, and pybind11.
+The development environment described in `docs/building-testing.md` provides
+them.
 
-```sh
-build/benchmarks/c50-native-workload \
-    --rows 100000 --features 50 --categorical-features 5
-```
-
-Use `--workers N` to select 1 through 8 split-evaluation workers. Training
-uses multiple workers only for non-verbose nodes with at least 10,000 rows
-and multiple eligible attributes, without legacy split-value subsampling.
-Training-row sampling remains eligible; other phases remain serial.
-The optional CTest case `parallel-workload-equivalence` checks exact model
-digests across worker counts near that threshold. Benchmark each worker count
-on the same workload and compare both time and peak RSS; more workers may
-increase memory use without improving throughput.
-
-Use `--ties stable` to evaluate continuous splits with the stable tie order,
-and `--value-levels N` to round continuous values to `N` evenly spaced levels
-in `[-1, 1]`, which creates equal values. Both options appear in the JSON
-workload record. Their defaults leave the workload and its digest unchanged.
-The equivalence test also checks the stable tie order on tied values.
-
-Use the native workload for CPU sampling:
-
-```sh
-perf record -o /tmp/c50-perf.data -F 199 -e cycles:u \
-    -g --call-graph dwarf,8192 -- \
-    build/benchmarks/c50-native-workload \
-    --rows 100000 --features 50 --categorical-features 5 --quiet
-perf report -i /tmp/c50-perf.data
-```
-
-Unprivileged profiling requires a host policy that permits user-space
-performance counters. On Linux, `kernel.perf_event_paranoid=2` permits the
-user-space-only `cycles:u` event used above without enabling kernel profiling.
-
-Use Heaptrack for allocation profiles. `--quiet` avoids attributing the C
-library's standard-output buffer to the workload at process exit:
+The `smoke` suite trains small synthetic datasets in a few seconds and needs no
+network access. CI runs it through `tests/benchmark_smoke.py`:
 
 ```sh
-heaptrack -o /tmp/c50-native-heaptrack \
-    build/benchmarks/c50-native-workload \
-    --rows 100000 --features 50 --categorical-features 5 --quiet
-heaptrack_print -f /tmp/c50-native-heaptrack.zst \
-    --print-leaks=1 --print-peaks=0 --print-allocators=0 \
-    --print-temporary=0
+python benchmarks/run.py --suite smoke --output smoke.json
 ```
 
-## Model operation measurements
+The `release` suite requires the canonical upstream archive, `C50.tgz`, whose
+SHA-256 digest must be
+`309db588eda420c06701bf8ae74c06a6c923e9a06e714a598ea761bcadfc5e2e`:
 
-`large_dataset.py` also records repeated model-load, serialized-string-copy,
-empty-prediction, and small/batched-prediction timings. Set
-`--operation-repetitions N` to change the five repetitions. Predictions are
-warmed before measurement and checked for exact score equality afterward.
-`model_load` includes parsing, validation, and owned copies. Empty prediction
-includes parser/setup costs but no case classification. Retrieving
-`serialized_data` copies an existing string in the Python binding. It does not
-measure native serialization, which runs during training. Use a sampled native
-profile to attribute time within training. These operation boundaries overlap
-and must not be summed as independent training phases.
+```sh
+python benchmarks/run.py --suite release \
+    --reference-archive ../archive/C50.tgz \
+    --output benchmarks/results/release.json
+```
+
+The driver builds the library from the checkout in `Release` mode, and builds
+the reference program as the upstream Makefile builds its production
+`c5.0`, with `gcc -ffloat-store -O3` on the concatenated sources. It refuses to
+measure a working tree with uncommitted changes unless `--allow-dirty` is
+given. Datasets are cached in `~/.cache/c50-benchmarks` unless `--cache`
+names another directory.
+
+The release suite repeats each measurement five times and takes several
+hours. Run it on an otherwise idle machine. The result
+records the load average and frequency governor, but it cannot correct for
+contention.
+
+## Results
+
+Retained results are under `benchmarks/results/`. Each release documents one
+result in `docs/performance.md`. After running the release suite, regenerate the
+page's tables:
+
+```sh
+python benchmarks/report.py benchmarks/results/release.json \
+    --update docs/performance.md
+```
+
+Check that the page still matches the retained result with `--check`:
+
+```sh
+python benchmarks/report.py benchmarks/results/release.json \
+    --check docs/performance.md
+```
+
+## Interpretation
+
+Each table entry is the median of the repetitions on one machine. The results
+describe that machine, compiler, and these datasets. They are not general time
+or memory bounds. Peak resident set size has different semantics on Linux and
+macOS, so do not compare memory across operating systems.
+
+## Profiling
+
+To profile training, run the built program on a cached dataset. For example,
+sample the CPU with `perf` on Linux:
+
+```sh
+perf record -g -o /tmp/c50.perf -- \
+    build/c5.0 -f ~/.cache/c50-benchmarks/files/covertype/covertype
+perf report -i /tmp/c50.perf
+```

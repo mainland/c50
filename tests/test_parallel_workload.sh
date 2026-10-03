@@ -3,7 +3,7 @@
 set -eu
 
 if test "$#" -ne 1; then
-    printf 'usage: %s <native-workload>\n' "$0" >&2
+    printf 'usage: %s <parallel-workload>\n' "$0" >&2
     exit 2
 fi
 

@@ -36,8 +36,7 @@ C4305, which report the implicit narrowing conversions that the imported
 sources use to store values as float.
 It also builds the Python extension with Visual Studio, a multi-configuration
 generator, so its CTest run checks that the build tree places the extension
-next to its package. The Windows job does not build the optional Catch2
-benchmarks, so it does not run the parallel-workload equivalence test.
+next to its package.
 
 Native CI configures a C++14 project default to verify that each target declares
 its own C++17 requirement. The platform labels follow the
@@ -247,6 +246,8 @@ interpreter and sets `PYTHONPATH` for runtime checks to import this build.
 The filter runs `python-api` (pytest), `benchmark-smoke`, `python-typecheck`
 (mypy), and `python-stubtest`. The two typing checks are registered only in
 non-sanitizer builds.
+`benchmark-smoke` is registered only on Linux and macOS, because the benchmark
+suite requires one of them. On Windows the filter runs the other three tests.
 
 To run the native tests as well, build all targets before running CTest without
 its filter:
@@ -324,29 +325,16 @@ uvx cibuildwheel --only cp312-manylinux_x86_64 dist/c50-*.tar.gz
 musllinux, free-threaded CPython, and prerelease CPython versions are not
 built.
 
-## Native benchmarks and profiling
+## Sort and worker-equivalence tests
 
-The native sort-correctness tests and profiling workload are optional and
-require Catch2 3.x:
-
-```sh
-cmake -S . -B build/benchmarks \
-    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-    -DC50_BUILD_BENCHMARKS=ON
-cmake --build build/benchmarks -j
-ctest --test-dir build/benchmarks -R native-sort-properties \
-    --output-on-failure
-```
-
-The same build provides `c50-native-workload`, a deterministic dense training
-driver without Python runtime allocations. Use it for `perf` and Heaptrack
-profiles. Set `--workers N` (1 through 8) to measure split-evaluation
-parallelism; the default is one. CTest runs `parallel-workload-equivalence`
-when native benchmarks are enabled. That test compares exact serialized
-classifier digests at 9,999, 10,000, and 20,000 rows with one, two,
-four, and eight workers, including a subset-split case. See
-{doc}`large-datasets` and the repository's
-`benchmarks/README.md` for the complete commands and interpretation rules.
+The default CTest run includes two tests of training internals.
+`sort-properties` checks that the continuous-value sorts order and preserve
+records. It requires the RuleQuest tie order from the reference sort and the
+case order from the stable sort, exhaustively for short inputs and on large
+random and floating-point-extreme inputs. `parallel-workload-equivalence`
+trains a deterministic dense workload with one, two, four, and eight split
+workers. It requires the same serialized classifier at 9,999, 10,000, and
+20,000 rows, with subset splits, and with the stable tie order on tied values.
 
 ## Class-count index check
 
