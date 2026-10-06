@@ -241,7 +241,7 @@ def build_library(work: Path, jobs: int, python_module: bool) -> dict[str, Any]:
             )
         )
     else:
-        import c50._c50
+        c50 = import_c50()
 
         record["installed_python_package"] = importlib.metadata.version("c50")
         record["python_module_sha256"] = sha256(Path(c50._c50.__file__))
