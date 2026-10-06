@@ -2,10 +2,21 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
 #include <cstdio>
+#include <cstdarg>
 #include <cstdlib>
 #include <exception>
 #include <utility>
 #include "c50_api_internal.h"
+
+int c50_diagnostic_printf(FILE *stream, const char *format, ...)
+{
+    if (!stream) return 0;
+    va_list arguments;
+    va_start(arguments, format);
+    const int result = vfprintf(stream, format, arguments);
+    va_end(arguments);
+    return result;
+}
 
 c50::exception::exception(error_code code, const std::string &message)
     : std::runtime_error(message), code_(code) {}

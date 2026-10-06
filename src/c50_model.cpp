@@ -27,12 +27,6 @@ using c50_dense_dataset = c50::dense_dataset;
 using owned_model = std::unique_ptr<c50_model>;
 using owned_predictions = std::unique_ptr<c50_predictions>;
 
-struct file_closer
-{
-    void operator()(FILE *file) const { if (file) fclose(file); }
-};
-using owned_file = std::unique_ptr<FILE, file_closer>;
-
 struct c50::detail::model_data
 {
     model_kind kind;
@@ -87,7 +81,6 @@ typedef struct c50_train_state
     const c50_dense_dataset *dense_dataset;
     const char *costs_data;
     size_t costs_size;
-    owned_file diagnostics;
     owned_model model;
 } c50_train_state;
 
@@ -433,16 +426,8 @@ static void TrainModel(c50_context *Context, void *user_data)
     unsigned char *serialized;
     size_t serialized_size;
 
-    state->diagnostics.reset(tmpfile());
-    if ( ! state->diagnostics )
-    {
-        c50_record_error(Context, c50::error_code::io_error,
-                         "could not create training diagnostics stream");
-        C50Exit(Context, 1);
-    }
-
-    Context->io.output = state->diagnostics.get();
-    Context->progress.update_file = state->diagnostics.get();
+    Context->io.output = NULL;
+    Context->progress.update_file = NULL;
     Context->io.file_stem = "memory";
     Context->io.attribute_exclusions = 0;
     Context->io.random_initial_seed = (int) state->options.random_seed;
@@ -547,13 +532,12 @@ static void TrainModel(c50_context *Context, void *user_data)
 
 static void CleanupTraining(c50_context *Context, void *user_data)
 {
-    c50_train_state *state = static_cast<c50_train_state *>(user_data);
+    (void) user_data;
 
     Context->progress.update_file = NULL;
     Cleanup(Context);
     c50_clear_prediction_state(Context);
     Context->io.output = NULL;
-    state->diagnostics.reset();
 }
 
 static void PredictParsedModel(c50_context *Context, void *user_data)

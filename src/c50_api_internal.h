@@ -351,4 +351,14 @@ std::unique_ptr<c50_context> c50_make_context();
 
 c50::model_inspection c50_build_inspection(c50_context *Context);
 
+/* A null diagnostic stream discards output for in-memory library calls. */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((format(printf, 2, 3)))
+#endif
+int c50_diagnostic_printf(FILE *stream, const char *format, ...);
+inline int c50_diagnostic_putc(int character, FILE *stream)
+{
+    return stream ? fputc(character, stream) : character;
+}
+
 #endif

@@ -385,7 +385,7 @@ void PruneRule(c50_context *Context, Condition Cond[])
 
     /*  Find conditions to delete  */
 
-    Verbosity(1, fprintf(Context->io.output, "\n  Pruning rule for %s", Context->schema.class_names[Context->rule_build.target_class]))
+    Verbosity(1, c50_diagnostic_printf(Context->io.output, "\n  Pruning rule for %s", Context->schema.class_names[Context->rule_build.target_class]))
 
     while (true )
     {
@@ -400,7 +400,7 @@ void PruneRule(c50_context *Context, Condition Cond[])
 			 Context->cases.max_case+1-Context->training.class_frequencies[Context->rule_build.target_class]-Context->rule_build.condition_errors[0]);
 
 	Verbosity(1,
-	    fprintf(Context->io.output, "\n       Err   Used   Pess\tAbsent condition\n"))
+	    c50_diagnostic_printf(Context->io.output, "\n       Err   Used   Pess\tAbsent condition\n"))
 
 	ForEach(d, 0, Context->rule_build.condition_count)
 	{
@@ -412,13 +412,13 @@ void PruneRule(c50_context *Context, Condition Cond[])
 			       (Context->rule_build.condition_errors[d] + 1) / (Context->rule_build.condition_totals[d] + 2.0) );
 
 	    Verbosity(1,
-		fprintf(Context->io.output, "   %7.1f%7.1f  %4.1f%%",
+		c50_diagnostic_printf(Context->io.output, "   %7.1f%7.1f  %4.1f%%",
 		       Context->rule_build.condition_errors[d], Context->rule_build.condition_totals[d], 100 * Context->rule_build.pessimistic_errors[d]))
 
 	    if ( ! d )
 	    {
 		Verbosity(1,
-		    fprintf(Context->io.output, "\t<base> %.1f/%.1f bits\n", Gain, Cost))
+		    c50_diagnostic_printf(Context->io.output, "\t<base> %.1f/%.1f bits\n", Gain, Cost))
 	    }
 	    else
 	    {
@@ -444,7 +444,7 @@ void PruneRule(c50_context *Context, Condition Cond[])
 	    break;
 	}
 
-	Verbosity(1, fprintf(Context->io.output, "\teliminate test %d\n", Bestid))
+	Verbosity(1, c50_diagnostic_printf(Context->io.output, "\teliminate test %d\n", Bestid))
 
 	Context->rule_build.deleted_conditions[Context->rule_build.best_condition] = true;
 	Remaining--;

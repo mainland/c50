@@ -556,7 +556,7 @@ void HillClimb(c50_context *Context)
     OriginalCount = RuleCount;
 
     InitialiseVotes(Context);
-    Verbosity(1, fprintf(Context->io.output, "\n"))
+    Verbosity(1, c50_diagnostic_printf(Context->io.output, "\n"))
 
     /*  Initialise Context->rule_selection.delta_errors[]  */
 
@@ -570,12 +570,12 @@ void HillClimb(c50_context *Context)
 	    MessageLength(Context, RuleCount, RuleBits, Errs);
 
 	Verbosity(1,
-	    fprintf(Context->io.output, "\t%d rules, %.1f errs, cost=%.1f bits\n",
+	    c50_diagnostic_printf(Context->io.output, "\t%d rules, %.1f errs, cost=%.1f bits\n",
 		   RuleCount, Errs, CurrentCost/100.0);
 
 	    if ( ! DeleteOnly && CurrentCost > LastCost )
 	    {
-		fprintf(Context->io.output, "ERROR %g %g\n",
+		c50_diagnostic_printf(Context->io.output, "ERROR %g %g\n",
 			    CurrentCost/1000.0, LastCost/100.0);
 		break;
 	    })
@@ -602,8 +602,8 @@ void HillClimb(c50_context *Context)
 	    }
 
 	    Verbosity(2,
-		if ( ! (OutCount++ % 5) ) fprintf(Context->io.output, "\n\t\t");
-		fprintf(Context->io.output, "%d<%g=%.1f> ",
+		if ( ! (OutCount++ % 5) ) c50_diagnostic_printf(Context->io.output, "\n\t\t");
+		c50_diagnostic_printf(Context->io.output, "%d<%g=%.1f> ",
 			    r, Context->rule_selection.delta_errors[r], (AltCost - CurrentCost)/100.0))
 
 	    if ( AltCost < NewCost ||
@@ -617,15 +617,15 @@ void HillClimb(c50_context *Context)
 	if ( ! DeleteOnly && NewCost > CurrentCost )
 	{
 	    DeleteOnly = true;
-	    Verbosity(1, fprintf(Context->io.output, "(start delete mode)\n"))
+	    Verbosity(1, c50_diagnostic_printf(Context->io.output, "(start delete mode)\n"))
 	}
 
-	Verbosity(2, fprintf(Context->io.output, "\n"))
+	Verbosity(2, c50_diagnostic_printf(Context->io.output, "\n"))
 
 	if ( ! Toggle || ( DeleteOnly && RuleCount <= OriginalCount ) ) break;
 
 	Verbosity(1,
-	    fprintf(Context->io.output, "\t%s rule %d/%d (errs=%.1f, cost=%.1f bits)\n",
+	    c50_diagnostic_printf(Context->io.output, "\t%s rule %d/%d (errs=%.1f, cost=%.1f bits)\n",
 		   ( Context->rule_selection.rules_included[Toggle] ? "Delete" : "Add" ),
 		   Context->rules.rules[Toggle]->TNo, Context->rules.rules[Toggle]->RNo,
 		   Errs + Context->rule_selection.delta_errors[Toggle], NewCost/100.0))
@@ -1003,11 +1003,11 @@ void SetDefaultClass(c50_context *Context)
 
     /*  Choose new default class using rel freq and rel uncovered  */
 
-    Verbosity(1, fprintf(Context->io.output, "\n    Weights of uncovered cases:\n"));
+    Verbosity(1, c50_diagnostic_printf(Context->io.output, "\n    Weights of uncovered cases:\n"));
 
     ForEach(c, 1, Context->schema.max_class)
     {
-	Verbosity(1, fprintf(Context->io.output, "\t%s (%.2f): %.1f\n",
+	Verbosity(1, c50_diagnostic_printf(Context->io.output, "\t%s (%.2f): %.1f\n",
 			    Context->schema.class_names[c], Context->training.class_frequencies[c] / (Context->cases.max_case + 1.0),
 			    UncoveredWeight[c]));
 
@@ -1063,7 +1063,7 @@ int OrderByUtility(c50_context *Context)
     int		j, OutCount;
     [[maybe_unused]] double	Errs=0;
 
-    Verbosity(1, fprintf(Context->io.output, "\n    Determining rule utility\n"))
+    Verbosity(1, c50_diagnostic_printf(Context->io.output, "\n    Determining rule utility\n"))
 
     Drop = Alloc(Context->rules.count, RuleNo);
 
@@ -1078,8 +1078,8 @@ int OrderByUtility(c50_context *Context)
 	    if ( ! Context->rule_selection.rules_included[r] ) continue;
 
 	    Verbosity(2,
-		if ( ! (OutCount++ %10 ) ) fprintf(Context->io.output, "\n\t\t");
-		fprintf(Context->io.output, "%d<%g> ", r, Context->rule_selection.delta_errors[r]))
+		if ( ! (OutCount++ %10 ) ) c50_diagnostic_printf(Context->io.output, "\n\t\t");
+		c50_diagnostic_printf(Context->io.output, "%d<%g> ", r, Context->rule_selection.delta_errors[r]))
 
 	    if ( ! Toggle ||
 		 Context->rule_selection.delta_errors[r] < Context->rule_selection.delta_errors[Toggle] - 1E-3 ||
@@ -1089,12 +1089,12 @@ int OrderByUtility(c50_context *Context)
 		Toggle = r;
 	    }
 	}
-	Verbosity(2, fprintf(Context->io.output, "\n"))
+	Verbosity(2, c50_diagnostic_printf(Context->io.output, "\n"))
 
 	if ( ! Toggle ) break;
 
 	Verbosity(1,
-	    fprintf(Context->io.output, "\tDelete rule %d/%d (errs up %.1f)\n",
+	    c50_diagnostic_printf(Context->io.output, "\tDelete rule %d/%d (errs up %.1f)\n",
 		   Context->rules.rules[Toggle]->TNo, Context->rules.rules[Toggle]->RNo,
 		   Errs + Context->rule_selection.delta_errors[Toggle]))
 

@@ -60,7 +60,7 @@ void CrossVal(c50_context *Context)
 
     if ( Context->options.folds > Context->cases.max_case+1 )
     {
-	fprintf(Context->io.output, T_FoldsReduced);
+	c50_diagnostic_printf(Context->io.output, T_FoldsReduced);
 	Context->options.folds = Context->cases.max_case+1;
     }
 
@@ -81,7 +81,7 @@ void CrossVal(c50_context *Context)
 
     ForEach(f, 0, Context->options.folds-1)
     {
-	fprintf(Context->io.output, "\n\n[ " T_Fold " %d ]\n", f+1);
+	c50_diagnostic_printf(Context->io.output, "\n\n[ " T_Fold " %d ]\n", f+1);
 	Context->cross_validation.results[f] = AllocZero(3, float);
 
 	if ( f == SmallTestBlocks ) Size++;
@@ -153,7 +153,7 @@ void CrossVal(c50_context *Context)
 	Context->cross_validation.results[f][1] = (100.0 * Context->cross_validation.results[f][1]) / Size;
 	Context->cross_validation.results[f][2] /= Size;
 
-	fprintf(Context->io.output, T_EvalHoldOut, Size);
+	c50_diagnostic_printf(Context->io.output, T_EvalHoldOut, Size);
 	Context->cases.max_case = Size-1;
 	Evaluate(Context, 0);
 
@@ -307,43 +307,43 @@ void Summary(c50_context *Context)
 	if ( Context->cross_validation.results[f][0] < 1 ) PrintSize = false;
     }
 
-    fprintf(Context->io.output, "\n\n[ " T_Summary " ]\n\n");
+    c50_diagnostic_printf(Context->io.output, "\n\n[ " T_Summary " ]\n\n");
 
     ForEach(t, 0, 2)
     {
-	fprintf(Context->io.output, "%s", FoldHead[t]);
-	putc('\t', Context->io.output);
+	c50_diagnostic_printf(Context->io.output, "%s", FoldHead[t]);
+	c50_diagnostic_putc('\t', Context->io.output);
 	if ( Context->options.rules )
 	{
-	    fprintf(Context->io.output, "%s", ( Context->costs.matrix ? ExtraC[t] : Extra[t] ));
+	    c50_diagnostic_printf(Context->io.output, "%s", ( Context->costs.matrix ? ExtraC[t] : Extra[t] ));
 	}
 	else
 	{
-	    fprintf(Context->io.output, "%s", ( Context->costs.matrix ? StdPC[t] : StdP[t] ));
+	    c50_diagnostic_printf(Context->io.output, "%s", ( Context->costs.matrix ? StdPC[t] : StdP[t] ));
 	}
-	putc('\n', Context->io.output);
+	c50_diagnostic_putc('\n', Context->io.output);
     }
-    putc('\n', Context->io.output);
+    c50_diagnostic_putc('\n', Context->io.output);
 
     ForEach(f, 0, Context->options.folds-1)
     {
-	fprintf(Context->io.output, "%4d\t", f+1);
+	c50_diagnostic_printf(Context->io.output, "%4d\t", f+1);
 
 	if ( PrintSize )
 	{
-	    fprintf(Context->io.output, " %5g", Context->cross_validation.results[f][0]);
+	    c50_diagnostic_printf(Context->io.output, " %5g", Context->cross_validation.results[f][0]);
 	}
 	else
 	{
-	    fprintf(Context->io.output, "     *");
+	    c50_diagnostic_printf(Context->io.output, "     *");
 	}
-	fprintf(Context->io.output, " %10.1f%%", Context->cross_validation.results[f][1]);
+	c50_diagnostic_printf(Context->io.output, " %10.1f%%", Context->cross_validation.results[f][1]);
 
 	if ( Context->costs.matrix )
 	{
-	    fprintf(Context->io.output, "%7.2f", Context->cross_validation.results[f][2]);
+	    c50_diagnostic_printf(Context->io.output, "%7.2f", Context->cross_validation.results[f][2]);
 	}
-	fprintf(Context->io.output, "\n");
+	c50_diagnostic_printf(Context->io.output, "\n");
 
 	for ( i = 0 ; i < 3 ; i++ )
 	{
@@ -352,42 +352,42 @@ void Summary(c50_context *Context)
 	}
     }
 
-    fprintf(Context->io.output, "\n  " T_Mean "\t");
+    c50_diagnostic_printf(Context->io.output, "\n  " T_Mean "\t");
 
     if ( ! PrintSize )
     {
-	fprintf(Context->io.output, "      ");
+	c50_diagnostic_printf(Context->io.output, "      ");
     }
     else
     {
-	fprintf(Context->io.output, "%6.1f", Sum[0] / Context->options.folds);
+	c50_diagnostic_printf(Context->io.output, "%6.1f", Sum[0] / Context->options.folds);
     }
 
-    fprintf(Context->io.output, " %10.1f%%", Sum[1] / Context->options.folds);
+    c50_diagnostic_printf(Context->io.output, " %10.1f%%", Sum[1] / Context->options.folds);
 
     if ( Context->costs.matrix )
     {
-	fprintf(Context->io.output, "%7.2f", Sum[2] / Context->options.folds);
+	c50_diagnostic_printf(Context->io.output, "%7.2f", Sum[2] / Context->options.folds);
     }
 
-    fprintf(Context->io.output, "\n  " T_SE "\t");
+    c50_diagnostic_printf(Context->io.output, "\n  " T_SE "\t");
 
     if ( ! PrintSize )
     {
-	fprintf(Context->io.output, "      ");
+	c50_diagnostic_printf(Context->io.output, "      ");
     }
     else
     {
-	fprintf(Context->io.output, "%6.1f", SE(Sum[0], SumSq[0], Context->options.folds));
+	c50_diagnostic_printf(Context->io.output, "%6.1f", SE(Sum[0], SumSq[0], Context->options.folds));
     }
 
-    fprintf(Context->io.output, " %10.1f%%", SE(Sum[1], SumSq[1], Context->options.folds));
+    c50_diagnostic_printf(Context->io.output, " %10.1f%%", SE(Sum[1], SumSq[1], Context->options.folds));
 
     if ( Context->costs.matrix )
     {
-	fprintf(Context->io.output, "%7.2f", SE(Sum[2], SumSq[2], Context->options.folds));
+	c50_diagnostic_printf(Context->io.output, "%7.2f", SE(Sum[2], SumSq[2], Context->options.folds));
     }
-    fprintf(Context->io.output, "\n");
+    c50_diagnostic_printf(Context->io.output, "\n");
 }
 
 

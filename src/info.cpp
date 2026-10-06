@@ -119,12 +119,12 @@ void PrintDistribution(c50_context *Context, Attribute Att,
 
     (void) ValFreq;
 
-    fprintf(Context->io.output, "\n\t\t\t ");
+    c50_diagnostic_printf(Context->io.output, "\n\t\t\t ");
     ForEach(c, 1, Context->schema.max_class)
     {
-	fprintf(Context->io.output, "%7.6s", Context->schema.class_names[c]);
+	c50_diagnostic_printf(Context->io.output, "%7.6s", Context->schema.class_names[c]);
     }
-    fprintf(Context->io.output, "\n");
+    c50_diagnostic_printf(Context->io.output, "\n");
 
     ForEach(v, MinVal, MaxVal)
     {
@@ -134,18 +134,18 @@ void PrintDistribution(c50_context *Context, Attribute Att,
 		    Context->schema.max_attribute_value[Att] ? Context->schema.attribute_value_names[Att][v] :
 		    v == 1 ? "N/A" :
 		    v == 2 ? "below" : "above" );
-	    fprintf(Context->io.output, "\t\t[%-7.7s:", Val);
+	    c50_diagnostic_printf(Context->io.output, "\t\t[%-7.7s:", Val);
 	}
 	else
 	{
-	    fprintf(Context->io.output, "\t\t[%-7d:", v);
+	    c50_diagnostic_printf(Context->io.output, "\t\t[%-7d:", v);
 	}
 
 	ForEach(c, 1, Context->schema.max_class)
 	{
-	    fprintf(Context->io.output, " %6.1f", Freq[v][c]);
+	    c50_diagnostic_printf(Context->io.output, " %6.1f", Freq[v][c]);
 	}
 
-	fprintf(Context->io.output, "]\n");
+	c50_diagnostic_printf(Context->io.output, "]\n");
     }
 }

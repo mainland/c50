@@ -121,17 +121,17 @@ void Progress(c50_context *Context, float Delta)
     {
 	Context->progress.twentieth = p;
 assert(p >= 0 && p <= 20);
-	fprintf(Context->progress.update_file, "%s", message);
+	c50_diagnostic_printf(Context->progress.update_file, "%s", message);
 	if ( tell )
 	{
-	    fprintf(Context->progress.update_file, "  %s%s  (%d %s)",
+	    c50_diagnostic_printf(Context->progress.update_file, "  %s%s  (%d %s)",
 			&done[20 - Context->progress.twentieth],
 			&todo[Context->progress.twentieth],
 			(int) (Context->progress.current+0.5),
 			( Context->progress.stage == SIFTRULES ?
 			    "refinements" : "cases covered" ));
 	}
-	fprintf(Context->progress.update_file, "\n");
-	fflush(Context->progress.update_file);
+	c50_diagnostic_printf(Context->progress.update_file, "\n");
+	if (Context->progress.update_file) fflush(Context->progress.update_file);
     }
 }

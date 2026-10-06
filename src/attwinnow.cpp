@@ -134,7 +134,7 @@ void WinnowAtts(c50_context *Context)
 	    {
 		Context->training.attribute_importance[Att] = 1;
 		Context->schema.special_status[Att] ^= SKIP;
-		Verbosity(1, fprintf(Context->io.output, "  re-including %s\n", Context->schema.attribute_names[Att]))
+		Verbosity(1, c50_diagnostic_printf(Context->io.output, "  re-including %s\n", Context->schema.attribute_names[Att]))
 	    }
 	}
 
@@ -156,11 +156,11 @@ void WinnowAtts(c50_context *Context)
 
     if ( ! Removed )
     {
-	fprintf(Context->io.output, T_NoWinnow);
+	c50_diagnostic_printf(Context->io.output, T_NoWinnow);
     }
     else
     {
-	fprintf(Context->io.output, T_AttributesWinnowed, Removed, Plural(Removed));
+	c50_diagnostic_printf(Context->io.output, T_AttributesWinnowed, Removed, Plural(Removed));
 
 	/*  Print remaining attributes ordered by importance  */
 
@@ -179,7 +179,7 @@ void WinnowAtts(c50_context *Context)
 
 	    if ( First )
 	    {
-		fprintf(Context->io.output, T_EstImportance);
+		c50_diagnostic_printf(Context->io.output, T_EstImportance);
 		First = false;
 	    }
 	    if ( Context->training.attribute_importance[Best] >= 1.005 )
@@ -188,19 +188,19 @@ void WinnowAtts(c50_context *Context)
 		    (Context->training.attribute_importance[Best] - 1) * 100.0;
 		if ( Percentage <= std::numeric_limits<int>::max() )
 		{
-		    fprintf(Context->io.output, "%7d%%  %s\n",
+		    c50_diagnostic_printf(Context->io.output, "%7d%%  %s\n",
 			    (int) (Percentage + 0.5),
 			    Context->schema.attribute_names[Best]);
 		}
 		else
 		{
-		    fprintf(Context->io.output, "%7s%%  %s\n", "inf",
+		    c50_diagnostic_printf(Context->io.output, "%7s%%  %s\n", "inf",
 			    Context->schema.attribute_names[Best]);
 		}
 	    }
 	    else
 	    {
-		fprintf(Context->io.output, "     <1%%  %s\n", Context->schema.attribute_names[Best]);
+		c50_diagnostic_printf(Context->io.output, "     <1%%  %s\n", Context->schema.attribute_names[Best]);
 	    }
 	    Context->training.attribute_importance[Best] = 0;
 	}
@@ -257,7 +257,7 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
     int		SaveVERBOSITY;
 
     Verbosity(1,
-	fprintf(Context->io.output, ( FirstTime ? "\nWinnow cycle:\n" : "\nCheck:\n" )))
+	c50_diagnostic_printf(Context->io.output, ( FirstTime ? "\nWinnow cycle:\n" : "\nCheck:\n" )))
 
     /*  Build and prune trial tree  */
 
@@ -293,13 +293,13 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 
     Verbosity(2,
 	PrintTree(Context, Context->trees.winnow, "Winnowing tree:");
-	fprintf(Context->io.output, "\n  training error cost %g\n",
+	c50_diagnostic_printf(Context->io.output, "\n  training error cost %g\n",
 		ErrCost(Context, Context->trees.winnow, 0, Cut)))
 
     Base = ErrCost(Context, Context->trees.winnow, Cut+1, Context->cases.max_case);
 
     Verbosity(1,
-	fprintf(Context->io.output, "  initial error cost %g\n", Base))
+	c50_diagnostic_printf(Context->io.output, "  initial error cost %g\n", Base))
 
     if ( FirstTime )
     {
@@ -315,7 +315,7 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 		Verbosity(1,
 		    if ( Att != Context->schema.class_attribute && ! Skip(Att) )
 		    {
-			fprintf(Context->io.output, "  %s not used\n", Context->schema.attribute_names[Att]);
+			c50_diagnostic_printf(Context->io.output, "  %s not used\n", Context->schema.attribute_names[Att]);
 		    })
 
 		if ( Context->training.split_attributes[Att] )
@@ -337,7 +337,7 @@ float TrialTreeCost(c50_context *Context, Boolean FirstTime)
 		  Base > 0 ? Cost / Base :
 		  Cost > 0 ? std::numeric_limits<float>::infinity() : 1 );
 	    Verbosity(1,
-		fprintf(Context->io.output, "  error cost without %s = %g%s\n",
+		c50_diagnostic_printf(Context->io.output, "  error cost without %s = %g%s\n",
 			    Context->schema.attribute_names[Att], Cost,
 			    ( Cost < Base ? " - excluded" : "" )))
 

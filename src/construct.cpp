@@ -120,7 +120,7 @@ void ConstructClassifiers(c50_context *Context)
     {
 	if ( Context->options.trials > 1 )
 	{
-	    fprintf(Context->io.output, "\n-----  " F_Trial " %d:  -----\n", Context->trees.trial);
+	    c50_diagnostic_printf(Context->io.output, "\n-----  " F_Trial " %d:  -----\n", Context->trees.trial);
 	}
 
 	NotifyStage(Context, FORMTREE);
@@ -192,7 +192,7 @@ void ConstructClassifiers(c50_context *Context)
 	    NoStructure |= ! Context->rules.sets[Context->trees.trial]->SNRules;
 
 	    PrintRules(Context, Context->rules.sets[Context->trees.trial], T_Rules);
-	    fprintf(Context->io.output, "\n" T_Default_class ": %s\n",
+	    c50_diagnostic_printf(Context->io.output, "\n" T_Default_class ": %s\n",
 			Context->schema.class_names[Context->rules.sets[Context->trees.trial]->SDefault]);
 
 	    FreeTree(Context->trees.pruned[Context->trees.trial]);			Context->trees.pruned[Context->trees.trial] = Nil;
@@ -275,13 +275,13 @@ void ConstructClassifiers(c50_context *Context)
 	if ( ErrWt < 0.1 )
 	{
 	    Context->options.trials = Context->trees.trial + 1;
-	    fprintf(Context->io.output, TX_Reduced1(Context->options.trials), Context->options.trials);
+	    c50_diagnostic_printf(Context->io.output, TX_Reduced1(Context->options.trials), Context->options.trials);
 	}
 	else
 	if ( ( Context->trees.trial && NoStructure ) || ErrWt / Cases >= 0.49 )
 	{
 	    Context->options.trials = ( Context->trees.trial ? Context->trees.trial : 1 );
-	    fprintf(Context->io.output, TX_Reduced2(Context->options.trials), Context->options.trials);
+	    c50_diagnostic_printf(Context->io.output, TX_Reduced2(Context->options.trials), Context->options.trials);
 	}
 	else
 	{
@@ -352,7 +352,7 @@ void ConstructClassifiers(c50_context *Context)
 
     if ( Context->options.boosting && Context->options.trials <= 2 )
     {
-	fprintf(Context->io.output, T_Abandoned);
+	c50_diagnostic_printf(Context->io.output, T_Abandoned);
 	Context->options.trials = 1;
     }
 
@@ -547,22 +547,22 @@ void EvaluateSingle(c50_context *Context, int Flags)
 	}
     }
 	    
-    fprintf(Context->io.output, "\n");
+    c50_diagnostic_printf(Context->io.output, "\n");
     ForEach(x, 0, 2)
     {
-	putc('\t', Context->io.output);
+	c50_diagnostic_putc('\t', Context->io.output);
 	if ( Context->options.rules )
 	{
-	    fprintf(Context->io.output, "%s", ( Context->costs.matrix ? ExtraC[x] : Extra[x] ));
+	    c50_diagnostic_printf(Context->io.output, "%s", ( Context->costs.matrix ? ExtraC[x] : Extra[x] ));
 	}
 	else
 	{
-	    Verbosity(1, fprintf(Context->io.output, "%s", StdR[x]))
-	    fprintf(Context->io.output, "%s", ( Context->costs.matrix ? StdPC[x] : StdP[x] ));
+	    Verbosity(1, c50_diagnostic_printf(Context->io.output, "%s", StdR[x]))
+	    c50_diagnostic_printf(Context->io.output, "%s", ( Context->costs.matrix ? StdPC[x] : StdP[x] ));
 	}
-	putc('\n', Context->io.output);
+	c50_diagnostic_putc('\n', Context->io.output);
     }
-    putc('\n', Context->io.output);
+    c50_diagnostic_putc('\n', Context->io.output);
 
     ForEach(i, 0, Context->cases.max_case)
     {
@@ -605,11 +605,11 @@ void EvaluateSingle(c50_context *Context, int Flags)
 	}
     }
 
-    putc('\t', Context->io.output);
+    c50_diagnostic_putc('\t', Context->io.output);
 
     if ( Context->options.rules )
     {
-	fprintf(Context->io.output, "  %4d %4d(%4.1f%%)",
+	c50_diagnostic_printf(Context->io.output, "  %4d %4d(%4.1f%%)",
 	       Context->rules.sets[0]->SNRules, Errs, 100 * Errs / Tests);
     }
     else
@@ -618,22 +618,22 @@ void EvaluateSingle(c50_context *Context, int Flags)
 
 	Verbosity(1,
 	{
-	    fprintf(Context->io.output, "  %4d %4d(%4.1f%%)  ",
+	    c50_diagnostic_printf(Context->io.output, "  %4d %4d(%4.1f%%)  ",
 		   TreeSize(Context->trees.raw[0]), RawErrs, 100 * RawErrs / Tests);
 	})
 
 	/*  Results for pruned tree  */
 
-	fprintf(Context->io.output, "  %4d %4d(%4.1f%%)",
+	c50_diagnostic_printf(Context->io.output, "  %4d %4d(%4.1f%%)",
 	       TreeSize(Context->trees.pruned[0]), Errs, 100 * Errs / Tests);
     }
 
     if ( Context->costs.matrix )
     {
-	fprintf(Context->io.output, "%7.2f", ECost / Tests);
+	c50_diagnostic_printf(Context->io.output, "%7.2f", ECost / Tests);
     }
 
-    fprintf(Context->io.output, "   <<\n");
+    c50_diagnostic_printf(Context->io.output, "   <<\n");
 
     if ( CMInfo )
     {
@@ -651,7 +651,7 @@ void EvaluateSingle(c50_context *Context, int Flags)
     {
 	if ( ! Context->options.cross_validation )
 	{
-	    fprintf(Context->io.output, "\n" T_Rule_utility_summary ":\n\n"
+	    c50_diagnostic_printf(Context->io.output, "\n" T_Rule_utility_summary ":\n\n"
 			"\t" F_Rules "\t      " F_Errors "%s\n"
 			"\t" F_URules "\t      " F_UErrors "%s\n",
 			    ( Context->costs.matrix ? "   " F_Cost : "" ),
@@ -659,14 +659,14 @@ void EvaluateSingle(c50_context *Context, int Flags)
 
 	    ForEach(u, 1, Context->options.utility_bands-1)
 	    {
-		fprintf(Context->io.output, "\t%s%d\t %4d(%4.1f%%)",
+		c50_diagnostic_printf(Context->io.output, "\t%s%d\t %4d(%4.1f%%)",
 			    ( Context->evaluation.utility_bands[u] == 1 ? "" : "1-" ), Context->evaluation.utility_bands[u],
 			    Context->evaluation.utility_errors[u], 100 * Context->evaluation.utility_errors[u] / Tests);
 		if ( Context->costs.matrix )
 		{
-		    fprintf(Context->io.output, "%7.2f", Context->evaluation.utility_costs[u] / Tests);
+		    c50_diagnostic_printf(Context->io.output, "%7.2f", Context->evaluation.utility_costs[u] / Tests);
 		}
-		fprintf(Context->io.output, "\n");
+		c50_diagnostic_printf(Context->io.output, "\n");
 	    }
 	}
 
@@ -718,21 +718,21 @@ void EvaluateBoost(c50_context *Context, int Flags)
     Errs = AllocZero(Context->options.trials, CaseNo);
     ECost = AllocZero(Context->options.trials, double);
 
-    fprintf(Context->io.output, "\n");
+    c50_diagnostic_printf(Context->io.output, "\n");
     ForEach(t, 0, 2)
     {
-	fprintf(Context->io.output, "%s\t", Multi[t]);
+	c50_diagnostic_printf(Context->io.output, "%s\t", Multi[t]);
 	if ( Context->options.rules )
 	{
-	    fprintf(Context->io.output, "%s", ( Context->costs.matrix ? ExtraC[t] : Extra[t] ));
+	    c50_diagnostic_printf(Context->io.output, "%s", ( Context->costs.matrix ? ExtraC[t] : Extra[t] ));
 	}
 	else
 	{
-	    fprintf(Context->io.output, "%s", ( Context->costs.matrix ? StdPC[t] : StdP[t] ));
+	    c50_diagnostic_printf(Context->io.output, "%s", ( Context->costs.matrix ? StdPC[t] : StdP[t] ));
 	}
-	putc('\n', Context->io.output);
+	c50_diagnostic_putc('\n', Context->io.output);
     }
-    putc('\n', Context->io.output);
+    c50_diagnostic_putc('\n', Context->io.output);
 
     /*  Set global default class for boosting  */
 
@@ -778,46 +778,46 @@ void EvaluateBoost(c50_context *Context, int Flags)
 
     ForEach(t, 0, Context->options.trials-1)
     {
-	fprintf(Context->io.output, "%4d\t", t);
+	c50_diagnostic_printf(Context->io.output, "%4d\t", t);
 
 	if ( Context->options.rules )
 	{
-	    fprintf(Context->io.output, "  %4d %4d(%4.1f%%)",
+	    c50_diagnostic_printf(Context->io.output, "  %4d %4d(%4.1f%%)",
 		   Context->rules.sets[t]->SNRules, Errs[t], 100 * Errs[t] / Tests);
 	}
 	else
 	{
-	    fprintf(Context->io.output, "  %4d %4d(%4.1f%%)",
+	    c50_diagnostic_printf(Context->io.output, "  %4d %4d(%4.1f%%)",
 		   TreeSize(Context->trees.pruned[t]), Errs[t], 100 * Errs[t] / Tests);
 	}
 
 	if ( Context->costs.matrix )
 	{
-	    fprintf(Context->io.output, "%7.2f", ECost[t] / Tests);
+	    c50_diagnostic_printf(Context->io.output, "%7.2f", ECost[t] / Tests);
 	}
 
-	putc('\n', Context->io.output);
+	c50_diagnostic_putc('\n', Context->io.output);
     }
 
     /*  Print boosted results  */
 
     if ( Context->options.rules )
     {
-	fprintf(Context->io.output, F_Boost "\t  %9d(%4.1f%%)",
+	c50_diagnostic_printf(Context->io.output, F_Boost "\t  %9d(%4.1f%%)",
 	    BoostErrs, 100 * BoostErrs / Tests);
     }
     else
     {
-	fprintf(Context->io.output, F_Boost "\t       %4d(%4.1f%%)",
+	c50_diagnostic_printf(Context->io.output, F_Boost "\t       %4d(%4.1f%%)",
 		BoostErrs, 100 * BoostErrs / Tests);
     }
 
     if ( Context->costs.matrix )
     {
-	fprintf(Context->io.output, "%7.2f", BoostECost / Tests);
+	c50_diagnostic_printf(Context->io.output, "%7.2f", BoostECost / Tests);
     }
 
-    fprintf(Context->io.output, "   <<\n");
+    c50_diagnostic_printf(Context->io.output, "   <<\n");
 
     if ( CMInfo )
     {

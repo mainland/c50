@@ -115,7 +115,7 @@ Boolean NewRule(c50_context *Context, Condition Cond[], int NCond,
     {
 	if ( SameRule(Context, r, Lhs, Size, TargetClass) )
 	{
-	    Verbosity(1, fprintf(Context->io.output, "\tduplicates rule %d\n", r))
+	    Verbosity(1, c50_diagnostic_printf(Context->io.output, "\tduplicates rule %d\n", r))
 
 	    /*  Keep the most optimistic error estimate  */
 
@@ -439,7 +439,7 @@ void PrintRules(c50_context *Context, CRuleSet RS, const char *Msg)
 {
     int	r;
 
-    fprintf(Context->io.output, "\n%s\n", Msg);
+    c50_diagnostic_printf(Context->io.output, "\n%s\n", Msg);
 
     ForEach(r, 1, RS->SNRules)
     {
@@ -461,21 +461,21 @@ void PrintRule(c50_context *Context, CRule R)
 {
     int		d;
 
-    fprintf(Context->io.output, T_RuleHeader);
-    if ( Context->options.trials > 1 ) fprintf(Context->io.output, "%d/", R->TNo);
-    fprintf(Context->io.output, "%d: (%.8g", R->RNo, P1(R->Cover));
+    c50_diagnostic_printf(Context->io.output, T_RuleHeader);
+    if ( Context->options.trials > 1 ) c50_diagnostic_printf(Context->io.output, "%d/", R->TNo);
+    c50_diagnostic_printf(Context->io.output, "%d: (%.8g", R->RNo, P1(R->Cover));
     if ( R->Correct < R->Cover - 0.1 )
     {
-	fprintf(Context->io.output, "/%.8g", P1(R->Cover - R->Correct));
+	c50_diagnostic_printf(Context->io.output, "/%.8g", P1(R->Cover - R->Correct));
     }
-    fprintf(Context->io.output, T_RuleLift, ((R->Correct + 1) / (R->Cover + 2)) / R->Prior);
+    c50_diagnostic_printf(Context->io.output, T_RuleLift, ((R->Correct + 1) / (R->Cover + 2)) / R->Prior);
 
     ForEach(d, 1, R->Size)
     {
 	PrintCondition(Context, R->Lhs[d]);
     }
 
-    fprintf(Context->io.output, "\t->  " T_class " %s  [%.3f]\n",
+    c50_diagnostic_printf(Context->io.output, "\t->  " T_class " %s  [%.3f]\n",
 		Context->schema.class_names[R->Rhs], R->Vote/1000.0);
 }
 
@@ -500,29 +500,29 @@ void PrintCondition(c50_context *Context, Condition C)
     v   = C->TestValue;
     Att = C->Tested;
 
-    fprintf(Context->io.output, "\t%s", Context->schema.attribute_names[Att]);
+    c50_diagnostic_printf(Context->io.output, "\t%s", Context->schema.attribute_names[Att]);
 
     if ( v < 0 )
     {
-	fprintf(Context->io.output, T_IsUnknown);
+	c50_diagnostic_printf(Context->io.output, T_IsUnknown);
 	return;
     }
 
     switch ( C->NodeType )
     {
 	case BrDiscr:
-	    fprintf(Context->io.output, " = %s\n", Context->schema.attribute_value_names[Att][v]);
+	    c50_diagnostic_printf(Context->io.output, " = %s\n", Context->schema.attribute_value_names[Att][v]);
 	    break;
 
 	case BrThresh:
 	    if ( v == 1 )
 	    {
-		fprintf(Context->io.output, " = N/A\n");
+		c50_diagnostic_printf(Context->io.output, " = N/A\n");
 	    }
 	    else
 	    {
 		CVS = CValToStr(Context, C->Cut, Att);
-		fprintf(Context->io.output, " %s %s\n", ( v == 2 ? "<=" : ">" ), CVS.c_str());
+		c50_diagnostic_printf(Context->io.output, " %s %s\n", ( v == 2 ? "<=" : ">" ), CVS.c_str());
 	    }
 	    break;
 
@@ -532,7 +532,7 @@ void PrintCondition(c50_context *Context, Condition C)
 	    Values = Elements(Context, Att, C->Subset, &Last);
 	    if ( Values == 1 )
 	    {
-		fprintf(Context->io.output, " = %s\n", Context->schema.attribute_value_names[Att][Last]);
+		c50_diagnostic_printf(Context->io.output, " = %s\n", Context->schema.attribute_value_names[Att][Last]);
 		break;
 	    }
 
@@ -543,14 +543,14 @@ void PrintCondition(c50_context *Context, Condition C)
 		for ( pv = 1 ; ! In(pv, C->Subset) ; pv++ )
 		    ;
 
-		fprintf(Context->io.output, " %s [%s-%s]\n", T_InRange,
+		c50_diagnostic_printf(Context->io.output, " %s [%s-%s]\n", T_InRange,
 			Context->schema.attribute_value_names[Att][pv], Context->schema.attribute_value_names[Att][Last]);
 		break;
 	    }
 
 	    /*  Must keep track of position to break long lines  */
 
-	    fprintf(Context->io.output, " %s {", T_ElementOf);
+	    c50_diagnostic_printf(Context->io.output, " %s {", T_ElementOf);
 	    Col = Base = CharWidth(Context->schema.attribute_names[Att]) + CharWidth(T_ElementOf) + 11;
 
 	    ForEach(pv, 1, Context->schema.max_attribute_value[Att])
@@ -567,18 +567,18 @@ void PrintCondition(c50_context *Context, Condition C)
 		    if ( Col + Entry + 2 >= Width )
 		    {
 			Col = Base;
-			fprintf(Context->io.output, ",\n%*s", Col, "");
+			c50_diagnostic_printf(Context->io.output, ",\n%*s", Col, "");
 		    }
 		    else
 		    {
-			fprintf(Context->io.output, ", ");
+			c50_diagnostic_printf(Context->io.output, ", ");
 			Col += 2;
 		    }
 
-		    fprintf(Context->io.output, "%s", Context->schema.attribute_value_names[Att][pv]);
+		    c50_diagnostic_printf(Context->io.output, "%s", Context->schema.attribute_value_names[Att][pv]);
 		    Col += Entry;
 		}
 	    }
-	    fprintf(Context->io.output, "}\n");
+	    c50_diagnostic_printf(Context->io.output, "}\n");
     }
 }

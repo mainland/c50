@@ -104,7 +104,7 @@ void EvalSubset(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Re
     if ( ! Workspace.ReasonableSubsets )
     {
 	Verbosity(2,
-	    fprintf(Context->io.output, "\tAtt %s: poor initial split\n", Context->schema.attribute_names[Att]))
+	    c50_diagnostic_printf(Context->io.output, "\tAtt %s: poor initial split\n", Context->schema.attribute_names[Att]))
 
 	return;
     }
@@ -119,11 +119,11 @@ void EvalSubset(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Re
     PrevInfo = TotalInfo(Workspace.ValFreq, 0, Context->schema.max_attribute_value[Att]) / Cases;
     BestVal  = PrevGain / PrevInfo;
 
-    Verbosity(2, fprintf(Context->io.output, "\tAtt %s", Context->schema.attribute_names[Att]))
+    Verbosity(2, c50_diagnostic_printf(Context->io.output, "\tAtt %s", Context->schema.attribute_names[Att]))
     Verbosity(3, PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], Workspace.Freq,
 				   Workspace.ValFreq, true))
     Verbosity(2,
-	fprintf(Context->io.output, "\tinitial inf %.3f, gain %.3f, val=%.3f\n",
+	c50_diagnostic_printf(Context->io.output, "\tinitial inf %.3f, gain %.3f, val=%.3f\n",
 		PrevInfo, PrevGain, BestVal))
 
     /*  Eliminate unrepresented attribute values from Freq[] and ValFreq[]
@@ -215,7 +215,7 @@ void EvalSubset(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Re
 
 	Verbosity(2,
 	{
-	    fprintf(Context->io.output, "\tprelim merges -> inf %.3f, gain %.3f, val %.3f%s%s",
+	    c50_diagnostic_printf(Context->io.output, "\tprelim merges -> inf %.3f, gain %.3f, val %.3f%s%s",
 			PrevInfo, PrevGain, Val,
 		        ( Better ? " **" : "" ),
 			(Context->options.verbosity > 2 ? "" : "\n" ));
@@ -283,7 +283,7 @@ void EvalSubset(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Re
 		ThisInfo = PrevInfo + (Workspace.MergeInfo[V1][V2] -
 			   (Workspace.SubsetInfo[V1] + Workspace.SubsetInfo[V2])) / Cases;
 		Verbosity(3,
-		    fprintf(Context->io.output, "\t    combine %d %d info %.3f gain %.3f\n",
+		    c50_diagnostic_printf(Context->io.output, "\t    combine %d %d info %.3f gain %.3f\n",
 			    V1, V2, ThisInfo, ThisGain))
 
 		/*  See whether this merge has the best gain so far  */
@@ -315,9 +315,9 @@ void EvalSubset(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Re
 	Merge(Context, Workspace, BestV1, BestV2, Cases);
 
 	Verbosity(2,
-	    fprintf(Context->io.output, "\tform subset ");
+	    c50_diagnostic_printf(Context->io.output, "\tform subset ");
 	    PrintSubset(Context, Att, Workspace.WSubset[BestV1]);
-	    fprintf(Context->io.output, ": %d subsets, inf %.3f, gain %.3f, val %.3f%s\n",
+	    c50_diagnostic_printf(Context->io.output, ": %d subsets, inf %.3f, gain %.3f, val %.3f%s\n",
 		   Workspace.Blocks, BestInfo, BestGain, Val,
 		   ( Val > BestVal ? " **" : "" ));
 	    Verbosity(3,
@@ -349,7 +349,7 @@ void EvalSubset(c50_context *Context, SplitWorkspace &Workspace, SplitResult &Re
     }
 
     Verbosity(2,
-	fprintf(Context->io.output, "\tfinal inf %.3f, gain %.3f, val=%.3f\n",
+	c50_diagnostic_printf(Context->io.output, "\tfinal inf %.3f, gain %.3f, val=%.3f\n",
 		Result.Information, Result.Gain, Result.Gain / (Result.Information + 1E-3)))
 }
 
@@ -571,10 +571,10 @@ void PrintSubset(c50_context *Context, Attribute Att, Set Ss)
 	    }
 	    else
 	    {
-		fprintf(Context->io.output, ", ");
+		c50_diagnostic_printf(Context->io.output, ", ");
 	    }
 
-	    fprintf(Context->io.output, "%s", Context->schema.attribute_value_names[Att][V1]);
+	    c50_diagnostic_printf(Context->io.output, "%s", Context->schema.attribute_value_names[Att][V1]);
 	}
     }
 }

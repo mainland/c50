@@ -61,7 +61,7 @@ void EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace, SplitRes
     ClassNo	c;
     ContValue	Interval;
 
-    Verbosity(3, fprintf(Context->io.output, "\tAtt %s\n", Context->schema.attribute_names[Att]))
+    Verbosity(3, c50_diagnostic_printf(Context->io.output, "\tAtt %s\n", Context->schema.attribute_names[Att]))
 
     Result.Gain = None;
     PrepareForContin(Context, Workspace, Att, Fp, Lp);
@@ -71,7 +71,7 @@ void EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace, SplitRes
     if ( Workspace.ApplicCases < 2 * Context->options.minimum_cases )
     {
 	Verbosity(2,
-	    fprintf(Context->io.output, "\tAtt %s\tinsufficient cases with known values\n",
+	    c50_diagnostic_printf(Context->io.output, "\tAtt %s\tinsufficient cases with known values\n",
 			Context->schema.attribute_names[Att]))
 	return;
     }
@@ -151,7 +151,7 @@ void EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace, SplitRes
 
 		Verbosity(3,
 		{
-		    fprintf(Context->io.output, "\t\tCut at %.3f  (gain %.3f):",
+		    c50_diagnostic_printf(Context->io.output, "\t\tCut at %.3f  (gain %.3f):",
 			   (Workspace.LowVal + Workspace.HighVal) / 2,
 			   (1 - Workspace.UnknownRate) *
 			   (Workspace.BaseInfo - (Workspace.NAInfo + LHInfo) / Workspace.KnownCases));
@@ -184,7 +184,7 @@ void EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace, SplitRes
 
     if ( BestGain <= 0 )
     {
-	Verbosity(2, fprintf(Context->io.output, "\tAtt %s\tno gain\n", Context->schema.attribute_names[Att]))
+	Verbosity(2, c50_diagnostic_printf(Context->io.output, "\tAtt %s\tno gain\n", Context->schema.attribute_names[Att]))
     }
     else
     {
@@ -204,7 +204,7 @@ void EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace, SplitRes
 	}
 
 	Verbosity(2,
-	    fprintf(Context->io.output, "\tAtt %s\tcut=%.3f, inf %.3f, gain %.3f\n",
+	    c50_diagnostic_printf(Context->io.output, "\tAtt %s\tcut=%.3f, inf %.3f, gain %.3f\n",
 		   Context->schema.attribute_names[Att], Result.Threshold, Result.Information, Result.Gain))
     }
 }
@@ -298,7 +298,7 @@ void EstimateMaxGR(c50_context *Context, SplitWorkspace &Workspace, SplitResult 
 
 		Verbosity(3,
 		{
-		    fprintf(Context->io.output, "\t\tCut at %.3f  (gain %.3f):",
+		    c50_diagnostic_printf(Context->io.output, "\t\tCut at %.3f  (gain %.3f):",
 			   (Workspace.LowVal + Workspace.HighVal) / 2, ThisGain);
 		    PrintDistribution(Context, Att, 2, 3, Workspace.Freq, Workspace.ValFreq, true);
 		})
@@ -309,7 +309,7 @@ void EstimateMaxGR(c50_context *Context, SplitWorkspace &Workspace, SplitResult 
     }
 
     Verbosity(2,
-	fprintf(Context->io.output, "\tAtt %s: max GR estimate %.3f\n",
+	c50_diagnostic_printf(Context->io.output, "\tAtt %s: max GR estimate %.3f\n",
 		    Context->schema.attribute_names[Att], Result.EstimatedMaxGR))
 }
 
