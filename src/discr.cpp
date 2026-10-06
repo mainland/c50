@@ -64,7 +64,7 @@ void EvalDiscreteAtt(c50_context *Context, SplitWorkspace &Workspace, SplitResul
 
     if ( ReasonableSubsets < 2 )
     {
-	Verbosity(2, fprintf(Context->io.output, "\tAtt %s: poor split\n", Context->schema.attribute_names[Att]))
+	Verbosity(2, c50_diagnostic_printf(Context->io.output, "\tAtt %s: poor split\n", Context->schema.attribute_names[Att]))
 	return;
     }
 
@@ -77,11 +77,11 @@ void EvalDiscreteAtt(c50_context *Context, SplitWorkspace &Workspace, SplitResul
 
     Verbosity(2,
     {
-	fprintf(Context->io.output, "\tAtt %s", Context->schema.attribute_names[Att]);
+	c50_diagnostic_printf(Context->io.output, "\tAtt %s", Context->schema.attribute_names[Att]);
 	Verbosity(3,
 	    PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], Workspace.Freq, Workspace.ValFreq,
 			      true))
-	fprintf(Context->io.output, "\tinf %.3f, gain %.3f\n",
+	c50_diagnostic_printf(Context->io.output, "\tinf %.3f, gain %.3f\n",
 		Result.Information, Result.Gain);
     })
 }
@@ -111,7 +111,7 @@ void EvalOrderedAtt(c50_context *Context, SplitWorkspace &Workspace, SplitResult
     BaseInfo = ( ! Workspace.ValFreq[0] ? Context->splits.base_information :
 		     DiscrKnownBaseInfo(Context, Workspace, KnownCases, Context->schema.max_attribute_value[Att]) );
 
-    Verbosity(2, fprintf(Context->io.output, "\tAtt %s", Context->schema.attribute_names[Att]))
+    Verbosity(2, c50_diagnostic_printf(Context->io.output, "\tAtt %s", Context->schema.attribute_names[Att]))
     Verbosity(3, PrintDistribution(Context, Att, 0, Context->schema.max_attribute_value[Att], Workspace.Freq,
 				   Workspace.ValFreq, true))
 
@@ -159,7 +159,7 @@ void EvalOrderedAtt(c50_context *Context, SplitWorkspace &Workspace, SplitResult
 	    }
 
 	    Verbosity(3,
-	    {   fprintf(Context->io.output, "\t\tFrom %s (gain %.3f)",
+	    {   c50_diagnostic_printf(Context->io.output, "\t\tFrom %s (gain %.3f)",
 			Context->schema.attribute_value_names[Att][v], ThisGain);
 		PrintDistribution(Context, Att, 0, 3, Workspace.Freq, Workspace.ValFreq, false);
 	    })
@@ -183,7 +183,7 @@ void EvalOrderedAtt(c50_context *Context, SplitWorkspace &Workspace, SplitResult
 
     if ( BestGain <= 0 )
     {
-	Verbosity(2, fprintf(Context->io.output, "\tno gain\n"))
+	Verbosity(2, c50_diagnostic_printf(Context->io.output, "\tno gain\n"))
     }
     else
     {
@@ -192,7 +192,7 @@ void EvalOrderedAtt(c50_context *Context, SplitWorkspace &Workspace, SplitResult
 	Result.Threshold  = BestV;
 
 	Verbosity(2,
-	    fprintf(Context->io.output, "\tcut=%g, inf %.3f, gain %.3f\n",
+	    c50_diagnostic_printf(Context->io.output, "\tcut=%g, inf %.3f, gain %.3f\n",
 		   Result.Threshold, Result.Information, Result.Gain))
     }
 }

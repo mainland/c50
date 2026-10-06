@@ -64,6 +64,9 @@ regenerate the values merely to make a failure pass.
 The in-memory interfaces preserve C5.0 names, data, costs, tree, and rules text
 formats. Trained and loaded models expose their serialized classifier so it can
 be stored or exchanged with compatible tools.
+Library training discards progress and diagnostic output without opening a
+temporary file. Text and dense in-memory operations do not require filesystem
+access. The command-line program retains its diagnostic and progress files.
 
 The native interface is C++ only. The former C header, handles, status codes,
 reserved ABI fields, and header-only facade are removed. Native callers must

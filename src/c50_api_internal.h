@@ -288,9 +288,6 @@ struct c50::detail::context_state
     /* True once the operation has printed its own diagnostic for the failure
      * that ends it, so that a front end need not print the message again. */
     int failure_reported;
-    /* True for the command-line program, which continues past a bad value
-     * as Release 2.07 does. A library operation ends at its first error. */
-    int continue_past_errors;
     unsigned int split_worker_count;
     /* The most levels that the model-text parser accepts in a tree, or no
      * limit. ParseModel sets it from the model before every parse. */
@@ -370,5 +367,15 @@ void c50_clear_prediction_state(c50_context *context);
 std::unique_ptr<c50_context> c50_make_context();
 
 c50::model_inspection c50_build_inspection(c50_context *Context);
+
+/* A null diagnostic stream discards output for in-memory library calls. */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((format(printf, 2, 3)))
+#endif
+int c50_diagnostic_printf(FILE *stream, const char *format, ...);
+inline int c50_diagnostic_putc(int character, FILE *stream)
+{
+    return stream ? fputc(character, stream) : character;
+}
 
 #endif
