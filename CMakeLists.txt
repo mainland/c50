@@ -596,7 +596,9 @@ if(BUILD_TESTING)
     if(C50_BUILD_PYTHON)
         add_test(
             NAME python-api
-            COMMAND ${Python_EXECUTABLE} -m pytest
+            COMMAND ${Python_EXECUTABLE}
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_built_python.py"
+                    "${CMAKE_CURRENT_BINARY_DIR}/python" pytest
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/python"
         )
         set_tests_properties(
@@ -610,13 +612,15 @@ if(BUILD_TESTING)
             add_test(
                 NAME benchmark-smoke
                 COMMAND ${Python_EXECUTABLE}
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_built_python.py"
+                        "${CMAKE_CURRENT_BINARY_DIR}/python"
                         "${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmark_smoke.py"
             )
             set_tests_properties(
                 benchmark-smoke
                 PROPERTIES
                     ENVIRONMENT
-                        "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python"
+                        "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python;C50_BENCHMARK_MODULE_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}/python"
             )
         endif()
         if(NOT C50_ENABLE_SANITIZERS AND NOT C50_ENABLE_THREAD_SANITIZER)
@@ -632,7 +636,9 @@ if(BUILD_TESTING)
             add_test(
                 NAME python-stubtest
                 COMMAND
-                    ${Python_EXECUTABLE} -m mypy.stubtest
+                    ${Python_EXECUTABLE}
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_built_python.py"
+                    "${CMAKE_CURRENT_BINARY_DIR}/python" mypy.stubtest
                     --allowlist
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/typing/stubtest-allowlist.txt"
                     c50._c50
