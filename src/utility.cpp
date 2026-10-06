@@ -54,11 +54,11 @@ void PrintHeader(c50_context *Context, const char *Title)
     int Underline;
 
     clock = time(0);
-    fprintf(Context->io.output, "\n%s  \t%s", TitleLine.c_str(), ctime(&clock));
+    c50_diagnostic_printf(Context->io.output, "\n%s  \t%s", TitleLine.c_str(), ctime(&clock));
 
     Underline = CharWidth(TitleLine.c_str());
-    while ( Underline-- ) putc('-', Context->io.output);
-    putc('\n', Context->io.output);
+    while ( Underline-- ) c50_diagnostic_putc('-', Context->io.output);
+    c50_diagnostic_putc('\n', Context->io.output);
 }
 
 
@@ -399,7 +399,7 @@ void ErrorContext(c50_context *Context, int ErrNo, const char *S1,
     };
 
 
-    if ( Context->io.output ) fprintf(Context->io.output, "\n");
+    if ( Context->io.output ) c50_diagnostic_printf(Context->io.output, "\n");
 
     if ( ErrNo == NOFILE || ErrNo == NOMEM || ErrNo == MODELFILE )
     {
@@ -567,12 +567,13 @@ void ErrorContext(c50_context *Context, int ErrNo, const char *S1,
 	/*  The command-line program prints the decorated text above.  The
 	    exception carries the diagnostic alone.  */
 
-	/*  The command-line program continues past a bad value as Release
-	    2.07 does and stops at the tenth error or at an error that
-	    cannot continue.  A library operation ends at the first
-	    error.  */
+	/*  The command-line program, which has an output stream, continues
+	    past a bad value as Release 2.07 does and stops at the tenth
+	    error or at an error that cannot continue.  Only a library
+	    caller, without an output stream, ends the operation at the
+	    first error.  */
 
-	if ( ! Context->continue_past_errors || Ends )
+	if ( ! Context->io.output || Ends )
 	{
 	    const size_t First = Buffer.compare(0, 4, "*** ") ? 0 : 4;
 	    const size_t Start = Buffer.find_first_not_of(" \t\n", First);
@@ -587,7 +588,7 @@ void ErrorContext(c50_context *Context, int ErrNo, const char *S1,
 
     if ( Context->io.error_count == 10 )
     {
-	if ( Context->io.output ) fprintf(Context->io.output,  T_ErrorLimit);
+	if ( Context->io.output ) c50_diagnostic_printf(Context->io.output,  T_ErrorLimit);
 	Context->cases.max_case--;
 	Quit = true;
     }
@@ -961,7 +962,7 @@ void Check(c50_context *Context, float Val, float Low, float High)
 {
     if ( Val < Low || Val > High )
     {
-	fprintf(Context->io.output, TX_IllegalValue(Val, Low, High));
+	c50_diagnostic_printf(Context->io.output, TX_IllegalValue(Val, Low, High));
 	C50Exit(Context, 1);
     }
 }

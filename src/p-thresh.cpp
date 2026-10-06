@@ -188,7 +188,7 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 
     if ( T->NodeType == BrThresh )
     {
-	Verbosity(1, fprintf(Context->io.output, "\nTest %s <> %g\n", Context->schema.attribute_names[Att], T->Cut))
+	Verbosity(1, c50_diagnostic_printf(Context->io.output, "\nTest %s <> %g\n", Context->schema.attribute_names[Att], T->Cut))
 
 	/*  Skip N/A values  */
 
@@ -266,7 +266,7 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 	T->Upper = Max(T->Mid, CVal(Context->cases.records[j], Att));
 
 	Verbosity(1,
-	    fprintf(Context->io.output, "\tLower = %g, Upper = %g\n", T->Lower, T->Upper))
+	    c50_diagnostic_printf(Context->io.output, "\tLower = %g, Upper = %g\n", T->Lower, T->Upper))
     }
 
     /*  Recursively scan each branch  */
