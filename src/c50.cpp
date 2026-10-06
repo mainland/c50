@@ -68,13 +68,15 @@ void IllegalValue(c50_context *Context, double Value, double Low, double High,
 {
     if ( Integer )
     {
-        fprintf(Context->io.output,
-                "\t** illegal value %.10g -- should be between %.10g and %.10g\n",
-                Value, Low, High);
+        c50_diagnostic_printf(Context->io.output,
+                              "\t** illegal value %.10g -- "
+                              "should be between %.10g and %.10g\n",
+                              Value, Low, High);
     }
     else
     {
-        fprintf(Context->io.output, TX_IllegalValue(Value, Low, High));
+        c50_diagnostic_printf(Context->io.output,
+                              TX_IllegalValue(Value, Low, High));
     }
     C50Exit(Context, 1);
 }
@@ -200,7 +202,7 @@ void Run(c50_context *Context, void *UserData)
     {
 	if ( FirstTime )
 	{
-	    fprintf(Context->io.output, T_OptHeader);
+	    c50_diagnostic_printf(Context->io.output, T_OptHeader);
 	    FirstTime = false;
 	}
 
@@ -209,81 +211,81 @@ void Run(c50_context *Context, void *UserData)
 	switch (o)
 	{
 	case 'f':   Context->io.file_stem = Context->io.option_argument;
-		    fprintf(Context->io.output, T_OptApplication, Context->io.file_stem);
+		    c50_diagnostic_printf(Context->io.output, T_OptApplication, Context->io.file_stem);
 		    ArgOK = true;
 		    break;
 	case 'b':   Context->options.boosting = true;
-		    fprintf(Context->io.output, T_OptBoost);
+		    c50_diagnostic_printf(Context->io.output, T_OptBoost);
 		    if ( Context->options.trials == 1 ) Context->options.trials = 10;
 		    ArgOK = true;
 		    break;
 	case 'p':   Context->options.probabilistic_thresholds = true;
-		    fprintf(Context->io.output, T_OptProbThresh);
+		    c50_diagnostic_printf(Context->io.output, T_OptProbThresh);
 		    ArgOK = true;
 		    break;
 #ifdef VerbOpt
 	case 'v':   if ( ! SetOption(Context, Context->options.verbosity, INT_MIN, INT_MAX) ) break;
 		    ArgOK = true;
-		    fprintf(Context->io.output, "\tVerbosity level %d\n", Context->options.verbosity);
+		    c50_diagnostic_printf(Context->io.output, "\tVerbosity level %d\n", Context->options.verbosity);
 		    break;
 #endif
 	case 't':   if ( ! SetOption(Context, Context->options.trials, 3, 1000) ) break;
 		    ArgOK = true;
-		    fprintf(Context->io.output, T_OptTrials, Context->options.trials);
+		    c50_diagnostic_printf(Context->io.output, T_OptTrials, Context->options.trials);
 		    Check(Context, Context->options.trials, 3, 1000);
 		    Context->options.boosting = true;
 		    break;
 	case 's':   Context->options.subset_splits = true;
-		    fprintf(Context->io.output, T_OptSubsets);
+		    c50_diagnostic_printf(Context->io.output, T_OptSubsets);
 		    ArgOK = true;
 		    break;
 	case 'm':   if ( ! SetOption(Context, Context->options.minimum_cases, 1, 1000000) ) break;
 		    ArgOK = true;
-		    fprintf(Context->io.output, T_OptMinCases, Context->options.minimum_cases);
+		    c50_diagnostic_printf(Context->io.output, T_OptMinCases, Context->options.minimum_cases);
 		    Check(Context, Context->options.minimum_cases, 1, 1000000);
 		    break;
 	case 'c':   if ( ! SetOption(Context, Context->options.confidence_factor, 0, 100) ) break;
 		    ArgOK = true;
-		    fprintf(Context->io.output, T_OptCF, Context->options.confidence_factor);
+		    c50_diagnostic_printf(Context->io.output, T_OptCF, Context->options.confidence_factor);
 		    Check(Context, Context->options.confidence_factor, 0, 100);
 		    Context->options.confidence_factor /= 100;
 		    break;
 	case 'r':   Context->options.rules = true;
-		    fprintf(Context->io.output, T_OptRules);
+		    c50_diagnostic_printf(Context->io.output, T_OptRules);
 		    ArgOK = true;
 		    break;
 	case 'S':   if ( ! SetOption(Context, Context->options.sample_fraction, 0.1, 99.9) ) break;
 		    ArgOK = true;
-		    fprintf(Context->io.output, T_OptSampling, Context->options.sample_fraction);
+		    c50_diagnostic_printf(Context->io.output, T_OptSampling, Context->options.sample_fraction);
 		    Check(Context, Context->options.sample_fraction, 0.1, 99.9);
 		    Context->options.sample_fraction /= 100;
 		    break;
 	case 'I':   if ( ! SetOption(Context, Context->io.random_initial_seed, INT_MIN, INT_MAX) ) break;
 		    ArgOK = true;
-		    fprintf(Context->io.output, T_OptSeed, Context->io.random_initial_seed);
+		    c50_diagnostic_printf(Context->io.output, T_OptSeed, Context->io.random_initial_seed);
 		    Context->io.random_initial_seed = Context->io.random_initial_seed & 07777;
 		    break;
 	case 'u':   if ( ! SetOption(Context, Context->options.utility_bands, 2, 10000) ) break;
 		    ArgOK = true;
-		    fprintf(Context->io.output, T_OptUtility, Context->options.utility_bands);
+		    c50_diagnostic_printf(Context->io.output, T_OptUtility, Context->options.utility_bands);
 		    Check(Context, Context->options.utility_bands, 2, 10000);
 		    Context->options.rules = true;
 		    break;
 	case 'e':   Context->options.ignore_costs = true;
-		    fprintf(Context->io.output, T_OptNoCosts);
+		    c50_diagnostic_printf(Context->io.output, T_OptNoCosts);
 		    ArgOK = true;
 		    break;
 	case 'w':   Context->options.winnow = true;
-		    fprintf(Context->io.output, T_OptWinnow);
+		    c50_diagnostic_printf(Context->io.output, T_OptWinnow);
 		    ArgOK = true;
 		    break;
 	case 'g':   Context->options.global_pruning = false;
-		    fprintf(Context->io.output, T_OptNoGlobal);
+		    c50_diagnostic_printf(Context->io.output, T_OptNoGlobal);
 		    ArgOK = true;
 		    break;
 	case 'X':   if ( ! SetOption(Context, Context->options.folds, 2, 1000) ) break;
 		    ArgOK = true;
-		    fprintf(Context->io.output, T_OptXval, Context->options.folds);
+		    c50_diagnostic_printf(Context->io.output, T_OptXval, Context->options.folds);
 		    Check(Context, Context->options.folds, 2, 1000);
 		    Context->options.cross_validation = true;
 		    break;
@@ -293,19 +295,19 @@ void Run(c50_context *Context, void *UserData)
 	{
 	    if ( o != 'h' )
 	    {
-		fprintf(Context->io.output, T_UnregnizedOpt,
+		c50_diagnostic_printf(Context->io.output, T_UnregnizedOpt,
 			    Context->io.option,
 			    ( ! Context->io.option_argument || Context->io.option_argument == Context->io.option+2 ? "" : Context->io.option_argument ));
-		fprintf(Context->io.output, T_SummaryOpts);
+		c50_diagnostic_printf(Context->io.output, T_SummaryOpts);
 	    }
-	    fprintf(Context->io.output, T_ListOpts);
+	    c50_diagnostic_printf(Context->io.output, T_ListOpts);
 	    Goodbye(1);
 	}
     }
 
     if ( Context->options.utility_bands && Context->options.boosting )
     {
-	fprintf(Context->io.output, T_UBWarn);
+	c50_diagnostic_printf(Context->io.output, T_UBWarn);
     }
 
     StartTime = ExecTime();
@@ -319,7 +321,7 @@ void Run(c50_context *Context, void *UserData)
 
     if ( Context->schema.class_attribute )
     {
-	fprintf(Context->io.output, T_ClassVar, Context->schema.attribute_names[Context->schema.class_attribute]);
+	c50_diagnostic_printf(Context->io.output, T_ClassVar, Context->schema.attribute_names[Context->schema.class_attribute]);
     }
 
     NotifyStage(Context, READDATA);
@@ -334,20 +336,20 @@ void Run(c50_context *Context, void *UserData)
 
     if ( ! (F = GetFile(Context, ".data", "r")) ) Error(Context, NOFILE, "", "");
     GetData(Context, F, true, false);
-    fprintf(Context->io.output, TX_ReadData(Context->cases.max_case+1, Context->schema.max_attribute, Context->io.file_stem));
+    c50_diagnostic_printf(Context->io.output, TX_ReadData(Context->cases.max_case+1, Context->schema.max_attribute, Context->io.file_stem));
 
     if ( Context->options.cross_validation && (F = GetFile(Context, ".test", "r")) )
     {
 	SaveMaxCase = Context->cases.max_case;
 	GetData(Context, F, false, false);
-	fprintf(Context->io.output, TX_ReadTest(Context->cases.max_case-SaveMaxCase, Context->io.file_stem));
+	c50_diagnostic_printf(Context->io.output, TX_ReadTest(Context->cases.max_case-SaveMaxCase, Context->io.file_stem));
     }
 
     /*  Check whether case weight attribute appears  */
 
     if ( Context->schema.case_weight_attribute )
     {
-	fprintf(Context->io.output, T_CWtAtt);
+	c50_diagnostic_printf(Context->io.output, T_CWtAtt);
     }
 
     if ( ! Context->options.ignore_costs && (F = GetFile(Context, ".costs", "r")) )
@@ -355,7 +357,7 @@ void Run(c50_context *Context, void *UserData)
 	GetMCosts(Context, F);
 	if ( Context->costs.matrix )
 	{
-	    fprintf(Context->io.output, T_ReadCosts, Context->io.file_stem);
+	    c50_diagnostic_printf(Context->io.output, T_ReadCosts, Context->io.file_stem);
 	}
     }
 
@@ -363,7 +365,7 @@ void Run(c50_context *Context, void *UserData)
 
     if ( Context->io.attribute_exclusions )
     {
-	fprintf(Context->io.output, "%s", ( Context->io.attribute_exclusions == -1 ? T_AttributesOut : T_AttributesIn ));
+	c50_diagnostic_printf(Context->io.output, "%s", ( Context->io.attribute_exclusions == -1 ? T_AttributesOut : T_AttributesIn ));
 
 	ForEach(Att, 1, Context->schema.max_attribute)
 	{
@@ -371,7 +373,7 @@ void Run(c50_context *Context, void *UserData)
 		 Att != Context->schema.case_weight_attribute &&
 		 ( StatBit(Att, SKIP) > 0 ) == ( Context->io.attribute_exclusions == -1 ) )
 	    {
-		fprintf(Context->io.output, "    %s\n", Context->schema.attribute_names[Att]);
+		c50_diagnostic_printf(Context->io.output, "    %s\n", Context->schema.attribute_names[Att]);
 	    }
 	}
     }
@@ -406,7 +408,7 @@ void Run(c50_context *Context, void *UserData)
 
 	/*  Evaluation  */
 
-	fprintf(Context->io.output, T_EvalTrain, Context->cases.max_case+1);
+	c50_diagnostic_printf(Context->io.output, T_EvalTrain, Context->cases.max_case+1);
 
 	NotifyStage(Context, EVALTRAIN);
 	Progress(Context, -Context->options.trials * (Context->cases.max_case+1.0));
@@ -416,12 +418,12 @@ void Run(c50_context *Context, void *UserData)
 	if ( (F = GetFile(Context, ( Context->options.sample_fraction ? ".data" : ".test" ), "r")) )
 	{
 	    NotifyStage(Context, READTEST);
-	    fprintf(Context->io.output, "\n");
+	    c50_diagnostic_printf(Context->io.output, "\n");
 
 	    FreeData(Context);
 	    GetData(Context, F, false, false);
 
-	    fprintf(Context->io.output, T_EvalTest, Context->cases.max_case+1);
+	    c50_diagnostic_printf(Context->io.output, T_EvalTest, Context->cases.max_case+1);
 
 	    NotifyStage(Context, EVALTEST);
 	    Progress(Context, -Context->options.trials * (Context->cases.max_case+1.0));
@@ -430,7 +432,7 @@ void Run(c50_context *Context, void *UserData)
 	}
     }
 
-    fprintf(Context->io.output, T_Time, ExecTime() - StartTime);
+    c50_diagnostic_printf(Context->io.output, T_Time, ExecTime() - StartTime);
 }
 
 void CleanupCli(c50_context *Context, void *UserData)
@@ -450,7 +452,6 @@ int main(int Argc, char *Argv[])
     try
     {
         context = c50_make_context();
-        context->continue_past_errors = 1;
         c50_run_operation(context.get(), Run, CleanupCli, &Arguments);
         return 0;
     }

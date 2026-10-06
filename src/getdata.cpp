@@ -169,7 +169,7 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 	{
 	    if ( FirstIgnore && Context->io.output )
 	    {
-		fprintf(Context->io.output, T_IgnoreBadClass);
+		c50_diagnostic_printf(Context->io.output, T_IgnoreBadClass);
 		FirstIgnore = false;
 	    }
 
