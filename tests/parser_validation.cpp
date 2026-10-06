@@ -126,6 +126,30 @@ static void structure(c50::context &context)
     deep_tree += leaf;
     for (int depth = 0; depth < 1024; ++depth) deep_tree += leaf;
     rejects([&] { c50::model::load(context, kind, names, deep_tree); });
+
+    // Distinct attributes prevent the rule index from combining thresholds.
+    constexpr int condition_count = 1100;
+    std::string wide_names = "no, yes.\n";
+    std::string cases;
+    std::string deep_rule = header + "rules=\"1\" default=\"yes\"\n"
+        "conds=\"" + std::to_string(condition_count) +
+        "\" cover=\"1\" ok=\"1\" lift=\"1\" class=\"no\"\n";
+    for (int attribute = 0; attribute < condition_count; ++attribute) {
+        const std::string name = "x" + std::to_string(attribute);
+        wide_names += name + ": continuous.\n";
+        cases += "1, ";
+        deep_rule += "type=\"2\" att=\"" + name +
+                     "\" cut=\"0\" result=\">\"\n";
+    }
+    cases += "?\n";
+    auto deep_rules = c50::model::load(context, rules, wide_names, deep_rule);
+    const auto matched = deep_rules.predict(context, cases);
+    cases.replace(0, 1, "0");
+    const auto unmatched = deep_rules.predict(context, cases);
+    if (matched.class_index(0) != 0 ||
+        matched.confidence(0) < 0.6669 || matched.confidence(0) > 0.6671 ||
+        unmatched.class_index(0) != 1 || unmatched.confidence(0) != 0.5)
+        throw std::runtime_error("deep rule matching changed predictions");
 }
 
 int main()

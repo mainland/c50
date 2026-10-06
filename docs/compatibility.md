@@ -107,6 +107,13 @@ child nodes remain valid and retain their parent-based prediction behavior.
 These checks reject malformed artifacts before prediction can index their
 internal structures.
 
+Rule indexes are limited to 512 levels. Deeper rulesets use iterative rule
+matching, which preserves their predictions without recursive index traversal.
+Internal tree nodes must have at least `1e-4` total class frequency. Empty
+leaves remain valid and use their parent's distribution. If matching rules
+have zero votes and the default class has no matching rule, prediction uses
+the default class with confidence `0.5`, as it does when no rules match.
+
 Costs must be complete finite nonnegative numbers representable by the native
 cost type. Each actual class requires a finite positive total error cost, and
 training normalization must produce finite weights. Inputs that previously

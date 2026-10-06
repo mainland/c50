@@ -812,7 +812,8 @@ void	    FreeSiftRuleData(c50_context *Context);
 
 void	    ConstructRuleTree(c50_context *Context, CRuleSet RS);
 void	    SetTestIndex(c50_context *Context, Condition C);
-RuleTree    GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule);
+RuleTree    GrowRT(c50_context *Context, RuleNo *RR, int RRN, CRule *Rule,
+                  int Depth = 0);
 int	    DesiredOutcome(c50_context *Context, CRule R, int TI);
 int	    SelectTest(c50_context *Context, RuleNo *RR, int RRN,
 		       CRule *Rule);
