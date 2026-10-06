@@ -811,6 +811,8 @@ std::string SecsToTime(int Secs)
 void SetTSBase(c50_context *Context, int y)
 /*   ---------  */
 {
+    if (y < 0 || y > 9999)
+        Error(Context, MODELFILE, "timestamp base year is out of range", "");
     y -= 15;
     Context->io.timestamp_base =
 	y * 365 + y / 4 - y / 100 + y / 400 + (367 * 4) / 12 + 1 - 30;
@@ -844,8 +846,13 @@ int TStampToMins(c50_context *Context, String TS)
 
     /*  Return a long time in the future if there is an error  */
 
-    return ( Day < 1 || Sec < 0 ? (1 << 30) :
-	     (Day - Context->io.timestamp_base) * 1440 + (Sec + 30) / 60 );
+    if (Day < 1 || Sec < 0) return (1 << 30);
+    const int64_t Minutes =
+        (static_cast<int64_t>(Day) - Context->io.timestamp_base) * 1440 +
+        (Sec + 30) / 60;
+    if (Minutes < std::numeric_limits<int>::min() || Minutes >= 1000000000)
+        return (1 << 30);
+    return static_cast<int>(Minutes);
 }
 
 

@@ -176,6 +176,21 @@ int main()
         auto short_id = c50::model::load(context, kind, names,
                                          "id=\"x\"\nentries=\"1\"\n" + leaf);
         if (short_id.predict(context, "0, ?\n").class_index(0) != 0) return 1;
+        const std::string timestamp_names = "no, yes.\nx: timestamp.\n";
+        const auto timestamp_model = c50::model::load(context, kind,
+            timestamp_names, "id=\"See5/C5.0 2.07 GPL Edition 2026-10-06\"\n"
+            "entries=\"1\"\n" + leaf);
+        rejects([&] { timestamp_model.predict(context,
+            "9999/12/31 00:00:00, ?\n"); });
+        if (timestamp_model.predict(context, "2026/10/06 12:34:56, ?\n")
+                .class_index(0) != 0)
+            throw std::runtime_error("ordinary timestamp prediction changed");
+        const auto future_base = c50::model::load(context, kind, timestamp_names,
+            "id=\"See5/C5.0 2.07 GPL Edition 9999-01-01\"\n"
+            "entries=\"1\"\n" + leaf);
+        rejects([&] { future_base.predict(context, "0000/03/01 00:00:00, ?\n"); });
+        rejects([&] { c50::model::load(context, kind, timestamp_names,
+            "id=\"999999-1-1\"\nentries=\"1\"\n" + leaf); });
         for (const auto &capacity : {"-1", "1", "2147483647", "999999999999999999999", "2junk"})
             rejects([&] { c50::model::load(context, kind,
                 std::string("no, yes.\nx: discrete ") + capacity + ".\n", header + leaf); });

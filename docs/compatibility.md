@@ -93,6 +93,10 @@ this change affects no definition that previously completed.
 Serialized properties must use the quoted syntax emitted by C5.0. Unquoted
 values, incomplete escapes, and trailing property text produce parse errors.
 Short model identifiers remain accepted without date recovery.
+Recovered timestamp base years must lie between 0 and 9999. Timestamp
+conversion uses checked arithmetic and rejects offsets outside the native
+integer range or at least one billion minutes after the base. Representable
+timestamps retain their existing rounded-minute values.
 
 Model loading rejects inconsistent branch counts, invalid attribute kinds,
 missing required classes or rule fields, nonfinite numeric properties, and
