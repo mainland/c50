@@ -149,6 +149,7 @@ files = [
     "docs/conf.py",
     "tests/benchmark_smoke.py",
     "tests/check_sdist.py",
+    "tests/run_built_python.py",
     "tests/reference",
 ]
 mypy_path = "python"
