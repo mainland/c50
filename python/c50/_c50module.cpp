@@ -6,8 +6,10 @@
 #include <cstdint>
 #include <limits>
 #include <mutex>
+#include <optional>
 #include <type_traits>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -18,6 +20,73 @@
 #include <c50/c50.hpp>
 
 namespace py = pybind11;
+
+namespace
+{
+
+// Text that the native library reads after the binding releases the GIL. A
+// str or bytes argument is immutable, and the call keeps it alive, so the text
+// borrows its buffer. A data file can be larger than a gigabyte, and a copy
+// would double that memory. A bytearray's contents are copied when the
+// argument is converted, because keeping a bytearray alive does not keep its
+// storage valid. Python code that runs while pybind11 converts a later
+// argument, such as an __index__ method, can resize it, and so can another
+// thread once the GIL is released. pybind11 documents this limitation of its
+// std::string_view caster, which borrows a bytearray's storage.
+class text_argument
+{
+public:
+    text_argument() = default;
+    explicit text_argument(std::string_view borrowed) noexcept
+        : borrowed_(borrowed)
+    {
+    }
+    explicit text_argument(std::string copy) : copy_(std::move(copy)) {}
+
+    std::string_view view() const noexcept
+    {
+        return copy_ ? std::string_view(*copy_) : borrowed_;
+    }
+
+private:
+    std::string_view borrowed_;
+    std::optional<std::string> copy_;
+};
+
+} // namespace
+
+namespace pybind11::detail
+{
+
+// Accept the same objects as a std::string parameter: str, encoded as UTF-8,
+// bytes, and bytearray.
+template <>
+struct type_caster<text_argument>
+{
+    PYBIND11_TYPE_CASTER(text_argument, const_name("str"));
+
+    bool load(handle source, bool convert)
+    {
+        if ( PyByteArray_Check(source.ptr()) )
+        {
+            value = text_argument(std::string(
+                PyByteArray_AS_STRING(source.ptr()),
+                static_cast<std::size_t>(
+                    PyByteArray_GET_SIZE(source.ptr()))));
+            return true;
+        }
+
+        make_caster<std::string_view> text;
+        if ( !text.load(source, convert) )
+        {
+            return false;
+        }
+        value = text_argument(cast_op<std::string_view>(text));
+        return true;
+    }
+};
+
+} // namespace pybind11::detail
 
 namespace
 {
@@ -141,11 +210,11 @@ class python_predictor
 public:
     explicit python_predictor(c50::predictor predictor) : predictor_(std::move(predictor)) {}
 
-    c50::predictions predict_details(const std::string &cases)
+    c50::predictions predict_details(const text_argument &cases)
     {
         py::gil_scoped_release release;
         std::lock_guard<std::mutex> lock(mutex_);
-        return predictor_.predict(cases);
+        return predictor_.predict(cases.view());
     }
 
     c50::predictions predict_details_dense(const dense_values<double> &values)
@@ -176,26 +245,27 @@ public:
     python_model(python_model &&) noexcept = default;
     python_model &operator=(python_model &&) noexcept = default;
 
-    static python_model train(const std::string &names,
-                              const std::string &training_data,
+    static python_model train(const text_argument &names,
+                              const text_argument &training_data,
                               c50::model_kind kind,
                               const c50::options &options,
-                              const std::string &costs,
+                              const text_argument &costs,
                               unsigned int split_workers)
     {
         c50::context context;
         context.split_workers(split_workers);
         py::gil_scoped_release release;
         return python_model(c50::model::train(
-            context, kind, names, training_data, options, costs));
+            context, kind, names.view(), training_data.view(), options,
+            costs.view()));
     }
 
-    static python_model train_dense(const std::string &names,
+    static python_model train_dense(const text_argument &names,
                                     const dense_values<double> &values,
                                     const py::array &class_indices,
                                     c50::model_kind kind,
                                     const c50::options &options,
-                                    const std::string &costs,
+                                    const text_argument &costs,
                                     unsigned int split_workers,
                                     bool copy)
     {
@@ -230,18 +300,19 @@ public:
         context.split_workers(split_workers);
         py::gil_scoped_release release;
         return python_model(c50::model::train(
-            context, kind, names, dataset, options, costs));
+            context, kind, names.view(), dataset, options, costs.view()));
     }
 
-    static python_model load(const std::string &names,
-                             const std::string &serialized_data,
+    static python_model load(const text_argument &names,
+                             const text_argument &serialized_data,
                              c50::model_kind kind,
-                             const std::string &costs)
+                             const text_argument &costs)
     {
         c50::context context;
         py::gil_scoped_release release;
         return python_model(c50::model::load(
-            context, kind, names, serialized_data, costs));
+            context, kind, names.view(), serialized_data.view(),
+            costs.view()));
     }
 
     c50::model_inspection inspect() const
@@ -262,11 +333,11 @@ public:
     std::string serialized_data() const { return model_.serialized_data(); }
     std::string costs_data() const { return model_.costs_data(); }
 
-    c50::predictions predict_details(const std::string &cases) const
+    c50::predictions predict_details(const text_argument &cases) const
     {
         c50::context context;
         py::gil_scoped_release release;
-        return model_.predict(context, cases);
+        return model_.predict(context, cases.view());
     }
 
     c50::predictions predict_details_dense(const dense_values<double> &values) const
@@ -286,11 +357,11 @@ public:
         return model_.predict(context, dataset);
     }
 
-    std::vector<std::size_t> attribute_usage(const std::string &cases) const
+    std::vector<std::size_t> attribute_usage(const text_argument &cases) const
     {
         c50::context context;
         py::gil_scoped_release release;
-        return model_.attribute_usage(context, cases);
+        return model_.attribute_usage(context, cases.view());
     }
 
     std::vector<std::size_t> attribute_usage_dense(
@@ -311,7 +382,7 @@ public:
         return model_.attribute_usage(context, dataset);
     }
 
-    std::vector<std::string> predict(const std::string &cases) const
+    std::vector<std::string> predict(const text_argument &cases) const
     {
         c50::predictions predictions = predict_details(cases);
         std::vector<std::string> labels;
@@ -326,7 +397,7 @@ public:
     }
 
     std::vector<std::vector<double>> predict_scores(
-        const std::string &cases) const
+        const text_argument &cases) const
     {
         c50::predictions predictions = predict_details(cases);
         std::vector<std::vector<double>> scores(
@@ -347,7 +418,7 @@ public:
 
     std::vector<std::string> classes() const
     {
-        c50::predictions predictions = predict_details("");
+        c50::predictions predictions = predict_details(text_argument());
         std::vector<std::string> names;
 
         names.reserve(predictions.class_count());
@@ -709,10 +780,10 @@ GIL while training, loading, or predicting.
                     throw py::value_error("invalid C5.0 model state");
                 }
                 return python_model::load(
-                    state[1].cast<std::string>(),
-                    state[2].cast<std::string>(),
+                    state[1].cast<text_argument>(),
+                    state[2].cast<text_argument>(),
                     state[0].cast<c50::model_kind>(),
-                    state[3].cast<std::string>());
+                    state[3].cast<text_argument>());
             }));
 
     module.def("train", &python_model::train,

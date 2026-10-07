@@ -64,6 +64,10 @@ native context. Native work releases the Python GIL. Independent operations can
 therefore execute concurrently, and the binding does not depend on hidden
 process-global classifier state.
 
+The binding does not copy text arguments. A `str` cannot change, and the call
+keeps it alive, so native code reads its UTF-8 representation in place after
+the binding releases the GIL.
+
 `train_dense` copies `values` before releasing the GIL. With `copy=False`, it
 reads a float64, C-contiguous array directly, and the caller must ensure that no
 thread modifies the array until training returns. Other dtypes and layouts are

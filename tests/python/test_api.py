@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pickle
 from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import pytest
@@ -263,6 +264,55 @@ def test_empty_prediction_batch() -> None:
     assert model.predict("") == []
     assert model.predict_scores("") == []
     assert len(model.predict_details("")) == 0
+
+
+@pytest.mark.parametrize("encoded", [bytes, bytearray])
+def test_bytes_like_text_matches_str(encoded: type[bytes] | type[bytearray]) -> None:
+    # The stub declares str, but the binding also accepts bytes-like text. It
+    # reads bytes in place and copies a bytearray when it is converted.
+    def text(value: str) -> Any:
+        return encoded(value, "ascii")
+
+    expected = c50.train(NAMES, TRAINING)
+    model = c50.train(text(NAMES), text(TRAINING), costs=text(""))
+    loaded = c50.load(text(NAMES), text(expected.serialized_data))
+
+    assert model.serialized_data == expected.serialized_data
+    assert loaded.serialized_data == expected.serialized_data
+    assert model.predict(text(CASES)) == ["low", "high"]
+    assert model.predict_scores(text(CASES)) == expected.predict_scores(CASES)
+    assert model.attribute_usage(text(TRAINING)) == expected.attribute_usage(TRAINING)
+    details = model.prepare_predictor().predict_details(text(CASES))
+    assert details.scores == expected.predict_details(CASES).scores
+
+
+@pytest.mark.parametrize("cases", [memoryview(b""), 0, None, "\ud800"])
+def test_text_arguments_reject_other_objects(cases: object) -> None:
+    model = c50.train(NAMES, TRAINING)
+
+    with pytest.raises(TypeError):
+        model.predict_details(cases)  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        model.prepare_predictor().predict_details(cases)  # type: ignore[arg-type]
+
+
+def test_bytearray_text_is_copied_before_later_arguments() -> None:
+    # pybind11 converts split_workers after training_data. Training must read
+    # the bytearray's contents as they were when it was converted. Overwriting
+    # them before clearing makes a stale view visible even when freed storage
+    # keeps its old bytes.
+    data = bytearray(TRAINING, "ascii")
+
+    class ReplacesData:
+        def __index__(self) -> int:
+            data[:] = bytes(len(data))
+            data.clear()
+            return 1
+
+    model = c50.train(NAMES, data, split_workers=ReplacesData())  # type: ignore[arg-type]
+
+    assert data == bytearray()
+    assert model.serialized_data == c50.train(NAMES, TRAINING).serialized_data
 
 
 @pytest.mark.parametrize("factory", [c50.train_dense, c50.Model.train_dense])
