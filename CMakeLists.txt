@@ -21,9 +21,34 @@ option(C50_ENABLE_THREAD_SANITIZER "Enable ThreadSanitizer" OFF)
 option(C50_BUILD_PYTHON "Build the Python extension module" OFF)
 option(C50_BUILD_DOCUMENTATION "Build the Doxygen API documentation" OFF)
 option(C50_BUILD_FUZZERS "Build AFL++ parser harnesses" OFF)
+option(C50_PRIVATE_CORE
+       "Compile an uninstalled core with link-time optimization and hidden symbols"
+       OFF)
 
 if(C50_ENABLE_SANITIZERS AND C50_ENABLE_THREAD_SANITIZER)
     message(FATAL_ERROR "AddressSanitizer and ThreadSanitizer cannot be combined")
+endif()
+
+# Wheels contain only the Python extension, which links the core statically.
+# A shared object that exports the core's functions lets the dynamic linker
+# replace them, so the compiler cannot inline across them. Hidden symbols make
+# them private to the extension, and link-time optimization then inlines across
+# the core's source files. A core compiled this way is not installed, because
+# its objects hold intermediate code that only the same compiler can link.
+if(C50_PRIVATE_CORE)
+    if(NOT DEFINED CMAKE_INTERPROCEDURAL_OPTIMIZATION)
+        include(CheckIPOSupported)
+        check_ipo_supported(RESULT c50_ipo_supported OUTPUT c50_ipo_output)
+        if(c50_ipo_supported)
+            set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+        else()
+            message(WARNING
+                    "Compiling the private core without link-time "
+                    "optimization: ${c50_ipo_output}")
+        endif()
+    endif()
+    set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+    set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 endif()
 
 # MSVC deprecates standard C functions such as fopen and sscanf in favor of
@@ -358,41 +383,43 @@ if(BUILD_TESTING)
     )
 endif()
 
-install(
-    TARGETS c50_core c50_cpp
-    EXPORT C50Targets
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
-install(
-    DIRECTORY include/c50
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
-)
+if(NOT C50_PRIVATE_CORE)
+    install(
+        TARGETS c50_core c50_cpp
+        EXPORT C50Targets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+    install(
+        DIRECTORY include/c50
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+    )
 
-configure_package_config_file(
-    cmake/C50Config.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/C50Config.cmake
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
-)
-write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/C50ConfigVersion.cmake
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
-)
-install(
-    FILES
+    configure_package_config_file(
+        cmake/C50Config.cmake.in
         ${CMAKE_CURRENT_BINARY_DIR}/C50Config.cmake
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
+    )
+    write_basic_package_version_file(
         ${CMAKE_CURRENT_BINARY_DIR}/C50ConfigVersion.cmake
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
-)
-install(
-    EXPORT C50Targets
-    FILE C50Targets.cmake
-    NAMESPACE C50::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
-)
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion
+    )
+    install(
+        FILES
+            ${CMAKE_CURRENT_BINARY_DIR}/C50Config.cmake
+            ${CMAKE_CURRENT_BINARY_DIR}/C50ConfigVersion.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
+    )
+    install(
+        EXPORT C50Targets
+        FILE C50Targets.cmake
+        NAMESPACE C50::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
+    )
+endif()
 
 if(BUILD_TESTING OR C50_BUILD_FUZZERS)
     add_library(c50_fuzz_target STATIC tests/fuzz/parser_target.cpp)
@@ -596,7 +623,8 @@ if(BUILD_TESTING)
             )
         endif()
     endif()
-    if(NOT C50_ENABLE_SANITIZERS AND NOT C50_ENABLE_THREAD_SANITIZER)
+    if(NOT C50_ENABLE_SANITIZERS AND NOT C50_ENABLE_THREAD_SANITIZER
+       AND NOT C50_PRIVATE_CORE)
         add_test(
             NAME install-consumer
             COMMAND

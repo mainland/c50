@@ -58,6 +58,45 @@ jobs:
           make -j2 c5.0dbg
           C50_BINARY="$PWD/c5.0dbg" ./tests/test_verbose.sh
 
+  # Python packages compile the core with C50_PRIVATE_CORE, and inlining
+  # across source files can change floating-point rounding where the compiler
+  # fuses a multiplication and an addition, as GCC does on ARM64. Check that
+  # this configuration reproduces the reference classifiers.
+  private-core:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            cc: gcc
+            cxx: g++
+          - os: ubuntu-24.04-arm
+            cc: gcc
+            cxx: g++
+          - os: macos-14
+            cc: clang
+            cxx: clang++
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # Request link-time optimization explicitly, so that configuration fails
+      # instead of continuing without it.
+      - name: Configure
+        run: >-
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER=${{ matrix.cc }}
+          -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+          -DC50_PRIVATE_CORE=ON
+          -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON
+      - name: Build and test
+        run: |
+          cmake --build build --parallel 2
+          ctest --test-dir build --output-on-failure
+
   windows:
     runs-on: windows-2022
     timeout-minutes: 30

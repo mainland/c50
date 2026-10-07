@@ -90,6 +90,9 @@ sdist.exclude = [
 
 [tool.scikit-build.cmake.define]
 C50_BUILD_PYTHON = true
+# The wheel installs only the extension, so compile its core with link-time
+# optimization and hidden symbols.
+C50_PRIVATE_CORE = true
 BUILD_TESTING = false
 
 [tool.scikit-build.metadata.version]
