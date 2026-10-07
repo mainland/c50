@@ -21,9 +21,34 @@ option(C50_ENABLE_THREAD_SANITIZER "Enable ThreadSanitizer" OFF)
 option(C50_BUILD_PYTHON "Build the Python extension module" OFF)
 option(C50_BUILD_DOCUMENTATION "Build the Doxygen API documentation" OFF)
 option(C50_BUILD_FUZZERS "Build AFL++ parser harnesses" OFF)
+option(C50_PRIVATE_CORE
+       "Compile an uninstalled core with link-time optimization and hidden symbols"
+       OFF)
 
 if(C50_ENABLE_SANITIZERS AND C50_ENABLE_THREAD_SANITIZER)
     message(FATAL_ERROR "AddressSanitizer and ThreadSanitizer cannot be combined")
+endif()
+
+# Wheels contain only the Python extension, which links the core statically.
+# A shared object that exports the core's functions lets the dynamic linker
+# replace them, so the compiler cannot inline across them. Hidden symbols make
+# them private to the extension, and link-time optimization then inlines across
+# the core's source files. A core compiled this way is not installed, because
+# its objects hold intermediate code that only the same compiler can link.
+# The core and the extension get these properties where they are created. An
+# explicit CMAKE_INTERPROCEDURAL_OPTIMIZATION setting takes precedence.
+set(c50_core_ipo OFF)
+if(C50_PRIVATE_CORE AND NOT DEFINED CMAKE_INTERPROCEDURAL_OPTIMIZATION)
+    include(CheckIPOSupported)
+    check_ipo_supported(LANGUAGES CXX RESULT c50_ipo_supported
+                        OUTPUT c50_ipo_output)
+    if(c50_ipo_supported)
+        set(c50_core_ipo ON)
+    else()
+        message(WARNING
+                "Compiling the private core without link-time "
+                "optimization: ${c50_ipo_output}")
+    endif()
 endif()
 
 # MSVC deprecates standard C functions such as fopen and sscanf in favor of
@@ -113,6 +138,18 @@ set_target_properties(
         EXPORT_NAME core
         POSITION_INDEPENDENT_CODE ON
 )
+if(C50_PRIVATE_CORE)
+    set_target_properties(
+        c50_core
+        PROPERTIES
+            CXX_VISIBILITY_PRESET hidden
+            VISIBILITY_INLINES_HIDDEN ON
+    )
+    if(c50_core_ipo)
+        set_target_properties(c50_core PROPERTIES
+                              INTERPROCEDURAL_OPTIMIZATION ON)
+    endif()
+endif()
 target_include_directories(
     c50_core
     PUBLIC
@@ -131,7 +168,25 @@ target_link_libraries(c50_cpp INTERFACE C50::core)
 if(C50_BUILD_PYTHON)
     find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
     find_package(pybind11 CONFIG REQUIRED)
+    # pybind11_add_module adds its own link-time optimization flags unless
+    # CMAKE_INTERPROCEDURAL_OPTIMIZATION is defined. Define it only for this
+    # call, which also initializes the target's INTERPROCEDURAL_OPTIMIZATION
+    # property, so that CMake's flags are the only ones.
+    if(c50_core_ipo)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+    endif()
     pybind11_add_module(c50_python MODULE python/c50/_c50module.cpp)
+    if(c50_core_ipo)
+        unset(CMAKE_INTERPROCEDURAL_OPTIMIZATION)
+    endif()
+    if(C50_PRIVATE_CORE)
+        set_target_properties(
+            c50_python
+            PROPERTIES
+                CXX_VISIBILITY_PRESET hidden
+                VISIBILITY_INLINES_HIDDEN ON
+        )
+    endif()
     target_compile_features(c50_python PRIVATE cxx_std_17)
     target_link_libraries(c50_python PRIVATE C50::cpp)
     # Multi-configuration generators append a configuration directory to an
@@ -388,41 +443,43 @@ if(BUILD_TESTING)
     )
 endif()
 
-install(
-    TARGETS c50_core c50_cpp
-    EXPORT C50Targets
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
-install(
-    DIRECTORY include/c50
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
-)
+if(NOT C50_PRIVATE_CORE)
+    install(
+        TARGETS c50_core c50_cpp
+        EXPORT C50Targets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+    install(
+        DIRECTORY include/c50
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+    )
 
-configure_package_config_file(
-    cmake/C50Config.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/C50Config.cmake
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
-)
-write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/C50ConfigVersion.cmake
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
-)
-install(
-    FILES
+    configure_package_config_file(
+        cmake/C50Config.cmake.in
         ${CMAKE_CURRENT_BINARY_DIR}/C50Config.cmake
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
+    )
+    write_basic_package_version_file(
         ${CMAKE_CURRENT_BINARY_DIR}/C50ConfigVersion.cmake
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
-)
-install(
-    EXPORT C50Targets
-    FILE C50Targets.cmake
-    NAMESPACE C50::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
-)
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion
+    )
+    install(
+        FILES
+            ${CMAKE_CURRENT_BINARY_DIR}/C50Config.cmake
+            ${CMAKE_CURRENT_BINARY_DIR}/C50ConfigVersion.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
+    )
+    install(
+        EXPORT C50Targets
+        FILE C50Targets.cmake
+        NAMESPACE C50::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/C50
+    )
+endif()
 
 # The class-count index check trains a schema of 46,341 classes, which reserves
 # about 8.6 GB of address space, so it is not part of the default tests. Run it
@@ -654,7 +711,8 @@ if(BUILD_TESTING)
             )
         endif()
     endif()
-    if(NOT C50_ENABLE_SANITIZERS AND NOT C50_ENABLE_THREAD_SANITIZER)
+    if(NOT C50_ENABLE_SANITIZERS AND NOT C50_ENABLE_THREAD_SANITIZER
+       AND NOT C50_PRIVATE_CORE)
         add_test(
             NAME install-consumer
             COMMAND
@@ -668,8 +726,32 @@ if(BUILD_TESTING)
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_install.cmake"
         )
     endif()
-    # This inventory uses GNU nm output and ELF symbol conventions.
-    if(CMAKE_NM AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # This inventory uses GNU nm output and ELF symbol conventions. A core
+    # compiled with link-time optimization holds intermediate code, which is
+    # LLVM bitcode for Clang and slim GNU LTO objects for GCC. Neither records
+    # data sections, so nm cannot tell constants from writable data, and the
+    # inventory would pass without checking anything. Whether a global is
+    # writable does not depend on link-time optimization, and native builds of
+    # the same sources run the inventory.
+    set(c50_core_lto OFF)
+    get_target_property(c50_core_ipo_property c50_core
+                        INTERPROCEDURAL_OPTIMIZATION)
+    set(c50_core_flags "${CMAKE_CXX_FLAGS}")
+    foreach(c50_config IN ITEMS DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+        string(APPEND c50_core_flags " ${CMAKE_CXX_FLAGS_${c50_config}}")
+        get_target_property(c50_config_ipo c50_core
+                            INTERPROCEDURAL_OPTIMIZATION_${c50_config})
+        if(c50_config_ipo)
+            set(c50_core_lto ON)
+        endif()
+    endforeach()
+    if(c50_core_ipo OR CMAKE_INTERPROCEDURAL_OPTIMIZATION
+       OR c50_core_ipo_property
+       OR c50_core_flags MATCHES "(^|[ ;])-flto([ =;]|$)")
+        set(c50_core_lto ON)
+    endif()
+    if(CMAKE_NM AND CMAKE_SYSTEM_NAME STREQUAL "Linux"
+       AND NOT c50_core_lto)
         add_test(
             NAME writable-global-inventory
             COMMAND
@@ -729,4 +811,20 @@ if(BUILD_TESTING)
             ${C50_TEST_SHELL_COMMAND}
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_predictions.sh"
     )
+endif()
+
+# The core's objects hold intermediate code, so the link step that consumes
+# the archive must load the compiler's link-time optimization plugin. GNU ld
+# loads GCC's plugin on its own but not Clang's, and CMake adds the flag that
+# loads it only to targets that request link-time optimization themselves.
+# Request it for every program that links the private core.
+if(c50_core_ipo)
+    get_directory_property(c50_all_targets BUILDSYSTEM_TARGETS)
+    foreach(c50_target IN LISTS c50_all_targets)
+        get_target_property(c50_target_type ${c50_target} TYPE)
+        if(c50_target_type STREQUAL "EXECUTABLE")
+            set_target_properties(${c50_target} PROPERTIES
+                                  INTERPROCEDURAL_OPTIMIZATION ON)
+        endif()
+    endforeach()
 endif()
