@@ -23,11 +23,15 @@ No release result has been retained yet.
 
 In the first table, each time is the wall time of the whole program, which
 reads the data, trains the classifier, writes it, and evaluates it on the
-training cases. The time ratio divides the library's time by the time of
-C5.0 Release 2.07, so a ratio below one means that the library is faster. Peak
-memory is the maximum resident set size of the process. "Same classifier"
-means that every run of both programs wrote the same serialized classifier,
-apart from the dated `id` line.
+training cases. C5.0 Release 2.07 is built twice from the same source: as
+its Makefile builds the production program, with `-ffloat-store`, and with
+plain `-O3`. This library drops `-ffloat-store` on 64-bit targets, so the
+`-O3` build shows how much of a time difference comes from the flag rather
+than the code. The time ratios divide the library's time by the time of each
+build, so a ratio below one means that the library is faster. Peak memory is
+the maximum resident set size of the process. "Same classifier" means that
+every run of all three programs wrote the same serialized classifier, apart
+from the dated `id` line.
 
 In the second table, each time covers one call of the low-level Python function
 `c50.train`, which parses the data text and trains a tree. The speedup divides

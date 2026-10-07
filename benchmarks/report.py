@@ -82,6 +82,13 @@ def render(results: dict[str, Any], path: str) -> str:
             f"using `{builds['reference']['command']}`, as its Makefile builds "
             "the production program."
         )
+    # Results measured before the suite added the -O3 reference build lack it.
+    plain = "reference_o3" in builds
+    if plain:
+        lines[-1] += (
+            " The same source was also built with "
+            f"`{builds['reference_o3']['command']}`, without `-ffloat-store`."
+        )
     python_build = builds["c50"].get("python_build")
     if python_build is not None:
         flags = " ".join(
@@ -107,9 +114,14 @@ def render(results: dict[str, Any], path: str) -> str:
     lines += ["", "### C5.0 Release 2.07 and this library", ""]
     if "reference" in builds:
         lines += [
-            "| Dataset | Classifier | C5.0 2.07, s | c50, s | Time ratio "
-            "| C5.0 2.07 peak, MiB | c50 peak, MiB | Same classifier |",
-            "| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
+            "| Dataset | Classifier | C5.0 2.07, s "
+            + ("| C5.0 2.07 -O3, s " if plain else "")
+            + "| c50, s | Time ratio "
+            + ("| Time ratio to -O3 " if plain else "")
+            + "| C5.0 2.07 peak, MiB | c50 peak, MiB | Same classifier |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | "
+            + ("---: | ---: | " if plain else "")
+            + "--- |",
         ]
     else:
         lines += [
@@ -125,10 +137,17 @@ def render(results: dict[str, Any], path: str) -> str:
         if "reference" in row["samples"]:
             reference = row["samples"]["reference"]
             reference_time = median(reference, "wall_seconds")
+            times = [reference_time]
+            ratios = [c50_time / reference_time]
+            if plain:
+                plain_time = median(row["samples"]["reference_o3"], "wall_seconds")
+                times.append(plain_time)
+                ratios.append(c50_time / plain_time)
+            cells = [*times, c50_time, *ratios]
             lines.append(
-                f"| {label} | {kind} | {reference_time:.2f} | {c50_time:.2f} "
-                f"| {c50_time / reference_time:.2f} "
-                f"| {median(reference, 'peak_rss_bytes') / MIB:,.0f} "
+                f"| {label} | {kind} | "
+                + " | ".join(f"{cell:.2f}" for cell in cells)
+                + f" | {median(reference, 'peak_rss_bytes') / MIB:,.0f} "
                 f"| {c50_peak:,.0f} | {yes_no(row['same_classifier'])} |"
             )
         else:

@@ -4,8 +4,9 @@ The benchmark suite measures the released behavior of the library. It answers
 three questions:
 
 1. How does the library's `c5.0` program compare with the imported C5.0
-   Release 2.07 program in time and peak memory, and do both programs write
-   the same classifier?
+   Release 2.07 program in time and peak memory, both as the upstream
+   Makefile builds it and without `-ffloat-store`, and do all three programs
+   write the same classifier?
 2. How does training time change with the number of split workers and with
    the tie order, and is the classifier the same for every worker count?
 3. How much time and memory does the scikit-learn estimator `C50Classifier`
@@ -16,11 +17,12 @@ as the tables in `docs/performance.md`.
 
 ## Measurements
 
-The comparison trains each dataset with both command-line programs, alternating
-their order in successive repetitions. Both programs read the same `.names` and
-`.data` files in a fresh directory. The recorded time is the wall time of the
-whole process, which includes reading the data and evaluating the classifier on
-the training cases. Peak memory is the process's maximum resident set size.
+The comparison trains each dataset with the three command-line programs,
+reversing their order in successive repetitions. Every program reads the same
+`.names` and `.data` files in a fresh directory. The recorded time is the wall
+time of the whole process, which includes reading the data and evaluating the
+classifier on the training cases. Peak memory is the process's maximum
+resident set size.
 On Linux, the peak that `wait4` reports for a child includes the memory of the
 process that started it, so `run.py` starts each measured process through
 `measure.c`, a small launcher. The comparison requires the serialized
@@ -110,6 +112,10 @@ instead and records its version and extension checksum.
 
 The driver builds the reference program as the upstream Makefile builds its
 production `c5.0`, with `gcc -ffloat-store -O3` on the concatenated sources.
+It builds the same source a second time with `gcc -O3`. The library drops
+`-ffloat-store` on 64-bit targets, where it affects only how floating-point
+variables are stored, so the second build separates the flag's effect on time
+from differences in the code.
 It refuses to measure a working tree with uncommitted changes unless
 `--allow-dirty` is given. Datasets are cached in `~/.cache/c50-benchmarks`
 unless `--cache` names another directory.

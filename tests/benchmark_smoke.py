@@ -78,6 +78,35 @@ def main() -> None:
             [sys.executable, str(REPOSITORY / "benchmarks/report.py"), str(legacy_path)],
             check=True, capture_output=True, text=True,
         )
+        # CI has no upstream archive, so check the reference columns with this
+        # library's samples standing in for both reference builds.
+        referenced = json.loads(output.read_text())
+        for name, command in (("reference", "gcc -ffloat-store -O3"),
+                              ("reference_o3", "gcc -O3")):
+            referenced["builds"][name] = {
+                "archive_sha256": "", "compiler": "gcc", "command": command,
+                "program_sha256": "",
+            }
+            for row in referenced["comparisons"]:
+                row["samples"][name] = row["samples"]["c50"]
+        for plain in (True, False):
+            if not plain:
+                del referenced["builds"]["reference_o3"]
+            referenced_path = scratch_path / "referenced.json"
+            referenced_path.write_text(json.dumps(referenced))
+            table = [
+                line for line in subprocess.run(
+                    [sys.executable, str(REPOSITORY / "benchmarks/report.py"),
+                     str(referenced_path)],
+                    check=True, capture_output=True, text=True,
+                ).stdout.split("\n### ")[1].splitlines()
+                if line.startswith("|")
+            ]
+            assert ("| C5.0 2.07 -O3, s |" in table[0]) == plain
+            assert ("| Time ratio to -O3 |" in table[0]) == plain
+            assert "| C5.0 2.07, s |" in table[0]
+            assert len({line.count("|") for line in table}) == 1, table
+            assert len(table) == 2 + len(referenced["comparisons"])
         portable = scratch_path / "portable.json"
         result["machine"].update(cpu=None, cpu_governor=None, memory_bytes=None)
         # A development version names its commit, which the report must omit.

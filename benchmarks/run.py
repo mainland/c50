@@ -4,14 +4,15 @@
 The suite answers three questions on the same input files:
 
 * How does this library's ``c5.0`` program compare with the imported C5.0
-  Release 2.07 program in time and peak memory, and do both write the same
+  Release 2.07 program in time and peak memory, both as its Makefile builds
+  it and without ``-ffloat-store``, and do all three write the same
   classifier?
 * How does training time change with the number of split workers and the
   tie order, and is the classifier the same for every worker count?
 * How much time and memory does ``C50Classifier`` add to low-level training
   and prediction, and does it predict the same classes?
 
-The driver builds both programs itself, from the current checkout and from
+The driver builds every program itself, from the current checkout and from
 the canonical upstream archive, and records their provenance with every
 sample. See ``benchmarks/README.md``.
 """
@@ -42,8 +43,15 @@ from datasets import Dataset, SyntheticSpec
 FORMAT_VERSION = 2
 REPOSITORY = Path(__file__).resolve().parents[1]
 ARCHIVE_SHA256 = "309db588eda420c06701bf8ae74c06a6c923e9a06e714a598ea761bcadfc5e2e"
-REFERENCE_CC = ["gcc", "-ffloat-store"]
-REFERENCE_CFLAGS = ["-O3"]
+REFERENCE_COMPILER = "gcc"
+# The upstream Makefile compiles the production program with
+# -ffloat-store -O3. This library drops -ffloat-store on 64-bit targets, so
+# a second build without it separates the flag's effect on time from the
+# code's.
+REFERENCE_FLAGS = {
+    "reference": ("-ffloat-store", "-O3"),
+    "reference_o3": ("-O3",),
+}
 WORKER_COUNTS = (1, 2, 4, 8)
 TIE_ORDERS = ("reference", "stable")
 
@@ -53,7 +61,7 @@ LAUNCHER: Path | None = None
 
 @dataclass(frozen=True)
 class Comparison:
-    """A dataset and the classifier kinds to train with both programs."""
+    """A dataset and the classifier kinds to train with every program."""
 
     dataset: str | SyntheticSpec
     classifiers: tuple[str, ...]
@@ -285,11 +293,19 @@ def build_library(work: Path, jobs: int, python_module: bool) -> dict[str, Any]:
 
 
 def build_reference(archive: Path, work: Path) -> dict[str, Any]:
-    """Build the imported program as its Makefile builds the production c5.0.
+    """Build the imported program with each set of ``REFERENCE_FLAGS``.
 
     The Makefile concatenates the sources into one file and compiles it with
     ``gcc -ffloat-store -O3``. Doing the same here avoids its ``csh``
     dependency.
+
+    Args:
+        archive: The canonical ``C50.tgz`` archive.
+        work: Directory for the extracted sources and programs.
+
+    Returns:
+        The program path and provenance record of each build, keyed by the
+        names in ``REFERENCE_FLAGS``.
     """
     digest = sha256(archive)
     if digest != ARCHIVE_SHA256:
@@ -311,20 +327,23 @@ def build_reference(archive: Path, work: Path) -> dict[str, Any]:
         line for line in combined.split("\n") if not re.search("defns.i|extern.i", line)
     )
     (source / "c50gt.c").write_text(combined, errors="surrogateescape")
-    program = source / "c5.0"
-    run(
-        [*REFERENCE_CC, *REFERENCE_CFLAGS, "-o", program, source / "c50gt.c", "-lm"],
-        cwd=source,
-    )
-    return {
-        "program": program,
-        "record": {
+    compiler = compiler_version(REFERENCE_COMPILER)
+    programs: dict[str, Path] = {}
+    records: dict[str, dict[str, Any]] = {}
+    for name, flags in REFERENCE_FLAGS.items():
+        program = source / f"c5.0-{name}"
+        run(
+            [REFERENCE_COMPILER, *flags, "-o", program, source / "c50gt.c", "-lm"],
+            cwd=source,
+        )
+        programs[name] = program
+        records[name] = {
             "archive_sha256": digest,
-            "compiler": compiler_version(REFERENCE_CC[0]),
-            "command": " ".join([*REFERENCE_CC, *REFERENCE_CFLAGS]),
+            "compiler": compiler,
+            "command": " ".join([REFERENCE_COMPILER, *flags]),
             "program_sha256": sha256(program),
-        },
-    }
+        }
+    return {"programs": programs, "records": records}
 
 
 def build_launcher(work: Path) -> Path:
@@ -737,8 +756,8 @@ def main(argv: Sequence[str]) -> int:
     builds: dict[str, Any] = {"c50": library["record"]}
     if args.reference_archive is not None:
         reference = build_reference(args.reference_archive, work)
-        programs = {"reference": reference["program"], **programs}
-        builds["reference"] = reference["record"]
+        programs = {**reference["programs"], **programs}
+        builds.update(reference["records"])
 
     prepared: dict[str, Dataset] = {}
 
