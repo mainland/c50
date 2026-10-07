@@ -2,13 +2,17 @@
 """Run the benchmark smoke suite and check its result and report.
 
 The suite builds the command-line program from this checkout and trains
-with the installed or ``PYTHONPATH`` c50 package, so it needs CMake, a C++
-compiler, NumPy, pandas, and scikit-learn. It runs on POSIX systems only.
+with the installed or ``PYTHONPATH`` c50 package. With ``--build-python``, it
+also builds the package's private Python core. It needs CMake, a C++ compiler,
+NumPy, pandas, and scikit-learn, plus pybind11 and an LTO-capable compiler
+for the Python build. It runs on POSIX systems only.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -18,6 +22,9 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--build-python", action="store_true")
+    args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="c50-benchmark-smoke-") as scratch:
         scratch_path = Path(scratch)
         output = scratch_path / "results" / "smoke.json"
@@ -27,14 +34,14 @@ def main() -> None:
                 str(REPOSITORY / "benchmarks" / "run.py"),
                 "--suite",
                 "smoke",
-                "--installed-python",
+                *([] if args.build_python else ["--installed-python"]),
                 "--allow-dirty",
                 "--jobs",
                 "2",
                 "--cache",
                 str(scratch_path / "cache"),
                 "--work",
-                str(scratch_path / "work"),
+                os.path.relpath(scratch_path / "work"),
                 "--output",
                 str(output),
             ],
@@ -47,8 +54,37 @@ def main() -> None:
             capture_output=True,
             text=True,
         ).stdout
+        build = result["builds"]["c50"]
+        assert not build["private_core"]
+        assert "-flto" not in build["learner_compile_command"]
+        if args.build_python:
+            python_build = build["python_build"]
+            assert python_build["private_core"]
+            assert "-flto" in python_build["learner_compile_command"]
+            assert "-fvisibility=hidden" in python_build["learner_compile_command"]
+            assert "The Python extension's core was built separately" in report
+            assert "-fvisibility=hidden" in report
+            assert "installed_python_package" not in build
+        else:
+            assert "python_build" not in build
+            assert "Python workloads used the installed `c50` package" in report
+        # Results retained before the separate Python build remain readable.
+        legacy = json.loads(output.read_text())
+        legacy["builds"]["c50"].pop("python_build", None)
+        legacy["builds"]["c50"].pop("private_core")
+        legacy_path = scratch_path / "legacy.json"
+        legacy_path.write_text(json.dumps(legacy))
+        subprocess.run(
+            [sys.executable, str(REPOSITORY / "benchmarks/report.py"), str(legacy_path)],
+            check=True, capture_output=True, text=True,
+        )
         portable = scratch_path / "portable.json"
         result["machine"].update(cpu=None, cpu_governor=None, memory_bytes=None)
+        # A development version names its commit, which the report must omit.
+        result["builds"]["c50"].pop("python_build", None)
+        result["builds"]["c50"]["installed_python_package"] = (
+            f"1.0.0a2.dev1+g{result['source']['commit'][:9]}.d20261007"
+        )
         portable.write_text(json.dumps(result))
         portable_report = subprocess.run(
             [sys.executable, str(REPOSITORY / "benchmarks/report.py"), str(portable)],
@@ -57,6 +93,8 @@ def main() -> None:
         assert "an unreported CPU" in portable_report
         assert "frequency governor" not in portable_report
         assert "GiB of memory" not in portable_report
+        assert "version `1.0.0a2.dev1`" in portable_report
+        assert result["source"]["commit"][:7] not in portable_report
         pending = scratch_path / "pending.md"
         pending.write_text(
             "<!-- begin generated benchmark results -->\n\n"

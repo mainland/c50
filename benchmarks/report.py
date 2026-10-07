@@ -82,6 +82,28 @@ def render(results: dict[str, Any], path: str) -> str:
             f"using `{builds['reference']['command']}`, as its Makefile builds "
             "the production program."
         )
+    python_build = builds["c50"].get("python_build")
+    if python_build is not None:
+        flags = " ".join(
+            part
+            for part in python_build["learner_compile_command"].split()
+            if part.startswith(("-O", "-flto", "-fvisibility"))
+            or part in ("-ffloat-store", "-DNDEBUG", "-fno-fat-lto-objects")
+        )
+        lines += [
+            "",
+            "The Python extension's core was built separately with "
+            f"{python_build['cxx_compiler']}, using `{flags}`.",
+        ]
+    elif "installed_python_package" in builds["c50"]:
+        # A development version's local label, such as +g1a2b3c4, names a
+        # commit, which a history rewrite would invalidate.
+        version = builds["c50"]["installed_python_package"].split("+", 1)[0]
+        lines += [
+            "",
+            "Python workloads used the installed `c50` package, version "
+            f"`{version}`. Its compiler settings were not recorded.",
+        ]
     lines += ["", "### C5.0 Release 2.07 and this library", ""]
     if "reference" in builds:
         lines += [

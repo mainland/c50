@@ -101,17 +101,31 @@ python benchmarks/run.py --suite release \
     --output benchmarks/results/release.json
 ```
 
-The driver builds the library from the checkout in `Release` mode, and builds
-the reference program as the upstream Makefile builds its production
-`c5.0`, with `gcc -ffloat-store -O3` on the concatenated sources. It refuses to
-measure a working tree with uncommitted changes unless `--allow-dirty` is
-given. Datasets are cached in `~/.cache/c50-benchmarks` unless `--cache`
-names another directory.
+The driver builds the command-line program from the checkout in `Release`
+mode with the ordinary core. It builds the Python extension separately with
+`C50_PRIVATE_CORE=ON`, matching Python package builds: hidden native symbols
+and LTO when the compiler supports it. Each build has its own recorded
+compiler settings. `--installed-python` uses the installed Python package
+instead and records its version and extension checksum.
+
+The driver builds the reference program as the upstream Makefile builds its
+production `c5.0`, with `gcc -ffloat-store -O3` on the concatenated sources.
+It refuses to measure a working tree with uncommitted changes unless
+`--allow-dirty` is given. Datasets are cached in `~/.cache/c50-benchmarks`
+unless `--cache` names another directory.
 
 The release suite repeats each measurement five times and takes several
 hours. Run it on an otherwise idle machine. The result
 records the load average and frequency governor, but it cannot correct for
 contention.
+
+Check the result and report through the installed Python package with
+`python tests/benchmark_smoke.py`. With an LTO-capable compiler, check the
+separate Python build as well:
+
+```sh
+python tests/benchmark_smoke.py --build-python
+```
 
 ## Results
 

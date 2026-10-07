@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run a benchmark suite and write one JSON result.
 
-The suite answers two questions on the same input files:
+The suite answers three questions on the same input files:
 
 * How does this library's ``c5.0`` program compare with the imported C5.0
   Release 2.07 program in time and peak memory, and do both write the same
@@ -183,32 +183,15 @@ def compiler_version(compiler: str) -> str:
     return run([compiler, "--version"]).splitlines()[0]
 
 
-def build_library(work: Path, jobs: int, python_module: bool) -> dict[str, Any]:
-    """Build the command-line program, and optionally the Python module, in
-    Release mode."""
-    build = work / "build"
-    configure: list[str | Path] = [
-        "cmake",
-        "-S",
-        REPOSITORY,
-        "-B",
-        build,
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DBUILD_TESTING=OFF",
-        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
-    ]
-    targets = ["c50_cli"]
-    if python_module:
-        import pybind11
+def build_record(build: Path) -> dict[str, Any]:
+    """Record the compiler settings of a CMake learning-core build.
 
-        configure += [
-            "-DC50_BUILD_PYTHON=ON",
-            f"-DPython_EXECUTABLE={sys.executable}",
-            f"-Dpybind11_DIR={pybind11.get_cmake_dir()}",
-        ]
-        targets.append("c50_python")
-    run(configure)
-    run(["cmake", "--build", build, "--parallel", str(jobs), "--target", *targets])
+    Args:
+        build: The configured and compiled CMake build directory.
+
+    Returns:
+        JSON-compatible compiler settings and the learner compile command.
+    """
     cache = (build / "CMakeCache.txt").read_text()
 
     def setting(name: str) -> str:
@@ -220,17 +203,70 @@ def build_library(work: Path, jobs: int, python_module: bool) -> dict[str, Any]:
     commands = json.loads((build / "compile_commands.json").read_text())
     learner = next(c for c in commands if c["file"].endswith("src/contin.cpp"))
     command = learner.get("command") or " ".join(learner["arguments"])
-    command = command.replace(str(build), "<build>").replace(str(REPOSITORY), "<source>")
-    program = build / "c5.0"
-    record: dict[str, Any] = {
-        "build_type": "Release",
+    command = command.replace(str(build.resolve()), "<build>")
+    command = command.replace(str(REPOSITORY), "<source>")
+    return {
+        "build_type": setting("CMAKE_BUILD_TYPE"),
         "cxx_compiler": compiler_version(setting("CMAKE_CXX_COMPILER")),
         "learner_compile_command": command,
-        "program_sha256": sha256(program),
+        "private_core": setting("C50_PRIVATE_CORE") == "ON",
     }
+
+
+def build_library(work: Path, jobs: int, python_module: bool) -> dict[str, Any]:
+    """Build the ordinary CLI and the package's private Python core separately.
+
+    Args:
+        work: Directory for builds and benchmark scratch files.
+        jobs: Number of parallel build jobs.
+        python_module: Whether to build Python instead of using its installation.
+
+    Returns:
+        The CLI path, optional Python package path, and both builds' provenance.
+    """
+    build = work / "build"
+    configure: list[str | Path] = [
+        "cmake",
+        "-S",
+        REPOSITORY,
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DBUILD_TESTING=OFF",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        "-DCMAKE_UNITY_BUILD=OFF",
+        "-UCMAKE_CXX_VISIBILITY_PRESET",
+        "-DCMAKE_VISIBILITY_INLINES_HIDDEN=OFF",
+        # Reset cached IPO overrides so reused work directories follow the
+        # ordinary CLI and Python package policies, respectively.
+        "-UCMAKE_INTERPROCEDURAL_OPTIMIZATION*",
+    ]
+    run([
+        *configure, "-B", build,
+        "-DC50_BUILD_PYTHON=OFF",
+        "-DC50_PRIVATE_CORE=OFF",
+        "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF",
+    ])
+    run(["cmake", "--build", build, "--parallel", str(jobs), "--target", "c50_cli"])
+    program = build / "c5.0"
+    record = build_record(build)
+    record["program_sha256"] = sha256(program)
     python_path = None
     if python_module:
-        python_path = build / "python"
+        import pybind11
+
+        python_build = work / "python-build"
+        run([
+            *configure, "-B", python_build,
+            "-DC50_BUILD_PYTHON=ON",
+            "-DC50_PRIVATE_CORE=ON",
+            f"-DPython_EXECUTABLE={sys.executable}",
+            f"-Dpybind11_DIR={pybind11.get_cmake_dir()}",
+        ])
+        run([
+            "cmake", "--build", python_build, "--parallel", str(jobs),
+            "--target", "c50_python",
+        ])
+        record["python_build"] = build_record(python_build)
+        python_path = python_build / "python"
         # Match the extension by its import suffix. The package also holds
         # the _c50.pyi stub.
         record["python_module_sha256"] = sha256(
@@ -692,7 +728,7 @@ def main(argv: Sequence[str]) -> int:
         args.output.parent.mkdir(parents=True, exist_ok=True)
 
     source = source_provenance(args.allow_dirty)
-    work = args.work or Path(tempfile.mkdtemp(prefix="c50-benchmarks-"))
+    work = (args.work or Path(tempfile.mkdtemp(prefix="c50-benchmarks-"))).resolve()
     work.mkdir(parents=True, exist_ok=True)
     progress(f"building in {work}")
     LAUNCHER = build_launcher(work)

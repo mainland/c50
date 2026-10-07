@@ -190,6 +190,11 @@ jobs:
           python -m mypy
           python -m mypy.stubtest --allowlist tests/typing/stubtest-allowlist.txt c50._c50
           python tests/benchmark_smoke.py
+      - name: Check the benchmark's separate Python build
+        if: matrix.python == '3.12' && matrix.dependencies == 'latest'
+        run: |
+          python -m pip install 'pybind11>=2.13.6'
+          python tests/benchmark_smoke.py --build-python
       - name: Build strict Doxygen and Sphinx documentation
         if: matrix.python == '3.12' && matrix.dependencies == 'latest'
         run: python -m sphinx -W --keep-going -b html docs docs/_build/html
