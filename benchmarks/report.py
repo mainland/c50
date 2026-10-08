@@ -29,6 +29,21 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 MIB = 1024 * 1024
 
 
+def code_generation_flags(command: str) -> str:
+    """Return the flags of a recorded compile command that affect the code.
+
+    The result keeps optimization, code-generation, link-time, and visibility
+    options such as `-O3`, `-flto`, and `-fno-semantic-interposition`, and
+    `-DNDEBUG`. It drops include paths, output names, and `-fPIC`.
+    """
+    return " ".join(
+        part
+        for part in command.split()
+        if part == "-DNDEBUG"
+        or (part.startswith(("-O", "-f", "-m")) and part != "-fPIC")
+    )
+
+
 def median(samples: list[dict[str, Any]], key: str) -> float:
     """Return the median of ``key`` over the samples."""
     return float(statistics.median(sample[key] for sample in samples))
@@ -85,11 +100,7 @@ def render(results: dict[str, Any], path: str) -> str:
         "The library's `c5.0` was built with "
         f"{builds['c50']['cxx_compiler']}, "
         "using `"
-        + " ".join(
-            part
-            for part in builds["c50"]["learner_compile_command"].split()
-            if part.startswith("-O") or part in ("-ffloat-store", "-DNDEBUG")
-        )
+        + code_generation_flags(builds["c50"]["learner_compile_command"])
         + "`.",
     ]
     if "reference" in builds:
@@ -108,12 +119,7 @@ def render(results: dict[str, Any], path: str) -> str:
         )
     python_build = builds["c50"].get("python_build")
     if python_build is not None:
-        flags = " ".join(
-            part
-            for part in python_build["learner_compile_command"].split()
-            if part.startswith(("-O", "-flto", "-fvisibility"))
-            or part in ("-ffloat-store", "-DNDEBUG", "-fno-fat-lto-objects")
-        )
+        flags = code_generation_flags(python_build["learner_compile_command"])
         lines += [
             "",
             (
