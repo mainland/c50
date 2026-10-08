@@ -164,6 +164,29 @@ def main() -> None:
             assert "| C5.0 2.07, s |" in table[0]
             assert len({line.count("|") for line in table}) == 1, table
             assert len(table) == 2 + len(referenced["comparisons"])
+        # The report prints every recorded code-generation flag, including the
+        # ones that Release 2.07 is not built with.
+        flagged = json.loads(output.read_text())
+        flagged["builds"]["c50"]["learner_compile_command"] = (
+            "/usr/bin/c++ -I<source>/include -O3 -DNDEBUG "
+            "-fno-semantic-interposition -fPIC -o x.o -c <source>/src/x.cpp"
+        )
+        flagged_path = scratch_path / "flagged.json"
+        flagged_path.write_text(json.dumps(flagged))
+        flagged_report = subprocess.run(
+            [
+                sys.executable,
+                str(REPOSITORY / "benchmarks/report.py"),
+                str(flagged_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        assert (
+            "using `-O3 -DNDEBUG -fno-semantic-interposition`."
+            in flagged_report
+        )
         portable = scratch_path / "portable.json"
         result["machine"].update(
             cpu=None, cpu_governor=None, memory_bytes=None
