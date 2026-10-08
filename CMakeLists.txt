@@ -146,6 +146,18 @@ target_include_directories(
 target_compile_features(c50_core PUBLIC cxx_std_17)
 target_link_libraries(c50_core PUBLIC Threads::Threads)
 
+# The core is position-independent so that the installed archive can be
+# linked into shared objects. GCC then assumes that the dynamic linker may
+# replace any function the core exports, and it does not inline across them.
+# Nothing replaces the core's functions, so drop that assumption where the
+# compiler supports the option.
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag(-fno-semantic-interposition
+                        C50_HAS_NO_SEMANTIC_INTERPOSITION)
+if(C50_HAS_NO_SEMANTIC_INTERPOSITION)
+    target_compile_options(c50_core PRIVATE -fno-semantic-interposition)
+endif()
+
 add_library(c50_cpp INTERFACE)
 add_library(C50::cpp ALIAS c50_cpp)
 set_target_properties(c50_cpp PROPERTIES EXPORT_NAME cpp)
