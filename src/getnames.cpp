@@ -162,18 +162,6 @@ Boolean ReadNameInput(c50_context *Context, c50_input *f, String s, int n,
 
 
 
-Boolean ReadName(c50_context *Context, FILE *f, String s, int n,
-		 char ColonOpt)
-/*      --------  */
-{
-    c50_input Input;
-
-    c50_input_init_file(&Input, f);
-    return ReadNameInput(Context, &Input, s, n, ColonOpt);
-}
-
-
-
 /*************************************************************************/
 /*									 */
 /*	Read names of classes, attributes and legal attribute values.	 */
@@ -823,13 +811,7 @@ int InChar(c50_context *Context, c50_input *f)
     {
 	Context->line_buffer.clear();
 	Context->line_buffer_position = 0;
-	int c;
-	while ( (c = c50_input_getc(f)) != EOF )
-	{
-	    Context->line_buffer.push_back(static_cast<char>(c));
-	    if ( c == '\n' ) break;
-	}
-	if ( Context->line_buffer.empty() ) return EOF;
+	if ( ! c50_input_read_line(f, Context->line_buffer) ) return EOF;
 
 	Context->io.line_number++;
     }

@@ -478,8 +478,6 @@ void	    RecordAttUsage(c50_context *Context, DataRec Case, int *Usage);
 
 	/* getnames.c */
 
-Boolean	    ReadName(c50_context *Context, FILE *f, String s, int n,
-		     char ColonOpt);
 Boolean	    ReadNameInput(c50_context *Context, c50_input *f, String s,
 			  int n, char ColonOpt);
 void	    GetNames(c50_context *Context, c50_input *Nf);
@@ -523,10 +521,8 @@ void	    GetData(c50_context *Context, FILE *Df, Boolean Train,
 		    Boolean AllowUnknownClass);
 void	    GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 			 Boolean AllowUnknownClass);
-DataRec	    GetDataRec(c50_context *Context, FILE *Df, Boolean Train);
 DataRec	    GetDataRecInput(c50_context *Context, c50_input *Input,
 			    Boolean Train);
-CaseNo	    CountData(FILE *Df);
 CaseNo	    CountDataInput(c50_input *Input);
 int	    StoreIVal(c50_context *Context, String s);
 void	    FreeData(c50_context *Context);
