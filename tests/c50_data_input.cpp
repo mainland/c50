@@ -33,12 +33,12 @@ int main(int argc, char *argv[])
 
     c50_input_init_memory(&data_input, data, sizeof(data) - 1);
     if ( CountDataInput(&data_input) != 2 ) return 1;
-    if ( data_input.position != 0 ) return 1;
+    if ( data_input.next != data_input.data ) return 1;
 
     c50_input_init_memory(&comment_input, trailing_comment,
                           sizeof(trailing_comment) - 1);
     if ( CountDataInput(&comment_input) != 1 ) return 1;
-    if ( comment_input.position != 0 ) return 1;
+    if ( comment_input.next != comment_input.data ) return 1;
 
     GetDataInput(context, &data_input, false, false);
     if ( context->cases.max_case != 1 ) return 1;

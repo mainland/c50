@@ -1,62 +1,73 @@
 /* Copyright 2026 Geoffrey Mainland. */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
+#include <string.h>
+
 #include "c50_input.h"
 
 void c50_input_init_file(c50_input *input, FILE *file)
 {
-    input->kind = C50_INPUT_FILE;
+    input->buffer.resize(c50_input_block_size);
     input->file = file;
     input->data = NULL;
     input->size = 0;
-    input->position = 0;
+    input->next = input->buffer.data();
+    input->end = input->buffer.data();
 }
 
 void c50_input_init_memory(c50_input *input, const void *data, size_t size)
 {
-    input->kind = C50_INPUT_MEMORY;
     input->file = NULL;
     input->data = static_cast<const unsigned char *>(data);
     input->size = size;
-    input->position = 0;
+    input->next = input->data;
+    input->end = input->data + size;
 }
 
-int c50_input_getc(c50_input *input)
+bool c50_input_fill(c50_input *input)
 {
-    if ( input->kind == C50_INPUT_FILE ) return fgetc(input->file);
-    if ( input->position == input->size ) return EOF;
+    if ( ! input->file ) return false;
 
-    return input->data[input->position++];
+    /* A short count means the end of the file or a read error. Both end the
+       input, as EOF from fgetc() did. */
+    size_t count = fread(input->buffer.data(), 1, input->buffer.size(), input->file);
+    input->next = input->buffer.data();
+    input->end = input->buffer.data() + count;
+    return count > 0;
 }
 
-char *c50_input_gets(char *buffer, size_t capacity, c50_input *input)
+bool c50_input_read_line(c50_input *input, std::string &line)
 {
-    int c = EOF;
-    size_t length = 0;
+    bool read = false;
 
-    if ( ! capacity ) return NULL;
-
-    while ( length < capacity - 1 &&
-            (c = c50_input_getc(input)) != EOF )
+    while ( input->next != input->end || c50_input_fill(input) )
     {
-        buffer[length++] = c;
-        if ( c == '\n' ) break;
+        const void *newline =
+            memchr(input->next, '\n', static_cast<size_t>(input->end - input->next));
+        const unsigned char *stop =
+            newline ? static_cast<const unsigned char *>(newline) + 1 : input->end;
+
+        line.append(reinterpret_cast<const char *>(input->next),
+                    static_cast<size_t>(stop - input->next));
+        input->next = stop;
+        read = true;
+        if ( newline ) break;
     }
 
-    if ( ! length ) return NULL;
-
-    buffer[length] = '\0';
-    return buffer;
+    return read;
 }
 
 void c50_input_rewind(c50_input *input)
 {
-    if ( input->kind == C50_INPUT_FILE )
+    if ( input->file )
     {
         rewind(input->file);
+        input->next = input->buffer.data();
+        input->end = input->buffer.data();
     }
     else
     {
-        input->position = 0;
+        input->next = input->data;
+        input->end = input->data + input->size;
     }
 }

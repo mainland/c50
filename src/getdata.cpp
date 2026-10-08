@@ -197,17 +197,6 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 /*************************************************************************/
 
 
-DataRec GetDataRec(c50_context *Context, FILE *Df, Boolean Train)
-/*      ----------  */
-{
-    c50_input Input;
-
-    c50_input_init_file(&Input, Df);
-    return GetDataRecInput(Context, &Input, Train);
-}
-
-
-
 DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 /*      ---------------  */
 {
@@ -434,17 +423,6 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 /*      Count cases in data file					 */
 /*                                                                       */
 /*************************************************************************/
-
-
-CaseNo CountData(FILE *Df)
-/*     ---------  */
-{
-    c50_input Input;
-
-    c50_input_init_file(&Input, Df);
-    return CountDataInput(&Input);
-}
-
 
 
 CaseNo CountDataInput(c50_input *Input)
