@@ -10,6 +10,11 @@ number that its native type cannot hold, such as a negative ``split_workers``
 or an ``Options`` field above the unsigned range, raises ``ValueError``, and
 text that UTF-8 cannot encode raises ``UnicodeEncodeError``, a ``ValueError``.
 The text of a message is not part of the stable interface.
+
+Text inputs end a call at the first bad value, such as a discrete value that
+the names file does not declare or a nonfinite number, and the call raises
+``ValueError`` with the line number. The ``c5.0`` program instead reports each
+bad value, replaces it with ``?``, and continues until ten errors.
 """
 
 from ._c50 import (

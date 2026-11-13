@@ -144,8 +144,14 @@ quickly as a numeric NumPy array. Nullable numeric columns, such as `Int64` and
 value is examined once. Prediction matches values rather than codes, so a
 prediction frame may order or extend its categories differently. Other columns,
 including object columns, become object arrays and are encoded one value at a
-time. Empty and sparse DataFrames are converted as whole arrays, so they raise
-the same errors as before.
+time. Empty and sparse DataFrames are converted as whole arrays. A DataFrame
+without rows raises `ValueError` from the scikit-learn input check, which
+requires at least one sample. A DataFrame without columns raises `ValueError`
+from NumPy, whose message reads "at least one array or dtype is required". A
+DataFrame whose columns are all sparse raises `TypeError` and asks for dense
+data. A DataFrame that mixes sparse and other columns is converted to a dense
+array with scikit-learn's `UserWarning` about sparse columns, and then trains
+and predicts. `fit` and `predict` raise the same exceptions.
 
 The order in which categories are declared to C5.0 can change the classifier,
 as {doc}`compatibility` describes. The estimator therefore derives the order
@@ -222,9 +228,11 @@ model retains no costs data in this mode.
 not: a ruleset averages the Laplace accuracies of the rules that match a case,
 so its scores sum to less than one, and soft thresholds drop branches that
 receive less than 1% of a case. The estimator divides each row by its sum,
-which keeps the order of the classes, so the class with the highest
-probability is the class that `predict` returns unless a cost matrix is in
-use. A case with no score at all receives probability one for its predicted
+which keeps the order of the classes. `predict` returns a class with the
+highest probability unless a cost matrix is in use. Under exact ties C5.0
+chooses a later class, so that class may differ from the one that
+`classes_[predict_proba(X).argmax(axis=1)]` selects, because `argmax` returns
+the first. A case with no score at all receives probability one for its predicted
 class. The low-level `Model.predict_details` and `predict_details_dense`
 methods return the native scores. See {doc}`algorithm` for how C5.0 computes
 them.
