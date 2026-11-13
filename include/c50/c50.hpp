@@ -210,6 +210,12 @@ public:
     /** Copy assignment is disabled. */
     predictor &operator=(const predictor &) = delete;
     /** Predict from borrowed data-file contents, possibly empty.
+     *
+     * The call ends at the first bad value and throws exception with
+     * error_code::parse_error and the line number. The c5.0 program instead
+     * reports each bad value, replaces it with "?", and continues until ten
+     * errors.
+     *
      * @param cases Data-file contents, borrowed for this call.
      * @return An independently owned prediction batch. */
     predictions predict(std::string_view cases);
@@ -332,6 +338,13 @@ public:
     model &operator=(const model &) = delete;
 
     /** Train from names/data/costs file contents in memory.
+     *
+     * The call ends at the first bad value, such as a discrete value that
+     * the names file does not declare or a nonfinite number, and throws
+     * exception with error_code::parse_error and the line number. The c5.0
+     * program instead reports each bad value, replaces it with "?", and
+     * continues until ten errors.
+     *
      * @param workspace Exclusive operation workspace.
      * @param kind Classifier representation.
      * @param names Names-file contents.
@@ -369,6 +382,12 @@ public:
                       std::string_view names, std::string_view serialized,
                       std::string_view costs = {});
     /** Predict from data-file contents. Empty input returns class metadata.
+     *
+     * The call ends at the first bad value and throws exception with
+     * error_code::parse_error and the line number, as train() does. The c5.0
+     * program instead reports each bad value, replaces it with "?", and
+     * continues until ten errors.
+     *
      * @param workspace Exclusive operation workspace.
      * @param cases Data-file contents, possibly empty.
      * @return An independently owned prediction batch. */
@@ -384,7 +403,9 @@ public:
      * attribute and the case's value is known. For implicit attributes, the
      * attributes used by the definition also count. These are the counts
      * behind C5.0's "Attribute usage" report, which divides them by the
-     * number of cases.
+     * number of cases. The call ends at the first bad value and throws
+     * exception with error_code::parse_error, as predict() does.
+     *
      * @param workspace Exclusive operation workspace.
      * @param cases Data-file contents, possibly empty.
      * @return One count per attribute of the names data, in declaration

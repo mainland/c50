@@ -135,6 +135,24 @@ paths. They change how malformed input and allocation failures end, not the
 classifiers or predictions for accepted input. The subsections describe each
 group of checks.
 
+### Bad values in text input
+
+The C++ and Python text interfaces end a call at the first bad value. This
+covers training and prediction data, such as a discrete value that the names
+file does not declare, and a continuous value that is not finite. The call
+throws `c50::exception` with `error_code::parse_error` in C++ and raises
+`ValueError` in Python, and the message names the line, the value, and the
+attribute.
+
+The `c5.0` program behaves as Release 2.07 does. It prints each bad value with
+its line number, uses `?` in its place, and continues. After ten errors it
+prints `Error limit exceeded` and stops. It reports a nonfinite continuous
+value as a change to `?` and also continues. The program exits 0 when it
+continued past fewer than ten errors, and exits 1 at the error limit and on
+failures that cannot continue. A library caller that needs the
+program's behavior must replace bad values with `?` before the call. The
+library has no option that returns the diagnostics and continues.
+
 ### Names and data tokens
 
 Malformed names and data tokens are rejected at the same length limit whether
