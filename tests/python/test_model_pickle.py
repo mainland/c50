@@ -62,6 +62,7 @@ def test_pickle_retains_required_costs() -> None:
 @pytest.mark.parametrize(
     "costs",
     [
+        "",
         "\n",
         "  \n\n",
         "\t \n",
@@ -69,7 +70,7 @@ def test_pickle_retains_required_costs() -> None:
         "low, high: 1\n",
         "low, low: 5\n",
     ],
-    ids=["newline", "blank", "tab", "comment", "cost-1", "diagonal"],
+    ids=["empty", "newline", "blank", "tab", "comment", "cost-1", "diagonal"],
 )
 def test_load_rejects_costs_that_set_no_cost_of_a_cost_model(
     costs: str,

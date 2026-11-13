@@ -152,7 +152,7 @@ static void unused_costs()
        matrix. It is as good as none, and must fail at load, not on every
        later use. The text holds nothing, only comments, only entries of
        cost 1, or only entries between a class and itself. */
-    for (const char *costs : {"\n", "  \n\n", "\t \n", "| a comment\n",
+    for (const char *costs : {"", "\n", "  \n\n", "\t \n", "| a comment\n",
                               "low, high: 1\n", "low, low: 5\n"}) {
         try {
             c50::model::load(context, kind, cost_names, cost_tree, costs);
@@ -218,6 +218,9 @@ static void diagnostics_name_their_input()
         c50::model::train(context, kind, cost_names, "1, low\n2, high\n", {},
                           "low, junk: 5\n");
     }), "costs"), "costs");
+    require(diagnostic([&] {
+        c50::model::load(context, kind, cost_names, cost_tree);
+    }).find("requires costs") != std::string::npos, "missing costs");
 }
 
 /* A dense value beyond the range of the native float is out of range, not
