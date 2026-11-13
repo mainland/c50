@@ -117,6 +117,7 @@ void c50_run_operation(c50_context *context, c50_operation_fn operation,
     context->error_message.clear();
     /* The input name of an earlier operation must not reach this one. */
     context->io.file_name.clear();
+    context->io.operation_clock = time(0);
     /* Parsing, training, prediction, and serialization all read and write
      * numbers, so the operation and its cleanup run in the C locale. The scope
      * ends on every exit, and a failure to enter it leaves the context idle. */
