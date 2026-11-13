@@ -265,6 +265,11 @@ The names, training, and optional costs strings use the corresponding C5.0
 file formats. The returned model owns its serialized representation and is
 independent of the native context used during training.
 
+The call stops at the first bad value, such as a discrete value that the
+names file does not declare or a nonfinite number, and raises ``ValueError``
+with the line number. ``c5.0`` instead reports each bad value, replaces it
+with ``?``, and continues until ten errors.
+
 Args:
     names: Contents of a C5.0 names file.
     training_data: Contents of a C5.0 data file.
@@ -391,6 +396,11 @@ the case's value is known. The result has one count per attribute of
 ``names_data``, in declaration order. These are the counts behind C5.0's
 "Attribute usage" report, which divides them by the number of cases.
 
+The call stops at the first bad value, such as a discrete value that the
+names file does not declare or a nonfinite number, and raises ``ValueError``
+with the line number. ``c5.0`` instead reports each bad value, replaces it
+with ``?``, and continues until ten errors.
+
 Args:
     cases: Case rows in C5.0 data-file syntax. Each row includes a final
         class field, which may be ``?``.
@@ -465,6 +475,11 @@ Predict cases and return labels, confidences, and per-class scores.
 Each case row uses C5.0 data-file syntax and includes a final class field,
 which may be ``?`` when unknown.
 
+The call stops at the first bad value, such as a discrete value that the
+names file does not declare or a nonfinite number, and raises ``ValueError``
+with the line number. ``c5.0`` instead reports each bad value, replaces it
+with ``?``, and continues until ten errors.
+
 Args:
     cases: Case rows in C5.0 data-file syntax.
 
@@ -481,6 +496,11 @@ Predict the class label for each case row.
 
 Each case row uses C5.0 data-file syntax and includes a final class field,
 which may be ``?`` when unknown.
+
+The call stops at the first bad value, such as a discrete value that the
+names file does not declare or a nonfinite number, and raises ``ValueError``
+with the line number. ``c5.0`` instead reports each bad value, replaces it
+with ``?``, and continues until ten errors.
 
 Args:
     cases: Case rows in C5.0 data-file syntax.
@@ -500,6 +520,11 @@ The scores are C5.0's native class scores, not normalized probabilities: a
 ruleset's scores, for example, sum to less than one. Columns follow
 ``class_names`` order. Each case row uses C5.0 data-file syntax and includes
 a final class field, which may be ``?`` when unknown.
+
+The call stops at the first bad value, such as a discrete value that the
+names file does not declare or a nonfinite number, and raises ``ValueError``
+with the line number. ``c5.0`` instead reports each bad value, replaces it
+with ``?``, and continues until ten errors.
 
 Args:
     cases: Case rows in C5.0 data-file syntax.
