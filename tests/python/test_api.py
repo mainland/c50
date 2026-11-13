@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pickle
+import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -320,7 +321,7 @@ def test_bytes_like_text_matches_str(
     assert details.scores == expected.predict_details(CASES).scores
 
 
-@pytest.mark.parametrize("cases", [memoryview(b""), 0, None, "\ud800"])
+@pytest.mark.parametrize("cases", [memoryview(b""), 0, None])
 def test_text_arguments_reject_other_objects(cases: object) -> None:
     model = c50.train(NAMES, TRAINING)
 
@@ -328,6 +329,117 @@ def test_text_arguments_reject_other_objects(cases: object) -> None:
         model.predict_details(cases)  # type: ignore[arg-type]
     with pytest.raises(TypeError):
         model.prepare_predictor().predict_details(cases)  # type: ignore[arg-type]
+
+
+def test_text_arguments_reject_unencodable_text_as_value_errors() -> None:
+    # A lone surrogate is a str with an invalid value, so it raises
+    # UnicodeEncodeError, a ValueError, and not an unsuitable-argument
+    # TypeError.
+    model = c50.train(NAMES, TRAINING)
+    bad = "\ud800"
+    assert issubclass(UnicodeEncodeError, ValueError)
+
+    with pytest.raises(UnicodeEncodeError):
+        model.predict(bad)
+    with pytest.raises(UnicodeEncodeError):
+        model.predict_details(bad)
+    with pytest.raises(UnicodeEncodeError):
+        model.prepare_predictor().predict_details(bad)
+    with pytest.raises(UnicodeEncodeError):
+        model.attribute_usage(bad)
+    with pytest.raises(UnicodeEncodeError):
+        c50.train(NAMES, TRAINING + bad)
+    with pytest.raises(UnicodeEncodeError):
+        c50.train(NAMES + bad, TRAINING)
+    with pytest.raises(UnicodeEncodeError):
+        c50.train(NAMES, TRAINING, costs=bad)
+    with pytest.raises(UnicodeEncodeError):
+        c50.load(bad, model.serialized_data)
+
+
+_TRAIN_CALLS: dict[str, Callable[[Any], c50.Model]] = {
+    "train": lambda w: c50.train(NAMES, TRAINING, split_workers=w),
+    "train_dense": lambda w: c50.train_dense(
+        NAMES, DENSE_TRAINING, DENSE_CLASSES, split_workers=w
+    ),
+    "Model.train": lambda w: c50.Model.train(NAMES, TRAINING, split_workers=w),
+    "Model.train_dense": lambda w: c50.Model.train_dense(
+        NAMES, DENSE_TRAINING, DENSE_CLASSES, split_workers=w
+    ),
+}
+
+
+@pytest.mark.parametrize("call", sorted(_TRAIN_CALLS))
+@pytest.mark.parametrize("workers", [-1, 2**32, 2**64, 0, 9])
+def test_split_workers_out_of_range_is_value_error(
+    call: str, workers: int
+) -> None:
+    with pytest.raises(ValueError, match=r"split_workers|split worker"):
+        _TRAIN_CALLS[call](workers)
+
+
+@pytest.mark.parametrize("call", sorted(_TRAIN_CALLS))
+@pytest.mark.parametrize("workers", [1.5, "2", None])
+def test_split_workers_of_the_wrong_type_is_type_error(
+    call: str, workers: object
+) -> None:
+    with pytest.raises(TypeError):
+        _TRAIN_CALLS[call](workers)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("trials", -1),
+        ("trials", 2**32),
+        ("random_seed", -1),
+        ("random_seed", 2**32),
+        ("minimum_cases", 10**400),
+        ("confidence_factor", 10**400),
+        ("sample_fraction", -(10**400)),
+    ],
+    ids=lambda value: "huge" if value in (10**400, -(10**400)) else str(value),
+)
+def test_options_setters_name_the_field_of_an_unrepresentable_number(
+    field: str, value: int
+) -> None:
+    options = c50.Options()
+    before = getattr(options, field)
+
+    with pytest.raises(ValueError, match=field):
+        setattr(options, field, value)
+    assert getattr(options, field) == before
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("trials", 1.5),
+        ("trials", "2"),
+        ("random_seed", None),
+        ("minimum_cases", "2"),
+        ("confidence_factor", None),
+        ("sample_fraction", "0"),
+    ],
+)
+def test_options_setters_reject_other_types(field: str, value: object) -> None:
+    with pytest.raises(TypeError):
+        setattr(c50.Options(), field, value)
+
+
+def test_options_setters_accept_in_range_numbers() -> None:
+    options = c50.Options()
+    options.trials = 2**32 - 1
+    options.random_seed = np.int64(7)  # type: ignore[assignment]
+    options.minimum_cases = 3
+    options.confidence_factor = np.float32(0.5)  # type: ignore[assignment]
+    options.sample_fraction = 0.5
+
+    assert options.trials == 2**32 - 1
+    assert options.random_seed == 7
+    assert options.minimum_cases == 3.0
+    assert options.confidence_factor == 0.5
+    assert options.sample_fraction == 0.5
 
 
 def test_bytearray_text_is_copied_before_later_arguments() -> None:
@@ -369,6 +481,162 @@ def test_dense_class_indices_reject_lossy_conversion(
         factory(NAMES, DENSE_TRAINING, labels)
 
 
+@pytest.mark.parametrize("factory", [c50.train_dense, c50.Model.train_dense])
+@pytest.mark.parametrize("copy", [True, False])
+@pytest.mark.parametrize(
+    "values",
+    [
+        np.full((8, 2), "word"),
+        np.full((8, 2), "word", dtype=object),
+        [[1.0, 2.0]] * 7 + [[1.0]],
+    ],
+    ids=["words", "object-words", "ragged"],
+)
+def test_dense_values_that_cannot_convert_raise_value_error(
+    factory: Callable[..., c50.Model], copy: bool, values: object
+) -> None:
+    with pytest.raises(ValueError, match="values cannot be converted"):
+        factory(NAMES, values, DENSE_CLASSES, copy=copy)
+
+
+class _FailingValues:
+    """Values whose conversion to an array raises an exception."""
+
+    def __init__(self, error: BaseException) -> None:
+        self._error = error
+
+    def __array__(
+        self, dtype: object = None, copy: object = None
+    ) -> np.ndarray:
+        raise self._error
+
+
+@pytest.mark.parametrize("factory", [c50.train_dense, c50.Model.train_dense])
+@pytest.mark.parametrize("copy", [True, False])
+@pytest.mark.parametrize("error", [MemoryError, KeyboardInterrupt])
+def test_dense_values_conversion_lets_memory_and_interrupts_propagate(
+    factory: Callable[..., c50.Model],
+    copy: bool,
+    error: type[BaseException],
+) -> None:
+    with pytest.raises(error, match="raised by the conversion"):
+        factory(
+            NAMES,
+            _FailingValues(error("raised by the conversion")),
+            DENSE_CLASSES,
+            copy=copy,
+        )
+
+
+@pytest.mark.parametrize("factory", [c50.train_dense, c50.Model.train_dense])
+@pytest.mark.parametrize("error", [RuntimeError, TypeError, OSError])
+def test_dense_values_conversion_chains_its_failure(
+    factory: Callable[..., c50.Model], error: type[Exception]
+) -> None:
+    with pytest.raises(ValueError, match="values cannot be converted") as info:
+        factory(
+            NAMES,
+            _FailingValues(error("the library cannot convert")),
+            DENSE_CLASSES,
+        )
+    assert isinstance(info.value.__cause__, error)
+
+
+@pytest.mark.parametrize("factory", [c50.train_dense, c50.Model.train_dense])
+def test_dense_values_that_numpy_rejects_keep_the_cause(
+    factory: Callable[..., c50.Model],
+) -> None:
+    with pytest.raises(ValueError, match="values cannot be converted") as info:
+        factory(NAMES, np.full((8, 2), "word"), DENSE_CLASSES)
+    assert isinstance(info.value.__cause__, ValueError)
+
+
+def test_dense_values_conversion_reports_a_warning_as_an_error() -> None:
+    complex_values = DENSE_TRAINING.astype(complex) + 1j
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(ValueError, match="values cannot be converted"):
+            c50.train_dense(NAMES, complex_values, DENSE_CLASSES)
+
+
+def test_dense_values_keep_the_casts_that_the_documentation_names() -> None:
+    expected = c50.train_dense(NAMES, DENSE_TRAINING, DENSE_CLASSES)
+    numeric_text = DENSE_TRAINING.astype(str)
+    for values in (
+        numeric_text,
+        DENSE_TRAINING.astype(np.float32),
+        DENSE_TRAINING.tolist(),
+        np.asfortranarray(DENSE_TRAINING),
+    ):
+        model = c50.train_dense(NAMES, values, DENSE_CLASSES)
+        assert without_date(model.serialized_data) == without_date(
+            expected.serialized_data
+        )
+
+
+def _read_only(values: np.ndarray) -> np.ndarray:
+    copy = values.copy()
+    copy.setflags(write=False)
+    return copy
+
+
+@pytest.mark.filterwarnings("ignore:Casting complex values")
+@pytest.mark.parametrize("copy", [True, False])
+@pytest.mark.parametrize(
+    "convert",
+    [
+        lambda v: v.astype(np.float16),
+        lambda v: v.astype(np.float32),
+        lambda v: v.astype(np.int8),
+        lambda v: v.astype(np.int64),
+        lambda v: v.astype(np.uint8),
+        lambda v: v.astype(np.longdouble),
+        lambda v: v.astype(object),
+        lambda v: v.astype(complex),
+        lambda v: v.astype("datetime64[D]"),
+        lambda v: v.astype("timedelta64[ns]"),
+        lambda v: np.ma.masked_array(v),
+        lambda v: memoryview(np.ascontiguousarray(v)),
+        lambda v: v.T.copy().T,
+        lambda v: np.repeat(v, 2, axis=0)[::2],
+        lambda v: tuple(map(tuple, v.tolist())),
+        _read_only,
+    ],
+    ids=[
+        "float16",
+        "float32",
+        "int8",
+        "int64",
+        "uint8",
+        "longdouble",
+        "object",
+        "complex",
+        "datetime64",
+        "timedelta64",
+        "masked",
+        "memoryview",
+        "fortran",
+        "strided",
+        "tuples",
+        "read-only",
+    ],
+)
+def test_dense_values_accept_the_dtypes_that_convert_to_float64(
+    convert: Callable[[np.ndarray], object], copy: bool
+) -> None:
+    # NumPy's own conversion gives the float64 matrix, which the native call
+    # reads directly. The converting pass must give the same classifier.
+    values = convert(DENSE_TRAINING)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        floats = np.asarray(values, dtype=np.float64)
+    expected = c50.train_dense(NAMES, floats, DENSE_CLASSES, copy=copy)
+    model = c50.train_dense(NAMES, values, DENSE_CLASSES, copy=copy)
+    assert without_date(model.serialized_data) == without_date(
+        expected.serialized_data
+    )
+
+
 @pytest.mark.parametrize("dtype", [np.int8, np.int32, np.uint32, np.uint64])
 def test_dense_class_indices_accept_integer_dtypes(
     dtype: type[np.generic],
@@ -376,3 +644,108 @@ def test_dense_class_indices_accept_integer_dtypes(
     labels = DENSE_CLASSES.astype(dtype)
     model = c50.train_dense(NAMES, DENSE_TRAINING, labels)
     assert model.predict_details_dense(DENSE_CASES).class_indices == [0, 1]
+
+
+def test_dense_methods_raise_c50_error_for_unsupported_attributes() -> None:
+    # A label attribute is valid in text but unsupported by the dense
+    # interface. The docstrings and stubs document C50Error for it.
+    names = "low, high.\n\nsignal: continuous.\nid: label.\n"
+    training = "0, a, low\n1, b, low\n2, c, high\n3, d, high\n"
+    model = c50.train(names, training)
+    values = np.asarray([[0.0, 1.0], [3.0, 0.0]])
+
+    with pytest.raises(c50.C50Error, match="label"):
+        model.predict_details_dense(values)
+    with pytest.raises(c50.C50Error, match="label"):
+        model.attribute_usage_dense(values)
+    with pytest.raises(c50.C50Error, match="label"):
+        model.prepare_predictor().predict_details_dense(values)
+    for method in (
+        c50.Model.predict_details_dense,
+        c50.Model.attribute_usage_dense,
+    ):
+        assert "C50Error" in (method.__doc__ or "")
+    assert "C50Error" in (c50.Predictor.predict_details_dense.__doc__ or "")
+
+
+# Each schema is valid for text data but unsupported by the dense interface.
+# The tuple holds the names data, the training data, and the feature count.
+UNSUPPORTED_DENSE_SCHEMAS = {
+    "implicit": ("a, b.\nx: continuous.\nd := x * 2.\n", "0,a\n1,b\n", 2),
+    "ignored": ("a, b.\nx: continuous.\ny: ignore.\n", "0,1,a\n1,2,b\n", 2),
+    "label": ("a, b.\nx: continuous.\nid: label.\n", "0,p,a\n1,q,b\n", 2),
+    "date": (
+        "a, b.\nx: continuous.\nd: date.\n",
+        "0,2020/01/01,a\n1,2020/01/02,b\n",
+        2,
+    ),
+    "time": (
+        "a, b.\nx: continuous.\nt: time.\n",
+        "0,10:00:00,a\n1,10:00:01,b\n",
+        2,
+    ),
+    "timestamp": (
+        "a, b.\nx: continuous.\nt: timestamp.\n",
+        "0,2020/01/01 10:00:00,a\n1,2020/01/01 10:00:01,b\n",
+        2,
+    ),
+    "discrete": (
+        "a, b.\nx: continuous.\ng: discrete 2.\n",
+        "0,u,a\n1,v,b\n",
+        2,
+    ),
+    "class": ("cls.\nx: continuous.\ncls: a, b.\n", "0,a\n1,b\n", 1),
+}
+
+
+@pytest.mark.parametrize("kind", sorted(UNSUPPORTED_DENSE_SCHEMAS))
+@pytest.mark.parametrize("extra", [None, 0, 1])
+@pytest.mark.parametrize("rows", [0, 2])
+@pytest.mark.parametrize("copy", [True, False])
+def test_unsupported_dense_schema_raises_c50_error_at_any_shape(
+    kind: str, extra: int | None, rows: int, copy: bool
+) -> None:
+    # The support checks need only the schema, so neither the rows nor the
+    # width of the array, which is zero for extra=None, may decide which
+    # exception the caller sees.
+    names, training, width = UNSUPPORTED_DENSE_SCHEMAS[kind]
+    model = c50.train(names, training)
+    values = np.zeros((rows, 0 if extra is None else width + extra))
+
+    with pytest.raises(c50.C50Error):
+        model.predict_details_dense(values)
+    with pytest.raises(c50.C50Error):
+        model.attribute_usage_dense(values)
+    with pytest.raises(c50.C50Error):
+        model.prepare_predictor().predict_details_dense(values)
+    with pytest.raises(c50.C50Error):
+        c50.train_dense(
+            names, values, np.zeros(rows, dtype=np.intp), copy=copy
+        )
+    with pytest.raises(c50.C50Error):
+        c50.Model.train_dense(
+            names, values, np.zeros(rows, dtype=np.intp), copy=copy
+        )
+
+
+@pytest.mark.parametrize("width", [0, 1, 3])
+@pytest.mark.parametrize("copy", [True, False])
+def test_supported_dense_schema_rejects_a_mismatched_width(
+    width: int, copy: bool
+) -> None:
+    names = "a, b.\nx: continuous.\ny: continuous.\n"
+    model = c50.train(names, "0,1,a\n1,2,b\n")
+    values = np.zeros((2, width))
+
+    with pytest.raises(ValueError, match="feature count"):
+        model.predict_details_dense(values)
+    with pytest.raises(ValueError, match="feature count"):
+        model.attribute_usage_dense(values)
+    with pytest.raises(ValueError, match="feature count"):
+        model.prepare_predictor().predict_details_dense(values)
+    with pytest.raises(ValueError, match="feature count"):
+        c50.train_dense(names, values, np.zeros(2, dtype=np.intp), copy=copy)
+    with pytest.raises(ValueError, match="feature count"):
+        c50.Model.train_dense(
+            names, values, np.zeros(2, dtype=np.intp), copy=copy
+        )
