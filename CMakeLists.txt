@@ -1,5 +1,18 @@
 cmake_minimum_required(VERSION 3.20)
 
+# Enabling a language defines an empty CMAKE_BUILD_TYPE, so record before
+# `project()` whether the user set one. CMake 3.22 and newer also initialize
+# the variable from a non-empty environment variable of the same name, but
+# only inside `project()`, so check the environment here. Older versions
+# ignore the environment variable, and no version uses an empty one.
+set(c50_build_type_given OFF)
+if(DEFINED CMAKE_BUILD_TYPE)
+    set(c50_build_type_given ON)
+elseif(CMAKE_VERSION VERSION_GREATER_EQUAL 3.22
+       AND NOT "$ENV{CMAKE_BUILD_TYPE}" STREQUAL "")
+    set(c50_build_type_given ON)
+endif()
+
 # The library and Python package share a version, which differs from the
 # imported C5.0 release number. CMake versions have no prerelease labels, so
 # prereleases such as 1.0.0a1 use the version they precede.
@@ -13,6 +26,16 @@ if(DEFINED SKBUILD_PROJECT_VERSION_FULL
     message(FATAL_ERROR
             "Python package version ${SKBUILD_PROJECT_VERSION_FULL} does not "
             "match the library version ${PROJECT_VERSION} in CMakeLists.txt")
+endif()
+
+# Single-configuration generators compile without optimization when no build
+# type is set, which makes the installed library and `c5.0` much slower. Choose
+# Release unless the user set a type, including an explicitly empty one.
+get_property(c50_is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(NOT c50_is_multi_config AND NOT c50_build_type_given)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING
+        "Build type, such as Debug or Release" FORCE)
+    message(STATUS "Setting the build type to Release, as none was given")
 endif()
 
 option(C50_ENABLE_SANITIZERS
@@ -456,6 +479,8 @@ if(NOT C50_PRIVATE_CORE)
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
+    install(TARGETS c50_cli c50_report RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(FILES gpl.txt DESTINATION ${CMAKE_INSTALL_DOCDIR})
     install(
         DIRECTORY include/c50
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
@@ -742,6 +767,20 @@ if(BUILD_TESTING)
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_install.cmake"
         )
     endif()
+    # Multi-configuration generators choose the type at build time.
+    if(NOT c50_is_multi_config)
+        add_test(
+            NAME default-build-type
+            COMMAND
+                ${CMAKE_COMMAND}
+                "-DC50_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+                "-DC50_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/default-build-type"
+                "-DC50_GENERATOR=${CMAKE_GENERATOR}"
+                "-DC50_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_default_build_type.cmake"
+        )
+        set_tests_properties(default-build-type PROPERTIES TIMEOUT 120)
+    endif()
     # This inventory uses GNU nm output and ELF symbol conventions. A core
     # compiled with link-time optimization holds intermediate code, which is
     # LLVM bitcode for Clang and slim GNU LTO objects for GCC. Neither records
@@ -776,6 +815,23 @@ if(BUILD_TESTING)
                 "$<TARGET_FILE:c50_core>"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/expected/writable-globals.txt"
         )
+    endif()
+    if(CMAKE_NM AND CMAKE_SYSTEM_NAME STREQUAL "Linux"
+       AND NOT c50_is_multi_config
+       AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_test(
+            NAME writable-global-inventory-lto
+            COMMAND
+                ${CMAKE_COMMAND}
+                "-DC50_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+                "-DC50_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/inventory-lto"
+                "-DC50_GENERATOR=${CMAKE_GENERATOR}"
+                "-DC50_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+                "-DC50_CTEST=${CMAKE_CTEST_COMMAND}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_inventory_lto.cmake"
+        )
+        set_tests_properties(writable-global-inventory-lto
+                             PROPERTIES TIMEOUT 300)
     endif()
     add_test(
         NAME makefile-headers
