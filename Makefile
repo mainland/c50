@@ -21,7 +21,7 @@ LFLAGS = $(S)
 POINTER_SIZE := $(shell echo __SIZEOF_POINTER__ | $(CXX) $(CXXFLAGS) -E -P -x c++ - 2>/dev/null)
 CXXFLOAT = $(if $(filter 8,$(POINTER_SIZE)),,-ffloat-store)
 
-.PHONY: all test
+.PHONY: all test reference-comparison
 
 
 #	Definitions of file sets
@@ -91,6 +91,12 @@ test: c5.0 report prediction-probe
 	./tests/test_cli.sh
 	./tests/test_report.sh
 	./tests/test_predictions.sh
+
+
+# Compare c5.0 with Release 2.07, which the script builds from `main`. This
+# builds and trains generated data, so `test` does not run it.
+reference-comparison: c5.0
+	./tests/reference/run.sh ./c5.0
 
 
 report: $(SRC_DIR)/report.cpp Makefile

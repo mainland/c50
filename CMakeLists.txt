@@ -493,6 +493,20 @@ if(NOT C50_PRIVATE_CORE)
     )
 endif()
 
+# The comparison with Release 2.07 builds the imported program from the `main`
+# branch and trains generated data, so it is not part of the default tests.
+# Run it explicitly with `cmake --build build --target reference-comparison`.
+if(UNIX)
+    add_custom_target(
+        reference-comparison
+        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/reference/run.sh"
+                $<TARGET_FILE:c50_cli>
+        DEPENDS c50_cli
+        USES_TERMINAL
+        VERBATIM
+    )
+endif()
+
 # The class-count index check trains a schema of 46,341 classes, which reserves
 # about 8.6 GB of address space, so it is not part of the default tests. Run it
 # explicitly with `cmake --build build --target index-overflow-large`.
