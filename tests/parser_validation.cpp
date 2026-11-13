@@ -229,6 +229,26 @@ int main()
         rejects([&] { c50::model::load(context, kind,
             "no, yes.\nx: continuous.\nderived := " + nested_expression(101) + ".\n",
             header + leaf); });
+        // Each level leaves several operands pending, so the operand stack
+        // grows beyond the nesting depth.
+        const auto operand_expression = [](int depth) {
+            std::string expression = "x";
+            for (int level = 0; level < depth; ++level)
+                expression = "1 + 1 * 1 ^ (" + expression + ")";
+            return expression;
+        };
+        for (const int depth : {34, 99}) {
+            const auto operand_model = c50::model::load(context, kind,
+                "no, yes.\nx: continuous.\nderived := " +
+                    operand_expression(depth) + ".\n",
+                header + leaf);
+            if (operand_model.predict(context, "1, ?\n").class_index(0) != 0)
+                throw std::runtime_error("pending operands changed prediction");
+        }
+        rejects([&] { c50::model::load(context, kind,
+            "no, yes.\nx: continuous.\nderived := " +
+                operand_expression(100) + ".\n",
+            header + leaf); });
         const std::string boundary_expression =
             "color = \"" + std::string(38, 'a') + "\"";
         if (boundary_expression.size() != 48) return 1;

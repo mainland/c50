@@ -150,6 +150,13 @@ or malformed definitions reject instead of exhausting resources or invoking
 undefined behavior. Accepted definitions within these limits retain their
 existing evaluation behavior.
 
+The evaluator's operand stack grows with the definition, so every definition
+within the nesting limit evaluates, including definitions that leave several
+operands pending at each level, such as `1 + 1 * 1 ^ (` repeated. Release 2.07
+evaluates with a fixed stack. A definition of 34 levels of that pattern
+overflows it, and the reference build used for this repository's comparisons
+terminates with a stack-smashing report.
+
 Division rounds its quotient to a precision that Release 2.07 keeps in a
 32-bit `int` multiplier. The multiplier starts at 10^p, where p is the number
 of decimals that the numerator needs up to a tolerance, at most 6, and gains a
