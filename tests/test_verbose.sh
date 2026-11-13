@@ -55,6 +55,9 @@ sed -e 's|^id="See5/C5\.0 2\.07 GPL Edition [0-9-][0-9-]*"$|id="See5/C5.0 2.07 G
 sed -e 's|^id="See5/C5\.0 2\.07 GPL Edition [0-9-][0-9-]*"$|id="See5/C5.0 2.07 GPL Edition <date>"|' \
     "$test_dir/utility.rules" > "$test_dir/utility-model.actual"
 diff -u "$test_dir/utility-model.actual" "$test_dir/pruned-model.actual"
+normalize_output "$test_dir/pruning.raw" > "$test_dir/pruning.actual"
+diff -u "$script_dir/expected/basic/verbose-pruning.output" \
+    "$test_dir/pruning.actual"
 
 # Rule construction at level 3 prints the pruned tree. The expected output
 # comes from a Release 2.07 `c5.0dbg` build, compiled with `-DVerbOpt` by
