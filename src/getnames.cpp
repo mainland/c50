@@ -497,11 +497,11 @@ void ExplicitAtt(c50_context *Context, c50_input *Nf)
 
 	    if ( ! Context->io.timestamp_base )
 	    {
-		clock = time(0);
+		clock = Context->io.operation_clock;
 #ifdef _WIN32
-		if ( gmtime_s(&Now, &clock) )
+		if ( localtime_s(&Now, &clock) )
 #else
-		if ( ! gmtime_r(&clock, &Now) )
+		if ( ! localtime_r(&clock, &Now) )
 #endif
 		{
 		    c50_record_error(Context, c50::error_code::internal_error,

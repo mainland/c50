@@ -48,8 +48,8 @@ enum class model_kind { tree, /**< Decision tree or tree ensemble. */
 
 /** Failure categories reported by the native library. */
 enum class error_code {
-    invalid_argument, /**< Invalid option or input descriptor. */
-    io_error,         /**< Stream failure or missing required costs. */
+    invalid_argument, /**< Invalid option or input, or missing required costs. */
+    io_error,         /**< Stream failure. */
     parse_error,      /**< Invalid schema, cases, costs, or model text. */
     unsupported,      /**< Unsupported schema or operation. */
     internal_error    /**< Operation-state or internal invariant failure. */
@@ -354,6 +354,11 @@ public:
      * @param names Names-file contents.
      * @param serialized Tree or rules file contents.
      * @param costs Optional costs-file contents, required by cost-bearing models.
+     *        A model without costs ignores them. Missing required costs throw
+     *        `error_code::invalid_argument`. Costs text that sets no cost
+     *        other than the default of 1 counts as missing. That includes
+     *        empty text, text with only comments, and text whose entries
+     *        all have cost 1 or name one class twice.
      * @return An independently owned model. */
     static model load(context &workspace, model_kind kind,
                       std::string_view names, std::string_view serialized,

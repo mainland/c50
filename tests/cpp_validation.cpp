@@ -82,7 +82,7 @@ static void model_validation()
     rejects(parse, [&] { c50::model::load(context, c50::model_kind::rules, names, bad_rules); });
     const std::string cost_tree = header + "costs=\"1\"\nentries=\"1\"\n"
         "type=\"0\" class=\"low\" freq=\"6,4\"\n";
-    rejects(c50::error_code::io_error, [&] { c50::model::load(context, kind, names, cost_tree); });
+    rejects(invalid, [&] { c50::model::load(context, kind, names, cost_tree); });
     auto cost_model = c50::model::load(context, kind, names, cost_tree, "low, high: 5\n");
     c50::context other;
     for (int iteration = 0; iteration < 8; ++iteration) {

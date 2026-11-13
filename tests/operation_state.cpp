@@ -4,11 +4,38 @@
    inputs.  Each case runs the same operation on a reused context and on a
    fresh one and requires the same result. */
 #include <c50/c50.hpp>
+#include <stdlib.h>
+#include <time.h>
 #include <iostream>
 #include <limits>
 #include <vector>
 #include <stdexcept>
 #include <string>
+
+#ifndef _WIN32
+#define C50_FIXED_CLOCK 1
+#endif
+
+#ifdef C50_FIXED_CLOCK
+/* The library reads the clock through time().  Defining it here fixes the
+   clock for the whole program, because the library is linked statically.
+   Zero selects the real clock. */
+static time_t fixed_clock = 0;
+extern "C" time_t time(time_t *result)
+#if defined(__GLIBC__)
+    noexcept
+#endif
+{
+    time_t now = fixed_clock;
+    if (!now) {
+        struct timespec real;
+        clock_gettime(CLOCK_REALTIME, &real);
+        now = real.tv_sec;
+    }
+    if (result) *result = now;
+    return now;
+}
+#endif
 
 static void require(bool condition, const char *message)
 {
@@ -123,7 +150,7 @@ static void unused_costs()
        matrix. It is as good as none, and must fail at load, not on every
        later use. The text holds nothing, only comments, only entries of
        cost 1, or only entries between a class and itself. */
-    for (const char *costs : {"\n", "  \n\n", "\t \n", "| a comment\n",
+    for (const char *costs : {"", "\n", "  \n\n", "\t \n", "| a comment\n",
                               "low, high: 1\n", "low, low: 5\n"}) {
         try {
             c50::model::load(context, kind, cost_names, cost_tree, costs);
@@ -189,6 +216,9 @@ static void diagnostics_name_their_input()
         c50::model::train(context, kind, cost_names, "1, low\n2, high\n", {},
                           "low, junk: 5\n");
     }), "costs"), "costs");
+    require(diagnostic([&] {
+        c50::model::load(context, kind, cost_names, cost_tree);
+    }).find("requires costs") != std::string::npos, "missing costs");
 }
 
 /* A dense value beyond the range of the native float is out of range, not
@@ -212,6 +242,27 @@ static void dense_range_message()
             "infinite dense value");
 }
 
+#ifdef C50_FIXED_CLOCK
+/* Release 2.07 takes the base year from the UTC calendar and the model's id
+   from the local one, so a model trained within hours of New Year outside
+   UTC predicts with cuts a year off.  Both now come from one reading of
+   the clock, converted once to local time. */
+static void clock_near_new_year(const char *zone, time_t instant,
+                                const char *year, const char *date)
+{
+    setenv("TZ", zone, 1);
+    tzset();
+    fixed_clock = instant;
+    c50::context context;
+    const auto trained = train_stamps(context);
+    fixed_clock = 0;
+    require(trained.serialized_data().find(
+                id_prefix + year + date) != std::string::npos,
+            "model id date");
+    require(stamp_errors(trained) == 0, "errors near New Year");
+}
+#endif
+
 /* Run every case, so that one failure does not hide the others. */
 template<class F> static int run(const char *name, F test)
 {
@@ -232,5 +283,18 @@ int main()
     failures += run("unused costs", unused_costs);
     failures += run("diagnostics", diagnostics_name_their_input);
     failures += run("dense range", dense_range_message);
+#ifdef C50_FIXED_CLOCK
+    /* 2026-12-31 20:00 UTC is 2027-01-01 in Sydney. */
+    failures += run("Sydney New Year", [] {
+        clock_near_new_year("Australia/Sydney", 1798747200, "2027", "-01-01");
+    });
+    /* 2027-01-01 00:01 UTC is still 2026-12-31 in Los Angeles. */
+    failures += run("Los Angeles New Year", [] {
+        clock_near_new_year("America/Los_Angeles", 1798761660, "2026", "-12-31");
+    });
+    failures += run("UTC New Year", [] {
+        clock_near_new_year("UTC", 1798761660, "2027", "-01-01");
+    });
+#endif
     return failures ? 1 : 0;
 }
