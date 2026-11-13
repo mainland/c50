@@ -352,6 +352,13 @@ uvx cibuildwheel --only cp312-manylinux_x86_64 dist/c50-*.tar.gz
 musllinux, free-threaded CPython, and prerelease CPython versions are not
 built.
 
+The Windows wheels import `MSVCP140.dll`, which Python installers do not ship.
+`[tool.cibuildwheel.windows]` runs `delvewheel repair`, which copies the DLL
+into the wheel's `c50.libs` directory. The repair runs only on a Windows
+build. Before a release, check that the release candidate's Windows wheels
+list no unbundled `MSVCP140.dll` import and that one imports in an
+environment without the Visual C++ runtime.
+
 ## Comparison with Release 2.07
 
 The `reference-comparison` check trains generated data with the library's
