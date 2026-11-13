@@ -7,14 +7,18 @@ interfaces to it:
 
 ```sh
 cmake -S . -B build
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake --build build --config Release
+ctest --test-dir build --build-config Release --output-on-failure
 ```
+
+Single-configuration generators build Release when `CMAKE_BUILD_TYPE` is unset.
+Multi-configuration generators, such as Visual Studio, ignore it and build
+Debug unless the commands name `--config Release`.
 
 Install the C++ interface into a chosen prefix:
 
 ```sh
-cmake --install build --prefix <prefix>
+cmake --install build --config Release --prefix <prefix>
 ```
 
 CMake consumers link `C50::cpp`:

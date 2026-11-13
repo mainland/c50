@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -20,29 +21,16 @@ from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 
-# The caller's build settings, which must not reach the suite's own builds.
-BUILD_VARIABLES = [
-    "CMAKE_BUILD_TYPE",
-    "CMAKE_CXX_FLAGS",
-    "CMAKE_C_FLAGS",
-    "CMAKE_EXE_LINKER_FLAGS",
-    "CMAKE_SHARED_LINKER_FLAGS",
-    "CMAKE_MODULE_LINKER_FLAGS",
-    "CMAKE_CXX_COMPILER_LAUNCHER",
-    "CMAKE_C_COMPILER_LAUNCHER",
-    "CMAKE_TOOLCHAIN_FILE",
-    "CMAKE_GENERATOR",
-    "CMAKE_GENERATOR_PLATFORM",
-    "CMAKE_GENERATOR_TOOLSET",
-    "CMAKE_PREFIX_PATH",
-    "CMAKE_BUILD_PARALLEL_LEVEL",
-    "CXX",
-    "CC",
-    "CXXFLAGS",
-    "CFLAGS",
-    "CPPFLAGS",
-    "LDFLAGS",
-]
+# The variables that `clean_environment.cmake` removes from a nested configure,
+# read from that file so that the caller's build settings cannot reach the
+# suite's own builds through a list that has drifted.
+_CLEAN_ENVIRONMENT = re.search(
+    r"foreach\(c50_variable(.*?)\)",
+    (REPOSITORY / "tests" / "clean_environment.cmake").read_text(),
+    re.DOTALL,
+)
+assert _CLEAN_ENVIRONMENT is not None
+BUILD_VARIABLES = _CLEAN_ENVIRONMENT.group(1).split()
 
 
 def main() -> None:
