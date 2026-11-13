@@ -5,6 +5,7 @@
 #define C50_API_INTERNAL_H
 
 #include <stdio.h>
+#include <time.h>
 
 #include <memory>
 
@@ -261,6 +262,9 @@ typedef struct
     int error_count;
     int attribute_exclusions;
     int timestamp_base;
+    /* The single clock reading of the operation, from which the timestamp
+       base year and the model's id date are both derived. */
+    time_t operation_clock;
     int random_initial_seed;
     const char *file_stem;
     std::string file_name;

@@ -264,6 +264,24 @@ the generator state in each context. It resets the state before each read of
 held-out cases, which matches the single read of the imported program. The
 `multiclass` `sample` fixture was captured on Linux with the GNU C library.
 
+## Timestamp base near New Year
+
+This project deliberately differs from C5.0 Release 2.07 in the model text
+that it writes for a `timestamp` attribute within a few hours of New Year.
+The imported program takes the base year of the timestamp cuts from the UTC
+calendar and writes the `id` date of the model file from the local calendar.
+Reading a model takes the base from the year of the `id`. Outside UTC, the two
+years differ for up to 14 hours around New Year. A classifier trained then
+prints correct results, but its file holds cuts relative to one year and an
+`id` that names another, so its cuts shift by a year when the file is read.
+
+The command-line program and the library read the clock once per operation
+and take both the base year and the `id` date from the local calendar of that
+reading. A model trained in the window now carries cuts consistent with its
+`id`. Model text differs from the imported program's only in that window,
+in the `cut` values of `timestamp` attributes. The fix was developed in this
+project.
+
 ## Command-line option values
 
 The command-line program parses numeric option values with `strtod` and
