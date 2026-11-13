@@ -150,6 +150,13 @@ or malformed definitions reject instead of exhausting resources or invoking
 undefined behavior. Accepted definitions within these limits retain their
 existing evaluation behavior.
 
+The evaluator's operand stack grows with the definition, so every definition
+within the nesting limit evaluates, including definitions that leave several
+operands pending at each level, such as `1 + 1 * 1 ^ (` repeated. Release 2.07
+evaluates with a fixed stack. A definition of 34 levels of that pattern
+overflows it, and the reference build used for this repository's comparisons
+terminates with a stack-smashing report.
+
 Division rounds its quotient to a precision that Release 2.07 keeps in a
 32-bit `int` multiplier. The multiplier starts at 10^p, where p is the number
 of decimals that the numerator needs up to a tolerance, at most 6, and gains a
@@ -356,3 +363,42 @@ subtree that Release 2.07 prunes without crashing is pruned as before. The fix
 was developed in this project, and the C50 R package has the same code as
 Release 2.07. The `costs-pruning` and `winnow-costs-pruning` fixtures record
 this project's output, because Release 2.07 has none.
+
+## Class count
+
+The number of classes is not limited, as in C5.0 Release 2.07. The
+`many-classes` fixture trains a schema of 4,097 classes and compares its trees,
+rules, and console output with Release 2.07. Earlier builds of this project
+rejected more than 4,096 classes.
+
+Memory grows with the square of the class count, as it does in Release 2.07.
+Evaluation allocates a confusion matrix of `(classes + 1)^2` integers, and
+other per-class arrays add a term linear in the class count. The address space
+that the program needed was measured with a Release build on x86-64 Linux, a
+12-case training set of one continuous attribute, default options, and
+`ulimit -v` bisection. It was about 744 MB for 8,000 classes, 2.9 GB for
+16,000 classes, and 11.8 GB for 32,000 classes. That is about 12 bytes per
+squared class, or four times the memory for twice the classes. Rule-based
+classifiers with `-r` needed more resident memory than trees did, 176 MB
+against 114 MB at 4,000 classes. Peak resident memory is lower than the
+address space because the program does not touch every page. Plan for the
+address-space figure.
+
+When memory is not available, the command-line program reports
+`*** unable to allocate sufficient memory` and exits 1, and the library
+entry points raise `std::bad_alloc`.
+
+Release 2.07 counts the elements of these tables in `int`. For a schema of
+46,340 to 65,534 classes, `(classes + 1)^2` exceeds `INT_MAX` but stays below
+2^32, the count wraps negative, and Release 2.07 reports out of memory
+regardless of the memory available. At 65,535 classes, `(classes + 1)^2` is
+exactly 2^32, so the count wraps to 0. Release 2.07 then receives a null
+pointer for the zero-element allocation and can crash with a segmentation fault
+instead of reporting out of memory. It crashed under a 60 GB address-space
+limit and reported out of memory under a smaller one, so the outcome depends on
+the available address space. The same wrap applies to boost votes (cases times
+classes plus one) and discrete frequencies (attribute values times classes)
+whose element counts lie in `[2^31, 2^32)`. This project counts and indexes
+these tables in `size_t`, so such inputs train when memory allows. From 65,536
+classes, Release 2.07 allocates a wrapped, too-small confusion matrix and
+writes out of bounds. This project does not.
