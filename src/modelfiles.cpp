@@ -226,7 +226,7 @@ void WriteFilePrefix(c50_context *Context, const char *Extension)
 	Context->classifier_output_active = true;
     }
 
-    clock = time(0);
+    clock = Context->io.operation_clock;
 #ifdef _WIN32
     if ( localtime_s(&now, &clock) )
 #else
@@ -581,8 +581,18 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 		    GetMCosts(Context, F);
 		}
 		else
+		if ( AllowFileCosts )
 		{
 		    Error(Context, NOFILE, Context->io.file_name.c_str(), "costs input required by model");
+		}
+		else
+		{
+		    /*  Nothing is opened for in-memory models, so the failure
+			is a missing argument, not an I/O failure  */
+
+		    c50_record_error(Context, c50::error_code::invalid_argument,
+				     "the model requires costs, but none were supplied");
+		    C50Exit(Context, 1);
 		}
 		break;
 	    case SAMPLEP:
