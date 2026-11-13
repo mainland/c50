@@ -81,6 +81,41 @@ run_case()
     fi
 }
 
+# Release 2.07 trains on a schema of more than 4,096 classes. The expected
+# files come from Release 2.07 on the same names file, which has 4,097 classes
+# and is generated here to keep the fixture small.
+run_many_classes()
+{
+    many_case_dir="$test_dir/many-classes"
+    mkdir "$many_case_dir"
+    cp "$script_dir/fixtures/many-classes/many-classes.data" "$many_case_dir/"
+    awk 'BEGIN {
+        printf "outcome.\n\nx: continuous.\ng: p, q, r.\noutcome: "
+        for (i = 0; i < 4097; i++) printf "%sc%d", (i ? ", " : ""), i
+        print "."
+    }' > "$many_case_dir/many-classes.names"
+
+    for many_mode in tree rules; do
+        many_options=
+        if test "$many_mode" = rules; then
+            many_options=-r
+        fi
+        (
+            cd "$many_case_dir"
+            # shellcheck disable=SC2086 # The options are one word or none.
+            "$binary" -f many-classes $many_options > "$many_mode.raw"
+        )
+        normalize_output "$many_case_dir/$many_mode.raw" \
+            > "$many_case_dir/$many_mode.actual"
+        diff -u "$script_dir/expected/many-classes/$many_mode.output" \
+            "$many_case_dir/$many_mode.actual"
+        normalize_model "$many_case_dir/many-classes.$many_mode" \
+            > "$many_case_dir/$many_mode.model"
+        diff -u "$script_dir/expected/many-classes/$many_mode.$many_mode" \
+            "$many_case_dir/$many_mode.model"
+    done
+}
+
 run_invalid_definition()
 {
     invalid_fixture_dir="$script_dir/fixtures/invalid-definition"
@@ -483,6 +518,7 @@ run_rule_costs_degenerate one-class "$one_class_data"
 run_rule_costs_degenerate one-class-bagged "$one_class_data" -b
 run_rule_costs_degenerate one-class-utility "$one_class_data" -u 2
 run_invalid_definition
+run_many_classes
 run_missing_file_format
 run_unwritable_classifier
 run_failure_after_bad_values full '\*\*\* could not close classifier'
