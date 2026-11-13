@@ -128,9 +128,32 @@ also depends on the previous training in the same R session. The
 only the average computed before winnowing. The `winnow-case-weight-costs`
 fixture records unmodified imported output for the preserved costs case.
 
-The project is licensed under GPL-3.0-or-later. C5.0 and RuleQuest are
-associated with RuleQuest Research Pty Ltd. This project is not an official
-RuleQuest distribution.
+## Input validation and failure handling
+
+This project adds checks to the imported parsers, loaders, and allocation
+paths. They change how malformed input and allocation failures end, not the
+classifiers or predictions for accepted input. The subsections describe each
+group of checks.
+
+### Bad values in text input
+
+The C++ and Python text interfaces end a call at the first bad value. This
+covers training and prediction data, such as a discrete value that the names
+file does not declare, and a continuous value that is not finite. The call
+throws `c50::exception` with `error_code::parse_error` in C++ and raises
+`ValueError` in Python, and the message names the line, the value, and the
+attribute.
+
+The `c5.0` program behaves as Release 2.07 does. It prints each bad value with
+its line number, uses `?` in its place, and continues. After ten errors it
+prints `Error limit exceeded` and stops. It reports a nonfinite continuous
+value as a change to `?` and also continues. The program exits 0 when it
+continued past fewer than ten errors, and exits 1 at the error limit and on
+failures that cannot continue. A library caller that needs the
+program's behavior must replace bad values with `?` before the call. The
+library has no option that returns the diagnostics and continues.
+
+### Names and data tokens
 
 Malformed names and data tokens are rejected at the same length limit whether
 or not diagnostics are printed. Oversized model-property diagnostics are
@@ -141,6 +164,8 @@ must contain a complete integer from 2 through `INT_MAX - 3`. Dynamic value
 dictionaries grow with the values read instead of reserving `N` pointer slots
 from the declaration. Input lines may exceed the legacy 9,999-byte read
 buffer. Per-token length checks still apply.
+
+### Implicit definitions
 
 Implicit definitions reject missing and not-applicable literals without a
 preceding operand that determines their type. They also reject nonfinite numeric
@@ -197,6 +222,8 @@ exponentiation overflow, yields an unknown value, as division by zero does.
 The imported implementation never finished evaluating such a definition, so
 this change affects no definition that previously completed.
 
+### Model loading
+
 Serialized properties must use the quoted syntax emitted by C5.0. Unquoted
 values, incomplete escapes, and trailing property text produce parse errors.
 Short model identifiers remain accepted without date recovery.
@@ -224,6 +251,8 @@ leaves remain valid and use their parent's distribution. If matching rules
 have zero votes and the default class has no matching rule, prediction uses
 the default class with confidence `0.5`, as it does when no rules match.
 
+### Costs
+
 Costs must be complete finite nonnegative numbers representable by the native
 cost type. Each actual class requires a finite positive total error cost, and
 training normalization must produce finite weights. Inputs that previously
@@ -241,6 +270,8 @@ in Python. Release 2.07 ignores a missing or empty costs file, builds no cost
 matrix, and predicts without costs. The library reports the error at load
 instead, because a cost model without its costs would otherwise fail on every
 later prediction. A comment beside a real entry is valid.
+
+### Failure cleanup
 
 Implicit-attribute parsing keeps scratch buffers and pending string literals
 owned during exception unwinding. Partially constructed definitions always
@@ -402,3 +433,9 @@ whose element counts lie in `[2^31, 2^32)`. This project counts and indexes
 these tables in `size_t`, so such inputs train when memory allows. From 65,536
 classes, Release 2.07 allocates a wrapped, too-small confusion matrix and
 writes out of bounds. This project does not.
+
+## License and affiliation
+
+The project is licensed under GPL-3.0-or-later. C5.0 and RuleQuest are
+associated with RuleQuest Research Pty Ltd. This project is not an official
+RuleQuest distribution.

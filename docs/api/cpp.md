@@ -23,6 +23,10 @@ Contexts, models, predictors, and prediction batches are move-only owners. See
 :members:
 ```
 
+```{doxygenenum} c50::tie_order
+:project: C50
+```
+
 ```{doxygenstruct} c50::options
 :project: C50
 :members:
