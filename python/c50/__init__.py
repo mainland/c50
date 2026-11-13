@@ -1,4 +1,16 @@
-"""Python interface to the C5.0 GPL core."""
+"""Python interface to the C5.0 GPL core.
+
+Exceptions: the functions and methods raise ``ValueError`` for invalid
+arguments, options, schemas, data, costs, and model text, including shape and
+range errors in dense arrays. They raise ``OSError`` for stream failures,
+``MemoryError`` when memory is exhausted, and ``C50Error`` for a schema feature
+or operation that the library does not support and for internal failures.
+Arguments of the wrong type raise ``TypeError``, as pybind11 reports it. A
+number that its native type cannot hold, such as a negative ``split_workers``
+or an ``Options`` field above the unsigned range, raises ``ValueError``, and
+text that UTF-8 cannot encode raises ``UnicodeEncodeError``, a ``ValueError``.
+The text of a message is not part of the stable interface.
+"""
 
 from ._c50 import (
     C50Error,

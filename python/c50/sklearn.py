@@ -7,6 +7,7 @@ import json
 import sys
 from collections.abc import Iterator, Mapping, Sequence
 from decimal import Decimal
+from importlib.metadata import PackageNotFoundError, version
 from numbers import Integral, Real
 from typing import Any, Literal, TypeAlias, cast
 
@@ -46,6 +47,8 @@ ClassWeight: TypeAlias = Mapping[Any, float] | Literal["balanced"]
 _SEED_COUNT = 4096
 _MAX_TRIALS = 1000
 _MAX_WORKERS = 8
+# Key of the saving package version in the pickled estimator state.
+_VERSION_KEY = "_c50_version"
 _BOOLEAN_PARAMETERS = (
     "subset_splits",
     "winnow",
@@ -508,6 +511,37 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             "value_names": value_names,
         }
 
+    def __getstate__(self) -> dict[str, Any]:
+        """Return the pickle state, which records the ``c50`` version."""
+        state: dict[str, Any] = super().__getstate__()
+        state[_VERSION_KEY] = _package_version()
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        """Restore pickled state saved by the same ``c50`` version.
+
+        The state holds private encoding state, so only the version that saved
+        it can load it.
+
+        Raises:
+            ValueError: If the state records no version or another version than
+                the running one.
+        """
+        state = dict(state)
+        saved = state.pop(_VERSION_KEY, None)
+        current = _package_version()
+        if saved is None:
+            raise ValueError(
+                "this C50Classifier pickle records no c50 version; load it "
+                f"with the version of c50 that saved it, not {current}"
+            )
+        if saved != current:
+            raise ValueError(
+                f"this C50Classifier pickle was saved by c50 {saved} and "
+                f"cannot be loaded by c50 {current}"
+            )
+        super().__setstate__(state)
+
     def __sklearn_is_fitted__(self) -> bool:
         """Return whether native model state has been fitted."""
         return hasattr(self, "model_")
@@ -668,6 +702,14 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             TieOrder.STABLE if self.ties == "stable" else TieOrder.REFERENCE
         )
         return options
+
+
+def _package_version() -> str:
+    """Return the installed ``c50`` version, or ``"unknown"``."""
+    try:
+        return version("c50")
+    except PackageNotFoundError:
+        return "unknown"
 
 
 def _normalize_scores(
