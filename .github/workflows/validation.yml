@@ -41,6 +41,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      # The locale tests skip when no decimal-comma locale exists.
+      - name: Generate a decimal-comma locale
+        if: runner.os == 'Linux'
+        run: sudo locale-gen de_DE.UTF-8
       # Verify that targets request C++17 even with an older project default.
       - name: Configure
         run: >-
@@ -210,6 +214,8 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: pip
+      - name: Generate a decimal-comma locale
+        run: sudo locale-gen de_DE.UTF-8
       - name: Install documentation tools and the package
         run: |
           sudo apt-get update
