@@ -249,6 +249,15 @@ def test_unused_costs_are_not_retained() -> None:
     assert restored.predict(CASES) == ["low", "high"]
 
 
+def test_missing_required_costs_is_a_value_error() -> None:
+    model = c50.train(NAMES, TRAINING, costs="low, high: 5\n")
+    assert model.costs_data
+
+    with pytest.raises(ValueError, match="requires costs"):
+        c50.load(NAMES, model.serialized_data)
+    assert c50.load(NAMES, model.serialized_data, costs=model.costs_data)
+
+
 def test_native_failures_become_python_exceptions() -> None:
     options = c50.Options()
     options.trials = 0

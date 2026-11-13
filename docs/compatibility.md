@@ -226,6 +226,15 @@ Cost-based prediction now compares all finite expected costs, including values
 above the former `1e38` initial bound. Such models select the least-cost class
 instead of accidentally retaining the default class.
 
+Costs text that sets no cost other than the default of 1 counts as missing.
+That includes empty text, text with only comments, text whose entries all have
+cost 1, and text whose entries all name one class twice. Loading a model that
+requires costs with such text throws `invalid_argument`, or raises `ValueError`
+in Python. Release 2.07 ignores a missing or empty costs file, builds no cost
+matrix, and predicts without costs. The library reports the error at load
+instead, because a cost model without its costs would otherwise fail on every
+later prediction. A comment beside a real entry is valid.
+
 Implicit-attribute parsing keeps scratch buffers and pending string literals
 owned during exception unwinding. Partially constructed definitions always
 have a terminator, including when an allocation fails. Allocation failures
