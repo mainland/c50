@@ -74,8 +74,10 @@ change classifiers, such as `ties="stable"`, are exceptions by design.
   predict again after loading it.
 - A pickled `C50Classifier` also holds private encoding state, so a pickle
   must be loaded with the version of `c50` that saved it, as scikit-learn
-  recommends for its own estimators. To use a classifier across versions, save
-  the estimator's `model_` and predict through the low-level API, or refit
-  the estimator from the training data.
+  recommends for its own estimators. The pickle records the saving version.
+  Loading it with another version raises `ValueError` naming both versions,
+  and loading a pickle that records none raises `ValueError`. To use a
+  classifier across versions, save the estimator's `model_` and predict
+  through the low-level API, or refit the estimator from the training data.
 - Inspection JSON records its `format_version`. A release that changes the
   meaning of an existing field increments it.
