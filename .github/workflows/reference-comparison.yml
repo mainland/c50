@@ -19,11 +19,11 @@ concurrency:
 
 jobs:
   # Build C5.0 Release 2.07 from the `main` branch and train generated data
-  # with it and with this tree's c5.0. The trees, rules, and console output
+  # with it and with the library's c5.0. The trees, rules, and console output
   # must match. The script builds the reference with -ffp-contract=off, so it
   # keeps the x86-64 arithmetic on every runner. The default ARM64 entry then
-  # shows whether this tree's default build matches the x86-64 classifier,
-  # and the entry that builds this tree with -ffp-contract=off shows whether
+  # shows whether the library's default build matches the x86-64 classifier,
+  # and the entry that builds the library with -ffp-contract=off shows whether
   # that flag restores it.
   release-207:
     runs-on: ${{ matrix.os }}
@@ -54,7 +54,7 @@ jobs:
           cmake -S . -B build
           -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_CXX_FLAGS="$FLAGS"
-      - name: Build this tree's c5.0
+      - name: Build the library's c5.0
         run: cmake --build build --parallel 2 --target c50_cli
       - name: Compare with Release 2.07
         run: tests/reference/run.sh build/c5.0 release-207

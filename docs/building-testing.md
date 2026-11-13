@@ -17,6 +17,7 @@ their current results.
 | Linux x86-64 | GCC | `sanitizers.yml`, `native` | CTest under ThreadSanitizer |
 | Linux x86-64 | AFL++ `afl-clang-lto` | `sanitizers.yml`, `afl-seed-replay` | Replay of the checked-in fuzz seeds |
 | Linux ARM64 | GCC on `ubuntu-24.04-arm` | `validation.yml`, `native` | Native build, CTest, and installed consumers |
+| Linux x86-64 and ARM64 | GCC on `ubuntu-24.04` and `ubuntu-24.04-arm` | `reference-comparison.yml`, `release-207` | Trees, rules, and console output compared with C5.0 Release 2.07 built from `main`. ARM64 also builds with `-ffp-contract=off`. |
 | macOS ARM64 | AppleClang on `macos-15` | `validation.yml`, `native` | Native build, CTest, and installed consumers |
 | Linux x86-64 and ARM64, macOS ARM64 | GCC on Linux, AppleClang on macOS | `validation.yml`, `private-core` | Release build and CTest with `C50_PRIVATE_CORE`, the Python packages' core configuration |
 | Windows x86-64 | MSVC on `windows-2022`, Python 3.12 | `validation.yml`, `windows` | Native build with the Python extension, CTest, installed consumers, and Python tests |
@@ -339,6 +340,67 @@ uvx cibuildwheel --only cp312-manylinux_x86_64 dist/c50-*.tar.gz
 musllinux, free-threaded CPython, and prerelease CPython versions are not
 built.
 
+## Comparison with Release 2.07
+
+The `reference-comparison` check trains generated data with the library's
+`c5.0` and with C5.0 Release 2.07 and requires identical results. It builds
+the imported program from the `main` branch with the Makefile's flags,
+`gcc -ffloat-store -O3`, without `csh`, and adds `-ffp-contract=off`. That
+flag keeps the reference to x86-64 arithmetic on targets with fused
+multiply-add and changes nothing on x86-64. The check does not run in the
+default CTest or `make test` runs, because it builds a second program and
+trains dozens of cases. Run it from a build directory or with Make:
+
+```sh
+cmake --build build --target reference-comparison
+make reference-comparison
+```
+
+Run the script directly to compare any `c5.0` program. The optional second
+argument is a directory that holds the files of `main`. Without it, the script
+extracts a ref with `git archive`: `$C50_REFERENCE_REF` if set, else `main`,
+else `origin/main`. A clone that has none of them, such as a shallow clone of
+another branch, fails with a message that asks for the variable or a directory.
+
+```sh
+tests/reference/run.sh ./c5.0
+tests/reference/run.sh ./c5.0 /path/to/release-2.07
+```
+
+`tests/reference/compare.py` runs the cases and takes a `--only TEXT` filter
+and `--keep DIRECTORY`, which retains the files of each case. The standard
+library is the only Python dependency. `tests/reference/generate.py` writes the
+datasets from fixed seeds, so every run and platform trains the same bytes.
+
+The datasets have continuous, discrete, and ordered discrete attributes,
+missing (`?`) and not-applicable (`N/A`) values, two to four classes, a
+case-weight attribute, a costs file, and implicit attributes. The cases use
+`-r`, `-b`, `-t`, `-w`, `-s`, `-g`, `-m`, `-c`, `-p`, `-S` with `-I`, `-X`,
+`-u`, `-e`, and costs, alone and in combination, with `-f` naming each
+dataset. The comparison normalizes what `tests/test_cli.sh` normalizes: the
+start time, the elapsed time, the date of the model `id`, and trailing white
+space. It normalizes nothing else, and any other difference fails the case. The
+comparison also requires the same exit status. Two datasets with undeclared
+discrete values check it: three bad values leave exit status 0, and twelve
+reach the error limit and exit with status 1. Six datasets divide in an
+implicit definition by a value that wraps Release 2.07's precision multiplier,
+to a positive value, a negative value, 0, and the most negative `int`, for a
+six-decimal numerator and an integer one, and in a nested comparison.
+
+The comparison avoids the differences that
+{doc}`compatibility` documents. Winnowing runs only on a dataset without a
+case-weight attribute, because the library computes the average case weight
+before winnowing and Release 2.07 does not. The cases do not train a
+`timestamp` attribute. The comparison does not cover prediction and report
+output.
+
+`.github/workflows/reference-comparison.yml` runs the check on `ubuntu-24.04`
+and on the ARM64 runner `ubuntu-24.04-arm`. The reference never fuses
+multiplications and additions. The default ARM64 entry shows whether the
+library's default build matches the x86-64 classifier, and a second ARM64
+entry, which builds the library with `-ffp-contract=off`, shows whether that
+flag restores it.
+
 ## Sort and worker-equivalence tests
 
 The default CTest run includes two tests of training internals.
@@ -418,6 +480,9 @@ The workflow runs on pull requests, pushes to `main`, `dev`, and topic branches,
 and manual dispatch. It uses read-only repository permissions and pinned action
 revisions. A checked-in workflow defines the intended checks. Hosted results
 must be inspected before claiming a platform or dependency configuration passed.
+
+`.github/workflows/reference-comparison.yml` runs the comparison with
+Release 2.07 described above.
 
 `.github/workflows/sanitizers.yml` runs separate Clang address/undefined/leak
 and GCC thread-sanitizer jobs on pull requests, integration-branch pushes,
