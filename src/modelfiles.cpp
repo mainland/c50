@@ -226,7 +226,7 @@ void WriteFilePrefix(c50_context *Context, const char *Extension)
 	Context->classifier_output_active = true;
     }
 
-    clock = time(0);
+    clock = Context->io.operation_clock;
 #ifdef _WIN32
     if ( localtime_s(&now, &clock) )
 #else
