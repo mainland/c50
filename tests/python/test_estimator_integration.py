@@ -193,6 +193,24 @@ def test_sparse_and_wrong_dimension_inputs_are_rejected() -> None:
         classifier.fit(X[:, 0], Y)
 
 
+def test_dataframe_sparse_columns_follow_the_documentation() -> None:
+    # docs/estimator.md: a frame of only sparse columns raises TypeError, and a
+    # frame that mixes sparse and dense columns is densified with
+    # scikit-learn's warning, then trains and predicts.
+    labels = np.asarray(["a", "b"] * 4)
+    dense = pd.DataFrame({"f": np.arange(8.0), "g": np.arange(8.0) % 3})
+    all_sparse = dense.astype(pd.SparseDtype("float64", 0.0))
+    mixed = dense.assign(f=pd.arrays.SparseArray(dense["f"]))
+
+    with pytest.raises(TypeError, match="Sparse data was passed"):
+        C50Classifier().fit(all_sparse, labels)
+    with pytest.warns(UserWarning, match="sparse columns"):
+        classifier = C50Classifier().fit(mixed, labels)
+    with pytest.warns(UserWarning, match="sparse columns"):
+        predicted = classifier.predict(mixed)
+    assert predicted.shape == (8,)
+
+
 def test_pandas_categories_names_and_missing_values() -> None:
     frame = pd.DataFrame(
         {
