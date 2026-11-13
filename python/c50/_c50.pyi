@@ -224,7 +224,16 @@ class Predictor:
     def predict_details(self, cases: str) -> Predictions: ...
     def predict_details_dense(
         self, values: NDArray[np.float64]
-    ) -> Predictions: ...
+    ) -> Predictions:
+        """Predict a dense matrix.
+
+        Raises:
+            C50Error: If the model's schema has an implicit, ignored, label,
+                date, time, or timestamp attribute, a class attribute, or a
+                discrete attribute without explicit values, which the dense
+                interface does not support. The number of columns does not
+                matter.
+        """
 
 @final
 class Model:
@@ -270,11 +279,27 @@ class Model:
     def predict_details(self, cases: str) -> Predictions: ...
     def predict_details_dense(
         self, values: NDArray[np.float64]
-    ) -> Predictions: ...
+    ) -> Predictions:
+        """Predict a dense matrix.
+
+        Raises:
+            C50Error: If the model's schema has an implicit, ignored, label,
+                date, time, or timestamp attribute, a class attribute, or a
+                discrete attribute without explicit values, which the dense
+                interface does not support. The number of columns does not
+                matter.
+        """
     def attribute_usage(self, cases: str) -> list[int]: ...
-    def attribute_usage_dense(
-        self, values: NDArray[np.float64]
-    ) -> list[int]: ...
+    def attribute_usage_dense(self, values: NDArray[np.float64]) -> list[int]:
+        """Count attribute usage for a dense matrix.
+
+        Raises:
+            C50Error: If the model's schema has an implicit, ignored, label,
+                date, time, or timestamp attribute, a class attribute, or a
+                discrete attribute without explicit values, which the dense
+                interface does not support. The number of columns does not
+                matter.
+        """
     def predict(self, cases: str) -> list[str]: ...
     def predict_scores(self, cases: str) -> list[list[float]]: ...
 
