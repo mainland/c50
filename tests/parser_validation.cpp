@@ -229,6 +229,26 @@ int main()
         rejects([&] { c50::model::load(context, kind,
             "no, yes.\nx: continuous.\nderived := " + nested_expression(101) + ".\n",
             header + leaf); });
+        // Each level leaves several operands pending, so the operand stack
+        // grows beyond the nesting depth.
+        const auto operand_expression = [](int depth) {
+            std::string expression = "x";
+            for (int level = 0; level < depth; ++level)
+                expression = "1 + 1 * 1 ^ (" + expression + ")";
+            return expression;
+        };
+        for (const int depth : {34, 99}) {
+            const auto operand_model = c50::model::load(context, kind,
+                "no, yes.\nx: continuous.\nderived := " +
+                    operand_expression(depth) + ".\n",
+                header + leaf);
+            if (operand_model.predict(context, "1, ?\n").class_index(0) != 0)
+                throw std::runtime_error("pending operands changed prediction");
+        }
+        rejects([&] { c50::model::load(context, kind,
+            "no, yes.\nx: continuous.\nderived := " +
+                operand_expression(100) + ".\n",
+            header + leaf); });
         const std::string boundary_expression =
             "color = \"" + std::string(38, 'a') + "\"";
         if (boundary_expression.size() != 48) return 1;
@@ -247,6 +267,22 @@ int main()
             "no, yes.\nx: continuous.\nderived := 1e1000.\n", header + leaf); });
         c50::model::load(context, kind,
             "no, yes.\nx: discrete 472721496.\n", header + leaf);
+        // Release 2.07 accepts schemas of any class count, so 4,097 classes
+        // must train.
+        std::string many_classes_names;
+        for (int class_index = 0; class_index < 4097; ++class_index)
+            many_classes_names +=
+                (class_index ? ",c" : "c") + std::to_string(class_index);
+        many_classes_names += ".\nx: continuous.\n";
+        const auto many_classes_model = c50::model::train(context, kind,
+            many_classes_names,
+            "0, c0\n1, c0\n2, c0\n3, c4096\n4, c4096\n5, c4096\n");
+        const auto many_classes_predictions =
+            many_classes_model.predict(context, "0, ?\n5, ?\n");
+        if (many_classes_predictions.size() != 2 ||
+            many_classes_predictions.class_index(0) != 0 ||
+            many_classes_predictions.class_index(1) != 4096)
+            throw std::runtime_error("many classes changed predictions");
         const std::string growing_names = "no, yes.\nx: discrete 101.\n";
         std::string growing_header = "att=\"x\" elts=";
         std::string growing_data;

@@ -1,0 +1,234 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `basic'
+	Random seed 17
+	Rule utility ordering (1/2's)
+	Verbosity level 2
+
+Read 20 cases (3 attributes) from basic.data
+
+<0> 20 cases
+	Att signal	cut=4.750, inf 1.722, gain 0.258
+	Att group	inf 1.559, gain 0.346
+	Att enabled	inf 1.000, gain 0.000
+	av gain=0.302, MDL (2) = 0.050, min=0.302
+	best attribute group inf 1.559 gain 0.346 val 0.222
+
+<1> 8 cases
+	Att signal	cut=4.750, inf 1.811, gain 0.664
+	Att enabled	inf 1.000, gain 0.049
+	av gain=0.356, MDL (2) = 0.125, min=0.356
+	best attribute signal cut 4.750 inf 1.811 gain 0.664 val 0.367
+
+<2> 2 cases, total weight 1.1
+
+<2> 4 cases, total weight 3.4
+
+<2> 4 cases, total weight 3.4
+
+<1> 5 cases
+	Att signal	cut=5.250, inf 0.971, gain 0.771
+	Att enabled	inf 0.971, gain 0.020
+	av gain=0.395, MDL (2) = 0.200, min=0.395
+	best attribute signal cut 5.250 inf 0.971 gain 0.771 val 0.794
+
+<2> 3 cases
+
+<2> 2 cases
+
+<1> 7 cases
+
+
+:   signal:  [43%  N=8.00  tree=3.50  leaf=3.00+1.47]
+
+:   signal:  [42%  N=5.00  tree=2.11  leaf=2.00+1.24]
+
+group:  [34%  N=20.00  tree=6.87  leaf=8.00+2.05  br[2]=7.71]
+
+Pruned tree:
+
+group = gamma: high (7)
+group = alpha:
+:...signal = N/A: low (1.1)
+:   signal <= 4.5: low (3.4)
+:   signal > 4.5: high (3.4/0.4)
+group = beta:
+:...signal <= 5: low (3)
+    signal > 5: high (2)
+
+  Pruning rule for low
+       Err   Used   Pess	Absent condition
+       0.0    1.0  33.3%	<base> 1.4/6.7 bits
+       1.0    2.0  50.0%	group = alpha
+       3.0    8.0  40.0%	signal = N/A
+	eliminate test 2
+
+       Err   Used   Pess	Absent condition
+       3.0    8.0  40.0%	<base> 2.0/3.1 bits
+      12.0   20.0  59.1%	group = alpha
+
+Rule 1: (8/3, lift 1.5)
+	group = alpha
+	->  class low  [0.600]
+
+  Pruning rule for low
+       Err   Used   Pess	Absent condition
+       0.0    3.0  20.0%	<base> 4.6/6.7 bits
+       2.0    8.0  30.0%	group = alpha
+       3.0    8.0  40.0%	signal <= 4.5
+
+Rule 2: (3, lift 2.0)
+	signal <= 4.5
+	group = alpha
+	->  class low  [0.800]
+
+  Pruning rule for high
+       Err   Used   Pess	Absent condition
+       0.0    3.0  20.0%	<base> 2.5/6.7 bits
+       0.0    8.0  10.0%	group = alpha
+       5.0    8.0  60.0%	signal > 4.5
+	eliminate test 1
+
+       Err   Used   Pess	Absent condition
+       0.0    8.0  10.0%	<base> 8.4/4.5 bits
+       8.0   20.0  40.9%	signal > 4.5
+
+Rule 3: (8, lift 1.5)
+	signal > 4.5
+	->  class high  [0.900]
+
+  Pruning rule for low
+       Err   Used   Pess	Absent condition
+       3.0    8.0  40.0%	<base> 2.0/3.1 bits
+      12.0   20.0  59.1%	group = alpha
+	duplicates rule 1
+
+  Pruning rule for low
+       Err   Used   Pess	Absent condition
+       0.0    3.0  20.0%	<base> 4.6/6.7 bits
+       3.0    9.0  36.4%	group = beta
+       2.0    5.0  42.9%	signal <= 5
+
+Rule 4: (3, lift 2.0)
+	signal <= 5
+	group = beta
+	->  class low  [0.800]
+
+  Pruning rule for high
+       Err   Used   Pess	Absent condition
+       0.0    2.0  25.0%	<base> 1.6/6.7 bits
+       0.0    7.0  11.1%	group = beta
+       3.0    5.0  57.1%	signal > 5
+	eliminate test 1
+
+       Err   Used   Pess	Absent condition
+       0.0    7.0  11.1%	<base> 6.9/4.5 bits
+       8.0   20.0  40.9%	signal > 5
+
+Rule 5: (7, lift 1.5)
+	signal > 5
+	->  class high  [0.889]
+
+  Pruning rule for low
+       Err   Used   Pess	Absent condition
+       2.0    5.0  42.9%	<base> 0.8/3.1 bits
+      12.0   20.0  59.1%	group = beta
+
+Rule 6: (5/2, lift 1.4)
+	group = beta
+	->  class low  [0.571]
+
+  Pruning rule for high
+       Err   Used   Pess	Absent condition
+       0.0    7.0  11.1%	<base> 6.9/3.1 bits
+       8.0   20.0  40.9%	group = gamma
+
+Rule 7: (7, lift 1.5)
+	group = gamma
+	->  class high  [0.889]
+
+	4 rules, 2.0 errs, cost=0.1 bits
+
+		1<-2=-0.1> 2<3=0.1> 3<5=0.2> 4<3=0.1> 5<0=0.0>
+		6<0=0.0> 7<4=0.2>
+	Add rule 0/1 (errs=0.0, cost=0.1 bits)
+	5 rules, 0.0 errs, cost=0.1 bits
+
+		2<0=-0.0> 3<5=0.2> 4<3=0.1> 7<4=0.2>
+	Delete rule 0/2 (errs=0.0, cost=0.1 bits)
+	4 rules, 0.0 errs, cost=0.1 bits
+
+		1<5=0.2> 3<5=0.2> 4<3=0.1> 7<4=0.2>
+
+    Weights of uncovered cases:
+	low (0.40): 0.0
+	high (0.60): 0.0
+
+    Determining rule utility
+
+		1<5> 3<5> 4<3> 7<4>
+	Delete rule 0/4 (errs up 3.0)
+
+		1<5> 3<5> 7<4>
+	Delete rule 0/7 (errs up 7.0)
+
+		1<5> 3<8>
+	Delete rule 0/1 (errs up 12.0)
+
+		3<8>
+	Delete rule 0/3 (errs up 20.0)
+
+
+Rules:
+
+Rule 1: (8, lift 1.5)
+	signal > 4.5
+	->  class high  [0.900]
+
+Rule 2: (8/3, lift 1.5)
+	group = alpha
+	->  class low  [0.600]
+
+Rule 3: (7, lift 1.5)
+	group = gamma
+	->  class high  [0.889]
+
+Rule 4: (3, lift 2.0)
+	signal <= 5
+	group = beta
+	->  class low  [0.800]
+
+Default class: high
+
+
+Evaluation on training data (20 cases):
+
+	        Rules
+	  ----------------
+	    No      Errors
+
+	     4    0( 0.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     8          (a): class low
+	          12    (b): class high
+
+
+	Attribute usage:
+
+	     90%  group
+	     55%  signal
+
+Rule utility summary:
+
+	Rules	      Errors
+	-----	      ------
+	1-2	    3(15.0%)
+
+
+Time: <elapsed> secs
