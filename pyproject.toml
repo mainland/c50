@@ -195,6 +195,9 @@ environment = { MACOSX_DEPLOYMENT_TARGET = "11.0" }
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
+# The extension imports MSVCP140.dll, which Python installers do not ship.
+# Bundle it explicitly, so that a cibuildwheel upgrade cannot drop the repair.
+repair-wheel-command = "delvewheel repair -w {dest_dir} -v {wheel}"
 
 [tool.codespell]
 # The fixtures and expected outputs hold generated text and bytes that the

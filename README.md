@@ -43,14 +43,22 @@ CMake is also supported, and is required on Windows with Visual Studio:
 
 ```sh
 cmake -S . -B build
-cmake --build build
+cmake --build build --config Release
 ```
 
-Install the native library, C++ header, and CMake package with:
+Single-configuration generators, such as Makefiles and Ninja, build Release
+when `CMAKE_BUILD_TYPE` is unset. Multi-configuration generators, such as
+Visual Studio, build Debug unless the commands name a configuration, so pass
+`--config Release` as above. Install the native library, C++ header, CMake
+package, the `c5.0` and `report` programs, and `gpl.txt` with:
 
 ```sh
-cmake --install build --prefix <prefix>
+cmake --install build --config Release --prefix <prefix>
 ```
+
+The install tree holds `bin/c5.0`, `bin/report`, `include/c50/c50.hpp`,
+`lib/libc50_core.a`, `lib/cmake/C50/`, and `share/doc/C50/gpl.txt`. The paths
+follow `GNUInstallDirs`, and `lib` may be `lib64` or a multiarch directory.
 
 CMake consumers link `C50::cpp`, which carries the compiled core and C++17
 requirements:

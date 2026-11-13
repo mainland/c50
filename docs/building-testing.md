@@ -58,7 +58,15 @@ which CMake finds in its default installation directory or on `PATH`:
 cmake -S . -B build
 cmake --build build --config Release
 ctest --test-dir build --build-config Release --output-on-failure
+cmake --install build --config Release --prefix <prefix>
 ```
+
+Without `--config Release`, Visual Studio builds and installs Debug.
+Single-configuration generators build Release when no build type is set.
+Set one explicitly, such as `-DCMAKE_BUILD_TYPE=Debug`, to override that
+default. CMake 3.22 and newer also read a non-empty `CMAKE_BUILD_TYPE`
+environment variable. Older versions and an empty variable leave the Release
+default in place.
 
 `.gitattributes` checks out text files with LF line endings on every platform,
 so the fixtures compare byte for byte. The programs write model files in
@@ -100,10 +108,14 @@ prediction digests captured with the imported RuleQuest sorting algorithms. See
 {doc}`compatibility` for its scope and baseline-update policy.
 
 A `VerbOpt` build also checks split-diagnostic order and the resulting
-classifier. Configure the flag for C++ sources, then run the two CLI tests:
+classifier. The verbose code contains assertions that the build checks only
+when `NDEBUG` is undefined, so configure it with `-DCMAKE_BUILD_TYPE=Debug`. A
+build of another type compiles the assertions out and the test passes without
+checking them. Configure the flag for C++ sources, then run the two CLI tests:
 
 ```sh
-cmake -S . -B build/verbose -DCMAKE_CXX_FLAGS=-DVerbOpt
+cmake -S . -B build/verbose -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_CXX_FLAGS=-DVerbOpt
 cmake --build build/verbose
 ctest --test-dir build/verbose -R '^cli(-verbose)?-regression$' \
     --output-on-failure
@@ -339,6 +351,13 @@ uvx cibuildwheel --only cp312-manylinux_x86_64 dist/c50-*.tar.gz
 
 musllinux, free-threaded CPython, and prerelease CPython versions are not
 built.
+
+The Windows wheels import `MSVCP140.dll`, which Python installers do not ship.
+`[tool.cibuildwheel.windows]` runs `delvewheel repair`, which copies the DLL
+into the wheel's `c50.libs` directory. The repair runs only on a Windows
+build. Before a release, check that the release candidate's Windows wheels
+list no unbundled `MSVCP140.dll` import and that one imports in an
+environment without the Visual C++ runtime.
 
 ## Comparison with Release 2.07
 
