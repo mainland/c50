@@ -1048,7 +1048,10 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 	return XStack[static_cast<size_t>(Index)];
     };
     const auto StackPush = [&]() -> XStackElt & {
-	if ( XSN >= MaxExpressionDepth ) InvalidStack();
+	// The parser's type stack keeps a compiled definition balanced, so
+	// the operand stack never holds more entries than the definition has
+	// instructions. Nesting depth does not bound it: each level can leave
+	// several operands pending.
 	if ( static_cast<size_t>(XSN) == XStack.size() ) XStack.emplace_back();
 	return XStack[static_cast<size_t>(XSN++)];
     };
