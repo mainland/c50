@@ -43,13 +43,17 @@ CMake is also supported, and is required on Windows with Visual Studio:
 
 ```sh
 cmake -S . -B build
-cmake --build build
+cmake --build build --config Release
 ```
 
-Install the native library, C++ header, and CMake package with:
+Single-configuration generators, such as Makefiles and Ninja, build Release
+when `CMAKE_BUILD_TYPE` is unset. Multi-configuration generators, such as
+Visual Studio, build Debug unless the commands name a configuration, so pass
+`--config Release` as above. Install the native library, C++ header, and CMake
+package with:
 
 ```sh
-cmake --install build --prefix <prefix>
+cmake --install build --config Release --prefix <prefix>
 ```
 
 CMake consumers link `C50::cpp`, which carries the compiled core and C++17
