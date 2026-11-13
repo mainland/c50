@@ -53,6 +53,113 @@ private:
     std::optional<std::string> copy_;
 };
 
+// The feature matrix of a training call. Its conversion to a C-contiguous
+// float64 array is the one that every dense function performs, but an object
+// that NumPy cannot convert, such as an array of words or a ragged list, raises
+// ValueError that names the argument. pybind11 would raise an unnamed
+// TypeError for it.
+class training_matrix
+{
+public:
+    using array_type =
+        py::array_t<double, py::array::c_style | py::array::forcecast>;
+
+    training_matrix() = default;
+    explicit training_matrix(array_type array) : array_(std::move(array)) {}
+
+    const array_type &array() const noexcept { return array_; }
+
+private:
+    array_type array_;
+};
+
+// The worker count of a training call. The converter rejects what is not an
+// int, and accepts any int, so that the caller gets a ValueError that names
+// the argument when the number does not fit the native type. The native
+// context checks the supported range.
+class worker_count_argument
+{
+public:
+    worker_count_argument() = default;
+    explicit worker_count_argument(unsigned count) noexcept : count_(count) {}
+
+    unsigned count() const noexcept { return count_; }
+
+private:
+    unsigned count_ = 1;
+};
+
+// Convert an int to unsigned, or raise ValueError that names the field when
+// the value does not fit. Python raises ValueError or OverflowError for such a
+// value, never pybind11's TypeError for an unsuitable argument.
+unsigned checked_unsigned(const py::handle &source, const char *field)
+{
+    const py::object number =
+        py::reinterpret_steal<py::object>(PyNumber_Index(source.ptr()));
+    if ( !number )
+    {
+        throw py::error_already_set();
+    }
+    const unsigned long long value = PyLong_AsUnsignedLongLong(number.ptr());
+    if ( value == static_cast<unsigned long long>(-1) && PyErr_Occurred() )
+    {
+        PyErr_Clear();
+        throw py::value_error(
+            std::string(field) + " does not fit an unsigned integer");
+    }
+    if ( value > std::numeric_limits<unsigned>::max() )
+    {
+        throw py::value_error(
+            std::string(field) + " does not fit an unsigned integer");
+    }
+    return static_cast<unsigned>(value);
+}
+
+// Convert an int or float to double, or raise ValueError that names the field
+// when an int is too large for a double.
+double checked_double(const py::handle &source, const char *field)
+{
+    const double value = PyFloat_AsDouble(source.ptr());
+    if ( value == -1.0 && PyErr_Occurred() )
+    {
+        if ( PyErr_ExceptionMatches(PyExc_OverflowError) )
+        {
+            PyErr_Clear();
+            throw py::value_error(
+                std::string(field) + " is too large for a float");
+        }
+        throw py::error_already_set();
+    }
+    return value;
+}
+
+// Convert with NumPy, as the converting pass of an array_t parameter does, but
+// keep the Python error. pybind11 clears the error of a failed conversion, so
+// the caller could neither say why it failed nor tell a MemoryError or a
+// KeyboardInterrupt from an object that NumPy cannot read. An Exception other
+// than MemoryError becomes a ValueError chained to it. MemoryError and any
+// exception that is not an Exception propagate as they are.
+py::object convert_to_float64(py::handle source)
+{
+    try
+    {
+        return py::module_::import("numpy").attr("asarray")(
+            source, py::arg("dtype") = "float64", py::arg("order") = "C");
+    }
+    catch ( py::error_already_set &error )
+    {
+        if ( !error.matches(PyExc_Exception) ||
+             error.matches(PyExc_MemoryError) )
+        {
+            throw;
+        }
+        py::raise_from(
+            error, PyExc_ValueError,
+            "values cannot be converted to a float64 array");
+        throw py::error_already_set();
+    }
+}
+
 } // namespace
 
 namespace pybind11::detail
@@ -76,12 +183,72 @@ struct type_caster<text_argument>
             return true;
         }
 
+        // pybind11 reports a str that UTF-8 cannot encode, such as a lone
+        // surrogate, as an unsuitable argument. Python raises
+        // UnicodeEncodeError, a ValueError, so let that error through.
+        if ( PyUnicode_Check(source.ptr()) &&
+             PyUnicode_AsUTF8AndSize(source.ptr(), nullptr) == nullptr )
+        {
+            throw error_already_set();
+        }
         make_caster<std::string_view> text;
         if ( !text.load(source, convert) )
         {
             return false;
         }
         value = text_argument(cast_op<std::string_view>(text));
+        return true;
+    }
+};
+
+// Accept what a float64 array parameter accepts. A float64 C-contiguous array
+// is read directly. In the converting pass, NumPy converts anything else, and
+// a failure raises ValueError that chains its cause instead of rejecting the
+// argument.
+template <>
+struct type_caster<training_matrix>
+{
+    PYBIND11_TYPE_CASTER(
+        training_matrix, make_caster<training_matrix::array_type>::name);
+
+    bool load(handle source, bool convert)
+    {
+        make_caster<training_matrix::array_type> array;
+        if ( !array.load(source, false) )
+        {
+            if ( !convert )
+            {
+                return false;
+            }
+            const object converted = convert_to_float64(source);
+            if ( !array.load(converted, false) )
+            {
+                throw py::value_error(
+                    "values cannot be converted to a float64 array");
+            }
+        }
+        value = training_matrix(
+            cast_op<training_matrix::array_type &&>(std::move(array)));
+        return true;
+    }
+};
+
+// Accept an int of any size, which includes numpy integers and bool, and
+// raise ValueError when it does not fit unsigned. Reject floats and other
+// objects with pybind11's TypeError for an unsuitable argument.
+template <>
+struct type_caster<worker_count_argument>
+{
+    PYBIND11_TYPE_CASTER(worker_count_argument, const_name("int"));
+
+    bool load(handle source, bool)
+    {
+        if ( !PyIndex_Check(source.ptr()) )
+        {
+            return false;
+        }
+        value = worker_count_argument(
+            checked_unsigned(source, "split_workers"));
         return true;
     }
 };
@@ -97,8 +264,26 @@ Train a C5.0 classifier from text held in memory.
 The names, training, and optional costs strings use the corresponding C5.0
 file formats. The returned model owns its serialized representation and is
 independent of the native context used during training.
-``split_workers`` selects 1 through 8 native split-evaluation workers;
-the default is one.
+
+Args:
+    names: Contents of a C5.0 names file.
+    training_data: Contents of a C5.0 data file.
+    kind: Whether to build a tree or a ruleset.
+    options: Training options. The call reads a copy, so later changes to
+        the object do not affect it.
+    costs: Contents of a C5.0 costs file, or an empty string.
+    split_workers: Number of native split-evaluation workers, from 1
+        through 8.
+
+Returns:
+    The trained model.
+
+Raises:
+    ValueError: If an option, the schema, the data, or the costs are
+        invalid.
+    C50Error: If the schema uses a feature that the library does not
+        support.
+    MemoryError: If memory is exhausted.
 )doc";
 
 const char load_doc[] = R"doc(
@@ -106,6 +291,27 @@ Load and validate a serialized C5.0 classifier.
 
 The returned model owns copies of the names, serialized classifier, and
 optional costs strings.
+
+Args:
+    names: Contents of the C5.0 names file that the classifier was trained
+        with.
+    serialized_data: Contents of a ``.tree`` or ``.rules`` file.
+    kind: Whether ``serialized_data`` holds a tree or a ruleset.
+    costs: Contents of the C5.0 costs file, which a classifier trained with
+        costs requires. Otherwise it is ignored and the model retains none.
+        Text that sets no cost other than the default of 1, such as empty
+        text, only comments, or only entries of cost 1, counts as missing
+        and raises ``ValueError`` for a cost model.
+
+Returns:
+    The loaded model.
+
+Raises:
+    ValueError: If the names, the classifier, or the costs are invalid, or a
+        required costs file is missing.
+    C50Error: If the schema uses a feature that the library does not
+        support.
+    MemoryError: If memory is exhausted.
 )doc";
 
 const char train_dense_doc[] = R"doc(
@@ -113,11 +319,7 @@ Train a C5.0 classifier from a dense NumPy feature matrix.
 
 Continuous columns contain their numeric values. Categorical columns contain
 zero-based indices into the explicit values declared by ``names``. NaN denotes
-a missing feature. ``class_indices`` requires an integer dtype and contains
-one nonnegative zero-based class index per
-row.
-``split_workers`` selects 1 through 8 native split-evaluation workers;
-the default is one.
+a missing feature.
 
 Training runs without the global interpreter lock, so by default it copies
 ``values`` first. With ``copy=False``, training reads a float64, C-contiguous
@@ -125,6 +327,36 @@ Training runs without the global interpreter lock, so by default it copies
 The caller must then ensure that no thread modifies ``values`` until the call
 returns. Arrays with another dtype or layout are always converted into a
 temporary array that no other code can modify.
+
+Args:
+    names: Contents of a C5.0 names file.
+    values: A two-dimensional matrix with one column per feature and one row
+        per case.
+    class_indices: A one-dimensional integer array with one nonnegative
+        zero-based class index per row.
+    kind: Whether to build a tree or a ruleset.
+    options: Training options. The call reads a copy, so later changes to
+        the object do not affect it.
+    costs: Contents of a C5.0 costs file, or an empty string.
+    split_workers: Number of native split-evaluation workers, from 1
+        through 8.
+    copy: Whether to copy ``values`` before training.
+
+Returns:
+    The trained model.
+
+Raises:
+    ValueError: If an array has the wrong shape or dtype, ``values`` cannot be
+        converted to a float64 array (the error chains the cause), the row
+        counts differ, a class index or a value is out of range, or an option,
+        the schema, or the costs are invalid.
+    C50Error: If the schema has an implicit, ignored, label, date, time, or
+        timestamp attribute, a class attribute, or a discrete attribute
+        without explicit values, which dense data does not support. The
+        number of columns does not matter.
+    MemoryError: If memory is exhausted, including while converting
+        ``values``. A ``KeyboardInterrupt`` or any other exception that is not
+        an ``Exception`` raised by that conversion also propagates.
 )doc";
 
 const char predict_details_dense_doc[] = R"doc(
@@ -132,6 +364,23 @@ Predict a dense NumPy feature matrix.
 
 The matrix uses the same continuous, categorical, and missing-value encoding
 as ``train_dense``.
+
+Args:
+    values: A two-dimensional matrix with one column per feature and one row
+        per case.
+
+Returns:
+    The labels, confidences, and per-class scores of the rows.
+
+Raises:
+    ValueError: If the array is not two-dimensional, has the wrong number of
+        columns, or holds a value that is out of range for its feature.
+    C50Error: If the model's schema has an implicit, ignored, label, date,
+        time, or timestamp attribute, a class attribute, or a discrete
+        attribute without explicit values, which the dense interface does not
+        support. The number of columns does not matter. Use the text methods
+        for such a model.
+    MemoryError: If memory is exhausted.
 )doc";
 
 const char attribute_usage_doc[] = R"doc(
@@ -141,6 +390,17 @@ A case counts for an attribute when classifying it tests that attribute and
 the case's value is known. The result has one count per attribute of
 ``names_data``, in declaration order. These are the counts behind C5.0's
 "Attribute usage" report, which divides them by the number of cases.
+
+Args:
+    cases: Case rows in C5.0 data-file syntax. Each row includes a final
+        class field, which may be ``?``.
+
+Returns:
+    One count per attribute.
+
+Raises:
+    ValueError: If a case row is malformed.
+    MemoryError: If memory is exhausted.
 )doc";
 
 const char attribute_usage_dense_doc[] = R"doc(
@@ -148,6 +408,23 @@ Count attribute usage for a dense NumPy feature matrix.
 
 The matrix uses the same encoding as ``predict_details_dense``. The result
 matches ``attribute_usage`` for the equivalent data-file contents.
+
+Args:
+    values: A two-dimensional matrix with one column per feature and one row
+        per case.
+
+Returns:
+    One count per attribute.
+
+Raises:
+    ValueError: If the array is not two-dimensional, has the wrong number of
+        columns, or holds a value that is out of range for its feature.
+    C50Error: If the model's schema has an implicit, ignored, label, date,
+        time, or timestamp attribute, a class attribute, or a discrete
+        attribute without explicit values, which the dense interface does not
+        support. The number of columns does not matter. Use the text methods
+        for such a model.
+    MemoryError: If memory is exhausted.
 )doc";
 
 template<class T>
@@ -187,6 +464,16 @@ Predict cases and return labels, confidences, and per-class scores.
 
 Each case row uses C5.0 data-file syntax and includes a final class field,
 which may be ``?`` when unknown.
+
+Args:
+    cases: Case rows in C5.0 data-file syntax.
+
+Returns:
+    The labels, confidences, and per-class scores of the rows.
+
+Raises:
+    ValueError: If a case row is malformed.
+    MemoryError: If memory is exhausted.
 )doc";
 
 const char predict_doc[] = R"doc(
@@ -194,6 +481,16 @@ Predict the class label for each case row.
 
 Each case row uses C5.0 data-file syntax and includes a final class field,
 which may be ``?`` when unknown.
+
+Args:
+    cases: Case rows in C5.0 data-file syntax.
+
+Returns:
+    One class label per row.
+
+Raises:
+    ValueError: If a case row is malformed.
+    MemoryError: If memory is exhausted.
 )doc";
 
 const char predict_scores_doc[] = R"doc(
@@ -201,8 +498,18 @@ Return C5.0's per-class scores for each case row.
 
 The scores are C5.0's native class scores, not normalized probabilities: a
 ruleset's scores, for example, sum to less than one. Columns follow
-``class_names`` order. Each case row uses C5.0 data-file syntax
-and includes a final class field, which may be ``?`` when unknown.
+``class_names`` order. Each case row uses C5.0 data-file syntax and includes
+a final class field, which may be ``?`` when unknown.
+
+Args:
+    cases: Case rows in C5.0 data-file syntax.
+
+Returns:
+    One list of class scores per row.
+
+Raises:
+    ValueError: If a case row is malformed.
+    MemoryError: If memory is exhausted.
 )doc";
 
 class python_predictor
@@ -250,13 +557,13 @@ public:
                               c50::model_kind kind,
                               c50::options options,
                               const text_argument &costs,
-                              unsigned int split_workers)
+                              const worker_count_argument &split_workers)
     {
         // The options are a copy. A reference would point into the Python
         // Options object, which another thread can change while the GIL is
         // released.
         c50::context context;
-        context.split_workers(split_workers);
+        context.split_workers(split_workers.count());
         py::gil_scoped_release release;
         return python_model(c50::model::train(
             context, kind, names.view(), training_data.view(), options,
@@ -264,14 +571,15 @@ public:
     }
 
     static python_model train_dense(const text_argument &names,
-                                    const dense_values<double> &values,
+                                    const training_matrix &matrix,
                                     const py::array &class_indices,
                                     c50::model_kind kind,
                                     c50::options options,
                                     const text_argument &costs,
-                                    unsigned int split_workers,
+                                    const worker_count_argument &split_workers,
                                     bool copy)
     {
+        const dense_values<double> &values = matrix.array();
         if ( values.ndim() != 2 )
         {
             throw py::value_error("values must be a two-dimensional array");
@@ -300,7 +608,7 @@ public:
             data, static_cast<std::size_t>(values.shape(0)),
             static_cast<std::size_t>(values.shape(1)), indices.data());
         c50::context context;
-        context.split_workers(split_workers);
+        context.split_workers(split_workers.count());
         py::gil_scoped_release release;
         return python_model(c50::model::train(
             context, kind, names.view(), dataset, options, costs.view()));
@@ -697,11 +1005,16 @@ GIL while training, loading, or predicting.
 
     py::class_<c50::options>(
         module, "Options",
-        "Mutable classifier-construction options. Values are validated when "
-        "training begins.")
+        "Mutable classifier-construction options. Assigning a number that the "
+        "native type cannot hold raises ValueError. Training checks the "
+        "documented ranges.")
         .def(py::init<>(), "Construct deterministic single-tree defaults.")
-        .def_readwrite(
-            "trials", &c50::options::trials,
+        .def_property(
+            "trials",
+            [](const c50::options &options) { return options.trials; },
+            [](c50::options &options, const py::object &value) {
+                options.trials = checked_unsigned(value, "options.trials");
+            },
             "Number of classifiers to construct, from 1 through 1000.")
         .def_readwrite(
             "subset_splits", &c50::options::subset_splits,
@@ -718,19 +1031,44 @@ GIL while training, loading, or predicting.
         .def_readwrite(
             "ignore_costs", &c50::options::ignore_costs,
             "Whether training ignores supplied misclassification costs.")
-        .def_readwrite(
-            "minimum_cases", &c50::options::minimum_cases,
+        .def_property(
+            "minimum_cases",
+            [](const c50::options &options) {
+                return options.minimum_cases;
+            },
+            [](c50::options &options, const py::object &value) {
+                options.minimum_cases =
+                    checked_double(value, "options.minimum_cases");
+            },
             "Minimum cases represented by two branches, from 1 through "
             "1000000.")
-        .def_readwrite(
-            "confidence_factor", &c50::options::confidence_factor,
+        .def_property(
+            "confidence_factor",
+            [](const c50::options &options) {
+                return options.confidence_factor;
+            },
+            [](c50::options &options, const py::object &value) {
+                options.confidence_factor =
+                    checked_double(value, "options.confidence_factor");
+            },
             "Pruning confidence factor expressed as a fraction in [0, 1].")
-        .def_readwrite(
-            "sample_fraction", &c50::options::sample_fraction,
+        .def_property(
+            "sample_fraction",
+            [](const c50::options &options) {
+                return options.sample_fraction;
+            },
+            [](c50::options &options, const py::object &value) {
+                options.sample_fraction =
+                    checked_double(value, "options.sample_fraction");
+            },
             "Training sample fraction in [0, 0.999], or zero for no "
             "sampling.")
-        .def_readwrite(
-            "random_seed", &c50::options::random_seed,
+        .def_property(
+            "random_seed",
+            [](const c50::options &options) { return options.random_seed; },
+            [](c50::options &options, const py::object &value) {
+                options.random_seed = checked_unsigned(value, "options.random_seed");
+            },
             "Sampling seed in the range 0 through 4095.")
         .def_readwrite(
             "ties", &c50::options::ties,
