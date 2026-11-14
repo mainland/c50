@@ -36,7 +36,7 @@ static std::vector<std::string> read_lines(c50_input *input)
 
 /* A file read in blocks must return the same bytes and lines as the same
    text in memory, including lines that cross a block boundary. */
-static int check_blocks(void)
+static int check_blocks(c50_context *context)
 {
     static const char path[] = "c50-input-blocks.data";
     c50_input file_input, memory_input;
@@ -60,7 +60,7 @@ static int check_blocks(void)
     if ( fwrite(text.data(), 1, text.size(), file) == text.size() )
     {
         rewind(file);
-        c50_input_init_file(&file_input, file);
+        c50_input_init_file(&file_input, file, context);
         c50_input_init_memory(&memory_input, text.data(), text.size());
 
         bool ok = read_lines(&file_input) == expected &&
@@ -89,6 +89,40 @@ static int check_blocks(void)
     return status;
 }
 
+/* A read error is not the end of the input. Reading a directory fails with
+   EISDIR on Linux. Skip where fopen() rejects a directory or reading it does
+   not set the error indicator, as on Windows. */
+static int check_read_error(c50_context *context)
+{
+    c50_input input;
+    FILE *file = fopen(".", "rb");
+    char byte;
+    int status = 1;
+
+    if ( ! file ) return 0;
+    if ( fread(&byte, 1, 1, file) || ! ferror(file) )
+    {
+        fclose(file);
+        return 0;
+    }
+    clearerr(file);
+
+    context->io.file_name = "directory";
+    c50_input_init_file(&input, file, context);
+    try
+    {
+        c50_input_getc(&input);
+    }
+    catch ( const c50::exception &error )
+    {
+        status = error.code() != c50::error_code::io_error ||
+                 std::string(error.what()).find("could not read directory") !=
+                     0;
+    }
+    fclose(file);
+    return status;
+}
+
 int main(int argc, char *argv[])
 {
     static const unsigned char text[] = "first\nsecond";
@@ -111,7 +145,8 @@ int main(int argc, char *argv[])
     (void) argc;
     (void) argv;
 
-    if ( check_blocks() ) return 1;
+    if ( check_blocks(context) ) return 1;
+    if ( check_read_error(context) ) return 1;
 
     c50_input_init_memory(&input, text, sizeof(text) - 1);
     if ( c50_input_getc(&input) != 'f' ) return 1;
