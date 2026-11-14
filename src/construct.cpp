@@ -554,7 +554,7 @@ void EvaluateSingle(c50_context *Context, int Flags)
 
 	ForEach(u, 1, Context->options.utility_bands-1)
 	{
-	    Context->evaluation.utility_bands[u] = rint(Context->rules.sets[0]->SNRules * u / (float) Context->options.utility_bands);
+	    Context->evaluation.utility_bands[u] = rint((double) (Context->rules.sets[0]->SNRules * u / (float) Context->options.utility_bands));
 	}
     }
 	    

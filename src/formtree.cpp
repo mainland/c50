@@ -413,14 +413,14 @@ void FormTree(c50_context *Context, CaseNo Fp, CaseNo Lp, int Level,
 	Cases += Context->training.class_frequencies[c];
     }
 
-    Context->splits.max_leaves = ( Context->options.leaf_ratio > 0 ? rint(Context->options.leaf_ratio * Cases) : 1E6 );
+    Context->splits.max_leaves = ( Context->options.leaf_ratio > 0 ? rint((double) (Context->options.leaf_ratio * Cases)) : 1E6 );
 
     *Result = Node = Leaf(Context, Context->training.class_frequencies, BestLeaf, Cases,
 			 Cases - Context->training.class_frequencies[BestLeaf]);
 
     Verbosity(1,
 	c50_diagnostic_printf(Context->io.output, "\n<%d> %d cases", Level, No(Fp,Lp));
-	if ( fabs(No(Fp,Lp) - Cases) >= 0.1 )
+	if ( fabs((double) (No(Fp,Lp) - Cases)) >= 0.1 )
 	{
 	    c50_diagnostic_printf(Context->io.output, ", total weight %.1f", Cases);
 	}
