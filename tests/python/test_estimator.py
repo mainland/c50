@@ -110,6 +110,46 @@ def test_stable_ties_fit_and_validation() -> None:
         C50Classifier(ties="fast").fit(X_BINARY, Y_BINARY)  # type: ignore[arg-type]
 
 
+def test_default_tie_order_is_stable_for_the_estimator_only() -> None:
+    classifier = C50Classifier()
+
+    assert classifier.get_params()["ties"] == "stable"
+    assert classifier._native_options().ties == c50.TieOrder.STABLE
+    assert clone(classifier).ties == "stable"
+    assert C50Classifier(ties="reference")._native_options().ties == (
+        c50.TieOrder.REFERENCE
+    )
+    assert c50.Options().ties == c50.TieOrder.REFERENCE
+
+    default = C50Classifier().fit(X_BINARY, Y_BINARY)
+    stable = C50Classifier(ties="stable").fit(X_BINARY, Y_BINARY)
+    assert default.ties == "stable"
+    assert without_date(default.model_.serialized_data) == without_date(
+        stable.model_.serialized_data
+    )
+
+    restored = pickle.loads(pickle.dumps(classifier))
+    assert restored.ties == "stable"
+    restored = pickle.loads(pickle.dumps(default))
+    assert restored.ties == "stable"
+    np.testing.assert_array_equal(
+        restored.predict(X_BINARY), default.predict(X_BINARY)
+    )
+    assert clone(default).set_params(ties="reference").ties == "reference"
+
+
+def test_low_level_train_keeps_the_reference_order() -> None:
+    names = "outcome.\nx: continuous.\noutcome: a, b.\n"
+    data = "1, a\n2, a\n3, b\n4, b\n"
+    default = c50.train(names, data)
+    explicit = c50.train(names, data, options=c50.Options())
+
+    assert without_date(default.serialized_data) == without_date(
+        explicit.serialized_data
+    )
+    assert c50.Options().ties == c50.TieOrder.REFERENCE
+
+
 @pytest.mark.parametrize(
     ("parameters", "name"),
     [

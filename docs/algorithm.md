@@ -168,7 +168,7 @@ printed thresholds are values that appear in the data.
 
 The order in which `Cachesort` leaves equal values determines which of several
 tied cuts is chosen. The `ties` option selects a faster, stable sort, which may
-produce a different classifier. See {doc}`compatibility`.
+produce a different classifier. `C50Classifier` uses it by default. See {doc}`compatibility`.
 
 ### Choosing a test
 
