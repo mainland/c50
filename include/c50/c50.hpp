@@ -26,10 +26,10 @@
  * be destroyed or assigned another object.
  *
  * Training, parsing, and classification recurse once per tree level on the
- * calling thread's stack, which the caller must size. The parser accepts trees
- * of fewer than 1,024 levels. A Release build needs about 220 bytes per level
- * to train and 140 to parse, and a sanitizer build about 3.8 KiB and 3.3 KiB.
- * See docs/ownership-concurrency.md for the measurements.
+ * calling thread's stack, which the caller must size. model::load accepts
+ * trees of at most load_options::max_tree_depth levels, 1,024 by default.
+ * Models that train() returned, and their moves, parse without a limit. See
+ * docs/ownership-concurrency.md for the stack that each level needs.
  */
 #ifndef C50_C50_HPP
 #define C50_C50_HPP
@@ -45,6 +45,7 @@
 namespace c50 {
 namespace detail {
 struct context_state;
+struct model_access;
 struct model_data;
 struct prediction_data;
 struct predictor_data;
@@ -323,6 +324,29 @@ struct model_inspection {
     std::vector<ruleset_inspection> rulesets; /**< Ruleset components in serialized order. */
 };
 
+/** The default for load_options::max_tree_depth, in tree levels.
+ *
+ * A later 1.x release may raise the value but never lowers it, so a model
+ * that loads with the default keeps loading. Use this constant, not 1,024, to
+ * name the default. */
+inline constexpr std::size_t default_max_tree_depth = 1024;
+
+/** Options for model::load. */
+struct load_options {
+    /** The most levels that a serialized tree may have, or no limit.
+     *
+     * The root is level 1, so a tree of this many levels is accepted and a
+     * deeper one throws exception with error_code::parse_error. The limit
+     * bounds the stack that parsing needs when the text is untrusted. It
+     * applies to each tree of an ensemble, and a rules model ignores it.
+     * A value of zero is invalid and throws exception with
+     * error_code::invalid_argument. std::nullopt removes the limit, so that
+     * parsing and prediction need stack in proportion to the tree's depth.
+     * The model keeps this value and applies it each time that it parses its
+     * text again, in predict(), inspect(), and prepare_predictor(). */
+    std::optional<std::size_t> max_tree_depth = default_max_tree_depth;
+};
+
 /** Move-only owner of an immutable classifier and its schema and costs. */
 class model {
 public:
@@ -354,7 +378,8 @@ public:
      * @param training Data-file contents.
      * @param settings Training options.
      * @param costs Optional costs-file contents.
-     * @return An independently owned model. */
+     * @return An independently owned model. It parses its own text without a
+     *         tree depth limit, because the library wrote that text. */
     static model train(context &workspace, model_kind kind,
                        std::string_view names, std::string_view training,
                        const options &settings = {}, std::string_view costs = {});
@@ -365,7 +390,8 @@ public:
      * @param training Borrowed dense training data.
      * @param settings Training options.
      * @param costs Optional costs-file contents.
-     * @return An independently owned model. */
+     * @return An independently owned model. It parses its own text without a
+     *         tree depth limit, because the library wrote that text. */
     static model train(context &workspace, model_kind kind,
                        std::string_view names, const dense_dataset &training,
                        const options &settings = {}, std::string_view costs = {});
@@ -380,10 +406,16 @@ public:
      *        other than the default of 1 counts as missing. That includes
      *        empty text, text with only comments, and text whose entries
      *        all have cost 1 or name one class twice.
-     * @return An independently owned model. */
+     * @param settings Loading options. The call reads a copy. A zero
+     *        `max_tree_depth` throws `error_code::invalid_argument`, and a
+     *        tree deeper than a nonzero limit throws
+     *        `error_code::parse_error`.
+     * @return An independently owned model, which applies the same tree
+     *         depth limit whenever it parses its text again. */
     static model load(context &workspace, model_kind kind,
                       std::string_view names, std::string_view serialized,
-                      std::string_view costs = {});
+                      std::string_view costs = {},
+                      const load_options &settings = {});
     /** Predict from data-file contents. Empty input returns class metadata.
      *
      * The call ends at the first bad value and throws exception with
@@ -442,6 +474,7 @@ public:
      *         lifetime. */
     const std::string &costs_data() const noexcept;
 private:
+    friend struct detail::model_access;
     explicit model(std::unique_ptr<detail::model_data> data);
     std::unique_ptr<detail::model_data> data_;
 };

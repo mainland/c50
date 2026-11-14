@@ -286,9 +286,13 @@ struct c50_io_state : c50_state_record
 
 using c50_context = c50::detail::context_state;
 
-/* The tree depth limit of a model that model::load reads, and of other text
-   that the parser reads outside a model. */
-constexpr std::size_t c50_default_max_tree_depth = 1024;
+/* Test access to a model's private state. Library code reads the state
+   directly. */
+struct c50::detail::model_access
+{
+    /* The tree depth limit that every parse of the model applies. */
+    static std::optional<std::size_t> max_tree_depth(const model &source);
+};
 
 struct c50::detail::context_state
 {
@@ -308,7 +312,7 @@ struct c50::detail::context_state
     /* The most levels that the model-text parser accepts in a tree, or no
      * limit. ParseModel sets it from the model before every parse. */
     std::optional<std::size_t> max_serialized_tree_depth =
-        c50_default_max_tree_depth;
+        c50::default_max_tree_depth;
     int sample_from = 0;
     int suppress_error_messages = 0;
     int delimiter = 0;

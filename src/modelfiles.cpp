@@ -620,7 +620,7 @@ Tree InTree(c50_context *Context, c50_input *Input)
 
 
 static Tree InTreeAtDepth(c50_context *Context, c50_input *Input, Tree *Slot,
-                          unsigned Depth);
+                          std::size_t Depth);
 
 Tree InTreeAt(c50_context *Context, c50_input *Input, Tree *Slot)
 /*   --------  */
@@ -629,14 +629,16 @@ Tree InTreeAt(c50_context *Context, c50_input *Input, Tree *Slot)
 }
 
 static Tree InTreeAtDepth(c50_context *Context, c50_input *Input, Tree *Slot,
-                          unsigned Depth)
+                          std::size_t Depth)
 {
     /* The root is level 1, so a node at Depth lies on level Depth + 1. */
     if ( Context->max_serialized_tree_depth &&
          Depth >= *Context->max_serialized_tree_depth )
     {
+        /* The message is a constant, because a string built here would
+           enlarge the frame of every level of the recursion. */
         c50_record_error(Context, c50::error_code::parse_error,
-                         "serialized tree exceeds maximum depth of 1024");
+                         "serialized tree exceeds max_tree_depth");
         C50Exit(Context, 1);
     }
     Tree	T;

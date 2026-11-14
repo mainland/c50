@@ -248,14 +248,17 @@ parent distribution to use below that threshold. Zero-case child nodes remain
 valid and retain their parent-based prediction behavior. These checks reject
 malformed artifacts before prediction can index their internal structures.
 
-The parser rejects a serialized tree of 1,024 or more levels with a parse error,
-to bound stack use. Release 2.07 has no such limit, so it can print a tree that
-this library can train but not reload. `model::train` returns such a tree,
-which predicts, inspects, and prepares predictors, but `load` of its serialized
-text and the unpickling of a Python `Model` fail with `error_code::parse_error`
-(`ValueError` in Python). A tree needs
-about 8,000 cases and 1,000 binary attributes to reach that depth. See
-{doc}`ownership-concurrency` for the stack that each level needs.
+`model::load` rejects a serialized tree of more than `max_tree_depth` levels
+with `error_code::parse_error` (`ValueError` in Python), to bound the stack
+that parsing needs for untrusted text. The root is level 1, and the default is
+1,024 levels. Release 2.07 has no such limit. Pass `std::nullopt` (`None` in
+Python) to load deeper trees from text that you trust. The library applies no
+limit to text that it wrote: a model from `model::train`, and a model that
+unpickling restores, parse any depth that the learner can produce. A tree that
+deep still needs stack in proportion to its depth to parse and to predict, as
+in Release 2.07. See {doc}`ownership-concurrency` for the stack that each level
+needs. A later 1.x release may raise the default limit but never lowers it.
+Name it through `c50::default_max_tree_depth`.
 
 Rule indexes are limited to 512 levels. Deeper rulesets use iterative rule
 matching, which preserves their predictions without recursive index traversal.

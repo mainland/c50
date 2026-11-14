@@ -53,6 +53,25 @@ private:
     std::optional<std::string> copy_;
 };
 
+// The tree depth limit of a load call, where std::nullopt is no limit. The
+// converter rejects what is not an int, and bool in particular, with
+// pybind11's TypeError for an unsuitable argument. Zero, a negative number,
+// and a number beyond the native size type raise ValueError.
+class tree_depth_argument
+{
+public:
+    tree_depth_argument() = default;
+    explicit tree_depth_argument(std::optional<std::size_t> limit) noexcept
+        : limit_(limit)
+    {
+    }
+
+    std::optional<std::size_t> limit() const noexcept { return limit_; }
+
+private:
+    std::optional<std::size_t> limit_;
+};
+
 // The worker count of a training call. The converter rejects what is not an
 // int, and accepts any int, so that the caller gets a ValueError that names
 // the argument when the number does not fit the native type. The native
@@ -154,6 +173,51 @@ struct type_caster<text_argument>
     }
 };
 
+// Accept None, or an int that is not a bool and lies between 1 and the
+// native size type's maximum.
+template <>
+struct type_caster<tree_depth_argument>
+{
+    PYBIND11_TYPE_CASTER(tree_depth_argument, const_name("int | None"));
+
+    bool load(handle source, bool)
+    {
+        if ( source.is_none() )
+        {
+            value = tree_depth_argument();
+            return true;
+        }
+        if ( PyBool_Check(source.ptr()) || !PyIndex_Check(source.ptr()) )
+        {
+            return false;
+        }
+        const object number =
+            reinterpret_steal<object>(PyNumber_Index(source.ptr()));
+        if ( !number )
+        {
+            throw error_already_set();
+        }
+        if ( PyObject_RichCompareBool(number.ptr(), int_(1).ptr(), Py_LT) )
+        {
+            throw value_error("max_tree_depth must be positive or None");
+        }
+        const unsigned long long levels =
+            PyLong_AsUnsignedLongLong(number.ptr());
+        if ( levels == static_cast<unsigned long long>(-1) &&
+             PyErr_Occurred() )
+        {
+            PyErr_Clear();
+            throw value_error("max_tree_depth is too large");
+        }
+        if ( levels > std::numeric_limits<std::size_t>::max() )
+        {
+            throw value_error("max_tree_depth is too large");
+        }
+        value = tree_depth_argument(static_cast<std::size_t>(levels));
+        return true;
+    }
+};
+
 // Accept an int of any size, which includes numpy integers and bool, and
 // raise ValueError when it does not fit unsigned. Reject floats and other
 // objects with pybind11's TypeError for an unsuitable argument.
@@ -184,7 +248,8 @@ Train a C5.0 classifier from text held in memory.
 
 The names, training, and optional costs strings use the corresponding C5.0
 file formats. The returned model owns its serialized representation and is
-independent of the native context used during training.
+independent of the native context used during training. The model parses that
+text without a tree depth limit, because the library wrote it.
 
 The call stops at the first bad value, such as a discrete value that the
 names file does not declare or a nonfinite number, and raises ``ValueError``
@@ -228,13 +293,23 @@ Args:
         Text that sets no cost other than the default of 1, such as empty
         text, only comments, or only entries of cost 1, counts as missing
         and raises ``ValueError`` for a cost model.
+    max_tree_depth: The most levels that a serialized tree may have, where the
+        root is level 1, or ``None`` for no limit. The default is 1024. A later
+        1.x release may raise it but never lowers it. The limit bounds the
+        stack that parsing needs for untrusted text. A tree needs stack in
+        proportion to its depth to parse and to predict, so remove the limit
+        only for text that you trust. The model applies the same limit whenever
+        it parses its text again. A rules model ignores it.
 
 Returns:
     The loaded model.
 
 Raises:
-    ValueError: If the names, the classifier, or the costs are invalid, or a
-        required costs file is missing.
+    TypeError: If ``max_tree_depth`` is neither an int nor ``None``, or is a
+        bool.
+    ValueError: If the names, the classifier, or the costs are invalid, a
+        required costs file is missing, the tree is deeper than
+        ``max_tree_depth``, or ``max_tree_depth`` is not positive.
     C50Error: If the schema uses a feature that the library does not
         support.
     MemoryError: If memory is exhausted.
@@ -245,7 +320,8 @@ Train a C5.0 classifier from a dense NumPy feature matrix.
 
 Continuous columns contain their numeric values. Categorical columns contain
 zero-based indices into the explicit values declared by ``names``. NaN denotes
-a missing feature.
+a missing feature. The returned model parses its serialized text without a
+tree depth limit, because the library wrote it.
 
 Training runs without the global interpreter lock, so by default it copies
 ``values`` first. With ``copy=False``, training reads a float64, C-contiguous
@@ -632,13 +708,16 @@ public:
     static python_model load(const text_argument &names,
                              const text_argument &serialized_data,
                              c50::model_kind kind,
-                             const text_argument &costs)
+                             const text_argument &costs,
+                             const tree_depth_argument &max_tree_depth)
     {
+        c50::load_options settings;
+        settings.max_tree_depth = max_tree_depth.limit();
         c50::context context;
         py::gil_scoped_release release;
         return python_model(c50::model::load(
             context, kind, names.view(), serialized_data.view(),
-            costs.view()));
+            costs.view(), settings));
     }
 
     c50::model_inspection inspect() const
@@ -1037,7 +1116,9 @@ GIL while training, loading, or predicting.
                     load_doc,
                     py::arg("names"), py::arg("serialized_data"),
                     py::arg("kind") = c50::model_kind::tree,
-                    py::arg("costs") = "")
+                    py::arg("costs") = "", py::kw_only(),
+                    py::arg("max_tree_depth") =
+                        c50::default_max_tree_depth)
         .def_property_readonly(
             "kind", &python_model::kind,
             "Serialized classifier representation.")
@@ -1106,7 +1187,8 @@ GIL while training, loading, or predicting.
                load_doc,
                py::arg("names"), py::arg("serialized_data"),
                py::arg("kind") = c50::model_kind::tree,
-               py::arg("costs") = "");
+               py::arg("costs") = "", py::kw_only(),
+               py::arg("max_tree_depth") = c50::default_max_tree_depth);
 
     bind_pickle_support(module);
 }

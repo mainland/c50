@@ -35,7 +35,7 @@ struct c50::detail::model_data
     std::string costs_data;
     /* The most tree levels that every parse of model_data accepts. Text that
        the library wrote has no limit, which is the default here. model::load
-       records the limit of 1,024 levels. Copies carry it. */
+       records the limit of its caller. Copies carry it. */
     std::optional<std::size_t> max_tree_depth;
 };
 
@@ -78,6 +78,7 @@ struct c50_model_load_state
     size_t model_size = 0;
     const char *costs_data = nullptr;
     size_t costs_size = 0;
+    std::optional<std::size_t> max_tree_depth;
     owned_model model;
 };
 
@@ -217,7 +218,7 @@ static void LoadModel(c50_context *Context, void *user_data)
 
     state->model = std::make_unique<c50_model>();
     state->model->kind = state->kind;
-    state->model->max_tree_depth = c50_default_max_tree_depth;
+    state->model->max_tree_depth = state->max_tree_depth;
     state->model->names_data.assign(state->names_data, state->names_size);
     state->model->model_data.assign(state->model_data, state->model_size);
     if (state->costs_size)
@@ -796,6 +797,12 @@ predictions predictor::predict(const dense_dataset &cases)
     return predictions(RunPredictor(*data_, state));
 }
 
+std::optional<std::size_t>
+detail::model_access::max_tree_depth(const model &source)
+{
+    return source.data_->max_tree_depth;
+}
+
 model_kind model::kind() const noexcept { return data_->kind; }
 const std::string &model::names_data() const noexcept { return data_->names_data; }
 const std::string &model::serialized_data() const noexcept { return data_->model_data; }
@@ -843,9 +850,13 @@ model model::train(context &workspace, model_kind kind, std::string_view names,
 }
 
 model model::load(context &workspace, model_kind kind, std::string_view names,
-                  std::string_view serialized, std::string_view costs)
+                  std::string_view serialized, std::string_view costs,
+                  const load_options &settings)
 {
     validate_model_inputs(kind, names, costs);
+    if (settings.max_tree_depth && *settings.max_tree_depth == 0)
+        throw exception(error_code::invalid_argument,
+                        "max_tree_depth must be positive or unset");
     validate_text(serialized);
     if (serialized.empty())
         throw exception(error_code::invalid_argument, "serialized model is required");
@@ -857,6 +868,7 @@ model model::load(context &workspace, model_kind kind, std::string_view names,
     state.model_size = serialized.size();
     state.costs_data = costs.data();
     state.costs_size = costs.size();
+    state.max_tree_depth = settings.max_tree_depth;
     c50_run_operation(workspace.state_.get(), LoadModel, CleanupModelLoad, &state);
     return model(std::move(state.model));
 }
