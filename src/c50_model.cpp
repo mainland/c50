@@ -29,7 +29,7 @@ using owned_predictions = std::unique_ptr<c50_predictions>;
 
 struct c50::detail::model_data
 {
-    model_kind kind;
+    model_kind kind = model_kind::tree;
     std::string names_data;
     std::string model_data;
     std::string costs_data;
@@ -62,46 +62,65 @@ struct c50::detail::prediction_data
     std::vector<double> scores;
 };
 
-typedef struct c50_model_load_state
+/* The state records pass an operation's inputs and results through
+ * c50_run_operation. Copying one would copy views of caller storage and the
+ * result under construction, so they are not copyable. */
+struct c50_model_load_state
 {
-    c50_model_kind kind;
-    const char *names_data;
-    size_t names_size;
-    const char *model_data;
-    size_t model_size;
-    const char *costs_data;
-    size_t costs_size;
-    owned_model model;
-} c50_model_load_state;
+    c50_model_load_state() = default;
+    c50_model_load_state(const c50_model_load_state &) = delete;
+    c50_model_load_state &operator=(const c50_model_load_state &) = delete;
 
-typedef struct c50_train_state
+    c50_model_kind kind = c50_model_kind::tree;
+    const char *names_data = nullptr;
+    size_t names_size = 0;
+    const char *model_data = nullptr;
+    size_t model_size = 0;
+    const char *costs_data = nullptr;
+    size_t costs_size = 0;
+    owned_model model;
+};
+
+struct c50_train_state
 {
-    c50_model_kind kind;
+    c50_train_state() = default;
+    c50_train_state(const c50_train_state &) = delete;
+    c50_train_state &operator=(const c50_train_state &) = delete;
+
+    c50_model_kind kind = c50_model_kind::tree;
     c50_options options;
-    const char *names_data;
-    size_t names_size;
-    const char *training_data;
-    size_t training_size;
-    const c50_dense_dataset *dense_dataset;
-    const char *costs_data;
-    size_t costs_size;
+    const char *names_data = nullptr;
+    size_t names_size = 0;
+    const char *training_data = nullptr;
+    size_t training_size = 0;
+    const c50_dense_dataset *dense_dataset = nullptr;
+    const char *costs_data = nullptr;
+    size_t costs_size = 0;
     owned_model model;
-} c50_train_state;
+};
 
-typedef struct c50_predict_state
+struct c50_predict_state
 {
-    const c50_model *model;
-    const char *cases_data;
-    size_t cases_size;
-    const c50_dense_dataset *dense_dataset;
+    c50_predict_state() = default;
+    c50_predict_state(const c50_predict_state &) = delete;
+    c50_predict_state &operator=(const c50_predict_state &) = delete;
+
+    const c50_model *model = nullptr;
+    const char *cases_data = nullptr;
+    size_t cases_size = 0;
+    const c50_dense_dataset *dense_dataset = nullptr;
     owned_predictions predictions;
     /* When set, count attribute usage instead of storing predictions. */
-    std::vector<std::size_t> *attribute_usage;
-} c50_predict_state;
+    std::vector<std::size_t> *attribute_usage = nullptr;
+};
 
 struct c50_inspect_state
 {
-    const c50_model *model;
+    c50_inspect_state() = default;
+    c50_inspect_state(const c50_inspect_state &) = delete;
+    c50_inspect_state &operator=(const c50_inspect_state &) = delete;
+
+    const c50_model *model = nullptr;
     c50::model_inspection result;
 };
 

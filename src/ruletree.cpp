@@ -56,7 +56,12 @@ struct RuleTreeScratch {
         free(state.tests_used);
         free(state.test_occurrences);
         free(state.rule_conditions_satisfied);
-        state = {};
+        state.tests = nullptr;
+        state.test_count = 0;
+        state.test_capacity = 0;
+        state.test_occurrences = nullptr;
+        state.rule_conditions_satisfied = nullptr;
+        state.tests_used = nullptr;
     }
 };
 }

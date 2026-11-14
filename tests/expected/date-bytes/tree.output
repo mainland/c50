@@ -1,0 +1,63 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `date-bytes'
+
+Class specified by attribute `outcome'
+
+*** line 31 of `date-bytes.data': bad date `2ייי/01/01' for attribute `d'
+
+*** line 33 of `date-bytes.data': bad date `2020/01/י01' for attribute `d'
+
+Read 63 cases (5 attributes) from date-bytes.data
+
+Decision tree:
+
+ts <= 2020/11/23 22:22:00: low (33/1)
+ts > 2020/11/23 22:22:00: high (30)
+
+
+Evaluation on training data (63 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2    1( 1.6%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	    32          (a): class low
+	     1    30    (b): class high
+
+
+	Attribute usage:
+
+	    100%  ts
+
+
+*** line 1 of `date-bytes.test': bad date `2ייי/01/01' for attribute `d'
+
+*** line 3 of `date-bytes.test': bad date `2020/01/י01' for attribute `d'
+
+*** line 4 of `date-bytes.test': bad timestamp `2‏20/01/01 12:00:00' for attribute `ts'
+
+Evaluation on test data (6 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2    2(33.3%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     4          (a): class low
+	     2          (b): class high
+
+
+Time: <elapsed> secs
