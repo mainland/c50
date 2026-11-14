@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+namespace c50::detail { struct context_state; }
+
 /* The number of bytes that one refill reads from a file. */
 constexpr size_t c50_input_block_size = 65536;
 
@@ -20,7 +22,9 @@ constexpr size_t c50_input_block_size = 65536;
    c50_input_fill() refills, so that inputs stay small on the stack. An input
    therefore reads ahead of the bytes it returns, so a file must be read only
    through one input until it is closed or rewound. An input cannot be
-   copied, because a copy's window would point into the original's buffer. */
+   copied, because a copy's window would point into the original's buffer.
+   A file input holds the context that owns the operation, so that a read
+   error can end the operation. */
 typedef struct c50_input
 {
     c50_input() = default;
@@ -30,19 +34,24 @@ typedef struct c50_input
     const unsigned char *next = nullptr;
     const unsigned char *end = nullptr;
     FILE *file = nullptr;
+    c50::detail::context_state *context = nullptr;
     const unsigned char *data = nullptr;
     size_t size = 0;
     std::vector<unsigned char> buffer;
 } c50_input;
 
-/* Initialize a non-owning view of file. */
-void c50_input_init_file(c50_input *input, FILE *file);
+/* Initialize a non-owning view of file. A read error on file records
+   io_error in context and ends the operation. */
+void c50_input_init_file(c50_input *input, FILE *file,
+                         c50::detail::context_state *context);
 
 /* Initialize a non-owning view of data[0..size). */
 void c50_input_init_memory(c50_input *input, const void *data, size_t size);
 
 /* Refill an empty window with the next block of a file. Return false at the
-   end of the input. */
+   end of the input. A read error is not the end of the input. It records
+   io_error in the input's context and unwinds the operation, as an error
+   that Error() reports does. */
 bool c50_input_fill(c50_input *input);
 
 inline int c50_input_getc(c50_input *input)

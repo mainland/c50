@@ -275,7 +275,7 @@ void ReadFilePrefix(c50_context *Context, const char *Extension)
 {
     if ( ! (Context->io.model_file = GetFile(Context, Extension, "r")) ) Error(Context, NOFILE, Context->io.file_name.c_str(), "");
 
-    c50_input_init_file(&Context->classifier_input, Context->io.model_file);
+    c50_input_init_file(&Context->classifier_input, Context->io.model_file, Context);
     StreamIn(&Context->classifier_input, (char *) &Context->options.trials, sizeof(int));
     if ( memcmp((char *) &Context->options.trials, "id=", 3) != 0 )
     {

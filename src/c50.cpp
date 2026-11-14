@@ -317,7 +317,7 @@ void Run(c50_context *Context, void *UserData)
     /*  Get information on training data  */
 
     if ( ! (F = GetFile(Context, ".names", "r")) ) Error(Context, NOFILE, "", "");
-    c50_input_init_file(&NamesInput, F);
+    c50_input_init_file(&NamesInput, F, Context);
     GetNames(Context, &NamesInput);
     fclose(F);
 
