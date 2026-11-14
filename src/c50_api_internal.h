@@ -277,7 +277,6 @@ struct c50_io_state : c50_state_record
     int random_initial_seed = 0;
     const char *file_stem = nullptr;
     std::string file_name;
-    FILE *model_file = nullptr;
     FILE *output = nullptr;
     char *option_argument = nullptr;
     char *option = nullptr;
@@ -341,7 +340,6 @@ struct c50::detail::context_state
     std::string line_buffer;
     size_t line_buffer_position = 0;
     struct c50_implicit_state *implicit_state = nullptr;
-    c50_input classifier_input;
     c50_output classifier_output;
     int classifier_output_active = 0;
     const char *last_model_extension = nullptr;
