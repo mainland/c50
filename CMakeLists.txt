@@ -397,6 +397,14 @@ if(BUILD_TESTING)
     target_link_libraries(c50_parser_validation PRIVATE C50::cpp)
     list(APPEND C50_COMPILE_TARGETS c50_parser_validation)
     list(APPEND C50_EXECUTABLE_TARGETS c50_parser_validation)
+    add_executable(c50_tree_depth tests/tree_depth.cpp)
+    target_include_directories(
+        c50_tree_depth
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(c50_tree_depth PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_tree_depth)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_tree_depth)
     add_executable(c50_model_inspection tests/model_inspection.cpp)
     target_link_libraries(c50_model_inspection PRIVATE C50::cpp)
     list(APPEND C50_COMPILE_TARGETS c50_model_inspection)
@@ -687,6 +695,8 @@ if(BUILD_TESTING)
     add_test(NAME reference-compatibility COMMAND c50_reference_compatibility)
     add_test(NAME cost-validation COMMAND c50_cost_validation)
     add_test(NAME parser-validation COMMAND c50_parser_validation)
+    add_test(NAME tree-depth COMMAND c50_tree_depth)
+    set_tests_properties(tree-depth PROPERTIES TIMEOUT 120)
     set_tests_properties(parser-validation PROPERTIES TIMEOUT 120)
     add_test(
         NAME parser-fuzz-seeds

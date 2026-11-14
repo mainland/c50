@@ -111,40 +111,65 @@ program. Each split peels off one class, so the depth grows with the number of
 classes. Assigning classes by anything else, such as alternating them across
 attributes, trains a single leaf.
 
-Two limits cap what the library accepts. The parser rejects a serialized tree
-of 1,024 or more levels with `error_code::parse_error`. A ruleset index limited
-to 512 levels falls back to iterative matching. Training does not enforce the
-tree limit. `model::train` returns a deeper tree, which its own `predict`,
-`inspect`, and `prepare_predictor` accept, but a `load` of its serialized text
-throws the same `parse_error`, and so does unpickling it in Python. Release
-2.07 prints such a tree. See
-{doc}`compatibility`.
+Two limits cap what the library accepts. `model::load` rejects a serialized
+tree of more than `max_tree_depth` levels with `error_code::parse_error`. The
+limit counts levels with the root as level 1 and defaults to
+`default_max_tree_depth`, 1,024. A later 1.x release may raise the default but
+never lowers it. Pass `std::nullopt` (`None` in Python) to remove it for text
+that you trust. A ruleset index limited to 512 levels falls back to iterative
+matching, so no trained ruleset is unusable because of depth.
 
-Measured stack use on x86-64 Linux, in bytes per tree level, adds to a base of
-about 10 KiB for training and 40 KiB for parsing:
+Training enforces no tree limit, and Release 2.07 enforces none when it prints
+or reads a tree. The library therefore parses without a limit the text that it
+wrote itself. A model that `model::train` returns, and a model that unpickling
+restores, apply no limit when `predict`, `inspect`, and `prepare_predictor`
+parse the text again. A model that `model::load` returns applies the
+`max_tree_depth` that the caller gave, the same value on every later parse, so
+a model loaded with `std::nullopt` stays usable. Copies of a Python `Model`
+(`copy.copy`, `copy.deepcopy`) and its pickles restore through the unpickling
+path and apply no limit, whatever limit the original used. A model with no
+limit still needs stack in proportion to its depth to parse and to predict, as
+in Release 2.07.
 
-| Build | Parsing a tree (`load`, `predict`, `inspect`) | Training a tree |
-| --- | --- | --- |
-| GCC 14 `-O3` (Release) | about 140 | about 215 |
-| GCC 14 `-O0` (Debug) | about 140 | about 255 |
-| Clang AddressSanitizer and UBSan | about 3,300 | about 3,800 |
+Measured stack use on x86-64 Linux, in bytes per tree level, with the base in
+parentheses. Parsing includes freeing the parsed tree, because both recurse
+once per level. Classification is `Classify` on a parsed predictor, where a
+case with an unknown value follows every branch and a case with known values
+follows one:
 
-Parsing is bounded by the 1,024-level limit, so any accepted tree parses in
-under 160 KiB in a Release build and under 3.4 MiB in a sanitizer build.
-Parsing a ruleset needs at most 71 KiB in a Release build, because rule indexes
-stop at 512 levels. Training has no bound of its own, but its stack use is
-about 215 bytes per level in a Release build, so a tree that the library
-can still return (under 1,024 levels) trains in about 230 KiB.
+| Build | Parsing (`load`, `predict`, `inspect`, `prepare_predictor`) | Classifying, known values | Classifying, unknown value | Training |
+| --- | --- | --- | --- | --- |
+| GCC `-O3` (Release) | 144 (10 KiB) | 64 | 64 | about 215 |
+| GCC `-O0` (Debug) | 144 (10 KiB) | 112 | 176 | about 255 |
+| Clang AddressSanitizer and UBSan | 3,360 (11 KiB) | 1,664 | 2,016 | about 3,800 |
+
+A call to `predict` or `inspect` parses and then classifies, but the two
+phases do not nest, so the larger of the two figures applies: parsing. The
+parsing and classification figures come from a probe that loads a synthetic
+tree of 4,000 and of 12,000 levels (1,000 and 2,000 in the sanitizer build),
+runs the operation on a thread with a set stack size, and bisects the smallest
+size that does not crash. The slope between the two depths is the per-level
+figure, and the intercept is the base. The compilers were GCC 13.3 and
+Clang 18.1. The training figures come from an earlier measurement with GCC 14
+and a deeper trained tree, and are rounded. Treat all figures as estimates for
+planning, because they depend on the compiler and its version.
+
+At the default limit, any accepted tree parses in under 160 KiB in a Release
+build and under 3.4 MiB in a sanitizer build. Without the limit, a Release
+build needs about 1.4 MiB for a tree of 10,000 levels, and a sanitizer build
+needs about 32 MiB. Training has no bound of its own, but a tree of 1,024
+levels trains in about 230 KiB in a Release build.
 
 Callers should compare these figures with their thread stacks. The platform
 defaults, which this repository did not measure, are 8 MiB for a Linux main
 thread and a glibc secondary thread, 1 MiB for a Windows thread, 512 KiB for a
-macOS secondary thread, and 128 KiB for a musl thread. A Release build fits
-all of them except musl. A sanitizer build needs more than 1 MiB at the
-1,024-level limit and must run on a thread with a larger stack, for example
-through `threading.stack_size` in Python or `pthread_attr_setstacksize`.
-Python threads use the platform default stack unless `threading.stack_size`
-sets another.
+macOS secondary thread, and 128 KiB for a musl thread. A Release build parses
+a tree of 1,024 levels on all of them except musl. A sanitizer build needs more
+than 1 MiB at the default limit and must run on a thread with a larger stack,
+for example through `threading.stack_size` in Python or
+`pthread_attr_setstacksize`. Python threads use the platform default stack
+unless `threading.stack_size` sets another. A service that parses models from
+untrusted sources on small stacks should keep the limit or lower it.
 
 ## Python interface
 
