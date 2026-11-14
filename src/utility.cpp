@@ -43,6 +43,54 @@
 #include <limits>
 
 
+namespace {
+
+/* Append a printf-style message to Buffer. A message without arguments is
+   appended as is, so that it need not escape a percent sign. */
+template <class... Arguments>
+void AppendFormatted(std::string &Buffer, const char *Format,
+		     Arguments... Values)
+{
+    if constexpr ( sizeof...(Values) == 0 )
+    {
+	Buffer += Format;
+    }
+    else
+    {
+	const int Length = snprintf(nullptr, 0, Format, Values...);
+	if ( Length < 0 )
+	{
+	    throw c50::exception(c50::error_code::internal_error,
+	                         "cannot format diagnostic");
+	}
+	std::vector<char> Formatted(static_cast<size_t>(Length) + 32);
+	snprintf(Formatted.data(), Formatted.size(), Format, Values...);
+	Buffer.append(Formatted.data(), static_cast<size_t>(Length));
+    }
+}
+
+/* Format a date or time field as at least two digits. */
+std::string TwoDigits(int Value)
+{
+    return std::string(Value < 10 ? "0" : "") + std::to_string(Value);
+}
+
+/* Convert a value that is about to be formatted as a date or time. */
+int ToInt(double Value)
+{
+    if ( ! isfinite(Value) ||
+	 Value < std::numeric_limits<int>::min() ||
+	 Value > std::numeric_limits<int>::max() )
+    {
+	throw c50::exception(c50::error_code::internal_error,
+	                     "formatted date or time is out of range");
+    }
+    return static_cast<int>(Value);
+}
+
+}  // namespace
+
+
 #define  NAME T_C50
 
 
@@ -129,6 +177,11 @@ char *Pstrdup(c50_context *Context, const char *text)
     char *copy = strdup(text);
     if (!copy) Error(Context, NOMEM, "", "");
     return copy;
+}
+
+void c50_set_vector_deleter::operator()(unsigned char **Vector) const noexcept
+{
+    FreeVector((void **) Vector, 1, Last);
 }
 
 void *Prealloc(c50_context *Context, void *Present, size_t Bytes)
@@ -380,175 +433,157 @@ void ErrorContext(c50_context *Context, int ErrNo, const char *S1,
 {
     Boolean	Quit=false, WarningOnly=false;
     std::string Buffer;
-    const auto Append = [&Buffer](const char *Format, auto... Args) {
-	if constexpr ( sizeof...(Args) == 0 )
-	{
-	    Buffer += Format;
-	}
-	else
-	{
-	    const int Length = snprintf(nullptr, 0, Format, Args...);
-	    if ( Length < 0 )
-	    {
-		throw c50::exception(c50::error_code::internal_error,
-		                     "cannot format diagnostic");
-	    }
-	    std::vector<char> Formatted(static_cast<size_t>(Length) + 32);
-	    snprintf(Formatted.data(), Formatted.size(), Format, Args...);
-	    Buffer.append(Formatted.data(), static_cast<size_t>(Length));
-	}
-    };
 
 
     if ( Context->io.output ) c50_diagnostic_printf(Context->io.output, "\n");
 
     if ( ErrNo == NOFILE || ErrNo == NOMEM || ErrNo == MODELFILE )
     {
-	Append("*** ");
+	AppendFormatted(Buffer, "*** ");
     }
     else
     {
-	Append(TX_Line(Context->io.line_number, Context->io.file_name.c_str()));
+	AppendFormatted(Buffer, TX_Line(Context->io.line_number, Context->io.file_name.c_str()));
     }
 
     switch ( ErrNo )
     {
 	case NOFILE:
-	    Append(E_NOFILE(Context->io.file_name.c_str(), S2));
+	    AppendFormatted(Buffer, E_NOFILE(Context->io.file_name.c_str(), S2));
 	    Quit = true;
 	    break;
 
 	case BADCLASSTHRESH:
-	    Append(E_BADCLASSTHRESH, S1);
+	    AppendFormatted(Buffer, E_BADCLASSTHRESH, S1);
 	    break;
 
 	case LEQCLASSTHRESH:
-	    Append(E_LEQCLASSTHRESH, S1);
+	    AppendFormatted(Buffer, E_LEQCLASSTHRESH, S1);
 	    break;
 
 	case BADATTNAME:
-	    Append(E_BADATTNAME, S1);
+	    AppendFormatted(Buffer, E_BADATTNAME, S1);
 	    break;
 
 	case EOFINATT:
-	    Append(E_EOFINATT, S1);
+	    AppendFormatted(Buffer, E_EOFINATT, S1);
 	    break;
 
 	case SINGLEATTVAL:
-	    Append(E_SINGLEATTVAL(S1, S2));
+	    AppendFormatted(Buffer, E_SINGLEATTVAL(S1, S2));
 	    break;
 
 	case DUPATTNAME:
-	    Append(E_DUPATTNAME, S1);
+	    AppendFormatted(Buffer, E_DUPATTNAME, S1);
 	    break;
 
 	case CWTATTERR:
-	    Append(E_CWTATTERR);
+	    AppendFormatted(Buffer, E_CWTATTERR);
 	    break;
 
 	case BADATTVAL:
-	    Append(E_BADATTVAL(S2, S1));
+	    AppendFormatted(Buffer, E_BADATTVAL(S2, S1));
 	    break;
 
 	case BADNUMBER:
-	    Append(E_BADNUMBER(S1));
+	    AppendFormatted(Buffer, E_BADNUMBER(S1));
 	    break;
 
 	case BADCLASS:
-	    Append(E_BADCLASS, S2);
+	    AppendFormatted(Buffer, E_BADCLASS, S2);
 	    break;
 
 	case BADCOSTCLASS:
-	    Append(E_BADCOSTCLASS, S1);
+	    AppendFormatted(Buffer, E_BADCOSTCLASS, S1);
 	    Quit = true;
 	    break;
 
 	case BADCOST:
-	    Append(E_BADCOST, S1);
+	    AppendFormatted(Buffer, E_BADCOST, S1);
 	    Quit = true;
 	    break;
 
 	case NOMEM:
-	    Append(E_NOMEM);
+	    AppendFormatted(Buffer, E_NOMEM);
 	    Quit = true;
 	    break;
 
 	case TOOMANYVALS:
-	    Append(E_TOOMANYVALS(S1, (int) (intptr_t) S2));
+	    AppendFormatted(Buffer, E_TOOMANYVALS(S1, (int) (intptr_t) S2));
 	    break;
 
 	case BADDISCRETE:
-	    Append(E_BADDISCRETE, S1);
+	    AppendFormatted(Buffer, E_BADDISCRETE, S1);
 	    break;
 
 	case NOTARGET:
-	    Append(E_NOTARGET, S1);
+	    AppendFormatted(Buffer, E_NOTARGET, S1);
 	    Quit = true;
 	    break;
 
 	case BADCTARGET:
-	    Append(E_BADCTARGET, S1);
+	    AppendFormatted(Buffer, E_BADCTARGET, S1);
 	    Quit = true;
 	    break;
 
 	case BADDTARGET:
-	    Append(E_BADDTARGET, S1);
+	    AppendFormatted(Buffer, E_BADDTARGET, S1);
 	    Quit = true;
 	    break;
 
 	case LONGNAME:
-	    Append(E_LONGNAME);
+	    AppendFormatted(Buffer, E_LONGNAME);
 	    Quit = true;
 	    break;
 
 	case HITEOF:
-	    Append(E_HITEOF);
+	    AppendFormatted(Buffer, E_HITEOF);
 	    break;
 
 	case MISSNAME:
-	    Append(E_MISSNAME, S2);
+	    AppendFormatted(Buffer, E_MISSNAME, S2);
 	    break;
 
 	case BADTSTMP:
-	    Append(E_BADTSTMP(S2, S1));
+	    AppendFormatted(Buffer, E_BADTSTMP(S2, S1));
 	    break;
 
 	case BADDATE:
-	    Append(E_BADDATE(S2, S1));
+	    AppendFormatted(Buffer, E_BADDATE(S2, S1));
 	    break;
 
 	case BADTIME:
-	    Append(E_BADTIME(S2, S1));
+	    AppendFormatted(Buffer, E_BADTIME(S2, S1));
 	    break;
 
 	case UNKNOWNATT:
-	    Append(E_UNKNOWNATT, S1);
+	    AppendFormatted(Buffer, E_UNKNOWNATT, S1);
 	    break;
 
 	case BADDEF1:
-	    Append(E_BADDEF1(Context->schema.attribute_names[Context->schema.max_attribute], S1, S2));
+	    AppendFormatted(Buffer, E_BADDEF1(Context->schema.attribute_names[Context->schema.max_attribute], S1, S2));
 	    break;
 
 	case BADDEF2:
-	    Append(E_BADDEF2(Context->schema.attribute_names[Context->schema.max_attribute], S1, S2));
+	    AppendFormatted(Buffer, E_BADDEF2(Context->schema.attribute_names[Context->schema.max_attribute], S1, S2));
 	    break;
 
 	case SAMEATT:
-	    Append(E_SAMEATT(Context->schema.attribute_names[Context->schema.max_attribute], S1));
+	    AppendFormatted(Buffer, E_SAMEATT(Context->schema.attribute_names[Context->schema.max_attribute], S1));
 	    WarningOnly = true;
 	    break;
 
 	case BADDEF3:
-	    Append(E_BADDEF3, Context->schema.attribute_names[Context->schema.max_attribute]);
+	    AppendFormatted(Buffer, E_BADDEF3, Context->schema.attribute_names[Context->schema.max_attribute]);
 	    break;
 
 	case BADDEF4:
-	    Append(E_BADDEF4, Context->schema.attribute_names[Context->schema.max_attribute]);
+	    AppendFormatted(Buffer, E_BADDEF4, Context->schema.attribute_names[Context->schema.max_attribute]);
 	    WarningOnly = true;
 	    break;
 
 	case MODELFILE:
-	    Append("    (%s `%s')\n", S1, S2);
+	    AppendFormatted(Buffer, "    (%s `%s')\n", S1, S2);
 	    Quit = true;
 	    break;
     }
@@ -801,9 +836,6 @@ std::string DayToDate(int Day)
 	Year++;
     }
 
-    const auto TwoDigits = [](int Value) {
-	return std::string(Value < 10 ? "0" : "") + std::to_string(Value);
-    };
     return std::to_string(Year) + "/" + TwoDigits(Month) + "/" +
            TwoDigits(Day);
 }
@@ -847,9 +879,6 @@ std::string SecsToTime(int Secs)
     const int Hour = Secs / 3600;
     const int Mins = (Secs % 3600) / 60;
     Secs %= 60;
-    const auto TwoDigits = [](int Value) {
-	return std::string(Value < 10 ? "0" : "") + std::to_string(Value);
-    };
     return TwoDigits(Hour) + ":" + TwoDigits(Mins) + ":" +
            TwoDigits(Secs);
 }
@@ -915,16 +944,6 @@ int TStampToMins(c50_context *Context, String TS)
 std::string CValToStr(c50_context *Context, ContValue CV, Attribute Att)
 /*   ---------  */
 {
-    const auto ToInt = [](double Value) {
-	if ( ! isfinite(Value) ||
-	     Value < std::numeric_limits<int>::min() ||
-	     Value > std::numeric_limits<int>::max() )
-	{
-	    throw c50::exception(c50::error_code::internal_error,
-	                         "formatted date or time is out of range");
-	}
-	return static_cast<int>(Value);
-    };
 
     if ( TStampVal(Att) )
     {
