@@ -457,6 +457,10 @@ static void LoadDenseData(c50_context *Context,
     }
 }
 
+/* TrainModel follows main() in c50.c of C5.0 Release 2.07 GPL Edition,
+   Copyright 2010 Rulequest Research Pty Ltd., which is distributed under the
+   GNU General Public License, version 3 or later. This version takes its
+   input from memory instead of files. Modified 2026 by Geoffrey Mainland. */
 static void TrainModel(c50_context *Context, void *user_data)
 {
     c50_train_state *state = static_cast<c50_train_state *>(user_data);
