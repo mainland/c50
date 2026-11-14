@@ -6,8 +6,8 @@
 
 Usage: python tests/check_sdist.py <sdist.tar.gz>
 
-Run it from a Git checkout of the revision that built the sdist. Apart from
-the generated PKG-INFO, every archive member must be a tracked file, and every
+Run it from a Git checkout of the revision that built the sdist. Apart from the
+generated PKG-INFO, every archive member must be a tracked file, and every
 tracked file must be in the archive unless pyproject.toml excludes it.
 """
 

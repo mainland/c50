@@ -94,13 +94,13 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             native seed from 0 through 4095. ``None`` uses NumPy's global
             random state.
         ties: Order of equal continuous values when evaluating splits.
-            ``"reference"`` reproduces the reference C5.0 learner.
-            ``"stable"`` is faster and deterministic on every platform, but
-            may build a classifier that differs from the reference learner.
-        n_jobs: Number of native split-evaluation workers. ``None`` means
-            one unless a ``joblib.parallel_config`` context sets another
-            value, and ``-1`` means all processors. At most 8 workers are
-            used. The worker count does not change the classifier.
+            ``"reference"`` reproduces the reference C5.0 learner. ``"stable"``
+            is faster and deterministic on every platform, but may build a
+            classifier that differs from the reference learner.
+        n_jobs: Number of native split-evaluation workers. ``None`` means one
+            unless a ``joblib.parallel_config`` context sets another value, and
+            ``-1`` means all processors. At most 8 workers are used. The worker
+            count does not change the classifier.
         categorical_features: Categorical column indices or, for inputs with
             string feature names, column names. ``None`` infers feature types.
             ``"from_dtype"`` selects exactly the DataFrame columns with a
@@ -116,8 +116,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         class_weight: Optional weights for classes, as a mapping from class
             label to weight or ``"balanced"``, which weights each class by
             ``n_samples / (n_classes * n_class_samples)``. Class weights
-            multiply ``sample_weight``, and C5.0 uses the products relative
-            to their mean.
+            multiply ``sample_weight``, and C5.0 uses the products relative to
+            their mean.
 
     Attributes:
         classes_: Original class labels in probability-column order.
@@ -132,8 +132,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             tests each feature with a known value. These are the values of
             C5.0's "Attribute usage" report divided by 100. Samples with zero
             weight are not counted.
-        feature_importances_: ``attribute_usage_`` divided by its sum, or
-            zeros when the classifier tests no feature.
+        feature_importances_: ``attribute_usage_`` divided by its sum, or zeros
+            when the classifier tests no feature.
     """
 
     classes_: NDArray[Any]
@@ -387,9 +387,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         C5.0's native class scores need not sum to one: a ruleset averages the
         votes of the rules that match a case, and soft thresholds drop small
         branch weights. Each row is divided by its sum, which keeps the order
-        of the classes. A row without any score assigns probability one to
-        the predicted class. ``Model.predict_details`` returns the native
-        scores.
+        of the classes. A row without any score assigns probability one to the
+        predicted class. ``Model.predict_details`` returns the native scores.
 
         Args:
             X: Dense two-dimensional prediction data, as for :meth:`fit`.
@@ -698,8 +697,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         options.confidence_factor = float(self.confidence_factor)
         options.sample_fraction = float(self.sample_fraction)
         random_state = check_random_state(self.random_state)
-        # Sampling is the only native use of the seed. Without it, leave
-        # a supplied RandomState unchanged.
+        # Sampling is the only native use of the seed. Without it, leave a
+        # supplied RandomState unchanged.
         if self.sample_fraction:
             options.random_seed = int(random_state.randint(_SEED_COUNT))
         options.ties = (
@@ -888,8 +887,8 @@ def _relative_sample_weight(
     if not np.any(nonzero):
         raise ValueError("sample_weight cannot be zero for every sample")
 
-    # Keep ordinary arithmetic unchanged. Rescale mantissas and exponents
-    # only when the product or mean becomes subnormal or overflows.
+    # Keep ordinary arithmetic unchanged. Rescale mantissas and exponents only
+    # when the product or mean becomes subnormal or overflows.
     with np.errstate(over="ignore", under="ignore", invalid="ignore"):
         combined = weights if factors is None else weights * factors
         mean = combined[nonzero].mean()
@@ -962,8 +961,8 @@ def _host_array(values: Any, name: str) -> Any:
 def _is_column_frame(X: object) -> bool:
     """Return whether ``X`` is a DataFrame to convert column by column.
 
-    Empty and sparse frames use the whole-array conversion, which reports
-    their errors.
+    Empty and sparse frames use the whole-array conversion, which reports their
+    errors.
     """
     pandas = sys.modules.get("pandas")
     return (
