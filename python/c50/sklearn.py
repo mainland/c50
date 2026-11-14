@@ -13,7 +13,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from decimal import Decimal
 from importlib.metadata import PackageNotFoundError, version
 from numbers import Integral, Real
-from typing import Any, Literal, TypeAlias, cast
+from typing import Any, Literal, SupportsIndex, TypeAlias, cast
 
 import numpy as np
 from joblib import effective_n_jobs
@@ -439,7 +439,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
     def export_text(
         self,
         *,
-        max_depth: int | None = None,
+        max_depth: SupportsIndex | None = None,
         include_empty: bool = True,
     ) -> str:
         """Render the fitted classifier with the original names and labels.
