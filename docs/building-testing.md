@@ -44,11 +44,21 @@ It also builds the Python extension with Visual Studio, a multi-configuration
 generator, so its CTest run checks that the build tree places the extension
 next to its package.
 
-The `python-license-notices` test runs `tests/check_license_notices.py`, which
-fails when a tracked source file that can carry a comment lacks an
-`SPDX-License-Identifier` line. It skips outside a Git checkout. Imported
-RuleQuest files that this project did not modify keep their original notice and
-are exempt.
+The `license-notices` pre-commit hook and the `python-license-notices` test run
+`tests/check_license_notices.py`. It fails when a tracked source file that can
+carry a comment lacks an `SPDX-License-Identifier` line. It also fails when a
+file that descends from a file of Release 2.07, including the root `Makefile`,
+lacks RuleQuest's copyright line or a `Modified` line, and when
+`src/c50_model.cpp`, `src/c50_sort.h`, or `tests/sort_properties.cpp`, which
+follow code of Release 2.07, lacks RuleQuest's credit. The check looks for the
+copyright line only, not for the permission paragraph under it. It also fails
+when `src/text.i` or `xval`, the imported files that this project did not
+modify, differs from its blob on `main`. The script holds those blob
+identifiers, so a clone without a `main` branch checks them too. When `main` or
+`origin/main` exists, the script also checks that each source file of Release
+2.07 has an entry in its tables and that the entry names a tracked file, so an
+import that is renamed and stripped of its notices fails. The test skips
+outside a Git checkout.
 
 Native CI configures a C++14 project default to verify that each target declares
 its own C++17 requirement. The platform labels follow the
