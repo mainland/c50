@@ -4,10 +4,11 @@ This repository modernizes the single-threaded C5.0 Release 2.07 GPL Edition
 while preserving its learning behavior and model compatibility. It provides a
 compiled C++17 library, compatible command-line programs, and Python bindings.
 
-The [project documentation](https://github.com/mainland/c50/blob/v1.0.0a1/docs/index.md) contains build and testing guides,
-ownership and concurrency contracts, and generated C++ and Python API
-references. The repository includes configuration for publishing that site on
-Read the Docs.
+The
+[project documentation](https://github.com/mainland/c50/blob/v1.0.0a1/docs/index.md)
+contains build and testing guides, ownership and concurrency contracts, and
+generated C++ and Python API references. The repository includes configuration
+for publishing that site on Read the Docs.
 
 Geoffrey Mainland maintains this modernization project. The C5.0 sources were
 subsequently migrated from C to C++; the imported implementation remains
@@ -151,11 +152,11 @@ text buffer and batches prediction to bound temporary native storage. Training
 remains in-memory. Set `n_jobs` to enable bounded parallel evaluation of
 eligible attribute splits with up to 8 workers. The default is one worker.
 Other training phases remain serial. The detailed input, concurrency, and
-[large-dataset](https://github.com/mainland/c50/blob/v1.0.0a1/docs/large-datasets.md) contracts are in the project
-documentation.
+[large-dataset](https://github.com/mainland/c50/blob/v1.0.0a1/docs/large-datasets.md)
+contracts are in the project documentation.
 
-Run `./c5.0 -h` to see the available command-line options. C5.0 uses a file stem
-to locate inputs such as `<stem>.names`, `<stem>.data`, and optional
+Run `./c5.0 -h` to see the available command-line options. C5.0 uses a file
+stem to locate inputs such as `<stem>.names`, `<stem>.data`, and optional
 `<stem>.test` and `<stem>.costs` files:
 
 ```sh

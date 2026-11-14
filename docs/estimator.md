@@ -174,13 +174,13 @@ libraries and CPU tensors, such as PyTorch tensors, with `numpy.asarray` for
 It accepts `__array_namespace__` and `__array__` with or without
 `array_api_dispatch`. Results are NumPy arrays.
 
-The array's library decides whether conversion is possible. An array in GPU
-or other device memory, a tensor that requires gradients, and a `bfloat16`
-tensor raise `ValueError` that names the input and chains the library's
-exception. Other conversion failures that raise `Exception` give the same
-`ValueError`, except `MemoryError`. A `MemoryError` and any exception outside
-the `Exception` hierarchy propagate. Move an array to CPU memory, detach it,
-or convert its dtype first. See the
+The array's library decides whether conversion is possible. An array in GPU or
+other device memory, a tensor that requires gradients, and a `bfloat16` tensor
+raise `ValueError` that names the input and chains the library's exception.
+Other conversion failures that raise `Exception` give the same `ValueError`,
+except `MemoryError`. A `MemoryError` and any exception outside the `Exception`
+hierarchy propagate. Move an array to CPU memory, detach it, or convert its
+dtype first. See the
 [scikit-learn Array API contract](https://scikit-learn.org/stable/modules/array_api.html).
 
 CI installs pandas and sets `SCIPY_ARRAY_API=1` before importing SciPy or
@@ -239,10 +239,10 @@ which keeps the order of the classes. `predict` returns a class with the
 highest probability unless a cost matrix is in use. Under exact ties C5.0
 chooses a later class, so that class may differ from the one that
 `classes_[predict_proba(X).argmax(axis=1)]` selects, because `argmax` returns
-the first. A case with no score at all receives probability one for its predicted
-class. The low-level `Model.predict_details` and `predict_details_dense`
-methods return the native scores. See {doc}`algorithm` for how C5.0 computes
-them.
+the first. A case with no score at all receives probability one for its
+predicted class. The low-level `Model.predict_details` and
+`predict_details_dense` methods return the native scores. See {doc}`algorithm`
+for how C5.0 computes them.
 
 ## Feature importances
 
@@ -316,9 +316,9 @@ gives each class the weight `n_samples / (n_classes * n_class_samples)`. The
 estimator computes the class weights with scikit-learn's
 `compute_sample_weight` and multiplies them by `sample_weight`, so the rules
 above apply to the products. Only the ratios between class weights matter, and
-the samples of a class with weight zero are removed. Class weights change the training
-distribution, while `cost_matrix` changes the cost of each error. Both may be
-used together.
+the samples of a class with weight zero are removed. Class weights change the
+training distribution, while `cost_matrix` changes the cost of each error. Both
+may be used together.
 
 ## Scikit-learn workflows
 
@@ -341,17 +341,18 @@ rejects missing values in its own input validation, before C5.0 receives them.
 ## Split selection and evaluation scoring
 
 `C50Classifier` uses the native C5.0 split-selection policy: gain ratio with
-minimum-gain filtering, the native MDL adjustment, and C5.0 tie handling. It has
-no `criterion` parameter. The C++ and Python interfaces use the same learner
-and preserve the reference classifier behavior, except that `ties` defaults to
-`"stable"` for `C50Classifier`, which may build a different classifier than the
-reference learner. Pass `ties="reference"` for Release 2.07's order.
+minimum-gain filtering, the native MDL adjustment, and C5.0 tie handling. It
+has no `criterion` parameter. The C++ and Python interfaces use the same
+learner and preserve the reference classifier behavior, except that `ties`
+defaults to `"stable"` for `C50Classifier`, which may build a different
+classifier than the reference learner. Pass `ties="reference"` for Release
+2.07's order.
 
 Scikit-learn compatibility does not require the parameters accepted by
 `DecisionTreeClassifier`. Alternative split criteria would define different
 training modes. A future alternative must be implemented and validated in the
-C++ core before it is exposed through Python. Reference C5.0 split selection must
-remain the only criterion. No alternative criterion is implemented.
+C++ core before it is exposed through Python. Reference C5.0 split selection
+must remain the only criterion. No alternative criterion is implemented.
 
 Choose an evaluation metric through scikit-learn's `scoring` interface. For
 example, reuse `X` and `y` from the example above to select native training
