@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Python interface to the C5.0 GPL core.
 
 Exceptions: the functions and methods raise ``ValueError`` for invalid

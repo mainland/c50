@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Sphinx configuration for the C5.0 GPL documentation."""
 
 from __future__ import annotations

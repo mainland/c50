@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Render benchmark results as the tables in docs/performance.md.
 
 Usage:

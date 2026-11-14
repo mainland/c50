@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Contracts for owned inspection metadata and readable exports."""
 
 from __future__ import annotations

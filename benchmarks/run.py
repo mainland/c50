@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Run a benchmark suite and write one JSON result.
 
 The suite answers three questions on the same input files:
