@@ -85,9 +85,11 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             native seed from 0 through 4095. ``None`` uses NumPy's global
             random state.
         ties: Order of equal continuous values when evaluating splits.
-            ``"reference"`` reproduces the reference C5.0 learner. ``"stable"``
-            is faster and deterministic on every platform, but may build a
-            classifier that differs from the reference learner.
+            ``"stable"``, the default, is faster and deterministic on every
+            platform, but may build a classifier that differs from the
+            reference learner. ``"reference"`` reproduces the reference C5.0
+            learner. The low-level ``c50.train`` and ``c5.0`` default to the
+            reference order.
         n_jobs: Number of native split-evaluation workers. ``None`` means one
             unless a ``joblib.parallel_config`` context sets another value, and
             ``-1`` means all processors. At most 8 workers are used. The worker
@@ -151,7 +153,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         confidence_factor: float = 0.25,
         sample_fraction: float = 0.0,
         random_state: int | np.random.RandomState | None = None,
-        ties: TieOrderName = "reference",
+        ties: TieOrderName = "stable",
         n_jobs: int | None = None,
         categorical_features: Sequence[int | str]
         | Literal["from_dtype"]

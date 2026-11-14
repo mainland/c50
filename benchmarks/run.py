@@ -707,6 +707,10 @@ def estimator_child(stem: Path, kind: str, trials: int) -> None:
         trials=trials,
         categorical_features="from_dtype",
         n_jobs=1,
+        # c50.train uses the reference order, so train the estimator in the
+        # same order. The comparison then measures the interface overhead and
+        # the predictions can be equal.
+        ties="reference",
     )
     start = time.perf_counter()
     classifier.fit(X, y)
