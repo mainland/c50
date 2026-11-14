@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Check that a source distribution holds exactly the tracked source files.
 
 Usage: python tests/check_sdist.py <sdist.tar.gz>

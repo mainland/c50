@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Behavioral tests for the scikit-learn-compatible estimator."""
 
 from __future__ import annotations

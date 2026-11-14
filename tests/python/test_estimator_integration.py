@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Integration checks for the scikit-learn estimator protocol."""
 
 from __future__ import annotations

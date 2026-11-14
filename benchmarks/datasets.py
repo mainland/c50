@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Prepare benchmark datasets as C5.0 ``.names`` and ``.data`` files.
 
 Every dataset is written once into a cache directory and reused. Categorical

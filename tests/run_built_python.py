@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Run a Python check against the CMake build, also when editable."""
 
 from __future__ import annotations
