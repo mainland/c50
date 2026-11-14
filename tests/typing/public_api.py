@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Static type assertions for the installed public Python interfaces."""
 
 from __future__ import annotations

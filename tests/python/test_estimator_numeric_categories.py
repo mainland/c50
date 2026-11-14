@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Tests that estimator categories match numbers by value, not by type."""
 
 from __future__ import annotations

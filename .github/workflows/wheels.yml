@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 name: Wheels
 
 # Build the source distribution, then build and test wheels from it, so that

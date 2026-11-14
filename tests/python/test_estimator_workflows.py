@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """End-to-end scikit-learn workflows that use the C5.0 estimator."""
 
 from __future__ import annotations
