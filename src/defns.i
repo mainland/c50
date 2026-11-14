@@ -680,6 +680,7 @@ void	    SortCasesByAttribute(c50_context *Context, CaseNo Fp, CaseNo Lp,
 
 	/* trees.c */
 
+int	    Digits(CaseCount n);
 void	    FindDepth(Tree T);
 void	    PrintTree(c50_context *Context, Tree T, const char *Title);
 void	    Show(c50_context *Context, Tree T, int Sh);
