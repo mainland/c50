@@ -714,7 +714,7 @@ int GetInt(String S, int N)
 
     while ( N-- )
     {
-	if ( ! isdigit(*S) ) return 0;
+	if ( ! isdigit(static_cast<unsigned char>(*S)) ) return 0;
 
 	Result = Result * 10 + (*S++ - '0');
     }
