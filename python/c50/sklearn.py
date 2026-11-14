@@ -419,6 +419,12 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
 
         Returns:
             The text produced by :func:`c50.export_text`.
+
+        Raises:
+            TypeError: If ``max_depth`` is a ``bool``, a NumPy boolean, or
+                neither ``None`` nor an object with ``__index__``, as
+                :func:`c50.export_text` raises.
+            ValueError: If ``max_depth`` is negative.
         """
         check_is_fitted(self)
         return _export_text(
