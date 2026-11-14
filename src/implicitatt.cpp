@@ -1018,10 +1018,37 @@ Boolean UpdateTStack(c50_context *Context, char OpCode, ContValue F, String S,
 /*									 */
 /*************************************************************************/
 
+namespace {
+
+[[noreturn]] void InvalidStack()
+{
+    throw c50::exception(c50::error_code::internal_error,
+                         "invalid compiled implicit expression");
+}
+
+/* The operand at Index, which must be one of the XSN operands in use. */
+XStackElt &StackAt(std::vector<XStackElt> &XStack, int XSN, int Index)
+{
+    if ( Index < 0 || Index >= XSN ) InvalidStack();
+    return XStack[static_cast<size_t>(Index)];
+}
+
+/* Push an operand and return it. The parser's type stack keeps a compiled
+   definition balanced, so the operand stack never holds more entries than the
+   definition has instructions. Nesting depth does not bound it: each level can
+   leave several operands pending. */
+XStackElt &StackPush(std::vector<XStackElt> &XStack, int &XSN)
+{
+    if ( static_cast<size_t>(XSN) == XStack.size() ) XStack.emplace_back();
+    return XStack[static_cast<size_t>(XSN++)];
+}
+
+}  // namespace
+
 #define	CUnknownVal(AV)		(AV.cval==UnknownContValue())
 #define	DUnknownVal(AV)		(AV.dval==UNKNOWN)
-#define DUNA(a)	(DUnknownVal(StackAt(a)) || NotApplicVal(StackAt(a)))
-#define CUNA(a)	(CUnknownVal(StackAt(a)) || NotApplicVal(StackAt(a)))
+#define DUNA(a)	(DUnknownVal(StackAt(XStack, XSN, a)) || NotApplicVal(StackAt(XStack, XSN, a)))
+#define CUNA(a)	(CUnknownVal(StackAt(XStack, XSN, a)) || NotApplicVal(StackAt(XStack, XSN, a)))
 #define	C1(x)	(CUNA(XSN-1) ? UnknownContValue() : (x))
 #define	C2(x)	(CUNA(XSN-1) || CUNA(XSN-2) ? UnknownContValue() : (x))
 #define	CD2(x)	(CUNA(XSN-1) || CUNA(XSN-2) ? UNKNOWN : (x))
@@ -1040,23 +1067,6 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
     DefElt	DElt;
     AttValue	ReturnVal;
 
-    const auto InvalidStack = []() -> void {
-	throw c50::exception(c50::error_code::internal_error,
-	                     "invalid compiled implicit expression");
-    };
-    const auto StackAt = [&](int Index) -> XStackElt & {
-	if ( Index < 0 || Index >= XSN ) InvalidStack();
-	return XStack[static_cast<size_t>(Index)];
-    };
-    const auto StackPush = [&]() -> XStackElt & {
-	// The parser's type stack keeps a compiled definition balanced, so
-	// the operand stack never holds more entries than the definition has
-	// instructions. Nesting depth does not bound it: each level can leave
-	// several operands pending.
-	if ( static_cast<size_t>(XSN) == XStack.size() ) XStack.emplace_back();
-	return XStack[static_cast<size_t>(XSN++)];
-    };
-
     for ( DN = 0 ; ; DN++)
     {
 	switch ( DefOp((DElt = D[DN])) )
@@ -1066,86 +1076,86 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 
 		    if ( Continuous(Att) )
 		    {
-			StackPush().cval = CVal(Case, Att);
+			StackPush(XStack, XSN).cval = CVal(Case, Att);
 		    }
 		    else
 		    {
-			StackPush().sval =
+			StackPush(XStack, XSN).sval =
 			    ( Unknown(Case, Att) && ! NotApplic(Context, Case, Att) ? 0 :
 			      Context->schema.attribute_value_names[Att][XDVal(Case, Att)] );
 		    }
 		    break;
 
 	    case OP_NUM:
-		    StackPush().cval = DefNVal(DElt);
+		    StackPush(XStack, XSN).cval = DefNVal(DElt);
 		    break;
 
 	    case OP_STR:
-		    StackPush().sval = DefSVal(DElt);
+		    StackPush(XStack, XSN).sval = DefSVal(DElt);
 		    break;
 
 	    case OP_AND:
-		    bv1 = StackAt(XSN-2).dval;
-		    bv2 = StackAt(XSN-1).dval;
-		    StackAt(XSN-2).dval = ( bv1 == 3 || bv2 == 3 ? 3 :
+		    bv1 = StackAt(XStack, XSN, XSN-2).dval;
+		    bv2 = StackAt(XStack, XSN, XSN-1).dval;
+		    StackAt(XStack, XSN, XSN-2).dval = ( bv1 == 3 || bv2 == 3 ? 3 :
 					   D2(bv1 == 2 && bv2 == 2 ? 2 : 3) );
 		    XSN--;
 		    break;
 
 	    case OP_OR:
-		    bv1 = StackAt(XSN-2).dval;
-		    bv2 = StackAt(XSN-1).dval;
-		    StackAt(XSN-2).dval = ( bv1 == 2 || bv2 == 2 ? 2 :
+		    bv1 = StackAt(XStack, XSN, XSN-2).dval;
+		    bv2 = StackAt(XStack, XSN, XSN-1).dval;
+		    StackAt(XStack, XSN, XSN-2).dval = ( bv1 == 2 || bv2 == 2 ? 2 :
 					   D2(bv1 == 2 || bv2 == 2 ? 2 : 3) );
 		    XSN--;
 		    break;
 
 	    case OP_EQ:
-		    cv1 = StackAt(XSN-2).cval;
-		    cv2 = StackAt(XSN-1).cval;
-		    StackAt(XSN-2).dval = ( cv1 == cv2 ? 2 : 3 );
+		    cv1 = StackAt(XStack, XSN, XSN-2).cval;
+		    cv2 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-2).dval = ( cv1 == cv2 ? 2 : 3 );
 		    XSN--;
 		    break;
 
 	    case OP_NE:
-		    cv1 = StackAt(XSN-2).cval;
-		    cv2 = StackAt(XSN-1).cval;
-		    StackAt(XSN-2).dval = ( cv1 != cv2 ? 2 : 3 );
+		    cv1 = StackAt(XStack, XSN, XSN-2).cval;
+		    cv2 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-2).dval = ( cv1 != cv2 ? 2 : 3 );
 		    XSN--;
 		    break;
 
 	    case OP_GT:
-		    cv1 = StackAt(XSN-2).cval;
-		    cv2 = StackAt(XSN-1).cval;
-		    StackAt(XSN-2).dval = CD2(cv1 > cv2 ? 2 : 3);
+		    cv1 = StackAt(XStack, XSN, XSN-2).cval;
+		    cv2 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-2).dval = CD2(cv1 > cv2 ? 2 : 3);
 		    XSN--;
 		    break;
 
 	    case OP_GE:
-		    cv1 = StackAt(XSN-2).cval;
-		    cv2 = StackAt(XSN-1).cval;
-		    StackAt(XSN-2).dval = CD2(cv1 >= cv2 ? 2 : 3);
+		    cv1 = StackAt(XStack, XSN, XSN-2).cval;
+		    cv2 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-2).dval = CD2(cv1 >= cv2 ? 2 : 3);
 		    XSN--;
 		    break;
 
 	    case OP_LT:
-		    cv1 = StackAt(XSN-2).cval;
-		    cv2 = StackAt(XSN-1).cval;
-		    StackAt(XSN-2).dval = CD2(cv1 < cv2 ? 2 : 3);
+		    cv1 = StackAt(XStack, XSN, XSN-2).cval;
+		    cv2 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-2).dval = CD2(cv1 < cv2 ? 2 : 3);
 		    XSN--;
 		    break;
 
 	    case OP_LE:
-		    cv1 = StackAt(XSN-2).cval;
-		    cv2 = StackAt(XSN-1).cval;
-		    StackAt(XSN-2).dval = CD2(cv1 <= cv2 ? 2 : 3);
+		    cv1 = StackAt(XStack, XSN, XSN-2).cval;
+		    cv2 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-2).dval = CD2(cv1 <= cv2 ? 2 : 3);
 		    XSN--;
 		    break;
 
 	    case OP_SEQ:
-		    sv1 = StackAt(XSN-2).sval;
-		    sv2 = StackAt(XSN-1).sval;
-		    StackAt(XSN-2).dval =
+		    sv1 = StackAt(XStack, XSN, XSN-2).sval;
+		    sv2 = StackAt(XStack, XSN, XSN-1).sval;
+		    StackAt(XStack, XSN, XSN-2).dval =
 			( ! sv1 && ! sv2 ? 2 :
 			  ! sv1 || ! sv2 ? 3 :
 			  ! strcmp(sv1, sv2) ? 2 : 3 );
@@ -1153,9 +1163,9 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 		    break;
 
 	    case OP_SNE:
-		    sv1 = StackAt(XSN-2).sval;
-		    sv2 = StackAt(XSN-1).sval;
-		    StackAt(XSN-2).dval =
+		    sv1 = StackAt(XStack, XSN, XSN-2).sval;
+		    sv2 = StackAt(XStack, XSN, XSN-1).sval;
+		    StackAt(XStack, XSN, XSN-2).dval =
 			( ! sv1 && ! sv2 ? 3 :
 			  ! sv1 || ! sv2 ? 2 :
 			  strcmp(sv1, sv2) ? 2 : 3 );
@@ -1163,41 +1173,41 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 		    break;
 
 	    case OP_PLUS:
-		    cv1 = StackAt(XSN-2).cval;
-		    cv2 = StackAt(XSN-1).cval;
-		    StackAt(XSN-2).cval = C2(cv1 + cv2);
+		    cv1 = StackAt(XStack, XSN, XSN-2).cval;
+		    cv2 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-2).cval = C2(cv1 + cv2);
 		    XSN--;
 		    break;
 
 	    case OP_MINUS:
-		    cv1 = StackAt(XSN-2).cval;
-		    cv2 = StackAt(XSN-1).cval;
-		    StackAt(XSN-2).cval = C2(cv1 - cv2);
+		    cv1 = StackAt(XStack, XSN, XSN-2).cval;
+		    cv2 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-2).cval = C2(cv1 - cv2);
 		    XSN--;
 		    break;
 
 	    case OP_MULT:
-		    cv1 = StackAt(XSN-2).cval;
-		    cv2 = StackAt(XSN-1).cval;
-		    StackAt(XSN-2).cval = C2(cv1 * cv2);
+		    cv1 = StackAt(XStack, XSN, XSN-2).cval;
+		    cv2 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-2).cval = C2(cv1 * cv2);
 		    XSN--;
 		    break;
 
 	    case OP_DIV:
 		    /*  Note: have to set precision of result  */
 
-		    cv1 = StackAt(XSN-2).cval;
-		    cv2 = StackAt(XSN-1).cval;
+		    cv1 = StackAt(XStack, XSN, XSN-2).cval;
+		    cv2 = StackAt(XStack, XSN, XSN-1).cval;
 		    /*  An infinite divisor would never finish the precision
 			scaling loop below, so treat it like a zero divisor  */
 
 		    if ( ! cv2 || isinf(cv2) ||
-			 CUnknownVal(StackAt(XSN-2)) ||
-			 CUnknownVal(StackAt(XSN-1)) ||
-			 NotApplicVal(StackAt(XSN-2)) ||
-			 NotApplicVal(StackAt(XSN-1)) )
+			 CUnknownVal(StackAt(XStack, XSN, XSN-2)) ||
+			 CUnknownVal(StackAt(XStack, XSN, XSN-1)) ||
+			 NotApplicVal(StackAt(XStack, XSN, XSN-2)) ||
+			 NotApplicVal(StackAt(XStack, XSN, XSN-1)) )
 		    {
-			StackAt(XSN-2).cval = UnknownContValue();
+			StackAt(XStack, XSN, XSN-2).cval = UnknownContValue();
 		    }
 		    else
 		    {
@@ -1217,23 +1227,23 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 			}
 			Mult = Wrapped <= (uint32_t) INT32_MAX ?
 			       (double) Wrapped : (double) Wrapped - 4294967296.0;
-			StackAt(XSN-2).cval =
+			StackAt(XStack, XSN, XSN-2).cval =
 			    ( Mult == 0 ? nan("") : rint(cv1 * Mult) / Mult );
 		    }
 		    XSN--;
 		    break;
 
 	    case OP_MOD:
-		    cv1 = StackAt(XSN-2).cval;
-		    cv2 = StackAt(XSN-1).cval;
-		    StackAt(XSN-2).cval = C2(fmod(cv1, cv2));
+		    cv1 = StackAt(XStack, XSN, XSN-2).cval;
+		    cv2 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-2).cval = C2(fmod(cv1, cv2));
 		    XSN--;
 		    break;
 
 	    case OP_POW:
-		    cv1 = StackAt(XSN-2).cval;
-		    cv2 = StackAt(XSN-1).cval;
-		    StackAt(XSN-2).cval =
+		    cv1 = StackAt(XStack, XSN, XSN-2).cval;
+		    cv2 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-2).cval =
 			( CUNA(XSN-1) || CUNA(XSN-2) ||
 			  ( cv1 < 0 && ceil(cv2) != cv2 ) ? UnknownContValue() :
 			  pow(cv1, cv2) );
@@ -1241,44 +1251,44 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 		    break;
 
 	    case OP_UMINUS:
-		    cv1 = StackAt(XSN-1).cval;
-		    StackAt(XSN-1).cval = C1(-cv1);
+		    cv1 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-1).cval = C1(-cv1);
 		    break;
 
 	    case OP_SIN:
-		    cv1 = StackAt(XSN-1).cval;
-		    StackAt(XSN-1).cval = C1(sin(cv1));
+		    cv1 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-1).cval = C1(sin(cv1));
 		    break;
 
 	    case OP_COS:
-		    cv1 = StackAt(XSN-1).cval;
-		    StackAt(XSN-1).cval = C1(cos(cv1));
+		    cv1 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-1).cval = C1(cos(cv1));
 		    break;
 
 	    case OP_TAN:
-		    cv1 = StackAt(XSN-1).cval;
-		    StackAt(XSN-1).cval = C1(tan(cv1));
+		    cv1 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-1).cval = C1(tan(cv1));
 		    break;
 
 	    case OP_LOG:
-		    cv1 = StackAt(XSN-1).cval;
-		    StackAt(XSN-1).cval =
+		    cv1 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-1).cval =
 			( CUNA(XSN-1) || cv1 <= 0 ? UnknownContValue() : log(cv1) );
 		    break;
 
 	    case OP_EXP:
-		    cv1 = StackAt(XSN-1).cval;
-		    StackAt(XSN-1).cval = C1(exp(cv1));
+		    cv1 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-1).cval = C1(exp(cv1));
 		    break;
 
 	    case OP_INT:
-		    cv1 = StackAt(XSN-1).cval;
-		    StackAt(XSN-1).cval = C1(rint(cv1));
+		    cv1 = StackAt(XStack, XSN, XSN-1).cval;
+		    StackAt(XStack, XSN, XSN-1).cval = C1(rint(cv1));
 		    break;
 
 	    case OP_END:
 		    if ( XSN != 1 ) InvalidStack();
-		    ReturnVal.cval = StackAt(0).cval;	/* cval >= dval bytes */
+		    ReturnVal.cval = StackAt(XStack, XSN, 0).cval;	/* cval >= dval bytes */
 		    return ReturnVal;
 	}
     }

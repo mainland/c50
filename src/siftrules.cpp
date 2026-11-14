@@ -889,11 +889,9 @@ void PruneSubsets(c50_context *Context)
         Alloc(Context->schema.max_attribute+1, Attribute), &free);
     std::unique_ptr<int[], decltype(&free)> Bytes(
         Alloc(Context->schema.max_attribute+1, int), &free);
-    auto FreeValues = [Context](Set *Values) {
-        FreeVector((void **) Values, 1, Context->schema.max_attribute);
-    };
-    std::unique_ptr<Set[], decltype(FreeValues)> PossibleValues(
-        AllocZero(Context->schema.max_attribute+1, Set), FreeValues);
+    std::unique_ptr<Set[], c50_set_vector_deleter> PossibleValues(
+        AllocZero(Context->schema.max_attribute+1, Set),
+        c50_set_vector_deleter{Context->schema.max_attribute});
     ForEach(Att, 1, Context->schema.max_attribute)
     {
 	if ( Context->schema.max_attribute_value[Att] > 3 )

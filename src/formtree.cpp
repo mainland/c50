@@ -737,6 +737,50 @@ static bool CanEvaluateQueueInParallel(c50_context *Context,
 }
 
 
+namespace {
+
+/* The read-only inputs that every worker of one queue evaluation shares. Each
+ * worker writes only the results at its own queue indices. */
+struct SplitBatch
+{
+    c50_context *Context;
+    const std::vector<Attribute> &Queue;
+    const std::array<SplitWorkspace *, 8> &Workspaces;
+    size_t Workers;
+    CaseNo WFp;
+    CaseNo WLp;
+    CaseCount WCases;
+};
+
+/* Evaluate the attributes at queue indices Worker, Worker + Workers, and so on
+ * in the worker's own workspace. */
+void EvaluateWorker(const SplitBatch &Batch, std::vector<SplitResult> &Results,
+                    size_t Worker)
+{
+    C50_SPLIT_TEST_WORKER(Worker);
+    C50_SPLIT_TEST_POINT(worker_begin, Worker);
+    c50_context *Context = Batch.Context;
+    SplitWorkspace &Workspace = *Batch.Workspaces[Worker];
+    for ( size_t Index = Worker; Index < Batch.Queue.size();
+          Index += Batch.Workers )
+    {
+        Attribute Att = Batch.Queue[Index];
+        if ( Discrete(Att) )
+        {
+            EvalDiscrSplit(Context, Workspace, Results[Index], Att,
+                           Batch.WCases);
+        }
+        else
+        {
+            EvalContinuousAtt(Context, Workspace, Results[Index], Att,
+                              Batch.WFp, Batch.WLp);
+        }
+    }
+}
+
+}  // namespace
+
+
 static void EvaluateQueueInParallel(c50_context *Context, CaseNo WFp,
                                     CaseNo WLp, CaseCount WCases)
 {
@@ -766,25 +810,8 @@ static void EvaluateQueueInParallel(c50_context *Context, CaseNo WFp,
         Workspaces[Worker] = ExtraWorkspaces.back().get();
     }
 
-    auto EvaluateWorker = [&](size_t Worker)
-    {
-        C50_SPLIT_TEST_WORKER(Worker);
-        C50_SPLIT_TEST_POINT(worker_begin, Worker);
-        SplitWorkspace &Workspace = *Workspaces[Worker];
-        for ( size_t Index = Worker; Index < Queue.size(); Index += Workers )
-        {
-            Attribute Att = Queue[Index];
-            if ( Discrete(Att) )
-            {
-                EvalDiscrSplit(Context, Workspace, Results[Index], Att, WCases);
-            }
-            else
-            {
-                EvalContinuousAtt(Context, Workspace, Results[Index], Att,
-                                  WFp, WLp);
-            }
-        }
-    };
+    const SplitBatch Batch{Context, Queue, Workspaces, Workers, WFp, WLp,
+                           WCases};
 
     std::vector<std::future<void>> Tasks;
     Tasks.reserve(Workers - 1);
@@ -792,17 +819,17 @@ static void EvaluateQueueInParallel(c50_context *Context, CaseNo WFp,
     {
         C50_SPLIT_TEST_POINT(task_launch, Worker);
         // A worker thread starts in the process locale, not the caller's.
-        Tasks.push_back(std::async(std::launch::async, [&, Worker]
+        Tasks.push_back(std::async(std::launch::async, [&Batch, &Results, Worker]
         {
-            const c50_c_locale_scope Locale(Context->c_locale);
-            EvaluateWorker(Worker);
+            const c50_c_locale_scope Locale(Batch.Context->c_locale);
+            EvaluateWorker(Batch, Results, Worker);
         }));
     }
 
     std::exception_ptr Failure;
     try
     {
-        EvaluateWorker(0);
+        EvaluateWorker(Batch, Results, 0);
     }
     catch ( ... )
     {

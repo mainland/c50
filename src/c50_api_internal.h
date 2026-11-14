@@ -378,6 +378,14 @@ void c50_record_error(c50_context *context, c50::error_code code,
 /* Exit legacy control flow by unwinding C++ frames. Never terminate the host. */
 [[noreturn]] void c50_abort_operation(c50_context *context, int exit_status);
 
+/* Frees a vector of byte-set pointers that is indexed from 1 to Last, with the
+ * sets it holds, as FreeVector does. A null vector is allowed. */
+struct c50_set_vector_deleter
+{
+    int Last;
+    void operator()(unsigned char **Vector) const noexcept;
+};
+
 /* Release every allocation that the context still holds. Cleanup, defined in
  * utility.cpp, frees what operations leave behind and is safe to repeat. */
 void Cleanup(c50_context *Context);
