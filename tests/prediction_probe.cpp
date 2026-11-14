@@ -24,7 +24,7 @@ static void predict(c50_context *Context, void *arguments)
     Extension = ( Context->options.rules ? ".rules" : ".tree" );
 
     if ( ! (F = GetFile(Context, ".names", "r")) ) Error(Context, NOFILE, "", "");
-    c50_input_init_file(&NamesInput, F);
+    c50_input_init_file(&NamesInput, F, Context);
     GetNames(Context, &NamesInput);
     fclose(F);
 
