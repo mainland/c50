@@ -103,6 +103,11 @@ void FindLeaf(c50_context *Context, DataRec Case, Tree T, Tree PT,
 
 	    if ( T->Cases < Epsilon )
 	    {
+		/*  A root leaf with no cases has no parent and no class
+		    distribution to use  */
+
+		if ( ! PT ) return;
+
 		T = PT;
 	    }
 

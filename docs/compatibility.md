@@ -402,6 +402,28 @@ files and cannot reach this failure. A read error in the library raises
 `c50::exception` with `c50::error_code::io_error`, which Python raises as
 `OSError`.
 
+## Training on no cases
+
+When the training data holds no cases, `c5.0` trains a classifier that has a
+single leaf of the first class, as Release 2.07 does, and evaluates the test
+cases with it. Release 2.07 crashes with a segmentation fault when a tree
+classifier, trained on no cases, classifies a case. It dereferences the parent
+of the root leaf, which is a null pointer. The same crash occurs in a
+cross-validation fold whose training cases are empty, such as `-X 2` on one
+case, and with boosting, winnowing, and subset tests. Rules classifiers and runs
+without test cases do not crash.
+
+This project returns no class distribution for that leaf, so every case is
+classified as the first class, as the rule classifier does, and the program
+exits with status 0. The change affects only runs that crashed. Rules
+classifiers with a costs file also train on no cases, and on data in which
+every case has one class, as Release 2.07 does. The rule cost normalization
+skips the terms that divide by zero, which occur with no cases or when one
+class has every case, and the program forms no rules. The library and Python
+entry points still reject zero training cases with `ValueError`. Release 2.07
+also copies zero bytes through null pointers in this case, which is undefined
+behavior but has no visible effect. This project skips those copies.
+
 ## Pruning with two-class costs
 
 With two classes and a costs file, C5.0 weights each training case by a

@@ -332,6 +332,53 @@ run_failure_after_bad_values()
     fi
 }
 
+# Training data with no cases. Release 2.07 crashes with a segmentation fault
+# when a tree classifier trained on no cases evaluates a case, and so does a
+# cross-validation fold that trains on no cases, so those runs have no
+# reference status. This project classifies every case as the first class, as
+# Release 2.07 does for rules, and exits 0. A cross-validation run reads
+# `basic.test` as more data, so that case omits it.
+run_zero_training()
+{
+    zero_test=yes
+    if test "$1" = --no-test; then
+        zero_test=no
+        shift
+    fi
+    zero_name=$1
+    zero_data=$2
+    zero_evaluated=$3
+    shift 3
+
+    zero_dir="$test_dir/zero-training-$zero_name"
+    mkdir "$zero_dir"
+    cp "$script_dir/fixtures/basic/basic.names" "$zero_dir/"
+    if test "$zero_test" = yes; then
+        cp "$script_dir/fixtures/basic/basic.test" "$zero_dir/"
+    fi
+    printf '%s' "$zero_data" > "$zero_dir/basic.data"
+
+    set +e
+    (
+        cd "$zero_dir"
+        "$binary" -f basic "$@" > output.raw 2>&1
+    )
+    zero_exit_code=$?
+    set -e
+
+    if test "$zero_exit_code" -ne 0; then
+        printf 'zero training cases (%s) returned %d, expected 0\n' \
+            "$zero_name" "$zero_exit_code" >&2
+        return 1
+    fi
+    if ! grep -F -x -e "$zero_evaluated" "$zero_dir/output.raw" > /dev/null; then
+        printf 'zero training cases (%s) did not report: %s\n' \
+            "$zero_name" "$zero_evaluated" >&2
+        cat "$zero_dir/output.raw" >&2
+        return 1
+    fi
+}
+
 run_invalid_option()
 {
     option_name=$1
@@ -559,6 +606,15 @@ run_case multiclass sample tree -S 30 -I 17
 # errors, and stops with exit 1 at the tenth.
 run_case bad-values tree tree
 run_case error-limit tree - --status 1
+run_zero_training tree '' 'Evaluation on test data (7 cases):'
+run_zero_training comments '# no cases
+' 'Evaluation on test data (7 cases):'
+run_zero_training rules '' 'Evaluation on test data (7 cases):' -r
+run_zero_training boost '' 'Evaluation on test data (7 cases):' -t 3
+run_zero_training winnow '' 'Evaluation on test data (7 cases):' -w
+run_zero_training subsets '' 'Evaluation on test data (7 cases):' -s
+run_zero_training --no-test cross-validation '1.0,alpha,false,low
+' 'Evaluation on hold-out data (1 cases):' -X 2
 one_class_data='1, circle, red.
 2, circle, red.
 3, circle, red.
