@@ -65,7 +65,7 @@ void GetData(c50_context *Context, FILE *Df, Boolean Train,
 {
     c50_input Input;
 
-    c50_input_init_file(&Input, Df);
+    c50_input_init_file(&Input, Df, Context);
     GetDataInput(Context, &Input, Train, AllowUnknownClass);
     fclose(Df);
 }
