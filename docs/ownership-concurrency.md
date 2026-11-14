@@ -32,6 +32,17 @@ operation boundary runs cleanup and rethrows the original exception. If cleanup
 also fails, the original operation failure takes precedence. Library code does
 not terminate the host process.
 
+Training with more than one split worker can also throw `std::system_error`,
+which is not a `c50::exception`. It reports that the system could not start a
+worker thread, for example when the user's process limit is exhausted, and its
+`code()` carries the operating-system error. Only `model::train` starts split
+workers, and only when `split_workers` is above one and a node holds at least
+10,000 cases. Loading, prediction, inspection, and serialization start no
+threads. The failed call joins every worker that it started and leaves the
+context reusable.
+`tests/parallel_failure.cpp` injects the failure and asserts this behavior.
+Catch `std::system_error` separately, or retry with `split_workers(1)`.
+
 `c50::model::train` and `c50::model::load` copy the retained schema, serialized
 classifier, and applicable costs. Models are immutable and independent of their
 originating contexts. Multiple threads may use a model concurrently with
@@ -76,6 +87,13 @@ Each Python `Model` training, loading, or prediction call constructs a local
 native context. Native work releases the Python GIL. Independent operations can
 therefore execute concurrently, and the binding does not depend on hidden
 process-global classifier state.
+
+Training with `split_workers` above one can raise `RuntimeError` that is not a
+`C50Error`, when the system cannot start a worker thread. The binding does not
+translate the native `std::system_error`, so pybind11 reports it as a plain
+`RuntimeError` whose message is the operating-system text, such as "Resource
+temporarily unavailable". Catch `RuntimeError` to cover both it and `C50Error`,
+which derives from `RuntimeError`, or retry with `split_workers=1`.
 
 The binding does not copy text arguments. A `str` cannot change, and the call
 keeps it alive, so native code reads its UTF-8 representation in place after
