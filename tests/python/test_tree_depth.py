@@ -10,6 +10,7 @@ import copy
 import pickle
 
 import c50
+import numpy as np
 import pytest
 
 NAMES = "no, yes.\nx: continuous.\n"
@@ -108,7 +109,11 @@ def test_unusable_limit_is_a_value_error(value: int) -> None:
             loader(NAMES, tree_text(1), max_tree_depth=value)
 
 
-@pytest.mark.parametrize("value", [True, False, 1.0, "3", b"3", [3], 3 + 0j])
+@pytest.mark.parametrize(
+    "value",
+    [True, False, np.True_, np.False_, 1.0, "3", b"3", [3], 3 + 0j],
+    ids=lambda value: f"{type(value).__name__}-{value!r}",
+)
 def test_limit_must_be_an_int(value: object) -> None:
     for loader in (c50.load, c50.Model.load):
         with pytest.raises(TypeError):
