@@ -383,5 +383,5 @@ float SE(float sum, float sumsq, int no)
 
     mean = sum / no;
 
-    return sqrt( ((sumsq - no * mean * mean) / (no - 1)) / no );
+    return sqrt( (double) (((sumsq - no * mean * mean) / (no - 1)) / no) );
 }
