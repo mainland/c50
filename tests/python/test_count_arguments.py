@@ -4,15 +4,16 @@
 
 """Every count argument of both Python layers, run through the same values.
 
-The low-level layer follows the rule in the ``c50`` package docstring. One
-table drives every argument, so that an argument that converts differently
-fails here.
+The low-level layer follows the rule in the ``c50`` package docstring, and the
+estimator follows the rule in ``docs/estimator.md``. One table drives both, so
+that a layer that converts an argument differently fails here.
 """
 
 from __future__ import annotations
 
 import subprocess
 import sys
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -60,6 +61,14 @@ def train_with_options(**fields: Any) -> object:
         setattr(options, name, value)
     model = c50.train(NAMES, TRAINING, options=options)
     return without_date(model.serialized_data)
+
+
+def fit_with(**parameters: Any) -> object:
+    classifier = C50Classifier(**parameters).fit(X, Y)
+    for name, value in parameters.items():
+        # A fit must not replace a parameter by its converted value.
+        assert classifier.get_params()[name] is value
+    return classifier.predict(X).tolist()
 
 
 LOW_LEVEL = [
@@ -116,6 +125,33 @@ LOW_LEVEL = [
         valid=(0, 2**70),
         none_ok=True,
         message="max_depth",
+    ),
+]
+
+ESTIMATOR = [
+    CountArgument(
+        "trials",
+        lambda value: fit_with(trials=value),
+        invalid=(0, -1, 1001, 2**70),
+        valid=(2,),
+        none_ok=False,
+        message="trials",
+    ),
+    CountArgument(
+        "n_jobs",
+        lambda value: fit_with(n_jobs=value),
+        invalid=(0,),
+        valid=(-1, 2**70),
+        none_ok=True,
+        message="n_jobs",
+    ),
+    CountArgument(
+        "prediction_batch_size",
+        lambda value: fit_with(prediction_batch_size=value),
+        invalid=(0, -1),
+        valid=(2**70,),
+        none_ok=True,
+        message="prediction_batch_size",
     ),
 ]
 
@@ -205,6 +241,27 @@ def test_low_level_integers(
         assert argument.call(value) == argument.call(integer)
 
 
+@pytest.mark.parametrize(
+    ("argument", "integer", "value", "rejected"),
+    integer_cases(ESTIMATOR),
+)
+def test_estimator_integers(
+    argument: CountArgument, integer: int, value: object, rejected: bool
+) -> None:
+    if rejected:
+        with pytest.raises(ValueError, match=argument.message):
+            argument.call(value)
+    else:
+        assert argument.call(value) == argument.call(integer)
+
+
+def generic_timedelta(value: int) -> np.timedelta64:
+    """Return a timedelta64 without a unit, which NumPy 2.5 deprecates."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return np.timedelta64(value)
+
+
 def not_integers() -> list[tuple[str, Callable[[], object]]]:
     values: list[tuple[str, Callable[[], object]]] = [
         ("True", lambda: True),
@@ -213,6 +270,11 @@ def not_integers() -> list[tuple[str, Callable[[], object]]]:
         ("0d-bool-array", lambda: np.asarray(True)),
         ("float", lambda: 1.0),
         ("str", lambda: "1"),
+        # NumPy registers timedelta64 as numbers.Integral, but it has no
+        # __index__, and int() rejects a value with a unit.
+        ("timedelta64-unit", lambda: np.timedelta64(2, "s")),
+        ("timedelta64-generic", lambda: generic_timedelta(1)),
+        ("timedelta64-nat", lambda: np.timedelta64("NaT", "s")),
     ]
     for index, flag in enumerate(numpy_bool_subclass()):
         values.append((f"bool_subclass-{index}", lambda flag=flag: flag))
@@ -235,6 +297,19 @@ def test_low_level_rejects_non_integers_with_type_error(
         argument.call(make())
 
 
+@pytest.mark.parametrize("argument", ESTIMATOR, ids=lambda a: a.name)
+@pytest.mark.parametrize(
+    "make",
+    [make for _, make in NOT_INTEGERS],
+    ids=[n for n, _ in NOT_INTEGERS],
+)
+def test_estimator_rejects_non_integers_with_value_error(
+    argument: CountArgument, make: Callable[[], object]
+) -> None:
+    with pytest.raises(ValueError, match=argument.message):
+        argument.call(make())
+
+
 @pytest.mark.parametrize("argument", LOW_LEVEL, ids=lambda a: a.name)
 @pytest.mark.parametrize(
     "make",
@@ -247,20 +322,103 @@ def test_low_level_accepts_any_index_object(
     assert argument.call(make()) == argument.call(1)
 
 
-@pytest.mark.parametrize("argument", LOW_LEVEL, ids=lambda a: a.name)
+@pytest.mark.parametrize("argument", ESTIMATOR, ids=lambda a: a.name)
+@pytest.mark.parametrize(
+    "make",
+    [lambda: IndexOnly(1), lambda: np.asarray(1)],
+    ids=["index-only", "0d-int-array"],
+)
+def test_estimator_requires_integral(
+    argument: CountArgument, make: Callable[[], object]
+) -> None:
+    with pytest.raises(ValueError, match=argument.message):
+        argument.call(make())
+
+
+@pytest.mark.parametrize(
+    "argument", LOW_LEVEL + ESTIMATOR, ids=lambda a: a.name
+)
 def test_none(argument: CountArgument) -> None:
     if argument.none_ok:
         assert argument.call(None) is not None
+    elif argument in ESTIMATOR:
+        with pytest.raises(ValueError, match=argument.message):
+            argument.call(None)
     else:
         with pytest.raises(TypeError):
             argument.call(None)
 
 
-@pytest.mark.parametrize("argument", LOW_LEVEL, ids=lambda a: a.name)
+@pytest.mark.parametrize(
+    "argument", LOW_LEVEL + ESTIMATOR, ids=lambda a: a.name
+)
 def test_a_failing_type_check_propagates(argument: CountArgument) -> None:
     # The error of the check is not a reason to accept or to replace the value.
     with pytest.raises(RuntimeError, match="hostile __class__"):
         argument.call(HostileClass())
+
+
+def batch_data() -> tuple[np.ndarray, np.ndarray]:
+    rng = np.random.default_rng(64)
+    values = rng.normal(size=(190, 4))
+    labels = np.where(
+        values[:, 0] + 0.5 * values[:, 1] > 0.3,
+        "a",
+        np.where(values[:, 2] > 0, "b", "c"),
+    )
+    return values, labels
+
+
+@pytest.mark.parametrize(
+    ("kind", "size"), [(np.int8, 100), (np.uint8, 150), (np.uint64, 100)]
+)
+def test_numpy_batch_size_matches_unbatched_results(
+    kind: type, size: int
+) -> None:
+    # A NumPy scalar that is added to a Python int wraps (int8 and uint8 under
+    # NumPy 2) or becomes a float (uint64 under NumPy 1), so a batch size that
+    # stays unconverted slices the rows wrongly.
+    values, labels = batch_data()
+    unbatched = C50Classifier(prediction_batch_size=None).fit(values, labels)
+    batched = C50Classifier(prediction_batch_size=kind(size)).fit(
+        values, labels
+    )
+
+    np.testing.assert_array_equal(
+        batched.attribute_usage_, unbatched.attribute_usage_
+    )
+    np.testing.assert_array_equal(
+        batched.feature_importances_, unbatched.feature_importances_
+    )
+    np.testing.assert_array_equal(
+        batched.predict(values), unbatched.predict(values)
+    )
+    np.testing.assert_array_equal(
+        batched.predict_proba(values), unbatched.predict_proba(values)
+    )
+    assert isinstance(batched.prediction_batch_size, kind)
+
+
+@pytest.mark.parametrize("kind", [np.int8, np.int64])
+def test_native_workers_receive_a_python_int(
+    kind: type, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import c50.sklearn
+
+    received: list[object] = []
+    effective_n_jobs = c50.sklearn.effective_n_jobs
+
+    def spy(n_jobs: Any) -> int:
+        received.append(n_jobs)
+        return int(effective_n_jobs(n_jobs))
+
+    monkeypatch.setattr(c50.sklearn, "effective_n_jobs", spy)
+    values, labels = batch_data()
+    for n_jobs in (kind(-1), kind(2), None):
+        C50Classifier(n_jobs=n_jobs).fit(values, labels)
+
+    assert received
+    assert all(type(item) in (int, type(None)) for item in received)
 
 
 # A NumPy that does not load must not make an ordinary count argument fail.

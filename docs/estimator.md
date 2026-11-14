@@ -200,6 +200,22 @@ and negative values count back from the number of processors, so `-1` uses all
 of them. At most 8 workers are used, and only eligible large nodes use more
 than one. The worker count does not change the classifier.
 
+`trials`, `n_jobs`, and `prediction_batch_size` accept instances of
+`numbers.Integral`, which include Python and NumPy integers, except `bool`,
+`np.bool_`, and `np.timedelta64`. `n_jobs` and `prediction_batch_size` also
+accept `None`. `fit` raises `ValueError` for every other value, whatever its
+type: `True`, `np.True_`, `np.timedelta64`, a float, a 0-d integer array, and an
+object that defines only `__index__`, as well as an out-of-range integer. This
+follows scikit-learn's parameter validation, where an invalid parameter raises
+at `fit` and not at construction. A parameter that `set_params` changes after
+`fit` is validated again where the estimator uses it, so an invalid
+`prediction_batch_size` also raises `ValueError` at `predict`,
+`predict_proba`, and the other prediction methods. The estimator converts each
+accepted value to a Python `int` where it uses it, and leaves the parameter
+unchanged. The estimator's annotations for these parameters remain `int`. The
+low-level count arguments and the `max_depth` of `export_text` follow a
+different rule, which the {doc}`Python API reference <api/python>` states.
+
 `ties` selects the order of equal continuous values when the learner evaluates
 splits. The estimator's default, `"stable"`, is faster than `"reference"` and
 is deterministic on every platform, but may build a classifier that differs

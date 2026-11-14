@@ -587,69 +587,6 @@ def test_rows_without_scores_give_the_predicted_class_probability_one() -> (
     )
 
 
-def batch_data() -> tuple[np.ndarray, np.ndarray]:
-    rng = np.random.default_rng(64)
-    values = rng.normal(size=(190, 4))
-    labels = np.where(
-        values[:, 0] + 0.5 * values[:, 1] > 0.3,
-        "a",
-        np.where(values[:, 2] > 0, "b", "c"),
-    )
-    return values, labels
-
-
-@pytest.mark.parametrize(
-    ("kind", "size"), [(np.int8, 100), (np.uint8, 150), (np.uint64, 100)]
-)
-def test_numpy_batch_size_matches_unbatched_results(
-    kind: type, size: int
-) -> None:
-    # A NumPy scalar that is added to a Python int wraps (int8 and uint8 under
-    # NumPy 2) or becomes a float (uint64 under NumPy 1), so a batch size that
-    # stays unconverted slices the rows wrongly.
-    values, labels = batch_data()
-    unbatched = C50Classifier(prediction_batch_size=None).fit(values, labels)
-    batched = C50Classifier(prediction_batch_size=kind(size)).fit(
-        values, labels
-    )
-
-    np.testing.assert_array_equal(
-        batched.attribute_usage_, unbatched.attribute_usage_
-    )
-    np.testing.assert_array_equal(
-        batched.feature_importances_, unbatched.feature_importances_
-    )
-    np.testing.assert_array_equal(
-        batched.predict(values), unbatched.predict(values)
-    )
-    np.testing.assert_array_equal(
-        batched.predict_proba(values), unbatched.predict_proba(values)
-    )
-    assert isinstance(batched.prediction_batch_size, kind)
-
-
-@pytest.mark.parametrize("kind", [np.int8, np.int64])
-def test_native_workers_receive_a_python_int(
-    kind: type, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import c50.sklearn
-
-    received: list[object] = []
-    effective_n_jobs = c50.sklearn.effective_n_jobs
-
-    def spy(n_jobs: Any) -> int:
-        received.append(n_jobs)
-        return int(effective_n_jobs(n_jobs))
-
-    monkeypatch.setattr(c50.sklearn, "effective_n_jobs", spy)
-    values, labels = batch_data()
-    for n_jobs in (kind(-1), kind(2), None):
-        C50Classifier(n_jobs=n_jobs).fit(values, labels)
-
-    assert received
-    assert all(type(item) in (int, type(None)) for item in received)
-
-
 def _condition_features(document: dict[str, Any]) -> set[int]:
     features = {
         branch["condition"]["feature"]
