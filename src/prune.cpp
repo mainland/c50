@@ -1,5 +1,3 @@
-/* Modified 2026 by Geoffrey Mainland: own pruning scratch during unwinding,
-   and never replace a tree with a missing branch. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -23,6 +21,10 @@
 /*      <http://www.gnu.org/licenses/>.					 */
 /*									 */
 /*************************************************************************/
+/* Modifications Copyright 2026 Geoffrey Mainland. */
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Modified 2026 by Geoffrey Mainland: own pruning scratch during unwinding,
+   and never replace a tree with a missing branch. */
 
 
 
