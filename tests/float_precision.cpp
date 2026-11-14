@@ -8,7 +8,11 @@
 
 #include <stdio.h>
 
+#include <cstring>
+
 #include "defns.i"
+#include "extern.i"
+#include "c50_api_internal.h"
 
 static int failures;
 
@@ -25,11 +29,26 @@ int main(int argc, char **argv)
 {
     (void) argc;
     (void) argv;
+    auto owner = c50_make_context();
+    c50_context *context = owner.get();
 
     /*  rint(Val * Mult) / Mult - Val subtracts in double, not in float  */
 
     expect_int("Denominator(0.498761)", Denominator(0.498761f), 1000000);
     expect_int("Denominator(493.769)", Denominator(493.769f), 1000);
+
+    /*  N * (1 - exp(log(CF) / N)) cancels for large N, and its float steps
+	give 1.3709068 at N = 10^6 instead of 1.3862934  */
+
+    char text[32];
+    snprintf(text, sizeof(text), "%.7f",
+	     (double) RawExtraErrs(context, 1000000, 0));
+    if ( strcmp(text, "1.3862934") )
+    {
+	fprintf(stderr, "RawExtraErrs(10^6, 0): got %s, expected 1.3862934\n",
+		text);
+	++failures;
+    }
 
     return failures == 0 ? 0 : 1;
 }
