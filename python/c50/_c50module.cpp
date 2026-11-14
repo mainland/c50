@@ -54,9 +54,9 @@ private:
 };
 
 // The tree depth limit of a load call, where std::nullopt is no limit. The
-// converter rejects what is not an int, and bool in particular, with
-// pybind11's TypeError for an unsuitable argument. Zero, a negative number,
-// and a number beyond the native size type raise ValueError.
+// converter accepts None and a count, as the c50 package documents. It rejects
+// anything else with pybind11's TypeError for an unsuitable argument. Zero, a
+// negative number, and a number beyond the native size type raise ValueError.
 class tree_depth_argument
 {
 public:
@@ -72,10 +72,10 @@ private:
     std::optional<std::size_t> limit_;
 };
 
-// The worker count of a training call. The converter rejects what is not an
-// int, and accepts any int, so that the caller gets a ValueError that names
-// the argument when the number does not fit the native type. The native
-// context checks the supported range.
+// The worker count of a training call. The converter accepts a count, as the
+// c50 package documents, and rejects anything else with TypeError. A number
+// that does not fit the native type raises a ValueError that names the
+// argument. The native context checks the supported range.
 class worker_count_argument
 {
 public:
@@ -88,17 +88,109 @@ private:
     unsigned count_ = 1;
 };
 
-// Convert an int to unsigned, or raise ValueError that names the field when
-// the value does not fit. Python raises ValueError or OverflowError for such a
-// value, never pybind11's TypeError for an unsuitable argument.
-unsigned checked_unsigned(const py::handle &source, const char *field)
+// Whether the object is a bool or a NumPy boolean, which no count argument
+// accepts. NumPy 1.26 to 2.2 define np.bool_.__index__ with a deprecation, so
+// the type decides, not the missing method. An int that is not a bool cannot
+// be a numpy.bool_, so it returns before the lookup, which would run the
+// deferred import of a lazily loaded NumPy. For any other object, the lookup
+// does not import NumPy by itself: an object of numpy.bool_ exists only when
+// the module is already loaded. A missing module or attribute means that no
+// such object exists. Any other error, such as one that the object's __class__
+// raises, propagates.
+bool is_bool_like(const py::handle &source)
 {
-    const py::object number =
+    if ( PyBool_Check(source.ptr()) )
+    {
+        return true;
+    }
+    if ( PyLong_Check(source.ptr()) )
+    {
+        return false;
+    }
+    const py::object numpy = py::reinterpret_steal<py::object>(
+        PyImport_GetModule(py::str("numpy").ptr()));
+    if ( !numpy )
+    {
+        if ( PyErr_Occurred() )
+        {
+            throw py::error_already_set();
+        }
+        return false;
+    }
+    const py::object bool_type =
+        py::reinterpret_steal<py::object>(
+            PyObject_GetAttrString(numpy.ptr(), "bool_"));
+    if ( !bool_type )
+    {
+        if ( PyErr_ExceptionMatches(PyExc_AttributeError) )
+        {
+            PyErr_Clear();
+            return false;
+        }
+        throw py::error_already_set();
+    }
+    const int found = PyObject_IsInstance(source.ptr(), bool_type.ptr());
+    if ( found < 0 )
+    {
+        throw py::error_already_set();
+    }
+    return found == 1;
+}
+
+// Why a count argument is not an integer.
+enum class count_problem
+{
+    none,
+    boolean,
+    not_an_index,
+};
+
+// The one place that decides which objects every count argument accepts: the
+// objects with __index__, except a bool or a NumPy boolean. The rule is in the
+// documentation of the c50 package. Return the object as a Python int, or a
+// null object and the reason when the argument is unsuitable. An exception
+// that the checks or __index__ raise propagates.
+py::object count_index(const py::handle &source, count_problem &problem)
+{
+    problem = count_problem::none;
+    if ( is_bool_like(source) )
+    {
+        problem = count_problem::boolean;
+        return py::object();
+    }
+    if ( !PyIndex_Check(source.ptr()) )
+    {
+        problem = count_problem::not_an_index;
+        return py::object();
+    }
+    py::object number =
         py::reinterpret_steal<py::object>(PyNumber_Index(source.ptr()));
     if ( !number )
     {
         throw py::error_already_set();
     }
+    return number;
+}
+
+// The TypeError for an unsuitable count argument.
+[[noreturn]] void reject_count(
+    const py::handle &source, const char *field, count_problem problem)
+{
+    if ( problem == count_problem::boolean )
+    {
+        throw py::type_error(std::string(field) + " must not be a bool");
+    }
+    throw py::type_error(
+        std::string(field) + " must be an integer, not " +
+        std::string(py::str(py::type::of(source).attr("__name__"))));
+}
+
+// Convert an int that count_index returned to unsigned, or raise ValueError
+// that names the field when the value does not fit. Python raises ValueError
+// or OverflowError for such a value, never pybind11's TypeError for an
+// unsuitable argument.
+unsigned fit_unsigned(const py::object &number, const char *field)
+{
     const unsigned long long value = PyLong_AsUnsignedLongLong(number.ptr());
     if ( value == static_cast<unsigned long long>(-1) && PyErr_Occurred() )
     {
@@ -112,6 +204,19 @@ unsigned checked_unsigned(const py::handle &source, const char *field)
             std::string(field) + " does not fit an unsigned integer");
     }
     return static_cast<unsigned>(value);
+}
+
+// Convert a count to unsigned, or raise TypeError for an unsuitable argument
+// and ValueError when the value does not fit.
+unsigned checked_unsigned(const py::handle &source, const char *field)
+{
+    count_problem problem;
+    const py::object number = count_index(source, problem);
+    if ( !number )
+    {
+        reject_count(source, field, problem);
+    }
+    return fit_unsigned(number, field);
 }
 
 // Convert an int or float to double, or raise ValueError that names the field
@@ -173,12 +278,13 @@ struct type_caster<text_argument>
     }
 };
 
-// Accept None, or an int that is not a bool and lies between 1 and the
-// native size type's maximum.
+// Accept None, or a count (see count_index) between 1 and the native size
+// type's maximum.
 template <>
 struct type_caster<tree_depth_argument>
 {
-    PYBIND11_TYPE_CASTER(tree_depth_argument, const_name("int | None"));
+    PYBIND11_TYPE_CASTER(
+        tree_depth_argument, const_name("typing.SupportsIndex | None"));
 
     bool load(handle source, bool)
     {
@@ -187,15 +293,11 @@ struct type_caster<tree_depth_argument>
             value = tree_depth_argument();
             return true;
         }
-        if ( PyBool_Check(source.ptr()) || !PyIndex_Check(source.ptr()) )
-        {
-            return false;
-        }
-        const object number =
-            reinterpret_steal<object>(PyNumber_Index(source.ptr()));
+        count_problem problem;
+        const object number = count_index(source, problem);
         if ( !number )
         {
-            throw error_already_set();
+            return false;
         }
         if ( PyObject_RichCompareBool(number.ptr(), int_(1).ptr(), Py_LT) )
         {
@@ -218,22 +320,24 @@ struct type_caster<tree_depth_argument>
     }
 };
 
-// Accept an int of any size, which includes numpy integers and bool, and
-// raise ValueError when it does not fit unsigned. Reject floats and other
-// objects with pybind11's TypeError for an unsuitable argument.
+// Accept a count (see count_index), and raise ValueError when the value does
+// not fit unsigned. Reject any other object with pybind11's TypeError for an
+// unsuitable argument, as the max_tree_depth caster does.
 template <>
 struct type_caster<worker_count_argument>
 {
-    PYBIND11_TYPE_CASTER(worker_count_argument, const_name("int"));
+    PYBIND11_TYPE_CASTER(
+        worker_count_argument, const_name("typing.SupportsIndex"));
 
     bool load(handle source, bool)
     {
-        if ( !PyIndex_Check(source.ptr()) )
+        count_problem problem;
+        const object number = count_index(source, problem);
+        if ( !number )
         {
             return false;
         }
-        value = worker_count_argument(
-            checked_unsigned(source, "split_workers"));
+        value = worker_count_argument(fit_unsigned(number, "split_workers"));
         return true;
     }
 };
@@ -305,8 +409,8 @@ Returns:
     The loaded model.
 
 Raises:
-    TypeError: If ``max_tree_depth`` is neither an int nor ``None``, or is a
-        bool.
+    TypeError: If ``max_tree_depth`` is neither ``None`` nor a count, as the
+        ``c50`` package documentation defines it.
     ValueError: If the names, the classifier, or the costs are invalid, a
         required costs file is missing, the tree is deeper than
         ``max_tree_depth``, or ``max_tree_depth`` is not positive.
@@ -995,6 +1099,21 @@ GIL while training, loading, or predicting.
                "Keep equal values in case order with a faster sort. "
                "Classifiers are deterministic on every platform but may "
                "differ from the reference learner.");
+
+    module.def(
+        "_count_index",
+        [](const py::object &value, const char *name) {
+            count_problem problem;
+            py::object number = count_index(value, problem);
+            if ( !number )
+            {
+                reject_count(value, name, problem);
+            }
+            return number;
+        },
+        py::arg("value"), py::arg("name"),
+        "Private. Convert a count argument to an int under the rule that "
+        "every count argument follows, or raise TypeError.");
 
     bind_inspection(module);
 
