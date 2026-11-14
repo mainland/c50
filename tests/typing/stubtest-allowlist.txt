@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # pybind11 classes use a native metaclass that stubs cannot express.
 c50._c50.Model
 c50._c50.Options

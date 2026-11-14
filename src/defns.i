@@ -1,4 +1,3 @@
-/* Modified 2026 by Geoffrey Mainland: native C++ library integration. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -23,6 +22,9 @@
 /*      <http://www.gnu.org/licenses/>.					 */
 /*									 */
 /*************************************************************************/
+/* Modifications Copyright 2026 Geoffrey Mainland. */
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Modified 2026 by Geoffrey Mainland: native C++ library integration. */
 
 
 

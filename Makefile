@@ -5,6 +5,14 @@
 #*									 *#
 #*************************************************************************#
 
+# This file began as the Makefile of C5.0 Release 2.07 GPL Edition,
+# copyright 2010 Rulequest Research Pty Ltd, distributed under the GNU
+# General Public License, version 3 or later (see gpl.txt).
+# Modifications Copyright 2026 Geoffrey Mainland.
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Modified 2026 by Geoffrey Mainland: C++17 build, test, and
+# reference-comparison targets.
+
 
 CC	= gcc
 CXX	= g++
