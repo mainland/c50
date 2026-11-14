@@ -80,10 +80,11 @@ single-tree learning and is the mode used for compatibility work. Setting
 the cases seen by the learner and may change the classifier. It must be
 described as approximate sampling rather than a transparent optimization.
 
-Set `ties` to `stable` to evaluate continuous splits with a faster sort that
-keeps equal values in case order. Training remains deterministic on every
-platform, but the classifier may differ from the reference learner. See
-{doc}`compatibility`.
+The `ties` option `stable` evaluates continuous splits with a faster sort that
+keeps equal values in case order. It is the default of `C50Classifier`; the
+low-level `c50.train` and the C++ options default to `reference`. Training
+remains deterministic on every platform, but the classifier may differ from the
+reference learner. See {doc}`compatibility`.
 
 Set the estimator's `n_jobs`, or the native `split_workers`, to enable bounded
 parallel evaluation of eligible attribute splits. At most 8 workers are used,

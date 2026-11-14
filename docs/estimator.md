@@ -200,6 +200,13 @@ and negative values count back from the number of processors, so `-1` uses all
 of them. At most 8 workers are used, and only eligible large nodes use more
 than one. The worker count does not change the classifier.
 
+`ties` selects the order of equal continuous values when the learner evaluates
+splits. The estimator's default, `"stable"`, is faster than `"reference"` and
+is deterministic on every platform, but may build a classifier that differs
+from the one that Release 2.07 builds from the same data. Pass
+`ties="reference"` for Release 2.07's order. `c50.train`, the C++ options, and
+`c5.0` default to the reference order. See {doc}`compatibility`.
+
 `random_state` controls training-row sampling, which is the only native use
 of randomness. When `sample_fraction` is positive, the estimator draws the
 native seed, an integer from 0 through 4095, from
@@ -336,13 +343,15 @@ rejects missing values in its own input validation, before C5.0 receives them.
 `C50Classifier` uses the native C5.0 split-selection policy: gain ratio with
 minimum-gain filtering, the native MDL adjustment, and C5.0 tie handling. It has
 no `criterion` parameter. The C++ and Python interfaces use the same learner
-and preserve the reference classifier behavior.
+and preserve the reference classifier behavior, except that `ties` defaults to
+`"stable"` for `C50Classifier`, which may build a different classifier than the
+reference learner. Pass `ties="reference"` for Release 2.07's order.
 
 Scikit-learn compatibility does not require the parameters accepted by
 `DecisionTreeClassifier`. Alternative split criteria would define different
 training modes. A future alternative must be implemented and validated in the
-C++ core before it is exposed through Python. Reference C5.0 behavior must
-remain the default. No alternative criterion is implemented.
+C++ core before it is exposed through Python. Reference C5.0 split selection must
+remain the only criterion. No alternative criterion is implemented.
 
 Choose an evaluation metric through scikit-learn's `scoring` interface. For
 example, reuse `X` and `y` from the example above to select native training

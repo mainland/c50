@@ -55,6 +55,9 @@ prediction times cover `Model.predict_details` on the data text and
 covers the whole Python process, including the interpreter, the imported
 modules, and the input that each interface reads. "Same predictions" means that
 both interfaces predicted the same class for every training case in every run.
+The benchmark trains the estimator with `ties="reference"`, the order of
+`c50.train`, so that the comparison measures the interface rather than the tie
+order.
 
 The results describe one machine, one compiler, and these datasets. They are
 not general time or memory bounds.
