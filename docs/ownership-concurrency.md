@@ -19,11 +19,13 @@ caller's process or thread locale uses `,`. An operation selects the C locale
 for the calling thread, and for each split worker thread it starts, and
 restores the caller's thread locale when it returns or throws. It does not
 change the process locale. If the C locale cannot be created, the operation
-throws `std::bad_alloc` when the host is out of memory. If the
-platform cannot create the C locale for another reason, the operation throws
-`c50::exception` with `error_code::internal_error`. On Windows the operation
-enables the per-thread locale and calls `setlocale` instead. The Python
-binding inherits this behavior.
+throws `std::bad_alloc` when the host is out of memory. If the platform cannot
+create the C locale for another reason, the operation throws `c50::exception`
+with `error_code::internal_error`. Each context and each predictor owns its
+locale, so constructing a context, calling `model::prepare_predictor`, and
+making the first prediction with a predictor after a failed one can throw these
+exceptions too. On Windows the operation enables the per-thread locale and
+calls `setlocale` instead. The Python binding inherits this behavior.
 
 Input and operation failures throw `c50::exception`, whose `code()` returns an
 `error_code` and whose `what()` supplies a diagnostic. Allocation failures throw

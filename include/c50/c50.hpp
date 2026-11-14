@@ -132,7 +132,10 @@ struct dense_dataset {
 /** Move-only owner of mutable operation workspace. */
 class context {
 public:
-    /** Create an independent workspace using one split worker. */
+    /** Create an independent workspace using one split worker.
+     * @throws exception with error_code::internal_error when the platform
+     *         cannot create the C locale that the workspace owns.
+     * @throws std::bad_alloc when memory is exhausted. */
     context();
     /** Release the workspace. Returned models and results remain valid. */
     ~context();
@@ -200,6 +203,9 @@ private:
  * It may outlive its source model. Callers must serialize operations on each
  * predictor. Independent predictors may run concurrently. Results own their
  * data. Failed predictions leave this object reusable, reparsing on demand.
+ * The first prediction after a failure can throw exception with
+ * error_code::internal_error when the platform cannot create the C locale
+ * that the new workspace owns.
  */
 class predictor {
 public:
@@ -343,7 +349,8 @@ struct load_options {
      * error_code::invalid_argument. std::nullopt removes the limit, so that
      * parsing and prediction need stack in proportion to the tree's depth.
      * The model keeps this value and applies it each time that it parses its
-     * text again, in predict(), inspect(), and prepare_predictor(). */
+     * text again, in predict(), attribute_usage(), inspect(), and
+     * prepare_predictor(). */
     std::optional<std::size_t> max_tree_depth = default_max_tree_depth;
 };
 
@@ -460,7 +467,10 @@ public:
      * @return A copyable snapshot independent of this model and workspace. */
     model_inspection inspect(context &workspace) const;
     /** Parse an independently owned classifier for repeated predictions.
-     * @return A predictor owning both parsed and serialized model data. */
+     * @return A predictor owning both parsed and serialized model data.
+     * @throws exception with error_code::internal_error when the platform
+     *         cannot create the C locale that the predictor owns, or with
+     *         the code of the parse failure. */
     predictor prepare_predictor() const;
     /** @return the classifier representation. */
     model_kind kind() const noexcept;
