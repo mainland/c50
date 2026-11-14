@@ -1,0 +1,7 @@
+outcome.
+
+d: date.
+tm: time.
+ts: timestamp.
+y: continuous.
+outcome: low, high.
