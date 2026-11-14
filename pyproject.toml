@@ -151,6 +151,7 @@ files = [
     "benchmarks",
     "docs/conf.py",
     "tests/benchmark_smoke.py",
+    "tests/check_license_notices.py",
     "tests/check_sdist.py",
     "tests/run_built_python.py",
     "tests/built_python_site",
