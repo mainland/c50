@@ -9,8 +9,11 @@ from __future__ import annotations
 import gc
 import json
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
+from fractions import Fraction
 from pathlib import Path
 
+import numpy as np
 import pytest
 from c50 import (
     ConditionKind,
@@ -97,6 +100,27 @@ def test_json_and_text_preserve_structure_and_escape_display_names() -> None:
         export_json(snapshot, feature_names=[])
     with pytest.raises(ValueError, match="max_depth"):
         export_text(snapshot, max_depth=-1)
+
+
+def test_export_text_depth_follows_the_count_policy() -> None:
+    snapshot = Model.train(NAMES, DATA).inspect()
+    expected = export_text(snapshot, max_depth=1)
+
+    assert export_text(snapshot, max_depth=np.int64(1)) == expected
+    assert export_text(snapshot, max_depth=np.uint8(1)) == expected
+    for bad in (
+        True,
+        np.True_,
+        np.False_,
+        Fraction(1, 1),
+        Decimal(1),
+        1.5,
+        "1",
+    ):
+        with pytest.raises(TypeError, match="max_depth"):
+            export_text(snapshot, max_depth=bad)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="max_depth"):
+        export_text(snapshot, max_depth=np.int64(-1))
 
 
 def test_concurrent_inspection_matches_loaded_model() -> None:

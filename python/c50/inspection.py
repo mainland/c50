@@ -9,9 +9,34 @@ from __future__ import annotations
 import json
 import struct
 from collections.abc import Mapping, Sequence
-from typing import cast
+from typing import SupportsIndex, cast
 
-from ._c50 import ConditionKind, ModelInspection, NodeKind, SplitCondition
+from ._c50 import (
+    ConditionKind,
+    ModelInspection,
+    NodeKind,
+    SplitCondition,
+    _count_index,
+)
+
+
+def _depth_limit(max_depth: object) -> int | None:
+    """Convert ``export_text``'s depth argument to an int or ``None``.
+
+    The extension decides which objects a count argument accepts, as the
+    :mod:`c50` documentation describes, so that every count argument follows
+    one rule.
+
+    Raises:
+        TypeError: If the argument is not ``None`` or a count.
+        ValueError: If the argument is negative.
+    """
+    if max_depth is None:
+        return None
+    limit: int = _count_index(max_depth, "max_depth")
+    if limit < 0:
+        raise ValueError("max_depth must be nonnegative or None")
+    return limit
 
 
 def _names(supplied: Sequence[str] | None, native: list[str]) -> list[str]:
@@ -224,7 +249,7 @@ def export_text(
     feature_names: Sequence[str] | None = None,
     class_names: Sequence[str] | None = None,
     value_names: Sequence[Mapping[str, str] | None] | None = None,
-    max_depth: int | None = None,
+    max_depth: SupportsIndex | None = None,
     include_empty: bool = True,
 ) -> str:
     """Render an inspected tree, ruleset, or ensemble as text.
@@ -246,16 +271,15 @@ def export_text(
         support. Soft-threshold bounds are reported at their split nodes.
 
     Raises:
-        ValueError: If display names or the depth limit are invalid.
+        ValueError: If display names are invalid or the depth limit is
+            negative.
+        TypeError: If the depth limit is neither ``None`` nor a count, as the
+            :mod:`c50` documentation defines it.
     """
     features = _names(feature_names, snapshot.feature_names)
     classes = _names(class_names, snapshot.class_names)
     values = _value_names(value_names, len(snapshot.feature_names))
-    limit: object = max_depth  # Callers may pass any type.
-    if limit is not None and (
-        isinstance(limit, bool) or not isinstance(limit, int) or limit < 0
-    ):
-        raise ValueError("max_depth must be a nonnegative integer or None")
+    limit = _depth_limit(max_depth)
     lines = []
     for number, tree in enumerate(snapshot.trees):
         nodes = tree.nodes
@@ -288,7 +312,7 @@ def export_text(
                         f"{t.upper:.9g})"
                     )
             lines.append(prefix + description)
-            if max_depth is not None and depth >= max_depth:
+            if limit is not None and depth >= limit:
                 if node.branches:
                     lines.append("  " * (depth + 1) + "... children omitted")
                 continue
