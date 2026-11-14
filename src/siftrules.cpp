@@ -1227,7 +1227,7 @@ void OrderRules(c50_context *Context)
 
 /*************************************************************************/
 /*									 */
-/*	Tabluate logs and log factorials (to improve speed)		 */
+/*	Tabulate logs and log factorials (to improve speed)		 */
 /*									 */
 /*************************************************************************/
 

@@ -202,7 +202,6 @@ repair-wheel-command = "delvewheel repair -w {dest_dir} -v {wheel}"
 [tool.codespell]
 # The fixtures and expected outputs hold generated text and bytes that the
 # project compares exactly. `ExtraC`, `aLow`, and `DElt` are identifiers of
-# the imported sources, and `non-existant` and `Tabluate` are misspellings in
-# their comments.
+# the imported sources.
 skip = "tests/expected/*,tests/fixtures/*,tests/fuzz/corpus/*"
-ignore-words-list = "extrac,alow,delt,non-existant,tabluate"
+ignore-words-list = "extrac,alow,delt"
