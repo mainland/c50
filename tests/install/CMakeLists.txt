@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 cmake_minimum_required(VERSION 3.20)
 
 project(C50InstallConsumer LANGUAGES C CXX)

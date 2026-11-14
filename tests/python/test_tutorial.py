@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Run the tutorial's code blocks and check the results that it reports."""
 
 from __future__ import annotations

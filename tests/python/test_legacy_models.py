@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Load model files written by the imported C5.0 Release 2.07 program."""
 
 from __future__ import annotations

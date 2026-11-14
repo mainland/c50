@@ -41,6 +41,12 @@ treats level-4 warnings as errors, except C4244, C4267, and C4305, which report
 the implicit narrowing conversions that the imported sources use to store
 values as float.
 
+The `python-license-notices` test runs `tests/check_license_notices.py`, which
+fails when a tracked source file that can carry a comment lacks an
+`SPDX-License-Identifier` line. It skips outside a Git checkout. Imported
+RuleQuest files that this project did not modify keep their original notice and
+are exempt.
+
 Native CI configures a C++14 project default to verify that each target declares
 its own C++17 requirement. The platform labels follow the
 [GitHub-hosted runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
@@ -257,9 +263,9 @@ ctest --test-dir build/python \
 The `c50_python` target builds the extension and its native library dependency.
 CMake places the package under `build/python/python/c50`. CTest uses the selected
 interpreter and sets `PYTHONPATH` for runtime checks to import this build.
-The filter runs `python-api` (pytest), `benchmark-smoke`, `python-typecheck`
-(mypy), and `python-stubtest`. The two typing checks are registered only in
-non-sanitizer builds.
+The filter runs `python-api` (pytest), `python-license-notices`,
+`benchmark-smoke`, `python-typecheck` (mypy), and `python-stubtest`. The two
+typing checks are registered only in non-sanitizer builds.
 
 To run the native tests as well, build all targets before running CTest without
 its filter:

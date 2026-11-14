@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Configure the project in fresh directories and check the effective build
 # type and the optimization flags of the core, and that no C compiler is
 # needed. Run with:

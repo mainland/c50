@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Owned reusable prediction state and Python concurrency contracts."""
 
 from __future__ import annotations

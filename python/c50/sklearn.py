@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Scikit-learn-compatible estimator backed by the C5.0 core."""
 
 from __future__ import annotations

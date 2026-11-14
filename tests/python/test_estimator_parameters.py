@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Range and conversion errors of the estimator's numeric parameters."""
 
 from __future__ import annotations
