@@ -176,6 +176,162 @@ run_missing_file_format()
         "$missing_case_dir/output.actual"
 }
 
+# A failure that `Error` does not print, such as a classifier file that cannot
+# be written, reports its message once on the output stream. Release 2.07
+# exits 0 for the same write failure, so the exit status has no reference.
+# The case needs `/dev/full` to open for writing and fail on close. Only Linux
+# and the BSDs behave so. macOS has no `/dev/full`, and under MSYS the device
+# exists but a symbolic link to it cannot be opened for writing, so other
+# platforms skip the case.
+run_unwritable_classifier()
+{
+    case $(uname -s) in
+        Linux|*BSD) ;;
+        *) return 0 ;;
+    esac
+    if test ! -c /dev/full; then
+        return 0
+    fi
+    full_case_dir="$test_dir/unwritable-classifier"
+    mkdir "$full_case_dir"
+    cp "$script_dir/fixtures/basic/basic.names" "$full_case_dir/"
+    cp "$script_dir/fixtures/basic/basic.data" "$full_case_dir/"
+    ln -s /dev/full "$full_case_dir/basic.tree"
+
+    set +e
+    (
+        cd "$full_case_dir"
+        "$binary" -f basic > output.raw 2>&1
+    )
+    full_exit_code=$?
+    set -e
+
+    if test "$full_exit_code" -ne 1; then
+        printf 'unwritable classifier returned %d, expected 1\n' \
+            "$full_exit_code" >&2
+        return 1
+    fi
+    full_messages=$(grep -c -F '*** could not' "$full_case_dir/output.raw" || true)
+    if test "$full_messages" -ne 1 ||
+        ! grep -F -x -e '*** could not close classifier' \
+            "$full_case_dir/output.raw" > /dev/null; then
+        printf 'unwritable classifier did not report its failure once\n' >&2
+        cat "$full_case_dir/output.raw" >&2
+        return 1
+    fi
+}
+
+# A read error is not the end of the input. Release 2.07 treats it as the end,
+# so a directory named `basic.test` evaluates 0 cases and exits 0. This
+# project reports the failure once and exits 1, so the exit status has no
+# reference. Reading a directory fails with EISDIR on Linux, macOS, and the
+# BSDs. Other platforms, where fopen rejects a directory, skip the case.
+run_read_error()
+{
+    case $(uname -s) in
+        Linux|Darwin|*BSD) ;;
+        *) return 0 ;;
+    esac
+    for read_error_input in data test; do
+        read_error_dir="$test_dir/read-error-$read_error_input"
+        mkdir "$read_error_dir"
+        cp "$script_dir/fixtures/basic/basic.names" "$read_error_dir/"
+        if test "$read_error_input" = data; then
+            cp "$script_dir/fixtures/basic/basic.test" "$read_error_dir/"
+        else
+            cp "$script_dir/fixtures/basic/basic.data" "$read_error_dir/"
+        fi
+        mkdir "$read_error_dir/basic.$read_error_input"
+
+        set +e
+        (
+            cd "$read_error_dir"
+            "$binary" -f basic > output.raw 2>&1
+        )
+        read_error_exit_code=$?
+        set -e
+
+        if test "$read_error_exit_code" -ne 1; then
+            printf 'read error in basic.%s returned %d, expected 1\n' \
+                "$read_error_input" "$read_error_exit_code" >&2
+            return 1
+        fi
+        read_error_messages=$(grep -c -E \
+            "^\*\*\* could not read basic\.$read_error_input: " \
+            "$read_error_dir/output.raw" || true)
+        if test "$read_error_messages" -ne 1; then
+            printf 'read error in basic.%s was not reported once\n' \
+                "$read_error_input" >&2
+            cat "$read_error_dir/output.raw" >&2
+            return 1
+        fi
+    done
+}
+
+# A bad data value that the run survives must not hide the message of a later
+# failure. Release 2.07 reports neither failure and exits 0, so the exit status
+# has no reference. This project reports the later failure once and exits 1.
+# Reading a directory fails on Linux, macOS, and the BSDs only, so other
+# platforms skip the read cases. The `full` case also needs `/dev/full` to
+# open for writing and fail on close, which holds on Linux and the BSDs only.
+# macOS lacks the device and MSYS cannot open a link to it, so they skip it.
+run_failure_after_bad_values()
+{
+    after_kind=$1
+    after_message=$2
+    case $after_kind in
+        full)
+            case $(uname -s) in
+                Linux|*BSD) ;;
+                *) return 0 ;;
+            esac
+            if test ! -c /dev/full; then
+                return 0
+            fi
+            ;;
+        *)
+            case $(uname -s) in
+                Linux|Darwin|*BSD) ;;
+                *) return 0 ;;
+            esac
+            ;;
+    esac
+
+    after_dir="$test_dir/bad-values-then-$after_kind"
+    mkdir "$after_dir"
+    cp "$script_dir/fixtures/bad-values/bad-values.names" "$after_dir/"
+    cp "$script_dir/fixtures/bad-values/bad-values.data" "$after_dir/"
+    case $after_kind in
+        full) ln -s /dev/full "$after_dir/bad-values.tree" ;;
+        test) mkdir "$after_dir/bad-values.test" ;;
+        costs) mkdir "$after_dir/bad-values.costs" ;;
+    esac
+
+    set +e
+    (
+        cd "$after_dir"
+        "$binary" -f bad-values > output.raw 2>&1
+    )
+    after_exit_code=$?
+    set -e
+
+    if test "$after_exit_code" -ne 1; then
+        printf 'bad values then %s returned %d, expected 1\n' \
+            "$after_kind" "$after_exit_code" >&2
+        return 1
+    fi
+    after_messages=$(grep -c -E "^\*\*\* could not " \
+        "$after_dir/output.raw" || true)
+    if test "$after_messages" -ne 1 ||
+        ! grep -E -x -e "$after_message" "$after_dir/output.raw" > /dev/null
+    then
+        printf 'bad values then %s did not report its failure once\n' \
+            "$after_kind" >&2
+        cat "$after_dir/output.raw" >&2
+        return 1
+    fi
+}
+
 run_invalid_option()
 {
     option_name=$1
@@ -351,114 +507,6 @@ run_rule_costs_degenerate()
     fi
 }
 
-# A failure that `Error` does not print, such as a classifier file that cannot
-# be written, reports its message once on the output stream. Release 2.07
-# exits 0 for the same write failure, so the exit status has no reference.
-# The case needs `/dev/full` to open for writing and fail on close. Only Linux
-# and the BSDs behave so. macOS has no `/dev/full`, and under MSYS the device
-# exists but a symbolic link to it cannot be opened for writing, so other
-# platforms skip the case.
-run_unwritable_classifier()
-{
-    case $(uname -s) in
-        Linux|*BSD) ;;
-        *) return 0 ;;
-    esac
-    if test ! -c /dev/full; then
-        return 0
-    fi
-    full_case_dir="$test_dir/unwritable-classifier"
-    mkdir "$full_case_dir"
-    cp "$script_dir/fixtures/basic/basic.names" "$full_case_dir/"
-    cp "$script_dir/fixtures/basic/basic.data" "$full_case_dir/"
-    ln -s /dev/full "$full_case_dir/basic.tree"
-
-    set +e
-    (
-        cd "$full_case_dir"
-        "$binary" -f basic > output.raw 2>&1
-    )
-    full_exit_code=$?
-    set -e
-
-    if test "$full_exit_code" -ne 1; then
-        printf 'unwritable classifier returned %d, expected 1\n' \
-            "$full_exit_code" >&2
-        return 1
-    fi
-    full_messages=$(grep -c -F '*** could not' "$full_case_dir/output.raw" || true)
-    if test "$full_messages" -ne 1 ||
-        ! grep -F -x -e '*** could not close classifier' \
-            "$full_case_dir/output.raw" > /dev/null; then
-        printf 'unwritable classifier did not report its failure once\n' >&2
-        cat "$full_case_dir/output.raw" >&2
-        return 1
-    fi
-}
-
-# A bad data value that the run survives must not hide the message of a later
-# failure. Release 2.07 reports neither failure and exits 0, so the exit status
-# has no reference. This project reports the later failure once and exits 1.
-# Reading a directory fails on Linux, macOS, and the BSDs only, so other
-# platforms skip the read cases. The `full` case also needs `/dev/full` to
-# open for writing and fail on close, which holds on Linux and the BSDs only.
-# macOS lacks the device and MSYS cannot open a link to it, so they skip it.
-run_failure_after_bad_values()
-{
-    after_kind=$1
-    after_message=$2
-    case $after_kind in
-        full)
-            case $(uname -s) in
-                Linux|*BSD) ;;
-                *) return 0 ;;
-            esac
-            if test ! -c /dev/full; then
-                return 0
-            fi
-            ;;
-        *)
-            case $(uname -s) in
-                Linux|Darwin|*BSD) ;;
-                *) return 0 ;;
-            esac
-            ;;
-    esac
-
-    after_dir="$test_dir/bad-values-then-$after_kind"
-    mkdir "$after_dir"
-    cp "$script_dir/fixtures/bad-values/bad-values.names" "$after_dir/"
-    cp "$script_dir/fixtures/bad-values/bad-values.data" "$after_dir/"
-    case $after_kind in
-        full) ln -s /dev/full "$after_dir/bad-values.tree" ;;
-        test) mkdir "$after_dir/bad-values.test" ;;
-        costs) mkdir "$after_dir/bad-values.costs" ;;
-    esac
-
-    set +e
-    (
-        cd "$after_dir"
-        "$binary" -f bad-values > output.raw 2>&1
-    )
-    after_exit_code=$?
-    set -e
-
-    if test "$after_exit_code" -ne 1; then
-        printf 'bad values then %s returned %d, expected 1\n' \
-            "$after_kind" "$after_exit_code" >&2
-        return 1
-    fi
-    after_messages=$(grep -c -E "^\*\*\* could not " \
-        "$after_dir/output.raw" || true)
-    if test "$after_messages" -ne 1 ||
-        ! grep -E -x -e "$after_message" "$after_dir/output.raw" > /dev/null
-    then
-        printf 'bad values then %s did not report its failure once\n' \
-            "$after_kind" >&2
-        cat "$after_dir/output.raw" >&2
-        return 1
-    fi
-}
 
 run_case basic tree tree
 run_case basic rules rules -r
@@ -530,6 +578,10 @@ run_invalid_definition
 run_many_classes
 run_missing_file_format
 run_unwritable_classifier
+run_read_error
 run_failure_after_bad_values full '\*\*\* could not close classifier'
+run_failure_after_bad_values test '\*\*\* could not read bad-values\.test: .*'
+run_failure_after_bad_values costs \
+    '\*\*\* could not read bad-values\.costs: .*'
 
 printf 'CLI regression tests passed\n'

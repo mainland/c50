@@ -382,6 +382,22 @@ file, so a write failure such as a full disk left a truncated model and exit
 status 0. This project reports `*** could not close classifier` or
 `*** could not write classifier` and exits 1. This difference is deliberate.
 
+## Read errors
+
+Release 2.07 treats a failed read of a `.names`, `.data`, `.test`, or
+`.costs` file as the end of the input. A `basic.test` that is a directory, for
+example, evaluates 0 cases and the program exits with status 0. This project
+reports the failure. The command-line program prints
+`*** could not read <file>: <reason>` on the output stream, where `<reason>`
+is the operating system's description of the error, and exits with status 1.
+An ordinary end of file and the limit of 10 data errors are unchanged. This
+difference is deliberate.
+
+The C++ and Python entry points read text from memory, so they do not read
+files and cannot reach this failure. A read error in the library raises
+`c50::exception` with `c50::error_code::io_error`, which Python raises as
+`OSError`.
+
 ## Pruning with two-class costs
 
 With two classes and a costs file, C5.0 weights each training case by a

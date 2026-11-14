@@ -174,7 +174,7 @@ void GetMCosts(c50_context *Context, FILE *Cf)
 {
     c50_input Input;
 
-    c50_input_init_file(&Input, Cf);
+    c50_input_init_file(&Input, Cf, Context);
     GetMCostsInput(Context, &Input);
     fclose(Cf);
 }
