@@ -20,6 +20,8 @@
  *
  * Invalid arguments and input errors throw c50::exception. Allocation failures
  * throw std::bad_alloc. Invalid result indices throw std::out_of_range.
+ * Training with more than one split worker throws std::system_error, which
+ * is not a c50::exception, when the system cannot start a worker thread.
  * A failed operation leaves its context reusable. Moved-from objects may only
  * be destroyed or assigned another object.
  */
