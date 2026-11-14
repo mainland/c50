@@ -483,6 +483,9 @@ run_case implicit-divide-precision tree tree
 run_case implicit-divide-negative tree tree
 run_case implicit-divide-zero tree - --status 1
 run_case implicit-power tree tree
+# Bytes at or above 0x80 in date, time, and timestamp values. The expected files
+# come from Release 2.07 on the same data.
+run_case date-bytes tree tree
 run_case multiclass tree tree
 run_case multiclass rules rules -r
 run_case multiclass sample tree -S 30 -I 17
