@@ -244,6 +244,15 @@ parent distribution to use below that threshold. Zero-case child nodes remain
 valid and retain their parent-based prediction behavior. These checks reject
 malformed artifacts before prediction can index their internal structures.
 
+The parser rejects a serialized tree of 1,024 or more levels with a parse error,
+to bound stack use. Release 2.07 has no such limit, so it can print a tree that
+this library can train but not reload. `model::train` returns such a tree,
+which predicts, inspects, and prepares predictors, but `load` of its serialized
+text and the unpickling of a Python `Model` fail with `error_code::parse_error`
+(`ValueError` in Python). A tree needs
+about 8,000 cases and 1,000 binary attributes to reach that depth. See
+{doc}`ownership-concurrency` for the stack that each level needs.
+
 Rule indexes are limited to 512 levels. Deeper rulesets use iterative rule
 matching, which preserves their predictions without recursive index traversal.
 Internal tree nodes must have at least `1e-4` total class frequency. Empty

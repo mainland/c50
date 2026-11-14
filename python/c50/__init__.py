@@ -9,7 +9,9 @@ Arguments of the wrong type raise ``TypeError``, as pybind11 reports it. A
 number that its native type cannot hold, such as a negative ``split_workers``
 or an ``Options`` field above the unsigned range, raises ``ValueError``, and
 text that UTF-8 cannot encode raises ``UnicodeEncodeError``, a ``ValueError``.
-The text of a message is not part of the stable interface.
+A training call with ``split_workers`` above one raises a plain
+``RuntimeError``, not ``C50Error``, when the system cannot start a worker
+thread. The text of a message is not part of the stable interface.
 
 Text inputs end a call at the first bad value, such as a discrete value that
 the names file does not declare or a nonfinite number, and the call raises
