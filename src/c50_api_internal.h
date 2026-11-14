@@ -36,67 +36,76 @@ typedef double c50_continuous_value;
 typedef float c50_continuous_value;
 #endif
 
-typedef struct
+/* Base of the context's state records. They hold raw pointers that the
+ * context owns, so copying one would duplicate that ownership. */
+struct c50_state_record
 {
-    int class_attribute;
-    int label_attribute;
-    int case_weight_attribute;
-    int max_attribute;
-    int max_class;
-    int owned_class_names;
-    int max_discrete_value;
-    char unknown_class_name[2];
-    char other_attribute_value_name[8];
-    char **class_names;
-    char **attribute_names;
-    char ***attribute_value_names;
-    int *max_attribute_value;
-    char *special_status;
-    struct _def_elt **attribute_definitions;
-    int **attribute_definition_uses;
-    c50_continuous_value *class_thresholds;
-} c50_schema_state;
+    c50_state_record() = default;
+    c50_state_record(const c50_state_record &) = delete;
+    c50_state_record &operator=(const c50_state_record &) = delete;
+};
 
-typedef struct
+struct c50_schema_state : c50_state_record
 {
-    union _attribute_value **records;
-    union _attribute_value **saved_records;
-    int max_case;
-    struct _datablockrec *memory_blocks;
-    int block_size;
-    unsigned char *some_missing;
-    unsigned char *some_not_applicable;
-} c50_case_state;
+    int class_attribute = 0;
+    int label_attribute = 0;
+    int case_weight_attribute = 0;
+    int max_attribute = 0;
+    int max_class = 0;
+    int owned_class_names = 0;
+    int max_discrete_value = 0;
+    char unknown_class_name[2]{};
+    char other_attribute_value_name[8]{};
+    char **class_names = nullptr;
+    char **attribute_names = nullptr;
+    char ***attribute_value_names = nullptr;
+    int *max_attribute_value = nullptr;
+    char *special_status = nullptr;
+    struct _def_elt **attribute_definitions = nullptr;
+    int **attribute_definition_uses = nullptr;
+    c50_continuous_value *class_thresholds = nullptr;
+};
 
-typedef struct
+struct c50_case_state : c50_state_record
 {
-    struct _treerec **raw;
-    struct _treerec **pruned;
-    struct _treerec *winnow;
-    int trial;
-    int max_tree;
-    int printed_subtree_count;
-    int printed_subtree_capacity;
-    struct _treerec **printed_subtrees;
+    union _attribute_value **records = nullptr;
+    union _attribute_value **saved_records = nullptr;
+    int max_case = 0;
+    struct _datablockrec *memory_blocks = nullptr;
+    int block_size = 0;
+    unsigned char *some_missing = nullptr;
+    unsigned char *some_not_applicable = nullptr;
+};
+
+struct c50_tree_state : c50_state_record
+{
+    struct _treerec **raw = nullptr;
+    struct _treerec **pruned = nullptr;
+    struct _treerec *winnow = nullptr;
+    int trial = 0;
+    int max_tree = 0;
+    int printed_subtree_count = 0;
+    int printed_subtree_capacity = 0;
+    struct _treerec **printed_subtrees = nullptr;
     std::vector<unsigned char> last_branches;
-} c50_tree_state;
+};
 
-typedef struct
+struct c50_rule_state : c50_state_record
 {
-    struct _rulerec **rules;
-    struct _rulesetrec **sets;
-    int count;
-    int capacity;
-} c50_rule_state;
+    struct _rulerec **rules = nullptr;
+    struct _rulesetrec **sets = nullptr;
+    int count = 0;
+    int capacity = 0;
+};
 
-typedef struct
+struct c50_cost_state : c50_state_record
 {
-    float **matrix;
-    float **normalized_matrix;
-    float *weight_multipliers;
-    unsigned char unit_weights;
-    unsigned char weighted;
-} c50_cost_state;
+    float **matrix = nullptr;
+    float **normalized_matrix = nullptr;
+    float *weight_multipliers = nullptr;
+    unsigned char unit_weights = 0;
+    unsigned char weighted = 0;
+};
 
 /* Frees partially constructed split scratch without consulting the context. */
 struct c50_split_workspace_deleter
@@ -104,177 +113,177 @@ struct c50_split_workspace_deleter
     void operator()(struct _split_workspace *workspace) const noexcept;
 };
 
-typedef struct
+struct c50_training_state : c50_state_record
 {
-    double *class_frequencies;
-    float *boost_vote_block;
+    double *class_frequencies = nullptr;
+    float *boost_vote_block = nullptr;
     std::unique_ptr<struct _split_workspace, c50_split_workspace_deleter> environment;
-    float *attribute_importance;
-    unsigned char *split_attributes;
-    unsigned char *used_attributes;
-    int *wrong_predictions;
-} c50_training_state;
+    float *attribute_importance = nullptr;
+    unsigned char *split_attributes = nullptr;
+    unsigned char *used_attributes = nullptr;
+    int *wrong_predictions = nullptr;
+};
 
-typedef struct
+struct c50_evaluation_state : c50_state_record
 {
-    int *utility_errors;
-    int *utility_bands;
-    double *utility_costs;
-} c50_evaluation_state;
+    int *utility_errors = nullptr;
+    int *utility_bands = nullptr;
+    double *utility_costs = nullptr;
+};
 
-typedef struct
+struct c50_options_state : c50_state_record
 {
-    int verbosity;
-    int trials;
-    int folds;
-    int utility_bands;
-    unsigned char subset_splits;
-    unsigned char boosting;
-    unsigned char probabilistic_thresholds;
-    unsigned char rules;
-    unsigned char cross_validation;
-    unsigned char ignore_costs;
-    unsigned char winnow;
-    unsigned char global_pruning;
-    unsigned char stable_ties;
-    float minimum_cases;
-    float leaf_ratio;
-    float confidence_factor;
-    float sample_fraction;
-} c50_options_state;
+    int verbosity = 0;
+    int trials = 0;
+    int folds = 0;
+    int utility_bands = 0;
+    unsigned char subset_splits = 0;
+    unsigned char boosting = 0;
+    unsigned char probabilistic_thresholds = 0;
+    unsigned char rules = 0;
+    unsigned char cross_validation = 0;
+    unsigned char ignore_costs = 0;
+    unsigned char winnow = 0;
+    unsigned char global_pruning = 0;
+    unsigned char stable_ties = 0;
+    float minimum_cases = 0;
+    float leaf_ratio = 0;
+    float confidence_factor = 0;
+    float sample_fraction = 0;
+};
 
-typedef struct
+struct c50_split_state : c50_state_record
 {
-    double **discrete_frequencies;
-    float *gain;
-    float *information;
-    float *estimated_max_gain_ratio;
-    c50_continuous_value *thresholds;
-    double base_information;
-    double **bell_numbers;
-    float sample_fraction;
-    int *possible_cuts;
-    unsigned char *tested_attributes;
-    unsigned char ***subsets;
-    int *subset_counts;
-    unsigned char all_attributes_multi_valued;
-    unsigned char use_subsampling;
-    float average_gain_weight;
-    float mdl_weight;
-    int *discrete_attributes;
-    int discrete_attribute_count;
-    int max_leaves;
-    float value_threshold;
-    unsigned char sampled;
-    int *waiting_attributes;
-    int waiting_count;
-} c50_split_state;
+    double **discrete_frequencies = nullptr;
+    float *gain = nullptr;
+    float *information = nullptr;
+    float *estimated_max_gain_ratio = nullptr;
+    c50_continuous_value *thresholds = nullptr;
+    double base_information = 0;
+    double **bell_numbers = nullptr;
+    float sample_fraction = 0;
+    int *possible_cuts = nullptr;
+    unsigned char *tested_attributes = nullptr;
+    unsigned char ***subsets = nullptr;
+    int *subset_counts = nullptr;
+    unsigned char all_attributes_multi_valued = 0;
+    unsigned char use_subsampling = 0;
+    float average_gain_weight = 0;
+    float mdl_weight = 0;
+    int *discrete_attributes = nullptr;
+    int discrete_attribute_count = 0;
+    int max_leaves = 0;
+    float value_threshold = 0;
+    unsigned char sampled = 0;
+    int *waiting_attributes = nullptr;
+    int waiting_count = 0;
+};
 
-typedef struct
+struct c50_rule_build_state : c50_state_record
 {
-    float attribute_test_bits;
-    float *branch_bits;
-    int *attribute_values;
-    unsigned char **fires;
-    unsigned char *compression_buffer;
-    int *coverage_counts;
-    int *list;
-    double *log_case_count;
-    double *log_factorial;
-    double *condition_errors;
-    double *condition_totals;
-    float *pessimistic_errors;
-    float *condition_costs;
-    unsigned char **condition_failed_by;
-    unsigned char *deleted_conditions;
-    struct _condrec **condition_stack;
-    int max_rule_depth;
-    int condition_count;
-    int best_condition;
-    int target_class;
-    short *failure_count;
-    short *local_failure_count;
-    int fail_zero;
-    int fail_one;
-    int fail_many;
-    int *successors;
-} c50_rule_build_state;
+    float attribute_test_bits = 0;
+    float *branch_bits = nullptr;
+    int *attribute_values = nullptr;
+    unsigned char **fires = nullptr;
+    unsigned char *compression_buffer = nullptr;
+    int *coverage_counts = nullptr;
+    int *list = nullptr;
+    double *log_case_count = nullptr;
+    double *log_factorial = nullptr;
+    double *condition_errors = nullptr;
+    double *condition_totals = nullptr;
+    float *pessimistic_errors = nullptr;
+    float *condition_costs = nullptr;
+    unsigned char **condition_failed_by = nullptr;
+    unsigned char *deleted_conditions = nullptr;
+    struct _condrec **condition_stack = nullptr;
+    int max_rule_depth = 0;
+    int condition_count = 0;
+    int best_condition = 0;
+    int target_class = 0;
+    short *failure_count = nullptr;
+    short *local_failure_count = nullptr;
+    int fail_zero = 0;
+    int fail_one = 0;
+    int fail_many = 0;
+    int *successors = nullptr;
+};
 
-typedef struct
+struct c50_rule_tree_state : c50_state_record
 {
-    struct _condrec **tests;
-    int test_count;
-    int test_capacity;
-    int *test_occurrences;
-    int *rule_conditions_satisfied;
-    unsigned char *tests_used;
-} c50_rule_tree_state;
+    struct _condrec **tests = nullptr;
+    int test_count = 0;
+    int test_capacity = 0;
+    int *test_occurrences = nullptr;
+    int *rule_conditions_satisfied = nullptr;
+    unsigned char *tests_used = nullptr;
+};
 
-typedef struct
+struct c50_rule_selection_state : c50_state_record
 {
-    float *delta_errors;
-    float *rule_bits;
-    float error_bits;
-    float correct_bits;
-    int **total_votes;
-    int *top_classes;
-    int *alternate_classes;
-    unsigned char *rules_included;
-    unsigned char *covered_cases;
-    unsigned char *coverage_block;
-    unsigned char **coverage_pointers;
-    int *last_covering_rule;
-} c50_rule_selection_state;
+    float *delta_errors = nullptr;
+    float *rule_bits = nullptr;
+    float error_bits = 0;
+    float correct_bits = 0;
+    int **total_votes = nullptr;
+    int *top_classes = nullptr;
+    int *alternate_classes = nullptr;
+    unsigned char *rules_included = nullptr;
+    unsigned char *covered_cases = nullptr;
+    unsigned char *coverage_block = nullptr;
+    unsigned char **coverage_pointers = nullptr;
+    int *last_covering_rule = nullptr;
+};
 
-typedef struct
+struct c50_pruning_state : c50_state_record
 {
-    unsigned char **possible_values;
-    double maximum_extra_errors;
-    double total_extra_errors;
-    struct _treerec **minimum_cost_subtrees;
-    int minimum_cost_subtree_count;
-    float minimum_cost_complexity;
-    unsigned char recalculate_errors;
-    float confidence_coefficient;
-} c50_pruning_state;
+    unsigned char **possible_values = nullptr;
+    double maximum_extra_errors = 0;
+    double total_extra_errors = 0;
+    struct _treerec **minimum_cost_subtrees = nullptr;
+    int minimum_cost_subtree_count = 0;
+    float minimum_cost_complexity = 0;
+    unsigned char recalculate_errors = 0;
+    float confidence_coefficient = 0;
+};
 
-typedef struct
+struct c50_cross_validation_state : c50_state_record
 {
-    union _attribute_value **blocked_cases;
-    float **results;
-    int *confusion_matrix;
-    int saved_folds;
-} c50_cross_validation_state;
+    union _attribute_value **blocked_cases = nullptr;
+    float **results = nullptr;
+    int *confusion_matrix = nullptr;
+    int saved_folds = 0;
+};
 
-typedef struct
+struct c50_progress_state : c50_state_record
 {
-    FILE *update_file;
-    float total;
-    float current;
-    int twentieth;
-    int last_stage;
-    int stage;
-} c50_progress_state;
+    FILE *update_file = nullptr;
+    float total = 0;
+    float current = 0;
+    int twentieth = 0;
+    int last_stage = 0;
+    int stage = 0;
+};
 
-typedef struct
+struct c50_io_state : c50_state_record
 {
-    int line_number;
-    int error_count;
-    int attribute_exclusions;
-    int timestamp_base;
+    int line_number = 0;
+    int error_count = 0;
+    int attribute_exclusions = 0;
+    int timestamp_base = 0;
     /* The single clock reading of the operation, from which the timestamp
        base year and the model's id date are both derived. */
-    time_t operation_clock;
-    int random_initial_seed;
-    const char *file_stem;
+    time_t operation_clock = 0;
+    int random_initial_seed = 0;
+    const char *file_stem = nullptr;
     std::string file_name;
-    FILE *model_file;
-    FILE *output;
-    char *option_argument;
-    char *option;
-    int option_index;
+    FILE *model_file = nullptr;
+    FILE *output = nullptr;
+    char *option_argument = nullptr;
+    char *option = nullptr;
+    int option_index = 0;
     std::string label_buffer;
-} c50_io_state;
+};
 
 using c50_context = c50::detail::context_state;
 
@@ -284,22 +293,27 @@ constexpr std::size_t c50_default_max_tree_depth = 1024;
 
 struct c50::detail::context_state
 {
+    context_state() = default;
+    /* Releases everything that an interrupted operation left allocated. */
     ~context_state();
+    context_state(const context_state &) = delete;
+    context_state &operator=(const context_state &) = delete;
 
     std::optional<c50::error_code> error;
     std::string error_message;
-    int operation_active;
+    int operation_active = 0;
     /* True once the operation has printed its own diagnostic for the failure
      * that ends it, so that a front end need not print the message again. */
-    int failure_reported;
-    unsigned int split_worker_count;
+    int failure_reported = 0;
+    unsigned int split_worker_count = 0;
     /* The most levels that the model-text parser accepts in a tree, or no
      * limit. ParseModel sets it from the model before every parse. */
-    std::optional<std::size_t> max_serialized_tree_depth;
-    int sample_from;
-    int suppress_error_messages;
-    int delimiter;
-    int max_label;
+    std::optional<std::size_t> max_serialized_tree_depth =
+        c50_default_max_tree_depth;
+    int sample_from = 0;
+    int suppress_error_messages = 0;
+    int delimiter = 0;
+    int max_label = 0;
     c50_schema_state schema;
     c50_case_state cases;
     c50_tree_state trees;
@@ -319,33 +333,33 @@ struct c50::detail::context_state
     /* The C locale that every operation and worker thread of this context
      * selects, so that results do not depend on the host locale. */
     c50_c_locale c_locale;
-    double average_case_weight;
-    char *ignored_values;
-    int ignored_values_size;
-    int ignored_values_offset;
-    int attributes_winnowed;
+    double average_case_weight = 0;
+    char *ignored_values = nullptr;
+    int ignored_values_size = 0;
+    int ignored_values_offset = 0;
+    int attributes_winnowed = 0;
     std::string line_buffer;
-    size_t line_buffer_position;
-    struct c50_implicit_state *implicit_state;
+    size_t line_buffer_position = 0;
+    struct c50_implicit_state *implicit_state = nullptr;
     c50_input classifier_input;
     c50_output classifier_output;
-    int classifier_output_active;
-    const char *last_model_extension;
-    int model_entry;
+    int classifier_output_active = 0;
+    const char *last_model_extension = nullptr;
+    int model_entry = 0;
     std::string property_name;
-    char *property_value;
-    int property_value_size;
-    int *active_rules;
-    int active_rule_count;
-    int active_rule_capacity;
-    float confidence;
-    float *class_sum;
-    float *votes;
-    int *trial_predictions;
-    struct _rulerec **most_specific_rules;
-    int default_class;
-    KRState random;
-    Drand48State held_out_random;
+    char *property_value = nullptr;
+    int property_value_size = 0;
+    int *active_rules = nullptr;
+    int active_rule_count = 0;
+    int active_rule_capacity = 0;
+    float confidence = 0;
+    float *class_sum = nullptr;
+    float *votes = nullptr;
+    int *trial_predictions = nullptr;
+    struct _rulerec **most_specific_rules = nullptr;
+    int default_class = 0;
+    KRState random{};
+    Drand48State held_out_random{};
 };
 
 typedef void (*c50_operation_fn)(c50_context *context, void *user_data);
@@ -363,6 +377,14 @@ void c50_record_error(c50_context *context, c50::error_code code,
 
 /* Exit legacy control flow by unwinding C++ frames. Never terminate the host. */
 [[noreturn]] void c50_abort_operation(c50_context *context, int exit_status);
+
+/* Frees a vector of byte-set pointers that is indexed from 1 to Last, with the
+ * sets it holds, as FreeVector does. A null vector is allowed. */
+struct c50_set_vector_deleter
+{
+    int Last;
+    void operator()(unsigned char **Vector) const noexcept;
+};
 
 /* Release every allocation that the context still holds. Cleanup, defined in
  * utility.cpp, frees what operations leave behind and is safe to repeat. */

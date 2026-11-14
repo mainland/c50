@@ -1028,11 +1028,8 @@ void CompressBranches(c50_context *Context, Tree T)
 	    /*  Compress!  */
 
             const DiscrValue Forks = S;
-            auto FreeSubsets = [Forks](Set *Subsets) {
-                FreeVector((void **) Subsets, 1, Forks);
-            };
-            std::unique_ptr<Set[], decltype(FreeSubsets)> Subsets(
-                Alloc(Forks+1, Set), FreeSubsets);
+            std::unique_ptr<Set[], c50_set_vector_deleter> Subsets(
+                Alloc(Forks+1, Set), c50_set_vector_deleter{Forks});
             std::unique_ptr<Tree[], decltype(&free)> Branches(
                 Alloc(Forks+1, Tree), &free);
             OldBranch = T->Branch;

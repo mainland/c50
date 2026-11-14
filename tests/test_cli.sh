@@ -17,9 +17,12 @@ fi
 test_dir=$(mktemp -d "${TMPDIR:-/tmp}/c50-cli-test.XXXXXX")
 trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
 
+# Program output may carry bytes that are not valid text, such as the
+# `date-bytes` fixture's. BSD `sed` rejects them in a UTF-8 locale, so every
+# `sed` runs byte-oriented in the C locale.
 normalize_output()
 {
-    sed \
+    LC_ALL=C sed \
         -e 's|^C5\.0 \[Release 2\.07 GPL Edition\].*$|C5.0 [Release 2.07 GPL Edition] <timestamp>|' \
         -e 's|^Time: .* secs$|Time: <elapsed> secs|' \
         -e 's/[[:space:]]*$//' \
@@ -28,7 +31,7 @@ normalize_output()
 
 normalize_model()
 {
-    sed \
+    LC_ALL=C sed \
         -e 's|^id="See5/C5\.0 2\.07 GPL Edition [0-9-][0-9-]*"$|id="See5/C5.0 2.07 GPL Edition <date>"|' \
         "$1"
 }
@@ -338,7 +341,7 @@ run_rule_costs_degenerate()
     printf 'costs="1"\nentries="1"\nrules="0" default="red"\n' \
         > "$degenerate_dir/rules.expected"
     normalize_model "$degenerate_dir/multiclass.rules" |
-        sed -e '1d' > "$degenerate_dir/rules.actual"
+        LC_ALL=C sed -e '1d' > "$degenerate_dir/rules.actual"
     if ! cmp -s "$degenerate_dir/rules.expected" \
         "$degenerate_dir/rules.actual"; then
         printf 'rule costs on %s (%s) wrote an unexpected model\n' \
@@ -497,6 +500,9 @@ run_case implicit-divide-precision tree tree
 run_case implicit-divide-negative tree tree
 run_case implicit-divide-zero tree - --status 1
 run_case implicit-power tree tree
+# Bytes at or above 0x80 in date, time, and timestamp values. The expected files
+# come from Release 2.07 on the same data.
+run_case date-bytes tree tree
 run_case multiclass tree tree
 run_case multiclass rules rules -r
 run_case multiclass sample tree -S 30 -I 17

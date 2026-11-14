@@ -446,13 +446,13 @@ std::vector<std::size_t> copy_checked_classes(const dense_values<T> &classes)
 {
     std::vector<std::size_t> result(static_cast<std::size_t>(classes.shape(0)));
     const auto values = classes.template unchecked<1>();
-    for (py::ssize_t row = 0; row < values.shape(0); ++row)
+    for ( py::ssize_t row = 0; row < values.shape(0); ++row )
     {
         const auto value = values(row);
-        if constexpr (std::is_signed_v<T>)
-            if (value < 0)
+        if constexpr ( std::is_signed_v<T> )
+            if ( value < 0 )
                 throw py::value_error("class_indices must be nonnegative");
-        if (value >= std::numeric_limits<int>::max())
+        if ( value >= std::numeric_limits<int>::max() )
             throw py::value_error("class_indices exceed the native class range");
         result[static_cast<std::size_t>(row)] = static_cast<std::size_t>(value);
     }
@@ -462,9 +462,9 @@ std::vector<std::size_t> copy_checked_classes(const dense_values<T> &classes)
 std::vector<std::size_t> checked_classes(const py::array &classes)
 {
     const char kind = classes.dtype().kind();
-    if (kind != 'i' && kind != 'u')
+    if ( kind != 'i' && kind != 'u' )
         throw py::value_error("class_indices must have an integer dtype");
-    if (kind == 'i')
+    if ( kind == 'i' )
         return copy_checked_classes(dense_values<std::int64_t>(classes));
     return copy_checked_classes(dense_values<std::uint64_t>(classes));
 }
@@ -551,7 +551,7 @@ public:
 
     c50::predictions predict_details_dense(const dense_values<double> &values)
     {
-        if (values.ndim() != 2)
+        if ( values.ndim() != 2 )
             throw py::value_error("values must be a two-dimensional array");
         std::vector<double> copy(static_cast<std::size_t>(values.size()));
         std::copy_n(values.data(), copy.size(), copy.data());
@@ -566,6 +566,79 @@ private:
     c50::predictor predictor_;
     std::mutex mutex_;
 };
+
+std::vector<std::string> prediction_class_names(
+    const c50::predictions &predictions)
+{
+    std::vector<std::string> names;
+
+    names.reserve(predictions.class_count());
+    for ( std::size_t class_index = 0;
+          class_index < predictions.class_count(); class_index++ )
+    {
+        names.emplace_back(predictions.class_name(class_index));
+    }
+    return names;
+}
+
+std::vector<std::size_t> prediction_class_indices(
+    const c50::predictions &predictions)
+{
+    std::vector<std::size_t> indices;
+
+    indices.reserve(predictions.size());
+    for ( std::size_t row = 0; row < predictions.size(); row++ )
+    {
+        indices.push_back(predictions.class_index(row));
+    }
+    return indices;
+}
+
+std::vector<std::string> prediction_labels(
+    const c50::predictions &predictions)
+{
+    std::vector<std::string> labels;
+
+    labels.reserve(predictions.size());
+    for ( std::size_t row = 0; row < predictions.size(); row++ )
+    {
+        labels.emplace_back(
+            predictions.class_name(predictions.class_index(row)));
+    }
+    return labels;
+}
+
+std::vector<double> prediction_confidences(
+    const c50::predictions &predictions)
+{
+    std::vector<double> confidences;
+
+    confidences.reserve(predictions.size());
+    for ( std::size_t row = 0; row < predictions.size(); row++ )
+    {
+        confidences.push_back(predictions.confidence(row));
+    }
+    return confidences;
+}
+
+std::vector<std::vector<double>> prediction_scores(
+    const c50::predictions &predictions)
+{
+    std::vector<std::vector<double>> scores(
+        predictions.size(),
+        std::vector<double>(predictions.class_count()));
+
+    for ( std::size_t row = 0; row < predictions.size(); row++ )
+    {
+        for ( std::size_t class_index = 0;
+              class_index < predictions.class_count(); class_index++ )
+        {
+            scores[row][class_index] =
+                predictions.score(row, class_index);
+        }
+    }
+    return scores;
+}
 
 class python_model
 {
@@ -720,128 +793,23 @@ public:
 
     std::vector<std::string> predict(const text_argument &cases) const
     {
-        c50::predictions predictions = predict_details(cases);
-        std::vector<std::string> labels;
-
-        labels.reserve(predictions.size());
-        for ( std::size_t row = 0; row < predictions.size(); row++ )
-        {
-            labels.emplace_back(
-                predictions.class_name(predictions.class_index(row)));
-        }
-        return labels;
+        return prediction_labels(predict_details(cases));
     }
 
     std::vector<std::vector<double>> predict_scores(
         const text_argument &cases) const
     {
-        c50::predictions predictions = predict_details(cases);
-        std::vector<std::vector<double>> scores(
-            predictions.size(),
-            std::vector<double>(predictions.class_count()));
-
-        for ( std::size_t row = 0; row < predictions.size(); row++ )
-        {
-            for ( std::size_t class_index = 0;
-                  class_index < predictions.class_count(); class_index++ )
-            {
-                scores[row][class_index] =
-                    predictions.score(row, class_index);
-            }
-        }
-        return scores;
+        return prediction_scores(predict_details(cases));
     }
 
     std::vector<std::string> classes() const
     {
-        c50::predictions predictions = predict_details(text_argument());
-        std::vector<std::string> names;
-
-        names.reserve(predictions.class_count());
-        for ( std::size_t class_index = 0;
-              class_index < predictions.class_count(); class_index++ )
-        {
-            names.emplace_back(predictions.class_name(class_index));
-        }
-        return names;
+        return prediction_class_names(predict_details(text_argument()));
     }
 
 private:
     c50::model model_;
 };
-
-std::vector<std::string> prediction_class_names(
-    const c50::predictions &predictions)
-{
-    std::vector<std::string> names;
-
-    names.reserve(predictions.class_count());
-    for ( std::size_t class_index = 0;
-          class_index < predictions.class_count(); class_index++ )
-    {
-        names.emplace_back(predictions.class_name(class_index));
-    }
-    return names;
-}
-
-std::vector<std::size_t> prediction_class_indices(
-    const c50::predictions &predictions)
-{
-    std::vector<std::size_t> indices;
-
-    indices.reserve(predictions.size());
-    for ( std::size_t row = 0; row < predictions.size(); row++ )
-    {
-        indices.push_back(predictions.class_index(row));
-    }
-    return indices;
-}
-
-std::vector<std::string> prediction_labels(
-    const c50::predictions &predictions)
-{
-    std::vector<std::string> labels;
-
-    labels.reserve(predictions.size());
-    for ( std::size_t row = 0; row < predictions.size(); row++ )
-    {
-        labels.emplace_back(
-            predictions.class_name(predictions.class_index(row)));
-    }
-    return labels;
-}
-
-std::vector<double> prediction_confidences(
-    const c50::predictions &predictions)
-{
-    std::vector<double> confidences;
-
-    confidences.reserve(predictions.size());
-    for ( std::size_t row = 0; row < predictions.size(); row++ )
-    {
-        confidences.push_back(predictions.confidence(row));
-    }
-    return confidences;
-}
-
-std::vector<std::vector<double>> prediction_scores(
-    const c50::predictions &predictions)
-{
-    std::vector<std::vector<double>> scores(
-        predictions.size(),
-        std::vector<double>(predictions.class_count()));
-
-    for ( std::size_t row = 0; row < predictions.size(); row++ )
-    {
-        for ( std::size_t class_index = 0;
-              class_index < predictions.class_count(); class_index++ )
-        {
-            scores[row][class_index] =
-                predictions.score(row, class_index);
-        }
-    }
-    return scores;
-}
 
 void translate_c50_exception(std::exception_ptr pointer)
 {
