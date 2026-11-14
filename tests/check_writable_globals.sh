@@ -1,4 +1,7 @@
 #!/bin/sh
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 set -eu
 

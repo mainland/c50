@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Tests for estimator sample weights and C5.0 case weights."""
 
 from __future__ import annotations

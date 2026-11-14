@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Run the benchmark smoke suite and check its result and report.
 
 The suite builds the command-line program from this checkout and trains

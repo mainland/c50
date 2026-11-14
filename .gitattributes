@@ -1,2 +1,6 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Keep test fixtures and shell scripts byte-identical on every platform.
 * text=auto eol=lf

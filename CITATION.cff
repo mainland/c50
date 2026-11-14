@@ -1,3 +1,7 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 cff-version: 1.2.0
 message: >-
   If you use this software, cite it as below. For the C5.0 algorithm, also
