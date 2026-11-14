@@ -93,9 +93,9 @@ def load_frame(stem: Path) -> tuple[Any, Any]:
 
     Discrete attributes become pandas categorical columns with the declared
     values as categories, in declaration order, continuous attributes become
-    float64 columns, and ``?`` becomes a missing value. ``C50Classifier``
-    keeps a categorical dtype's order, so it declares the values to C5.0 in
-    the same order as the ``.names`` file.
+    float64 columns, and ``?`` becomes a missing value. ``C50Classifier`` keeps
+    a categorical dtype's order, so it declares the values to C5.0 in the same
+    order as the ``.names`` file.
 
     Args:
         stem: Path without suffix of a prepared dataset's files.
