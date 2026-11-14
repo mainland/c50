@@ -16,9 +16,9 @@ The suite answers three questions on the same input files:
 * How much time and memory does ``C50Classifier`` add to low-level training
   and prediction, and does it predict the same classes?
 
-The driver builds every program itself, from the current checkout and from
-the canonical upstream archive, and records their provenance with every
-sample. See ``benchmarks/README.md``.
+The driver builds every program itself, from the current checkout and from the
+canonical upstream archive, and records their provenance with every sample. See
+``benchmarks/README.md``.
 """
 
 from __future__ import annotations
@@ -51,10 +51,9 @@ ARCHIVE_SHA256 = (
     "309db588eda420c06701bf8ae74c06a6c923e9a06e714a598ea761bcadfc5e2e"
 )
 REFERENCE_COMPILER = "gcc"
-# The upstream Makefile compiles the production program with
-# -ffloat-store -O3. This library drops -ffloat-store on 64-bit targets, so
-# a second build without it separates the flag's effect on time from the
-# code's.
+# The upstream Makefile compiles the production program with -ffloat-store -O3.
+# This library drops -ffloat-store on 64-bit targets, so a second build without
+# it separates the flag's effect on time from the code's.
 REFERENCE_FLAGS = {
     "reference": ("-ffloat-store", "-O3"),
     "reference_o3": ("-O3",),
@@ -318,8 +317,8 @@ def build_library(
         )
         record["python_build"] = build_record(python_build)
         python_path = python_build / "python"
-        # Match the extension by its import suffix. The package also holds
-        # the _c50.pyi stub.
+        # Match the extension by its import suffix. The package also holds the
+        # _c50.pyi stub.
         record["python_module_sha256"] = sha256(
             next(
                 path
@@ -419,8 +418,8 @@ def measured(
 ) -> dict[str, Any]:
     """Run a command and return its wall time, CPU time, and peak RSS.
 
-    The command runs under the launcher, so that its peak RSS does not
-    include the memory of this process.
+    The command runs under the launcher, so that its peak RSS does not include
+    the memory of this process.
     """
     if LAUNCHER is None:
         raise RuntimeError("the measurement launcher has not been built")
@@ -522,17 +521,17 @@ def compare(
     return results
 
 
-# Set in child processes to the directory of the Python module that the
-# driver built.
+# Set in child processes to the directory of the Python module that the driver
+# built.
 MODULE_DIRECTORY = "C50_BENCHMARK_MODULE_DIRECTORY"
 
 
 def import_c50() -> Any:
     """Import ``c50`` from the module directory that the driver built.
 
-    An editable install adds an import finder that runs before the path
-    search, so ``PYTHONPATH`` alone does not select the built module. Drop
-    every finder that would import ``c50`` from elsewhere.
+    An editable install adds an import finder that runs before the path search,
+    so ``PYTHONPATH`` alone does not select the built module. Drop every finder
+    that would import ``c50`` from elsewhere.
     """
     directory = os.environ.get(MODULE_DIRECTORY)
     if directory:
@@ -738,8 +737,8 @@ def compare_interfaces(
     """Alternate the low-level interface and the estimator on one dataset.
 
     Each sample runs in a fresh process, so its peak memory includes Python,
-    the imported modules, and the input that the interface reads: the data
-    text for ``c50.train`` and a DataFrame for ``C50Classifier``.
+    the imported modules, and the input that the interface reads: the data text
+    for ``c50.train`` and a DataFrame for ``C50Classifier``.
     """
     env = dict(os.environ)
     if library["python_path"] is not None:

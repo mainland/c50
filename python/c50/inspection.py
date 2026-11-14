@@ -178,8 +178,8 @@ def export_json(
 def _single(value: float) -> str:
     """Return the shortest text that reads back as the same float32 value.
 
-    C5.0 stores thresholds in single precision, so printing the widened
-    double would show digits that the model does not hold.
+    C5.0 stores thresholds in single precision, so printing the widened double
+    would show digits that the model does not hold.
     """
     stored = struct.unpack("f", struct.pack("f", value))[0]
     for digits in range(1, 9):
@@ -192,8 +192,8 @@ def _single(value: float) -> str:
 def _lift(cover: float, correct: float, prior: float) -> str:
     """Return a rule's lift as C5.0 serializes it, to six significant digits.
 
-    The model stores lift rather than the prior, which the loader derives
-    from it, so lift is the quantity that the model holds.
+    The model stores lift rather than the prior, which the loader derives from
+    it, so lift is the quantity that the model holds.
     """
     return f"{(correct + 1) / ((cover + 2) * prior):.6g}"
 
