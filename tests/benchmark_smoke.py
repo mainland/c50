@@ -5,11 +5,11 @@
 
 """Run the benchmark smoke suite and check its result and report.
 
-The suite builds the command-line program from this checkout and trains
-with the installed or ``PYTHONPATH`` c50 package. With ``--build-python``, it
-also builds the package's private Python core. It needs CMake, a C++ compiler,
-NumPy, pandas, and scikit-learn, plus pybind11 and an LTO-capable compiler
-for the Python build. It runs on POSIX systems only.
+The suite builds the command-line program from this checkout and trains with
+the installed or ``PYTHONPATH`` c50 package. With ``--build-python``, it also
+builds the package's private Python core. It needs CMake, a C++ compiler,
+NumPy, pandas, and scikit-learn, plus pybind11 and an LTO-capable compiler for
+the Python build. It runs on POSIX systems only.
 """
 
 from __future__ import annotations

@@ -183,9 +183,9 @@ class FeatureSchema:
 
     ``declared`` holds the keys of categories that a pandas categorical dtype
     declared during fitting but that no training row used. Prediction treats
-    them as missing values instead of unseen categories. An ``ordered``
-    feature lists its categories in increasing order and is a C5.0 ordered
-    discrete attribute.
+    them as missing values instead of unseen categories. An ``ordered`` feature
+    lists its categories in increasing order and is a C5.0 ordered discrete
+    attribute.
     """
 
     categorical: bool
@@ -199,8 +199,8 @@ class FeatureSchema:
 class Schema:
     """Fitted conversion between array values and C5.0 case fields.
 
-    With ``case_weight``, the C5.0 schema ends with a ``case weight``
-    attribute after the features. C5.0 does not use it in classifiers.
+    With ``case_weight``, the C5.0 schema ends with a ``case weight`` attribute
+    after the features. C5.0 does not use it in classifiers.
     """
 
     features: tuple[FeatureSchema, ...]
