@@ -9,6 +9,8 @@ from __future__ import annotations
 import pickle
 import warnings
 from collections.abc import Callable
+from decimal import Decimal
+from fractions import Fraction
 from typing import Any
 
 import c50
@@ -382,8 +384,21 @@ def test_split_workers_out_of_range_is_value_error(
         _TRAIN_CALLS[call](workers)
 
 
+_NOT_COUNTS = [
+    True,
+    np.True_,
+    Fraction(3, 1),
+    Decimal(3),
+    1.5,
+    "2",
+    None,
+]
+
+
 @pytest.mark.parametrize("call", sorted(_TRAIN_CALLS))
-@pytest.mark.parametrize("workers", [1.5, "2", None])
+@pytest.mark.parametrize(
+    "workers", _NOT_COUNTS, ids=lambda value: type(value).__name__
+)
 def test_split_workers_of_the_wrong_type_is_type_error(
     call: str, workers: object
 ) -> None:
@@ -429,6 +444,37 @@ def test_options_setters_name_the_field_of_an_unrepresentable_number(
 def test_options_setters_reject_other_types(field: str, value: object) -> None:
     with pytest.raises(TypeError):
         setattr(c50.Options(), field, value)
+
+
+@pytest.mark.parametrize("field", ["trials", "random_seed"])
+@pytest.mark.parametrize(
+    "value",
+    [True, np.True_, Fraction(3, 1), Decimal(3)],
+    ids=lambda value: type(value).__name__,
+)
+def test_options_counts_reject_bool_and_non_index_numbers(
+    field: str, value: object
+) -> None:
+    options = c50.Options()
+    before = getattr(options, field)
+
+    with pytest.raises(TypeError):
+        setattr(options, field, value)
+    assert getattr(options, field) == before
+
+
+@pytest.mark.parametrize("call", sorted(_TRAIN_CALLS))
+def test_split_workers_accepts_numpy_integers(call: str) -> None:
+    assert without_date(
+        _TRAIN_CALLS[call](np.int64(2)).serialized_data
+    ) == without_date(_TRAIN_CALLS[call](2).serialized_data)
+
+
+@pytest.mark.parametrize("field", ["trials", "random_seed"])
+def test_options_counts_accept_numpy_integers(field: str) -> None:
+    options = c50.Options()
+    setattr(options, field, np.int64(2))
+    assert getattr(options, field) == 2
 
 
 def test_options_setters_accept_in_range_numbers() -> None:
