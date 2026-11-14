@@ -949,7 +949,8 @@ std::string CValToStr(c50_context *Context, ContValue CV, Attribute Att)
     {
 	const std::string Date = DayToDate(
 	    ToInt(floor((double) (CV / 1440)) + Context->io.timestamp_base));
-	const int Mins = ToInt(rint((double) CV) - floor((double) (CV / 1440)) * 1440);
+	const int Mins = ToInt(rint((double) CV) -
+	    floor((double) (CV / 1440)) * 1440);
 	const std::string Time = SecsToTime(
 	    ToInt(static_cast<double>(Mins) * 60));
 	return Date == "?" || Time == "?" ? "?" : Date + " " + Time;
