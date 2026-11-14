@@ -69,7 +69,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
     Args:
         model_kind: Build a decision tree or a rule set.
         trials: Number of boosting trials, from 1 through 1000. One disables
-            boosting.
+            boosting. A value that is not an integer raises ``ValueError`` at
+            ``fit``, as the estimator documentation describes. That includes a
+            ``bool``, ``numpy.bool_``, and ``numpy.timedelta64``.
         subset_splits: Allow subset splits for categorical features.
         winnow: Enable attribute winnowing.
         global_pruning: Enable global tree pruning.
@@ -93,7 +95,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         n_jobs: Number of native split-evaluation workers. ``None`` means one
             unless a ``joblib.parallel_config`` context sets another value, and
             ``-1`` means all processors. At most 8 workers are used. The worker
-            count does not change the classifier.
+            count does not change the classifier. Zero and a value that is not
+            an integer, including a ``bool``, ``numpy.bool_``, and
+            ``numpy.timedelta64``, raise ``ValueError`` at ``fit``.
         categorical_features: Categorical column indices or, for inputs with
             string feature names, column names. ``None`` infers feature types.
             ``"from_dtype"`` selects exactly the DataFrame columns with a
@@ -101,7 +105,11 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         unknown_categories: Raise an error for an unseen prediction-time
             category or pass it to C5.0 as a missing value.
         prediction_batch_size: Maximum rows converted and predicted in one
-            native call. ``None`` processes all prediction rows together.
+            native call. ``None`` processes all prediction rows together. A
+            value below one and a value that is not an integer, including a
+            ``bool``, ``numpy.bool_``, and ``numpy.timedelta64``, raise
+            ``ValueError`` at ``fit``, and at prediction if ``set_params``
+            changes the value after ``fit``.
         cost_matrix: Optional predicted-by-actual misclassification-cost
             matrix. Its shape must be ``(n_classes, n_classes)``.
         class_weight: Optional weights for classes, as a mapping from class
@@ -421,8 +429,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             The text produced by :func:`c50.export_text`.
 
         Raises:
-            TypeError: If ``max_depth`` is a ``bool``, a NumPy boolean, or
-                neither ``None`` nor an object with ``__index__``, as
+            TypeError: If ``max_depth`` is neither ``None`` nor a count, as
                 :func:`c50.export_text` raises.
             ValueError: If ``max_depth`` is negative.
         """
@@ -557,8 +564,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         values: NDArray[np.float64],
     ) -> NDArray[np.float64]:
         """Count, per C5.0 attribute, the training rows that use it."""
-        # A NumPy batch size would wrap or become a float in the slicing below.
-        batch_size = int(self.prediction_batch_size or max(1, values.shape[0]))
+        batch_size = self._batch_size() or max(1, values.shape[0])
         usage = np.zeros(values.shape[1], dtype=np.float64)
         for start in range(0, values.shape[0], batch_size):
             usage += model.attribute_usage_dense(
@@ -570,13 +576,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         self,
         X: NDArray[Any] | Columns,
     ) -> Iterator[tuple[slice, NDArray[np.float64]]]:
-        batch_size = (
-            max(1, X.shape[0])
-            if self.prediction_batch_size is None
-            # A NumPy integer would take part in NumPy's scalar arithmetic,
-            # which wraps or becomes a float when added to the start row.
-            else int(self.prediction_batch_size)
-        )
+        batch_size = self._batch_size() or max(1, X.shape[0])
         for start in range(0, X.shape[0], batch_size):
             stop = min(start + batch_size, X.shape[0])
             yield (
@@ -596,16 +596,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 raise ValueError(f"{name} must be a Boolean")
         # Parameters hold whatever `set_params` stored, whatever their
         # annotations say.
-        trials: object = self.trials
-        n_jobs: object = self.n_jobs
-        if (
-            isinstance(trials, (bool, np.bool_))
-            or not isinstance(trials, Integral)
-            or not 1 <= int(trials) <= _MAX_TRIALS
-        ):
-            raise ValueError(
-                f"trials must be an integer from 1 through {_MAX_TRIALS}"
-            )
+        self._trials()
         for name in _REAL_PARAMETERS:
             value = getattr(self, name)
             if isinstance(value, (bool, np.bool_)) or not isinstance(
@@ -622,39 +613,57 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             raise ValueError("model_kind must be 'tree' or 'rules'")
         if self.ties not in ("reference", "stable"):
             raise ValueError("ties must be 'reference' or 'stable'")
-        if n_jobs is not None and (
-            isinstance(n_jobs, bool)
-            or not isinstance(n_jobs, Integral)
-            or n_jobs == 0
-        ):
-            raise ValueError("n_jobs must be None or a nonzero integer")
+        self._n_jobs()
         self._validate_prediction_configuration()
 
     def _validate_prediction_configuration(self) -> None:
         if self.unknown_categories not in ("error", "missing"):
             raise ValueError("unknown_categories must be 'error' or 'missing'")
-        batch_size: object = self.prediction_batch_size
-        if batch_size is not None and (
-            isinstance(batch_size, bool)
-            or not isinstance(batch_size, Integral)
-            or int(batch_size) < 1
-        ):
+        self._batch_size()
+
+    # The three integer parameters are read only through these methods. Each
+    # checks the rule in the estimator documentation and returns a Python int,
+    # because the batch arithmetic and joblib follow NumPy's scalar promotion
+    # for a NumPy integer. A method must not store the result in the parameter,
+    # because an estimator must not change its parameters.
+
+    def _trials(self) -> int:
+        trials = _integral(self.trials)
+        if trials is None or not 1 <= trials <= _MAX_TRIALS:
+            raise ValueError(
+                f"trials must be an integer from 1 through {_MAX_TRIALS}"
+            )
+        return trials
+
+    def _n_jobs(self) -> int | None:
+        value = self.n_jobs
+        if value is None:
+            return None
+        n_jobs = _integral(value)
+        if not n_jobs:
+            raise ValueError("n_jobs must be None or a nonzero integer")
+        return n_jobs
+
+    def _batch_size(self) -> int | None:
+        value = self.prediction_batch_size
+        if value is None:
+            return None
+        batch_size = _integral(value)
+        if batch_size is None or batch_size < 1:
             raise ValueError(
                 "prediction_batch_size must be a positive integer or None"
             )
+        return batch_size
 
     def _native_workers(self) -> int:
-        # joblib adds a NumPy n_jobs to the processor count in NumPy's
-        # arithmetic, so it receives a Python int.
-        n_jobs = None if self.n_jobs is None else int(self.n_jobs)
-        return min(int(effective_n_jobs(n_jobs)), _MAX_WORKERS)
+        return min(int(effective_n_jobs(self._n_jobs())), _MAX_WORKERS)
 
     def _native_model_kind(self) -> ModelKind:
         return ModelKind.TREE if self.model_kind == "tree" else ModelKind.RULES
 
     def _native_options(self) -> Options:
         options = Options()
-        options.trials = int(self.trials)
+        options.trials = self._trials()
         options.subset_splits = bool(self.subset_splits)
         options.winnow = bool(self.winnow)
         options.global_pruning = bool(self.global_pruning)
@@ -672,6 +681,21 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             TieOrder.STABLE if self.ties == "stable" else TieOrder.REFERENCE
         )
         return options
+
+
+def _integral(value: object) -> int | None:
+    """Return a Python int for an integer parameter, or None if invalid.
+
+    A parameter is an instance of ``numbers.Integral`` other than a ``bool``, a
+    NumPy boolean, or a ``numpy.timedelta64``, as ``docs/estimator.md`` states.
+    NumPy registers ``timedelta64`` as an integer type, although ``int``
+    rejects a value with a unit.
+    """
+    if isinstance(value, (bool, np.bool_, np.timedelta64)) or not isinstance(
+        value, Integral
+    ):
+        return None
+    return int(value)
 
 
 def _package_version() -> str:
