@@ -55,6 +55,57 @@ def test_pickle_names_only_the_public_module(
     assert restored.predict(CASES) == model.predict(CASES)
 
 
+_ENUMERATION_MEMBERS = [
+    member
+    for enumeration in (
+        c50.ModelKind,
+        c50.TieOrder,
+        c50.NodeKind,
+        c50.ConditionKind,
+    )
+    for member in enumeration.__members__.values()
+]
+
+
+@pytest.mark.parametrize("protocol", _PROTOCOLS)
+@pytest.mark.parametrize(
+    "member",
+    _ENUMERATION_MEMBERS,
+    ids=lambda member: f"{type(member).__name__}.{member.name}",
+)
+def test_enumeration_pickle_names_the_public_module(
+    protocol: int, member: Any
+) -> None:
+    data = pickle.dumps(member, protocol=protocol)
+
+    assert b"_c50" not in data
+    assert b"pybind11" not in data
+    strings = _strings(data)
+    assert "c50 _restore_enum" in strings or (
+        "c50" in strings and "_restore_enum" in strings
+    )
+    assert member.name in strings
+    assert pickle.loads(data) is member
+    assert copy.copy(member) is member
+    assert copy.deepcopy(member) is member
+
+
+@pytest.mark.parametrize(
+    ("arguments", "error"),
+    [
+        (("Options", "trials"), ValueError),
+        (("TieOrder", "NO_SUCH_MEMBER"), ValueError),
+        (("TieOrder", 1), TypeError),
+        ((1, "STABLE"), TypeError),
+    ],
+)
+def test_restore_enum_rejects_unknown_or_malformed_state(
+    arguments: tuple[Any, Any], error: type[Exception]
+) -> None:
+    with pytest.raises(error):
+        c50._restore_enum(*arguments)
+
+
 def test_pickle_retains_required_costs() -> None:
     model = c50.train(NAMES, TRAINING, costs=COSTS)
     assert model.costs_data

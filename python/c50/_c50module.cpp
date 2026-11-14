@@ -993,7 +993,9 @@ void bind_inspection(py::module_ &module)
 // bare pybind11 base type, and the uncaught C++ exception aborts the process.
 // Give every class that the module defines and that does not define its own
 // __reduce__ one that fails with TypeError, and give every enumeration one
-// that pickles the member as its type and integer value at every protocol.
+// that pickles the member by type and member name through the public package
+// at every protocol, like a Model, so that the pickle does not name this
+// module or depend on the integer values.
 void bind_pickle_support(py::module_ &module)
 {
     const py::object reject_pickle = py::cpp_function(
@@ -1006,11 +1008,15 @@ void bind_pickle_support(py::module_ &module)
         py::doc("Raise TypeError: this type does not support pickling."));
     const py::object reduce_enum = py::cpp_function(
         [](const py::object &self) {
-            return py::make_tuple(py::type::of(self),
-                                  py::make_tuple(self.attr("value")));
+            const py::module_ package = py::module_::import("c50");
+            return py::make_tuple(
+                package.attr("_restore_enum"),
+                py::make_tuple(py::type::of(self).attr("__name__"),
+                               self.attr("name")));
         },
         py::name("__reduce__"), py::is_method(py::none()),
-        py::doc("Return the pickle state: the type and the integer value."));
+        py::doc("Return the pickle state: the type name and the member "
+                "name."));
 
     const std::string module_name = module.attr("__name__").cast<std::string>();
     for ( const auto item : py::dict(module.attr("__dict__")) )
