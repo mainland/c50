@@ -32,7 +32,7 @@ int main(int argc, char **argv)
     auto owner = c50_make_context();
     c50_context *context = owner.get();
 
-    /*  rint(Val * Mult) / Mult - Val subtracts in double, not in float  */
+    /*  The float Val - rint(Val * Mult) / Mult must subtract in double  */
 
     expect_int("Denominator(0.498761)", Denominator(0.498761f), 1000000);
     expect_int("Denominator(493.769)", Denominator(493.769f), 1000);
@@ -49,6 +49,12 @@ int main(int argc, char **argv)
 		text);
 	++failures;
     }
+
+    /*  log(n-1) of a float n-1 near 10^5 rounds to a different float  */
+
+    expect_int("Digits(9)", Digits(9), 3);
+    expect_int("Digits(100001)", Digits(100001), 8);
+    expect_int("Digits(99999)", Digits(99999), 7);
 
     return failures == 0 ? 0 : 1;
 }
