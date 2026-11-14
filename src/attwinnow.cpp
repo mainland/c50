@@ -1,7 +1,6 @@
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
-/*  Modifications Copyright 2026 Geoffrey Mainland.			 */
 /*									 */
 /*  This file is part of C5.0 GPL Edition, a single-threaded version	 */
 /*  of C5.0 release 2.07.						 */
@@ -22,6 +21,9 @@
 /*      <http://www.gnu.org/licenses/>.					 */
 /*									 */
 /*************************************************************************/
+/* Modifications Copyright 2026 Geoffrey Mainland. */
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Modified 2026 by Geoffrey Mainland. */
 
 
 
