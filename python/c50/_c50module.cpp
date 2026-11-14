@@ -474,8 +474,9 @@ Args:
     costs: Contents of the C5.0 costs file, which a classifier trained with
         costs requires. Otherwise it is ignored and the model retains none.
         Text that sets no cost other than the default of 1, such as empty
-        text, only comments, or only entries of cost 1, counts as missing
-        and raises ``ValueError`` for a cost model.
+        text, only comments, only entries of cost 1, or only entries that name
+        one class twice, counts as missing and raises ``ValueError`` for a
+        cost model.
     max_tree_depth: The most levels that a serialized tree may have, where the
         root is level 1, or ``None`` for no limit. The default is 1024. A later
         1.x release may raise it but never lowers it. The limit bounds the
