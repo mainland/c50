@@ -203,9 +203,17 @@ ctest --test-dir build/tsan --output-on-failure
 
 ## License
 
-The imported C5.0 source is distributed under the GNU General Public License,
-version 3 or, at your option, any later version. See [gpl.txt](https://github.com/mainland/c50/blob/v1.0.0a1/gpl.txt) and the
-notices in the source files.
+The whole distribution is licensed under the GNU General Public License,
+version 3 or, at your option, any later version (`GPL-3.0-or-later`). See
+[gpl.txt](https://github.com/mainland/c50/blob/v1.0.0a1/gpl.txt).
+
+The imported C5.0 Release 2.07 source is copyright 2010 RuleQuest Research Pty
+Ltd, released under the same license. Files that this project modified keep
+RuleQuest's notice first, followed by a notice of the modifications. Source
+files that this project created carry their own copyright and
+`SPDX-License-Identifier` lines. Documentation pages, test fixtures and
+expected outputs, and marker files such as `py.typed` carry none and fall under
+the same license.
 
 C5.0 and RuleQuest are associated with RuleQuest Research Pty Ltd. This
 modernization project is based on the GPL source release and is not an official
