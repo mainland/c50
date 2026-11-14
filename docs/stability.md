@@ -33,7 +33,8 @@ Python, at least one minor release before a major release removes it.
 These are not part of the stable interface:
 
 - Python names that begin with an underscore, including the `c50._c50` and
-  `c50._data` modules.
+  `c50._data` modules, except the pickle entry points that "Saved models"
+  lists.
 - The `c50::detail` namespace in C++.
 - The text of error messages. Match the exception type, or the C++
   `c50::error_code`, rather than the message.
@@ -62,23 +63,26 @@ change classifiers, such as `ties="stable"`, are exceptions by design.
   larger `max_tree_depth`, or `std::nullopt` (`None` in Python), to `load`. A
   1.x release may raise `default_max_tree_depth` but never lowers it.
 - A pickled low-level `Model` holds only those formats and a pickle format
-  version, so the same promise applies to it. The pickle names the public
-  `c50` package and holds the model's names, serialized classifier, costs, and
-  kind as text. It does not name `c50._c50` or the representation of the
-  enumerations, which may change. Loading a pickle with an unknown version, an
-  unknown kind, or elements of the wrong type raises `ValueError` or
-  `TypeError`. A release that changes the state increments the version and
-  keeps loading earlier versions. Pickles that earlier prereleases wrote do
-  not load.
+  version, so the same promise applies to it. The pickle calls
+  `c50._restore_model` and holds the model's names, serialized classifier,
+  costs, and kind as text. It does not name `c50._c50`. Every 1.x release keeps
+  `c50._restore_model` and `c50._restore_enum`, which the next bullet
+  describes, as pickle entry points that load the pickles of every earlier 1.x
+  release, even though their names begin with an underscore. Loading a pickle
+  with an unknown version, an unknown kind, or elements of the wrong type
+  raises `ValueError` or `TypeError`. A release that changes the state
+  increments the version and keeps loading earlier versions. Pickles that
+  earlier prereleases wrote do not load.
 - Of the other low-level classes, only the enumerations `ModelKind`,
   `TieOrder`, `NodeKind`, and `ConditionKind` support pickling, at every
-  protocol. An enumeration pickle names the public `c50` package, the
-  enumeration, and the member by name, not `c50._c50` or the member's integer
+  protocol. An enumeration pickle calls `c50._restore_enum` with the
+  enumeration and the member by name, not `c50._c50` or the member's integer
   value, and unpickling returns the member itself. Every 1.x release loads
-  enumeration pickles saved by an earlier 1.x release, as long as the member
-  still exists. `Options`, `Predictions`, `Predictor`, and the inspection
-  objects raise `TypeError` at every protocol. Pickle the `Model`, and inspect
-  or predict again after loading it.
+  enumeration pickles saved by an earlier 1.x release, because only a major
+  release removes an enumeration member, as "Stable interfaces" states.
+  `Options`, `Predictions`, `Predictor`, and the inspection objects raise
+  `TypeError` at every protocol. Pickle the `Model`, and inspect or predict
+  again after loading it.
 - A pickled `C50Classifier` also holds private encoding state, so a pickle
   must be loaded with the version of `c50` that saved it, as scikit-learn
   recommends for its own estimators. The pickle records the saving version.
