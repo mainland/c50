@@ -72,9 +72,13 @@ change classifiers, such as `ties="stable"`, are exceptions by design.
   not load.
 - Of the other low-level classes, only the enumerations `ModelKind`,
   `TieOrder`, `NodeKind`, and `ConditionKind` support pickling, at every
-  protocol. `Options`, `Predictions`, `Predictor`, and the inspection objects
-  raise `TypeError` at every protocol. Pickle the `Model`, and inspect or
-  predict again after loading it.
+  protocol. An enumeration pickle names the public `c50` package, the
+  enumeration, and the member by name, not `c50._c50` or the member's integer
+  value, and unpickling returns the member itself. Every 1.x release loads
+  enumeration pickles saved by an earlier 1.x release, as long as the member
+  still exists. `Options`, `Predictions`, `Predictor`, and the inspection
+  objects raise `TypeError` at every protocol. Pickle the `Model`, and inspect
+  or predict again after loading it.
 - A pickled `C50Classifier` also holds private encoding state, so a pickle
   must be loaded with the version of `c50` that saved it, as scikit-learn
   recommends for its own estimators. The pickle records the saving version.
