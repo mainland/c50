@@ -21,7 +21,7 @@ their current results.
 | macOS ARM64 | AppleClang on `macos-15` | `validation.yml`, `native` | Native build, CTest, and installed consumers |
 | Linux x86-64 and ARM64, macOS ARM64 | GCC on Linux, AppleClang on macOS | `validation.yml`, `private-core` | Release build and CTest with `C50_PRIVATE_CORE`, the Python packages' core configuration |
 | Windows x86-64 | MSVC on `windows-2022`, Python 3.12 | `validation.yml`, `windows` | Native build with the Python extension, CTest, installed consumers, and Python tests |
-| Linux x86-64 | Python 3.12 and the pinned checkers | `validation.yml`, `lint` | The pre-commit hooks: ruff, ruff format, mypy, zizmor on the workflows, codespell, rumdl, and file hygiene checks |
+| Linux x86-64 | Python 3.12 and the pinned checkers | `validation.yml`, `lint` | The pre-commit hooks: ruff, ruff format, mypy, the license notice check, zizmor on the workflows, codespell, rumdl, and file hygiene checks |
 | Python 3.10 | joblib 1.3.0, NumPy 1.26.4, pandas 2.2.3, scikit-learn 1.6.1 | `validation.yml`, `python-and-docs` | Python tests, mypy, stubtest, and the benchmark smoke test |
 | Python 3.11 through 3.14 | Latest releases | `validation.yml`, `python-and-docs` | As for Python 3.10. Python 3.12 also runs the tutorial test and builds the documentation. |
 | Wheels for CPython 3.10 through 3.14 | Linux x86-64 and ARM64, macOS arm64 and x86-64, Windows AMD64 | `wheels.yml`, `wheels` | Build from the source distribution and test each wheel |
@@ -44,14 +44,24 @@ It also builds the Python extension with Visual Studio, a multi-configuration
 generator, so its CTest run checks that the build tree places the extension
 next to its package.
 
-The `python-license-notices` test runs `tests/check_license_notices.py`, which
-fails when a tracked source file that can carry a comment lacks an
-`SPDX-License-Identifier` line. It skips outside a Git checkout. Imported
-RuleQuest files that this project did not modify keep their original notice and
-are exempt.
+The `license-notices` pre-commit hook and the `python-license-notices` test run
+`tests/check_license_notices.py`. It fails when a tracked source file that can
+carry a comment lacks an `SPDX-License-Identifier` line. It also fails when a
+file that descends from a file of Release 2.07, including the root `Makefile`,
+lacks RuleQuest's copyright line or a `Modified` line, and when
+`src/c50_model.cpp`, `src/c50_sort.h`, or `tests/sort_properties.cpp`, which
+follow code of Release 2.07, lacks RuleQuest's credit. The check looks for the
+copyright line only, not for the permission paragraph under it. It also fails
+when `src/text.i` or `xval`, the imported files that this project did not
+modify, differs from its blob on `main`. The script holds those blob
+identifiers, so a clone without a `main` branch checks them too. When `main` or
+`origin/main` exists, the script also checks that each source file of Release
+2.07 has an entry in its tables and that the entry names a tracked file, so an
+import that is renamed and stripped of its notices fails. The test skips
+outside a Git checkout.
 
-Native CI configures a C++14 project default to verify that each target declares
-its own C++17 requirement. The platform labels follow the
+Native CI configures a C++14 project default to verify that each target
+declares its own C++17 requirement. The platform labels follow the
 [GitHub-hosted runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 
 ## Windows
@@ -236,9 +246,9 @@ python3 -m venv .venv
 .venv/bin/pre-commit run --all-files
 ```
 
-The hooks also run codespell, which `pyproject.toml` configures, and rumdl,
-which `.rumdl.toml` configures. Add a word that codespell flags wrongly to
-`ignore-words-list` in `pyproject.toml`.
+The hooks also run codespell, which `pyproject.toml` configures, rumdl, which
+`.rumdl.toml` configures, and the license notice check. Add a word that
+codespell flags wrongly to `ignore-words-list` in `pyproject.toml`.
 
 Run `.venv/bin/pre-commit install` once to run the hooks before each commit.
 The hooks check and never rewrite files. Fix a finding with
@@ -265,9 +275,9 @@ ctest --test-dir build/python \
 ```
 
 The `c50_python` target builds the extension and its native library dependency.
-CMake places the package under `build/python/python/c50`. CTest uses the selected
-interpreter and sets `PYTHONPATH` for runtime checks to import this build.
-The filter runs `python-api` (pytest), `python-license-notices`,
+CMake places the package under `build/python/python/c50`. CTest uses the
+selected interpreter and sets `PYTHONPATH` for runtime checks to import this
+build. The filter runs `python-api` (pytest), `python-license-notices`,
 `benchmark-smoke`, `python-typecheck` (mypy), and `python-stubtest`. The two
 typing checks are registered only in non-sanitizer builds. `benchmark-smoke`
 is registered only on Linux and macOS, because the benchmark suite requires
@@ -285,24 +295,25 @@ ctest --test-dir build/python --output-on-failure
 
 The `c50` Python distribution has its own version sequence, independent of the
 imported C5.0 Release 2.07 GPL Edition. `setuptools-scm` derives the package
-version from Git tags beginning with `v` and a digit, such as `v1.0.0a1`.
-The upstream `c5.0-2.07` tag does not participate in package version discovery.
-Commits after a package tag receive development versions with a commit identifier.
+version from Git tags beginning with `v` and a digit, such as `v1.0.0a1`. The
+upstream `c5.0-2.07` tag does not participate in package version discovery.
+Commits after a package tag receive development versions with a commit
+identifier.
 
 The native library and its CMake package share this version, so C++ consumers
 request it with `find_package(C50 1.0 CONFIG REQUIRED)`. Packages with the same
 major version are compatible. CMake versions have no prerelease labels, so a
 prerelease such as `1.0.0a1` has the CMake version of the release it precedes,
-`1.0.0`. Before tagging a release, set the version in the `project()` command in
-`CMakeLists.txt` to the tag's release number. A Python build from a release tag
-fails at configuration when the two differ. The command-line programs and
+`1.0.0`. Before tagging a release, set the version in the `project()` command
+in `CMakeLists.txt` to the tag's release number. A Python build from a release
+tag fails at configuration when the two differ. The command-line programs and
 serialized models keep the upstream identifier `2.07`.
 
-Build from a clean checkout of the package release tag when preparing a release.
-The checkout must include Git history and tags. Source distributions retain the
-resolved version in `PKG-INFO`, so wheels built from them do not require Git.
-An arbitrary source copy without Git or source-distribution metadata has no
-version fallback and cannot produce a Python package.
+Build from a clean checkout of the package release tag when preparing a
+release. The checkout must include Git history and tags. Source distributions
+retain the resolved version in `PKG-INFO`, so wheels built from them do not
+require Git. An arbitrary source copy without Git or source-distribution
+metadata has no version fallback and cannot produce a Python package.
 
 Python package builds set the CMake option `C50_PRIVATE_CORE`, which compiles
 the learning core with link-time optimization and hidden symbol visibility.
@@ -321,8 +332,8 @@ Build source and binary distributions with `build` installed:
 ```
 
 The default `build` command creates a source distribution and then builds the
-wheel from that distribution. Test both artifacts in separate clean environments
-before publishing them. Read the installed package version with:
+wheel from that distribution. Test both artifacts in separate clean
+environments before publishing them. Read the installed package version with:
 
 ```sh
 .venv/bin/python -c 'from importlib.metadata import version; print(version("c50"))'
@@ -463,8 +474,8 @@ cmake -S . -B build/docs \
 cmake --build build/docs --target c50-docs
 ```
 
-The HTML output is under `build/docs/docs/doxygen/html`, and the XML consumed by
-Breathe is under `build/docs/docs/doxygen/xml`.
+The HTML output is under `build/docs/docs/doxygen/html`, and the XML consumed
+by Breathe is under `build/docs/docs/doxygen/xml`.
 
 Build the complete Sphinx site with:
 
@@ -476,10 +487,11 @@ python3 -m venv .venv
 ```
 
 On Linux with GCC or Clang, `allocation-failure` injects failures into native
-`malloc`, `calloc`, `realloc`, and `strdup` calls and C++ allocations. It checks
-basic model loading, training, prediction, schema growth, and thresholded
-class names, including reuse of the context after every failure. Run it under
-AddressSanitizer with leak detection to check exceptional-path ownership:
+`malloc`, `calloc`, `realloc`, and `strdup` calls and C++ allocations. It
+checks basic model loading, training, prediction, schema growth, and
+thresholded class names, including reuse of the context after every failure.
+Run it under AddressSanitizer with leak detection to check exceptional-path
+ownership:
 
 ```sh
 ASAN_OPTIONS=detect_leaks=1 \
@@ -501,10 +513,11 @@ also runs the tutorial test, with the OpenML data cached between runs.
 The `lint` job runs the pre-commit hooks over the whole tree with the checkers
 that `pyproject.toml` pins.
 
-The workflow runs on pull requests, pushes to `main`, `dev`, and topic branches,
-and manual dispatch. It uses read-only repository permissions and pinned action
-revisions. A checked-in workflow defines the intended checks. Hosted results
-must be inspected before claiming a platform or dependency configuration passed.
+The workflow runs on pull requests, pushes to `main`, `dev`, and topic
+branches, and manual dispatch. It uses read-only repository permissions and
+pinned action revisions. A checked-in workflow defines the intended checks.
+Hosted results must be inspected before claiming a platform or dependency
+configuration passed.
 
 `.github/workflows/reference-comparison.yml` runs the comparison with
 Release 2.07 described above.

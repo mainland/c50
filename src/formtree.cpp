@@ -1202,7 +1202,7 @@ CaseNo Group(c50_context *Context, DiscrValue V, CaseNo Bp, CaseNo Ep,
 	    }
 	}
     }
-    else				/* skip non-existant N/A values */
+    else				/* skip non-existent N/A values */
     if ( V != 1 || TestNode->NodeType == BrSubset || Context->cases.some_not_applicable[Att] )
     {
 	/*  Group cases on the value of attribute Att, and depending
