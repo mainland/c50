@@ -537,9 +537,10 @@ if(UNIX)
     )
 endif()
 
-# The class-count index check trains a schema of 46,341 classes, which reserves
-# about 8.6 GB of address space, so it is not part of the default tests. Run it
-# explicitly with `cmake --build build --target index-overflow-large`.
+# The class-table cases train a schema of 46,341 classes, which reserves about
+# 8.6 GB of address space. The discrete-frequency cases need about 32 GiB
+# resident. Neither is part of the default tests. Run them explicitly with
+# `cmake --build build --target index-overflow-large`.
 if(UNIX)
     add_executable(
         c50_index_overflow_train EXCLUDE_FROM_ALL
