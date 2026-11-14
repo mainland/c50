@@ -4,6 +4,15 @@
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+
+/* Copying a context or one of its state records would copy raw owning
+ * pointers and free them twice. */
+static_assert(!std::is_copy_constructible_v<c50_context>);
+static_assert(!std::is_copy_assignable_v<c50_context>);
+static_assert(!std::is_copy_constructible_v<c50_schema_state>);
+static_assert(!std::is_copy_assignable_v<c50_cost_state>);
+static_assert(!std::is_copy_constructible_v<c50_io_state>);
 
 struct state { int destroyed = 0; int cleaned = 0; };
 struct probe { state &s; ~probe() { ++s.destroyed; } };
