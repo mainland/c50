@@ -29,7 +29,7 @@ The archive used for the import has this SHA-256 digest:
 
 ## Build
 
-The compatibility programs require C and C++17 compilers and `make`:
+The compatibility programs require a C++17 compiler and `make`:
 
 ```sh
 make

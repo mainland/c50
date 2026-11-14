@@ -20,6 +20,7 @@ their current results.
 | Linux x86-64 and ARM64 | GCC on `ubuntu-24.04` and `ubuntu-24.04-arm` | `reference-comparison.yml`, `release-207` | Trees, rules, and console output compared with C5.0 Release 2.07 built from `main`. ARM64 also builds with `-ffp-contract=off`. |
 | macOS ARM64 | AppleClang on `macos-15` | `validation.yml`, `native` | Native build, CTest, and installed consumers |
 | Linux x86-64 and ARM64, macOS ARM64 | GCC on Linux, AppleClang on macOS | `validation.yml`, `private-core` | Release build and CTest with `C50_PRIVATE_CORE`, the Python packages' core configuration |
+| Linux x86-64 | Clang on `ubuntu-24.04` | `validation.yml`, `private-core-clang` | Release build and CTest with `C50_PRIVATE_CORE` and no interprocedural optimization variable, so that the programs link against Clang's LLVM bitcode core |
 | Windows x86-64 | MSVC on `windows-2022`, Python 3.12 | `validation.yml`, `windows` | Native build with the Python extension, CTest, installed consumers, and Python tests |
 | Linux x86-64 | Python 3.12 and the pinned checkers | `validation.yml`, `lint` | The pre-commit hooks: ruff, ruff format, mypy, the license notice check, zizmor on the workflows, codespell, rumdl, and file hygiene checks |
 | Python 3.10 | joblib 1.3.0, NumPy 1.26.4, pandas 2.2.3, scikit-learn 1.6.1 | `validation.yml`, `python-and-docs` | Python tests, mypy, stubtest, and the benchmark smoke test |
@@ -27,19 +28,24 @@ their current results.
 | Wheels for CPython 3.10 through 3.14 | Linux x86-64 and ARM64, macOS arm64 and x86-64, Windows AMD64 | `wheels.yml`, `wheels` | Build from the source distribution and test each wheel |
 
 Free-threaded Python, GPU arrays, and other compiler or platform combinations
-are not tested. Four tests run only on Linux. `in-memory-without-files`,
+are not tested. Five tests run only on Linux. `in-memory-without-files`,
 `allocation-failure`, and `parallel-failure` need GNU or Clang on Linux because
 they link with `-Wl,--wrap`, and `writable-global-inventory` reads ELF symbols
-with GNU `nm`. The macOS and Windows jobs omit them, so the no-file guarantee,
-the allocation-failure behavior, and the parallel-failure guarantees are tested
-only on Linux. A core compiled with link-time optimization, whether Clang's
-LLVM bitcode or GCC's slim LTO objects, records no sections, so `nm` cannot
-tell constants from writable data and CMake does not register
-`writable-global-inventory`. Native builds of the same sources run it. The
-portable contract and installed-consumer tests still run. The Windows job
-treats level-4 warnings as errors, except C4244, C4267, and C4305, which report
-the implicit narrowing conversions that the imported sources use to store
-values as float.
+with GNU `nm`. `writable-global-inventory-lto` reads no symbols. It configures
+nested builds with `-flto` flags, so CMake registers it only on Linux with
+`nm`, a single-configuration generator, and GCC or Clang. The macOS and Windows
+jobs omit them, so the no-file guarantee, the allocation-failure behavior, and
+the parallel-failure guarantees are tested only on Linux. The
+`locale-independence` test exits with status 77, which CTest reports as
+skipped, on Windows, so the Windows branch of its locale scope has no C++ test.
+A core compiled with link-time optimization, whether Clang's LLVM bitcode or
+GCC's slim LTO objects, records no sections, so `nm` cannot tell constants from
+writable data and CMake does not register `writable-global-inventory`. Native
+builds of the same sources run it, and `writable-global-inventory-lto`
+configures both kinds of build to check which one registers it. The portable
+contract and installed-consumer tests still run. The Windows job treats level-4
+warnings as errors, except C4244, C4267, and C4305, which report the implicit
+narrowing conversions that the imported sources use to store values as float.
 It also builds the Python extension with Visual Studio, a multi-configuration
 generator, so its CTest run checks that the build tree places the extension
 next to its package.
@@ -93,7 +99,7 @@ The root `Makefile` and the `xval` script are not supported on Windows.
 
 ## Legacy Make build
 
-The compatibility build requires C and C++17 compilers and `make`:
+The compatibility build requires a C++17 compiler and `make`:
 
 ```sh
 make
@@ -101,7 +107,8 @@ make test
 ```
 
 It produces `c5.0`, the training and evaluation program, and `report`, the
-cross-validation report generator.
+cross-validation report generator. Only `make reference-comparison` needs a C
+compiler, `gcc`, which builds C5.0 Release 2.07.
 
 The installed `C50::cpp` CMake target links the compiled C++17 core. Manual
 link commands must use a C++ driver and link the platform's thread and math
@@ -505,13 +512,18 @@ including the optional native correctness workloads and installed C++17/C++20
 consumers. The GCC job also exercises production and verbose Make builds. The
 `private-core` job repeats the native suite in Release mode with
 `C50_PRIVATE_CORE` and link-time optimization required, with GCC on Linux
-x86-64 and ARM64 and AppleClang on macOS ARM64. A
-separate job installs the Python package, runs the estimator and typing checks,
-and builds warning-strict Doxygen and Sphinx documentation. Its Python 3.12 job
-also runs the tutorial test, with the OpenML data cached between runs.
+x86-64 and ARM64 and AppleClang on macOS ARM64. The `private-core-clang` job
+configures the same option with Clang on Linux x86-64 and leaves the
+interprocedural optimization variables unset, to check that the programs link
+against a core of LLVM bitcode, which the default linker loads through the
+Clang plugin. A separate job installs the Python package, runs the estimator
+and typing checks, and builds warning-strict Doxygen and Sphinx documentation.
+Its Python 3.12 job also runs the tutorial test, with the OpenML data cached
+between runs.
 
 The `lint` job runs the pre-commit hooks over the whole tree with the checkers
-that `pyproject.toml` pins.
+that `pyproject.toml` pins: ruff, ruff format, mypy, the license notice check,
+zizmor, which audits the workflows, codespell, rumdl, and file hygiene checks.
 
 The workflow runs on pull requests, pushes to `main`, `dev`, and topic
 branches, and manual dispatch. It uses read-only repository permissions and
