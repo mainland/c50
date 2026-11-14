@@ -28,10 +28,20 @@ their current results.
 | Wheels for CPython 3.10 through 3.14 | Linux x86-64 and ARM64, macOS arm64 and x86-64, Windows AMD64 | `wheels.yml`, `wheels` | Build from the source distribution and test each wheel |
 
 Free-threaded Python, GPU arrays, and other compiler or platform combinations
-are not tested. Five tests run only on Linux. `in-memory-without-files`,
+are not tested. Six tests run only on Linux. `in-memory-without-files`,
 `allocation-failure`, and `parallel-failure` need GNU or Clang on Linux because
 they link with `-Wl,--wrap`, and `writable-global-inventory` reads ELF symbols
-with GNU `nm`. `writable-global-inventory-lto` reads no symbols. It configures
+with GNU `nm`. `math-overloads` compiles each source twice, with and without `-DVerbOpt`,
+at `-O0 -fno-inline`. It fails when `nm` lists a math function overload for
+`float` or `long double`, such as `std::log(float)`, which C++ selects where
+Release 2.07's C calls the `double` function. It also fails when `nm` fails,
+when no object lists a symbol, and when it does not report the `float`
+overload that `tests/math_overload_control.cpp` calls. The calls that match
+Release 2.07's precision cast the whole argument to `double`. An optimized
+build cannot show these overloads, because it inlines `rintf` and `fabsf`. The
+check does not list classification functions such as `isfinite`, which are
+exact in every precision, and it runs in every Linux job that runs CTest.
+`writable-global-inventory-lto` reads no symbols. It configures
 nested builds with `-flto` flags, so CMake registers it only on Linux with
 `nm`, a single-configuration generator, and GCC or Clang. The macOS and Windows
 jobs omit them, so the no-file guarantee, the allocation-failure behavior, and
