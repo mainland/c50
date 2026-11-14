@@ -848,6 +848,19 @@ if(BUILD_TESTING)
         )
     endif()
     if(CMAKE_NM AND CMAKE_SYSTEM_NAME STREQUAL "Linux"
+       AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_test(
+            NAME math-overloads
+            COMMAND
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_math_overloads.sh"
+                "${CMAKE_CXX_COMPILER}"
+                "${CMAKE_NM}"
+                "${CMAKE_CURRENT_SOURCE_DIR}"
+                "${CMAKE_CURRENT_BINARY_DIR}/math-overloads"
+        )
+        set_tests_properties(math-overloads PROPERTIES TIMEOUT 300)
+    endif()
+    if(CMAKE_NM AND CMAKE_SYSTEM_NAME STREQUAL "Linux"
        AND NOT c50_is_multi_config
        AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         add_test(
