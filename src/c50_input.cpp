@@ -1,14 +1,22 @@
 /* Copyright 2026 Geoffrey Mainland. */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
+#include <errno.h>
 #include <string.h>
 
-#include "c50_input.h"
+#include <string>
+#include <system_error>
 
-void c50_input_init_file(c50_input *input, FILE *file)
+#include "defns.i"
+#include "extern.i"
+#include "c50_input.h"
+#include "c50_api_internal.h"
+
+void c50_input_init_file(c50_input *input, FILE *file, c50_context *context)
 {
     input->buffer.resize(c50_input_block_size);
     input->file = file;
+    input->context = context;
     input->data = NULL;
     input->size = 0;
     input->next = input->buffer.data();
@@ -18,6 +26,7 @@ void c50_input_init_file(c50_input *input, FILE *file)
 void c50_input_init_memory(c50_input *input, const void *data, size_t size)
 {
     input->file = NULL;
+    input->context = NULL;
     input->data = static_cast<const unsigned char *>(data);
     input->size = size;
     input->next = input->data;
@@ -28,9 +37,20 @@ bool c50_input_fill(c50_input *input)
 {
     if ( ! input->file ) return false;
 
-    /* A short count means the end of the file or a read error. Both end the
-       input, as EOF from fgetc() did. */
     size_t count = fread(input->buffer.data(), 1, input->buffer.size(), input->file);
+
+    /* A short count means the end of the file or a read error. Release 2.07
+       treated both as the end of the input, so a read error truncated the
+       data silently. This project reports it. */
+    if ( count < input->buffer.size() && ferror(input->file) )
+    {
+        const std::string reason =
+            std::generic_category().message(errno);
+        c50_record_error(input->context, c50::error_code::io_error,
+                         ("could not read " + input->context->io.file_name +
+                          ": " + reason).c_str());
+        C50Exit(input->context, 1);
+    }
     input->next = input->buffer.data();
     input->end = input->buffer.data() + count;
     return count > 0;

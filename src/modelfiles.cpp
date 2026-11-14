@@ -167,40 +167,28 @@ static void ModelPutc(c50_context *Context, int Character)
 
 /*************************************************************************/
 /*									 */
-/*	Check whether file is open.  If it is not, open it and		 */
-/*	read/write sampling information and discrete names		 */
+/*	Check whether the classifier output is open.  If it is not, open	 */
+/*	it and write sampling information and discrete names		 */
 /*									 */
 /*************************************************************************/
 
 
-void CheckFile(c50_context *Context, const char *Extension, Boolean Write)
+void CheckFile(c50_context *Context, const char *Extension)
 /*   ---------  */
 {
-    if ( Write )
+    if ( ! Context->classifier_output_active ||
+	 ! Context->last_model_extension ||
+	 strcmp(Context->last_model_extension, Extension) )
     {
-	if ( ! Context->classifier_output_active ||
-	     ! Context->last_model_extension ||
-	     strcmp(Context->last_model_extension, Extension) )
+	if ( Context->classifier_output_active &&
+	     Context->last_model_extension )
 	{
-	    if ( Context->classifier_output_active &&
-		 Context->last_model_extension )
-	    {
-		ModelPrintf(Context, "\n");
-		c50_output_close(&Context->classifier_output);
-		Context->classifier_output_active = false;
-	    }
-	    Context->last_model_extension = Extension;
-	    WriteFilePrefix(Context, Extension);
+	    ModelPrintf(Context, "\n");
+	    c50_output_close(&Context->classifier_output);
+	    Context->classifier_output_active = false;
 	}
-    }
-    else if ( ! Context->io.model_file ||
-	      ! Context->last_model_extension ||
-	      strcmp(Context->last_model_extension, Extension) )
-    {
 	Context->last_model_extension = Extension;
-	CheckClose(Context->io.model_file);
-	Context->io.model_file = Nil;
-	ReadFilePrefix(Context, Extension);
+	WriteFilePrefix(Context, Extension);
     }
 }
 
@@ -265,34 +253,6 @@ void WriteFilePrefix(c50_context *Context, const char *Extension)
 
 /*************************************************************************/
 /*									 */
-/*	Read header information						 */
-/*									 */
-/*************************************************************************/
-
-
-void ReadFilePrefix(c50_context *Context, const char *Extension)
-/*   --------------  */
-{
-    if ( ! (Context->io.model_file = GetFile(Context, Extension, "r")) ) Error(Context, NOFILE, Context->io.file_name.c_str(), "");
-
-    c50_input_init_file(&Context->classifier_input, Context->io.model_file);
-    StreamIn(&Context->classifier_input, (char *) &Context->options.trials, sizeof(int));
-    if ( memcmp((char *) &Context->options.trials, "id=", 3) != 0 )
-    {
-	printf("\nCannot read old format classifiers\n");
-	C50Exit(Context, 1);
-    }
-    else
-    {
-	c50_input_rewind(&Context->classifier_input);
-	ReadHeader(Context, &Context->classifier_input);
-    }
-}
-
-
-
-/*************************************************************************/
-/*									 */
 /*	Save attribute values read with "discrete N"			 */
 /*									 */
 /*************************************************************************/
@@ -331,7 +291,7 @@ void SaveDiscreteNames(c50_context *Context)
 void SaveTree(c50_context *Context, Tree T, const char *Extension)
 /*   --------  */
 {
-    CheckFile(Context, Extension, true);
+    CheckFile(Context, Extension);
 
     OutTree(Context, T);
 }
@@ -432,7 +392,7 @@ void SaveRules(c50_context *Context, CRuleSet RS, const char *Extension)
     DiscrValue	v;
     Boolean	First;
 
-    CheckFile(Context, Extension, true);
+    CheckFile(Context, Extension);
 
     ModelPrintf(Context, "rules=\"%d\"", RS->SNRules);
     AsciiOut(Context, " default=", Context->schema.class_names[RS->SDefault]);
@@ -529,15 +489,13 @@ void AsciiOut(c50_context *Context, const char *Pre, const char *S)
 
 
 static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
-			   c50_input *CostsInput,
-			   Boolean AllowFileCosts)
+			   c50_input *CostsInput)
 /*          --------------  */
 {
     Attribute	Att=0;
     DiscrValue	v;
     char	*p, *Unquoted, Dummy;
     int		Year, Month, Day;
-    FILE	*F;
 
     while ( true )
     {
@@ -576,16 +534,6 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 					 "the model requires costs, but the costs text defines none");
 			C50Exit(Context, 1);
 		    }
-		}
-		else
-		if ( AllowFileCosts && (F = GetFile(Context, ".costs", "r")) )
-		{
-		    GetMCosts(Context, F);
-		}
-		else
-		if ( AllowFileCosts )
-		{
-		    Error(Context, NOFILE, Context->io.file_name.c_str(), "costs input required by model");
 		}
 		else
 		{
@@ -652,36 +600,11 @@ static void ReadHeaderFrom(c50_context *Context, c50_input *Input,
 
 
 
-void ReadHeader(c50_context *Context, c50_input *Input)
-/*   ----------  */
-{
-    ReadHeaderFrom(Context, Input, Nil, true);
-}
-
-
-
 void ReadHeaderMemory(c50_context *Context, c50_input *Input,
 		      c50_input *CostsInput)
 /*   ----------------  */
 {
-    ReadHeaderFrom(Context, Input, CostsInput, false);
-}
-
-
-
-/*************************************************************************/
-/*									 */
-/*	Retrieve decision tree with extension Extension			 */
-/*									 */
-/*************************************************************************/
-
-
-Tree GetTree(c50_context *Context, const char *Extension)
-/*   -------  */
-{
-    CheckFile(Context, Extension, false);
-
-    return InTree(Context, &Context->classifier_input);
+    ReadHeaderFrom(Context, Input, CostsInput);
 }
 
 
@@ -851,34 +774,6 @@ static Tree InTreeAtDepth(c50_context *Context, c50_input *Input, Tree *Slot,
 
 
 
-/*************************************************************************/
-/*									 */
-/*	Retrieve ruleset with extension Extension			 */
-/*	(Separate functions for ruleset, single rule, single condition)	 */
-/*									 */
-/*************************************************************************/
-
-
-CRuleSet GetRules(c50_context *Context, const char *Extension)
-/*	 --------  */
-{
-    CheckFile(Context, Extension, false);
-
-    return InRules(Context, &Context->classifier_input);
-}
-
-
-
-CRuleSet InRules(c50_context *Context, c50_input *Input)
-/*	 -------  */
-{
-    CRuleSet RS=Nil;
-
-    return InRulesAt(Context, Input, &RS);
-}
-
-
-
 CRuleSet InRulesAt(c50_context *Context, c50_input *Input, CRuleSet *Slot)
 /*	 ---------  */
 {
@@ -943,16 +838,6 @@ CRuleSet InRulesAt(c50_context *Context, c50_input *Input, CRuleSet *Slot)
     ConstructRuleTree(Context, RS);
     Context->model_entry++;
     return RS;
-}
-
-
-
-CRule InRule(c50_context *Context, c50_input *Input)
-/*    ------  */
-{
-    CRule R=Nil;
-
-    return InRuleAt(Context, Input, &R);
 }
 
 
@@ -1034,16 +919,6 @@ CRule InRuleAt(c50_context *Context, c50_input *Input, CRule *Slot)
     R->Vote = 1000 * (R->Correct + 1.0) / (R->Cover + 2.0) + 0.5;
 
     return R;
-}
-
-
-
-Condition InCondition(c50_context *Context, c50_input *Input)
-/*        -----------  */
-{
-    Condition C=Nil;
-
-    return InConditionAt(Context, Input, &C);
 }
 
 
@@ -1279,19 +1154,4 @@ Set MakeSubset(c50_context *Context, Attribute Att)
     }
 
     return owner.release();
-}
-
-
-
-/*************************************************************************/
-/*								  	 */
-/*	Character stream read for binary routines			 */
-/*								  	 */
-/*************************************************************************/
-
-
-void StreamIn(c50_input *Input, String S, int n)
-/*   --------  */
-{
-    while ( n-- ) *S++ = c50_input_getc(Input);
 }

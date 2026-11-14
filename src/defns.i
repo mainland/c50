@@ -817,35 +817,26 @@ void	    FreeRuleTree(RuleTree RT);
 
 	/* modelfiles.c */
 
-void	    CheckFile(c50_context *Context, const char *Extension,
-		      Boolean Write);
+void	    CheckFile(c50_context *Context, const char *Extension);
 void	    WriteFilePrefix(c50_context *Context, const char *Extension);
-void	    ReadFilePrefix(c50_context *Context, const char *Extension);
 void	    SaveDiscreteNames(c50_context *Context);
 void	    SaveTree(c50_context *Context, Tree T, const char *Extension);
 void	    OutTree(c50_context *Context, Tree T);
 void	    SaveRules(c50_context *Context, CRuleSet RS,
 			      const char *Extension);
 void	    AsciiOut(c50_context *Context, const char *Pre, const char *S);
-void	    ReadHeader(c50_context *Context, c50_input *Input);
 void	    ReadHeaderMemory(c50_context *Context, c50_input *Input,
 			     c50_input *CostsInput);
-Tree	    GetTree(c50_context *Context, const char *Extension);
 Tree	    InTree(c50_context *Context, c50_input *Input);
 Tree	    InTreeAt(c50_context *Context, c50_input *Input, Tree *Slot);
-CRuleSet    GetRules(c50_context *Context, const char *Extension);
-CRuleSet    InRules(c50_context *Context, c50_input *Input);
 CRuleSet    InRulesAt(c50_context *Context, c50_input *Input,
 		      CRuleSet *Slot);
-CRule	    InRule(c50_context *Context, c50_input *Input);
 CRule	    InRuleAt(c50_context *Context, c50_input *Input, CRule *Slot);
-Condition   InCondition(c50_context *Context, c50_input *Input);
 Condition   InConditionAt(c50_context *Context, c50_input *Input,
 			  Condition *Slot);
 int	    ReadProp(c50_context *Context, c50_input *Input, char *Delim);
 String	    RemoveQuotes(String S);
 Set	    MakeSubset(c50_context *Context, Attribute Att);
-void	    StreamIn(c50_input *Input, String S, int n);
 
 	/* update.c (Unix) or winmain.c (WIN32) */
 
