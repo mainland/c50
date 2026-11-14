@@ -43,7 +43,17 @@
 
 #define	TabSize		4
 #define Utility		ClassDist[0]
-#define Digits(n)	((n) < 10 ? 3 : (int)(3 + log((double) ((n)-1)) / log(10.0)))
+
+
+/*  Width of a count in a printed tree. Release 2.07 computes this in a
+    macro whose log() takes the float n-1 converted to double, so the
+    conversion stays after the float subtraction  */
+
+int Digits(CaseCount n)
+/*  ------  */
+{
+    return n < 10 ? 3 : (int)(3 + log((double) (n - 1)) / log(10.0));
+}
 
 
 	/*  If lines look like getting too long while a tree is being
