@@ -57,8 +57,8 @@ identifiers, so a clone without a `main` branch checks them too. When `main` or
 import that is renamed and stripped of its notices fails. The test skips
 outside a Git checkout.
 
-Native CI configures a C++14 project default to verify that each target declares
-its own C++17 requirement. The platform labels follow the
+Native CI configures a C++14 project default to verify that each target
+declares its own C++17 requirement. The platform labels follow the
 [GitHub-hosted runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 
 ## Windows
@@ -271,9 +271,9 @@ ctest --test-dir build/python \
 ```
 
 The `c50_python` target builds the extension and its native library dependency.
-CMake places the package under `build/python/python/c50`. CTest uses the selected
-interpreter and sets `PYTHONPATH` for runtime checks to import this build.
-The filter runs `python-api` (pytest), `python-license-notices`,
+CMake places the package under `build/python/python/c50`. CTest uses the
+selected interpreter and sets `PYTHONPATH` for runtime checks to import this
+build. The filter runs `python-api` (pytest), `python-license-notices`,
 `benchmark-smoke`, `python-typecheck` (mypy), and `python-stubtest`. The two
 typing checks are registered only in non-sanitizer builds.
 
@@ -289,24 +289,25 @@ ctest --test-dir build/python --output-on-failure
 
 The `c50` Python distribution has its own version sequence, independent of the
 imported C5.0 Release 2.07 GPL Edition. `setuptools-scm` derives the package
-version from Git tags beginning with `v` and a digit, such as `v1.0.0a1`.
-The upstream `c5.0-2.07` tag does not participate in package version discovery.
-Commits after a package tag receive development versions with a commit identifier.
+version from Git tags beginning with `v` and a digit, such as `v1.0.0a1`. The
+upstream `c5.0-2.07` tag does not participate in package version discovery.
+Commits after a package tag receive development versions with a commit
+identifier.
 
 The native library and its CMake package share this version, so C++ consumers
 request it with `find_package(C50 1.0 CONFIG REQUIRED)`. Packages with the same
 major version are compatible. CMake versions have no prerelease labels, so a
 prerelease such as `1.0.0a1` has the CMake version of the release it precedes,
-`1.0.0`. Before tagging a release, set the version in the `project()` command in
-`CMakeLists.txt` to the tag's release number. A Python build from a release tag
-fails at configuration when the two differ. The command-line programs and
+`1.0.0`. Before tagging a release, set the version in the `project()` command
+in `CMakeLists.txt` to the tag's release number. A Python build from a release
+tag fails at configuration when the two differ. The command-line programs and
 serialized models keep the upstream identifier `2.07`.
 
-Build from a clean checkout of the package release tag when preparing a release.
-The checkout must include Git history and tags. Source distributions retain the
-resolved version in `PKG-INFO`, so wheels built from them do not require Git.
-An arbitrary source copy without Git or source-distribution metadata has no
-version fallback and cannot produce a Python package.
+Build from a clean checkout of the package release tag when preparing a
+release. The checkout must include Git history and tags. Source distributions
+retain the resolved version in `PKG-INFO`, so wheels built from them do not
+require Git. An arbitrary source copy without Git or source-distribution
+metadata has no version fallback and cannot produce a Python package.
 
 Python package builds set the CMake option `C50_PRIVATE_CORE`, which compiles
 the learning core with link-time optimization and hidden symbol visibility.
@@ -325,8 +326,8 @@ Build source and binary distributions with `build` installed:
 ```
 
 The default `build` command creates a source distribution and then builds the
-wheel from that distribution. Test both artifacts in separate clean environments
-before publishing them. Read the installed package version with:
+wheel from that distribution. Test both artifacts in separate clean
+environments before publishing them. Read the installed package version with:
 
 ```sh
 .venv/bin/python -c 'from importlib.metadata import version; print(version("c50"))'
@@ -467,8 +468,8 @@ cmake -S . -B build/docs \
 cmake --build build/docs --target c50-docs
 ```
 
-The HTML output is under `build/docs/docs/doxygen/html`, and the XML consumed by
-Breathe is under `build/docs/docs/doxygen/xml`.
+The HTML output is under `build/docs/docs/doxygen/html`, and the XML consumed
+by Breathe is under `build/docs/docs/doxygen/xml`.
 
 Build the complete Sphinx site with:
 
@@ -480,10 +481,11 @@ python3 -m venv .venv
 ```
 
 On Linux with GCC or Clang, `allocation-failure` injects failures into native
-`malloc`, `calloc`, `realloc`, and `strdup` calls and C++ allocations. It checks
-basic model loading, training, prediction, schema growth, and thresholded
-class names, including reuse of the context after every failure. Run it under
-AddressSanitizer with leak detection to check exceptional-path ownership:
+`malloc`, `calloc`, `realloc`, and `strdup` calls and C++ allocations. It
+checks basic model loading, training, prediction, schema growth, and
+thresholded class names, including reuse of the context after every failure.
+Run it under AddressSanitizer with leak detection to check exceptional-path
+ownership:
 
 ```sh
 ASAN_OPTIONS=detect_leaks=1 \
@@ -505,10 +507,11 @@ also runs the tutorial test, with the OpenML data cached between runs.
 The `lint` job runs the pre-commit hooks over the whole tree with the checkers
 that `pyproject.toml` pins.
 
-The workflow runs on pull requests, pushes to `main`, `dev`, and topic branches,
-and manual dispatch. It uses read-only repository permissions and pinned action
-revisions. A checked-in workflow defines the intended checks. Hosted results
-must be inspected before claiming a platform or dependency configuration passed.
+The workflow runs on pull requests, pushes to `main`, `dev`, and topic
+branches, and manual dispatch. It uses read-only repository permissions and
+pinned action revisions. A checked-in workflow defines the intended checks.
+Hosted results must be inspected before claiming a platform or dependency
+configuration passed.
 
 `.github/workflows/reference-comparison.yml` runs the comparison with
 Release 2.07 described above.

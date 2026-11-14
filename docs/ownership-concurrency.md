@@ -28,11 +28,11 @@ exceptions too. On Windows the operation enables the per-thread locale and
 calls `setlocale` instead. The Python binding inherits this behavior.
 
 Input and operation failures throw `c50::exception`, whose `code()` returns an
-`error_code` and whose `what()` supplies a diagnostic. Allocation failures throw
-`std::bad_alloc`. Invalid prediction indices throw `std::out_of_range`. The
-operation boundary runs cleanup and rethrows the original exception. If cleanup
-also fails, the original operation failure takes precedence. Library code does
-not terminate the host process.
+`error_code` and whose `what()` supplies a diagnostic. Allocation failures
+throw `std::bad_alloc`. Invalid prediction indices throw `std::out_of_range`.
+The operation boundary runs cleanup and rethrows the original exception. If
+cleanup also fails, the original operation failure takes precedence. Library
+code does not terminate the host process.
 
 Training with more than one split worker can also throw `std::system_error`,
 which is not a `c50::exception`. It reports that the system could not start a
@@ -63,9 +63,10 @@ This trades retained memory for lower repeated-call latency.
 
 `model.inspect` returns an owned, copyable classifier snapshot with class and
 feature names, nodes, branches, rules, and structural statistics. It uses the
-same exclusive context rule as prediction. The snapshot survives both the
-model and context, and changes to a snapshot do not affect the classifier. See
-{doc}`model-inspection` for serialization-precision and missing-value semantics.
+same exclusive context rule as prediction. The snapshot survives both the model
+and context, and changes to a snapshot do not affect the classifier. See
+{doc}`model-inspection` for serialization-precision and missing-value
+semantics.
 
 `model.predict` returns an independently owned `c50::predictions` batch.
 Results retain class names, labels, confidence values, and scores after the
@@ -90,14 +91,14 @@ recurse once per tree level on the calling thread. They run on the caller's
 stack, because the library does not start a thread for them. The `c5.0` program
 raises its stack limit to 20 MiB (or links with `/STACK:20971520` on Windows
 with MSVC) before it runs. A library caller gets no such provision and must
-supply the stack. Split workers run attribute evaluation, which does not recurse
-with tree depth.
+supply the stack. Split workers run attribute evaluation, which does not
+recurse with tree depth.
 
 The recursion depth is the tree depth. The learner stops splitting a node when
-fewer than two branches would hold `minimum_cases` cases, so the depth is at most
-the number of training cases divided by `minimum_cases`. The learner reaches
-that bound only when each split peels off about `minimum_cases` cases, and a
-split must gain more than its cost, so realistic data stays far below it.
+fewer than two branches would hold `minimum_cases` cases, so the depth is at
+most the number of training cases divided by `minimum_cases`. The learner
+reaches that bound only when each split peels off about `minimum_cases` cases,
+and a split must gain more than its cost, so realistic data stays far below it.
 A synthetic set reaches it: 1,100 binary attributes and 1,100 classes, one
 class per attribute, with two cases per class in which only that class's
 attribute is true. The 2,200 cases train a tree of 1,100 levels, the deepest
@@ -185,10 +186,10 @@ keeps it alive, so native code reads its UTF-8 representation in place after
 the binding releases the GIL.
 
 `train_dense` copies `values` before releasing the GIL. With `copy=False`, it
-reads a float64, C-contiguous array directly, and the caller must ensure that no
-thread modifies the array until training returns. Other dtypes and layouts are
-converted into a temporary array. The scikit-learn estimator uses `copy=False`
-for its private encoded matrix.
+reads a float64, C-contiguous array directly, and the caller must ensure that
+no thread modifies the array until training returns. Other dtypes and layouts
+are converted into a temporary array. The scikit-learn estimator uses
+`copy=False` for its private encoded matrix.
 
 Python `Model` objects expose immutable classifier data. `Options` remains a
 mutable value object. `train` and `train_dense` copy it when the call begins,
@@ -202,6 +203,7 @@ instance lock after releasing the GIL. Independent predictors can run in
 parallel. Dense inputs are copied before releasing the GIL. Persist the source
 `Model`, which supports pickling, and recreate predictors after loading it.
 
-The scikit-learn estimator creates one predictor per `predict` or `predict_proba`
-call and reuses it across that call's batches. It retains no mutable prediction
-workspace between calls, so independent calls on a fitted estimator remain safe.
+The scikit-learn estimator creates one predictor per `predict` or
+`predict_proba` call and reuses it across that call's batches. It retains no
+mutable prediction workspace between calls, so independent calls on a fitted
+estimator remain safe.

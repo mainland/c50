@@ -6,11 +6,11 @@ deterministic text and JSON exports.
 ## Ownership and operation boundary
 
 `model.inspect(context)` returns an owned, copyable `model_inspection` value.
-It parses the model through the same validated native loader used by prediction.
-The snapshot owns its strings, vectors, and scalar data and remains valid after
-the context or model is destroyed. Editing a snapshot cannot change the model.
-Inspection uses an exclusive context and leaves it reusable after failures.
-Separate contexts may inspect the same immutable model concurrently.
+It parses the model through the same validated native loader used by
+prediction. The snapshot owns its strings, vectors, and scalar data and remains
+valid after the context or model is destroyed. Editing a snapshot cannot change
+the model. Inspection uses an exclusive context and leaves it reusable after
+failures. Separate contexts may inspect the same immutable model concurrently.
 
 The snapshot describes the retained serialized classifier. Its counts and
 thresholds therefore reflect serialization precision, including for newly

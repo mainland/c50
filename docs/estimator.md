@@ -146,8 +146,8 @@ C5.0 runs on the CPU. Arrays from other Array API libraries, such as PyTorch
 CPU tensors, are converted to NumPy arrays with `numpy.asarray` for `X`, `y`,
 and `sample_weight`, with or without `array_api_dispatch`. Results are NumPy
 arrays. The array's library decides whether it can be converted. An array in
-GPU or other device memory raises `ValueError`, so move it to CPU memory
-first. See the
+GPU or other device memory raises `ValueError`, so move it to CPU memory first.
+See the
 [scikit-learn Array API contract](https://scikit-learn.org/stable/modules/array_api.html).
 
 CI installs pandas and sets `SCIPY_ARRAY_API=1` before importing SciPy or
@@ -184,10 +184,11 @@ no seed is drawn, and a supplied `RandomState` is not advanced.
 `cost_matrix` accepts an optional square array in predicted-by-actual order.
 Entry `[predicted, actual]` is the cost of predicting the row class when the
 column class is correct. Entries must be finite and nonnegative, and diagonal
-entries must be zero. Costs must fit the native single-precision representation.
-Each actual-class column must have a positive, representable sum of error costs.
-Consequently, binary off-diagonal costs must be positive. Individual zero costs
-are supported in multiclass matrices whose columns satisfy this requirement.
+entries must be zero. Costs must fit the native single-precision
+representation. Each actual-class column must have a positive, representable
+sum of error costs. Consequently, binary off-diagonal costs must be positive.
+Individual zero costs are supported in multiclass matrices whose columns
+satisfy this requirement.
 
 `ignore_costs=True` ignores costs during both training and prediction. The
 model retains no costs data in this mode.
@@ -202,10 +203,10 @@ which keeps the order of the classes. `predict` returns a class with the
 highest probability unless a cost matrix is in use. Under exact ties C5.0
 chooses a later class, so that class may differ from the one that
 `classes_[predict_proba(X).argmax(axis=1)]` selects, because `argmax` returns
-the first. A case with no score at all receives probability one for its predicted
-class. The low-level `Model.predict_details` and `predict_details_dense`
-methods return the native scores. See {doc}`algorithm` for how C5.0 computes
-them.
+the first. A case with no score at all receives probability one for its
+predicted class. The low-level `Model.predict_details` and
+`predict_details_dense` methods return the native scores. See {doc}`algorithm`
+for how C5.0 computes them.
 
 ## Feature importances
 
@@ -254,9 +255,9 @@ gives each class the weight `n_samples / (n_classes * n_class_samples)`. The
 estimator computes the class weights with scikit-learn's
 `compute_sample_weight` and multiplies them by `sample_weight`, so the rules
 above apply to the products. Only the ratios between class weights matter, and
-the samples of a class with weight zero are removed. Class weights change the training
-distribution, while `cost_matrix` changes the cost of each error. Both may be
-used together.
+the samples of a class with weight zero are removed. Class weights change the
+training distribution, while `cost_matrix` changes the cost of each error. Both
+may be used together.
 
 ## Scikit-learn workflows
 
@@ -279,17 +280,18 @@ rejects missing values in its own input validation, before C5.0 receives them.
 ## Split selection and evaluation scoring
 
 `C50Classifier` uses the native C5.0 split-selection policy: gain ratio with
-minimum-gain filtering, the native MDL adjustment, and C5.0 tie handling. It has
-no `criterion` parameter. The C++ and Python interfaces use the same learner
-and preserve the reference classifier behavior, except that `ties` defaults to
-`"stable"` for `C50Classifier`, which may build a different classifier than the
-reference learner. Pass `ties="reference"` for Release 2.07's order.
+minimum-gain filtering, the native MDL adjustment, and C5.0 tie handling. It
+has no `criterion` parameter. The C++ and Python interfaces use the same
+learner and preserve the reference classifier behavior, except that `ties`
+defaults to `"stable"` for `C50Classifier`, which may build a different
+classifier than the reference learner. Pass `ties="reference"` for Release
+2.07's order.
 
 Scikit-learn compatibility does not require the parameters accepted by
 `DecisionTreeClassifier`. Alternative split criteria would define different
 training modes. A future alternative must be implemented and validated in the
-C++ core before it is exposed through Python. Reference C5.0 split selection must
-remain the only criterion. No alternative criterion is implemented.
+C++ core before it is exposed through Python. Reference C5.0 split selection
+must remain the only criterion. No alternative criterion is implemented.
 
 Choose an evaluation metric through scikit-learn's `scoring` interface. For
 example, reuse `X` and `y` from the example above to select native training

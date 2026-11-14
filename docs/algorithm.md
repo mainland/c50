@@ -33,13 +33,13 @@ the attributes. `GetNames` and `ExplicitAtt` in `src/getnames.cpp` parse it.
   and discarded, and a continuous attribute named `case weight` supplies case
   weights.
 
-Every value may be unknown, written `?`, or not applicable, written `N/A`.
-C5.0 keeps the two apart throughout. An unknown value is a value that exists but
-was not recorded, so an unknown case is distributed over all branches of a
-test. A not-applicable value means that the attribute does not apply to the
-case, so it forms a branch of its own. Internally, value 1 of every discrete
-attribute is reserved for `N/A`, so an attribute with $k$ declared values has
-$k + 1$ possible values.
+Every value may be unknown, written `?`, or not applicable, written `N/A`. C5.0
+keeps the two apart throughout. An unknown value is a value that exists but was
+not recorded, so an unknown case is distributed over all branches of a test. A
+not-applicable value means that the attribute does not apply to the case, so it
+forms a branch of its own. Internally, value 1 of every discrete attribute is
+reserved for `N/A`, so an attribute with $k$ declared values has $k + 1$
+possible values.
 
 ### Initial weights
 
@@ -168,7 +168,8 @@ printed thresholds are values that appear in the data.
 
 The order in which `Cachesort` leaves equal values determines which of several
 tied cuts is chosen. The `ties` option selects a faster, stable sort, which may
-produce a different classifier. `C50Classifier` uses it by default. See {doc}`compatibility`.
+produce a different classifier. `C50Classifier` uses it by default. See
+{doc}`compatibility`.
 
 ### Choosing a test
 
