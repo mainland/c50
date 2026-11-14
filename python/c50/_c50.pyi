@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from typing import Any, ClassVar, final
+from typing import Any, ClassVar, SupportsIndex, final
 
 import numpy as np
 from numpy.typing import NDArray
@@ -197,7 +197,10 @@ class ModelInspection:
 @final
 class Options:
     def __init__(self) -> None: ...
-    trials: int
+    @property
+    def trials(self) -> int: ...
+    @trials.setter
+    def trials(self, value: SupportsIndex) -> None: ...
     subset_splits: bool
     winnow: bool
     global_pruning: bool
@@ -206,7 +209,10 @@ class Options:
     minimum_cases: float
     confidence_factor: float
     sample_fraction: float
-    random_seed: int
+    @property
+    def random_seed(self) -> int: ...
+    @random_seed.setter
+    def random_seed(self, value: SupportsIndex) -> None: ...
     ties: TieOrder
 
 @final
@@ -248,7 +254,7 @@ class Model:
         kind: ModelKind = ModelKind.TREE,
         options: Options = ...,
         costs: str = "",
-        split_workers: int = 1,
+        split_workers: SupportsIndex = 1,
     ) -> Model: ...
     @staticmethod
     def train_dense(
@@ -258,7 +264,7 @@ class Model:
         kind: ModelKind = ModelKind.TREE,
         options: Options = ...,
         costs: str = "",
-        split_workers: int = 1,
+        split_workers: SupportsIndex = 1,
         copy: bool = True,
     ) -> Model: ...
     @staticmethod
@@ -268,7 +274,7 @@ class Model:
         kind: ModelKind = ModelKind.TREE,
         costs: str = "",
         *,
-        max_tree_depth: int | None = 1024,
+        max_tree_depth: SupportsIndex | None = 1024,
     ) -> Model: ...
     @property
     def kind(self) -> ModelKind: ...
@@ -315,7 +321,7 @@ def train(
     kind: ModelKind = ModelKind.TREE,
     options: Options = ...,
     costs: str = "",
-    split_workers: int = 1,
+    split_workers: SupportsIndex = 1,
 ) -> Model: ...
 def train_dense(
     names: str,
@@ -324,7 +330,7 @@ def train_dense(
     kind: ModelKind = ModelKind.TREE,
     options: Options = ...,
     costs: str = "",
-    split_workers: int = 1,
+    split_workers: SupportsIndex = 1,
     copy: bool = True,
 ) -> Model: ...
 def load(
@@ -333,5 +339,6 @@ def load(
     kind: ModelKind = ModelKind.TREE,
     costs: str = "",
     *,
-    max_tree_depth: int | None = 1024,
+    max_tree_depth: SupportsIndex | None = 1024,
 ) -> Model: ...
+def _count_index(value: object, name: str) -> int: ...
