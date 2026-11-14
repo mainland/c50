@@ -96,7 +96,9 @@ def _restore_model(
         model_kind = ModelKind.RULES
     else:
         raise ValueError(f"unknown model pickle kind {kind!r}")
-    return load(names, serialized, model_kind, costs)
+    # The pickle holds text that a trained or loaded model wrote. Loading it
+    # runs trusted code anyway, so it does not limit the tree depth.
+    return load(names, serialized, model_kind, costs, max_tree_depth=None)
 
 
 __all__ = [

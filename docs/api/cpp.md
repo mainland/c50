@@ -32,6 +32,15 @@ Contexts, models, predictors, and prediction batches are move-only owners. See
 :members:
 ```
 
+```{doxygenvariable} c50::default_max_tree_depth
+:project: C50
+```
+
+```{doxygenstruct} c50::load_options
+:project: C50
+:members:
+```
+
 ```{doxygenclass} c50::model
 :project: C50
 :members:

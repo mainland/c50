@@ -42,7 +42,6 @@ std::unique_ptr<c50_context> c50_make_context()
 {
     auto context = std::make_unique<c50_context>();
     context->split_worker_count = 1;
-    context->max_serialized_tree_depth = c50_default_max_tree_depth;
     context->schema.max_discrete_value = 3;
     snprintf(context->schema.unknown_class_name,
              sizeof(context->schema.unknown_class_name), "%s", "?");

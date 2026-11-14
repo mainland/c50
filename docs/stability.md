@@ -55,9 +55,12 @@ change classifiers, such as `ties="stable"`, are exceptions by design.
 
 - `.tree` and `.rules` files, and the `names_data`, `serialized_data`, and
   `costs_data` of a `Model`, use C5.0's own formats. Every 1.x release loads
-  models saved by any earlier 1.x release and by the imported C5.0 program,
-  and the test suite loads models that the imported program wrote. These
-  formats are the recommended way to keep models.
+  models saved by any earlier 1.x release and by the imported C5.0 program, and
+  the test suite loads models that the imported program wrote. These formats
+  are the recommended way to keep models. A tree deeper than
+  `default_max_tree_depth` (1,024 levels) loads only when the caller passes a
+  larger `max_tree_depth`, or `std::nullopt` (`None` in Python), to `load`. A
+  1.x release may raise `default_max_tree_depth` but never lowers it.
 - A pickled low-level `Model` holds only those formats and a pickle format
   version, so the same promise applies to it. The pickle names the public
   `c50` package and holds the model's names, serialized classifier, costs, and

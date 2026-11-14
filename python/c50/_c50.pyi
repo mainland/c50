@@ -267,6 +267,8 @@ class Model:
         serialized_data: str,
         kind: ModelKind = ModelKind.TREE,
         costs: str = "",
+        *,
+        max_tree_depth: int | None = 1024,
     ) -> Model: ...
     @property
     def kind(self) -> ModelKind: ...
@@ -330,4 +332,6 @@ def load(
     serialized_data: str,
     kind: ModelKind = ModelKind.TREE,
     costs: str = "",
+    *,
+    max_tree_depth: int | None = 1024,
 ) -> Model: ...
