@@ -136,8 +136,8 @@ python tests/benchmark_smoke.py --build-python
 ## Results
 
 Retained results are under `benchmarks/results/`. Each release documents one
-result in `docs/performance.md`. After running the release suite, regenerate the
-page's tables:
+result in `docs/performance.md`. After running the release suite, regenerate
+the page's tables:
 
 ```sh
 python benchmarks/report.py benchmarks/results/release.json \
