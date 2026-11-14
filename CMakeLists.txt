@@ -722,6 +722,13 @@ if(BUILD_TESTING)
                 ENVIRONMENT
                     "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python;SCIPY_ARRAY_API=1"
         )
+        add_test(
+            NAME python-license-notices
+            COMMAND ${Python_EXECUTABLE}
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_license_notices.py"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        )
+        set_tests_properties(python-license-notices PROPERTIES SKIP_RETURN_CODE 77)
         # The benchmark suite requires Linux or macOS.
         if(UNIX)
             add_test(
