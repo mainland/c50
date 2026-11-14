@@ -24,6 +24,12 @@
  * is not a c50::exception, when the system cannot start a worker thread.
  * A failed operation leaves its context reusable. Moved-from objects may only
  * be destroyed or assigned another object.
+ *
+ * Training, parsing, and classification recurse once per tree level on the
+ * calling thread's stack, which the caller must size. The parser accepts trees
+ * of fewer than 1,024 levels. A Release build needs about 220 bytes per level
+ * to train and 140 to parse, and a sanitizer build about 3.8 KiB and 3.3 KiB.
+ * See docs/ownership-concurrency.md for the measurements.
  */
 #ifndef C50_C50_HPP
 #define C50_C50_HPP

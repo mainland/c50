@@ -81,6 +81,64 @@ row strides are measured in `double` elements, with zero meaning the feature
 count. NaN denotes missing data. Use text input for not-applicable values and
 schemas unsupported by the dense interface.
 
+## Stack use
+
+Tree construction, pruning, rule generation, classification, and model parsing
+recurse once per tree level on the calling thread. They run on the caller's
+stack, because the library does not start a thread for them. The `c5.0` program
+raises its stack limit to 20 MiB (or links with `/STACK:20971520` on Windows
+with MSVC) before it runs. A library caller gets no such provision and must
+supply the stack. Split workers run attribute evaluation, which does not recurse
+with tree depth.
+
+The recursion depth is the tree depth. The learner stops splitting a node when
+fewer than two branches would hold `minimum_cases` cases, so the depth is at most
+the number of training cases divided by `minimum_cases`. The learner reaches
+that bound only when each split peels off about `minimum_cases` cases, and a
+split must gain more than its cost, so realistic data stays far below it.
+A synthetic set reaches it: 1,100 binary attributes and 1,100 classes, one
+class per attribute, with two cases per class in which only that class's
+attribute is true. The 2,200 cases train a tree of 1,100 levels, the deepest
+measured, in about 23 seconds and 82 MB on x86-64 Linux with the `c5.0`
+program. Each split peels off one class, so the depth grows with the number of
+classes. Assigning classes by anything else, such as alternating them across
+attributes, trains a single leaf.
+
+Two limits cap what the library accepts. The parser rejects a serialized tree
+of 1,024 or more levels with `error_code::parse_error`. A ruleset index limited
+to 512 levels falls back to iterative matching. Training does not enforce the
+tree limit. `model::train` returns a deeper tree, which its own `predict`,
+`inspect`, and `prepare_predictor` accept, but a `load` of its serialized text
+throws the same `parse_error`, and so does unpickling it in Python. Release
+2.07 prints such a tree. See
+{doc}`compatibility`.
+
+Measured stack use on x86-64 Linux, in bytes per tree level, adds to a base of
+about 10 KiB for training and 40 KiB for parsing:
+
+| Build | Parsing a tree (`load`, `predict`, `inspect`) | Training a tree |
+| --- | --- | --- |
+| GCC 14 `-O3` (Release) | about 140 | about 215 |
+| GCC 14 `-O0` (Debug) | about 140 | about 255 |
+| Clang AddressSanitizer and UBSan | about 3,300 | about 3,800 |
+
+Parsing is bounded by the 1,024-level limit, so any accepted tree parses in
+under 160 KiB in a Release build and under 3.4 MiB in a sanitizer build.
+Parsing a ruleset needs at most 71 KiB in a Release build, because rule indexes
+stop at 512 levels. Training has no bound of its own, but its stack use is
+about 215 bytes per level in a Release build, so a tree that the library
+can still return (under 1,024 levels) trains in about 230 KiB.
+
+Callers should compare these figures with their thread stacks. The platform
+defaults, which this repository did not measure, are 8 MiB for a Linux main
+thread and a glibc secondary thread, 1 MiB for a Windows thread, 512 KiB for a
+macOS secondary thread, and 128 KiB for a musl thread. A Release build fits
+all of them except musl. A sanitizer build needs more than 1 MiB at the
+1,024-level limit and must run on a thread with a larger stack, for example
+through `threading.stack_size` in Python or `pthread_attr_setstacksize`.
+Python threads use the platform default stack unless `threading.stack_size`
+sets another.
+
 ## Python interface
 
 Each Python `Model` training, loading, or prediction call constructs a local
