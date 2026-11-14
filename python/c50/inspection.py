@@ -251,10 +251,9 @@ def export_text(
     features = _names(feature_names, snapshot.feature_names)
     classes = _names(class_names, snapshot.class_names)
     values = _value_names(value_names, len(snapshot.feature_names))
-    # The annotation describes valid input. Check the value passed.
-    depth: object = max_depth
-    if depth is not None and (
-        isinstance(depth, bool) or not isinstance(depth, int) or depth < 0
+    limit: object = max_depth  # Callers may pass any type.
+    if limit is not None and (
+        isinstance(limit, bool) or not isinstance(limit, int) or limit < 0
     ):
         raise ValueError("max_depth must be a nonnegative integer or None")
     lines = []

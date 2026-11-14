@@ -1,7 +1,7 @@
 # Parser fuzz targets
 
-The six AFL++ targets use the public C++ interface and accept at most 4096 bytes
-per input. Each iteration reuses the context for a known valid model and
+The six AFL++ targets use the public C++ interface and accept at most 4096
+bytes per input. Each iteration reuses the context for a known valid model and
 prediction after the tested operation. Parse, argument, unsupported-format, and
 missing-cost errors are expected. Unexpected exceptions, sanitizer failures,
 hangs, and failed recovery are findings.
@@ -65,8 +65,9 @@ shadow mapping. Run sanitized campaigns inside a memory-limited container or
 cgroup. Alternatively, generate a corpus with the fast build and replay it with
 the sanitized target.
 
-Preserve the command, compiler, source commit, AFL++ version, and original crash
-input. Replay a finding by passing its file to the target. Minimize it with:
+Preserve the command, compiler, source commit, AFL++ version, and original
+crash input. Replay a finding by passing its file to the target. Minimize it
+with:
 
 ```sh
 afl-tmin -i CRASH -o MINIMIZED -- build/afl/c50_fuzz_implicit @@

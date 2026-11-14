@@ -591,6 +591,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         # Parameters hold whatever `set_params` stored, whatever their
         # annotations say.
         trials: object = self.trials
+        n_jobs: object = self.n_jobs
         if (
             isinstance(trials, (bool, np.bool_))
             or not isinstance(trials, Integral)
@@ -615,9 +616,6 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             raise ValueError("model_kind must be 'tree' or 'rules'")
         if self.ties not in ("reference", "stable"):
             raise ValueError("ties must be 'reference' or 'stable'")
-        # Parameters hold whatever `set_params` stored, whatever their
-        # annotations say.
-        n_jobs: object = self.n_jobs
         if n_jobs is not None and (
             isinstance(n_jobs, bool)
             or not isinstance(n_jobs, Integral)
@@ -633,7 +631,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         if batch_size is not None and (
             isinstance(batch_size, bool)
             or not isinstance(batch_size, Integral)
-            or batch_size < 1
+            or int(batch_size) < 1
         ):
             raise ValueError(
                 "prediction_batch_size must be a positive integer or None"

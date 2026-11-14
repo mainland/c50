@@ -172,12 +172,12 @@ buffer. Per-token length checks still apply.
 ### Implicit definitions
 
 Implicit definitions reject missing and not-applicable literals without a
-preceding operand that determines their type. They also reject nonfinite numeric
-literals and expressions nested beyond 100 levels. Token matching and date and
-time recognition remain within the definition buffer. These checks make extreme
-or malformed definitions reject instead of exhausting resources or invoking
-undefined behavior. Accepted definitions within these limits retain their
-existing evaluation behavior.
+preceding operand that determines their type. They also reject nonfinite
+numeric literals and expressions nested beyond 100 levels. Token matching and
+date and time recognition remain within the definition buffer. These checks
+make extreme or malformed definitions reject instead of exhausting resources or
+invoking undefined behavior. Accepted definitions within these limits retain
+their existing evaluation behavior.
 
 The evaluator's operand stack grows with the definition, so every definition
 within the nesting limit evaluates, including definitions that leave several
@@ -413,8 +413,8 @@ cases with it. Release 2.07 crashes with a segmentation fault when a tree
 classifier, trained on no cases, classifies a case. It dereferences the parent
 of the root leaf, which is a null pointer. The same crash occurs in a
 cross-validation fold whose training cases are empty, such as `-X 2` on one
-case, and with boosting, winnowing, and subset tests. Rules classifiers and runs
-without test cases do not crash.
+case, and with boosting, winnowing, and subset tests. Rules classifiers and
+runs without test cases do not crash.
 
 This project returns no class distribution for that leaf, so every case is
 classified as the first class, as the rule classifier does, and the program
