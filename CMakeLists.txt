@@ -457,6 +457,12 @@ if(BUILD_TESTING)
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
     target_link_libraries(c50_sort_properties PRIVATE C50::core)
+    add_executable(c50_float_precision tests/float_precision.cpp)
+    target_include_directories(
+        c50_float_precision
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(c50_float_precision PRIVATE C50::core)
     add_executable(c50_index_overflow tests/index_overflow.cpp)
     target_compile_features(c50_index_overflow PRIVATE cxx_std_17)
     target_include_directories(
@@ -475,6 +481,7 @@ if(BUILD_TESTING)
         c50_cpp_api
         c50_sort_properties
         c50_index_overflow
+        c50_float_precision
         c50_parallel_workload
     )
     list(
@@ -486,6 +493,7 @@ if(BUILD_TESTING)
         c50_cpp_api
         c50_sort_properties
         c50_index_overflow
+        c50_float_precision
         c50_parallel_workload
     )
 endif()
@@ -713,6 +721,7 @@ if(BUILD_TESTING)
     add_test(NAME cpp-contracts COMMAND c50_cpp_contracts)
     add_test(NAME sort-properties COMMAND c50_sort_properties)
     add_test(NAME index-overflow COMMAND c50_index_overflow)
+    add_test(NAME float-precision COMMAND c50_float_precision)
     add_test(
         NAME parallel-workload-equivalence
         COMMAND ${C50_TEST_SHELL_COMMAND}
