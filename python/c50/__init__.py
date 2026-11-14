@@ -101,6 +101,52 @@ def _restore_model(
     return load(names, serialized, model_kind, costs, max_tree_depth=None)
 
 
+_ENUMERATIONS: dict[
+    str, type[ModelKind | TieOrder | NodeKind | ConditionKind]
+] = {
+    enumeration.__name__: enumeration
+    for enumeration in (ModelKind, TieOrder, NodeKind, ConditionKind)
+}
+
+
+def _restore_enum(
+    type_name: str, member: str
+) -> ModelKind | TieOrder | NodeKind | ConditionKind:
+    """Return an enumeration member from its type name and member name.
+
+    Pickles of the enumerations name this function, not ``c50._c50``, and
+    identify the member by name, so that they do not depend on the extension
+    module's layout or on the integer values of the members. Unpickling returns
+    the member itself.
+
+    Args:
+        type_name: ``"ModelKind"``, ``"TieOrder"``, ``"NodeKind"``, or
+            ``"ConditionKind"``.
+        member: The name of a member of that enumeration.
+
+    Returns:
+        The member.
+
+    Raises:
+        ValueError: If the enumeration or the member is unknown.
+        TypeError: If an argument is not a string.
+    """
+    # The annotations describe valid arguments, and a pickle may hold others.
+    supplied: tuple[object, object] = (type_name, member)
+    if not all(isinstance(name, str) for name in supplied):
+        raise TypeError("enumeration pickle names must be strings")
+    enumeration = _ENUMERATIONS.get(type_name)
+    if enumeration is None:
+        raise ValueError(f"unknown enumeration {type_name!r} in pickle")
+    try:
+        return enumeration.__members__[member]
+    except KeyError:
+        raise ValueError(
+            f"{type_name} has no member {member!r}; the pickle comes from a "
+            "different version of c50"
+        ) from None
+
+
 __all__ = [
     "C50Error",
     "ConditionKind",
