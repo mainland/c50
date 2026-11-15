@@ -319,6 +319,44 @@ def test_invalid_class_weights_are_rejected(
         C50Classifier(class_weight=class_weight).fit(X, y)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize(
+    ("weight", "error"),
+    [
+        (c50.NOT_APPLICABLE, TypeError),
+        (object(), TypeError),
+        ("heavy", ValueError),
+    ],
+)
+def test_non_numeric_sample_weight_raises_the_documented_exception(
+    weight: object, error: type[Exception]
+) -> None:
+    # `docs/estimator.md` and the `fit` docstring document this rule. A
+    # non-numeric object is a TypeError and a string that does not parse as a
+    # number is a ValueError.
+    X, y, weights = weighted_problem()
+    values = np.asarray(weights, dtype=object)
+    values[3] = weight
+    with pytest.raises(error):
+        C50Classifier().fit(X, y, sample_weight=values)
+
+
+def test_non_numeric_continuous_value_raises_in_every_prediction_method() -> (
+    None
+):
+    # The `Raises` sections of the prediction methods name this TypeError.
+    X, y, _ = weighted_problem()
+    fitted = C50Classifier().fit(X, y)
+    cases = np.asarray(X[:2], dtype=object)
+    cases[0, 0] = "x"
+    for method in (
+        fitted.predict,
+        fitted.predict_proba,
+        fitted.predict_log_proba,
+    ):
+        with pytest.raises(TypeError, match="continuous"):
+            method(cases)
+
+
 def _object_weights(element: object) -> np.ndarray:
     values = np.asarray(weighted_problem()[2], dtype=object)
     values[3] = element
