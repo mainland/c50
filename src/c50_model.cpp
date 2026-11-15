@@ -394,6 +394,16 @@ static void LoadDenseData(c50_context *Context,
             const double value =
                 dataset->values[row * dataset->row_stride + Att - 1];
 
+            /* The mask decides first, as "N/A" does in GetDataRec, and hides
+               whatever value is stored under it. */
+            if ( dataset->not_applicable &&
+                 dataset->not_applicable[row * dataset->feature_count +
+                                         Att - 1] )
+            {
+                DVal(DVec, Att) = NA;
+                Context->cases.some_not_applicable[Att] = true;
+            }
+            else
             if ( isnan(value) )
             {
                 DVal(DVec, Att) = UNKNOWN;
@@ -765,9 +775,9 @@ dense_dataset validate_dense(dense_dataset dataset, bool training)
 
 dense_dataset::dense_dataset(const double *data, std::size_t rows,
                              std::size_t features, const std::size_t *classes,
-                             std::size_t stride)
+                             std::size_t stride, const unsigned char *mask)
     : values(data), row_count(rows), feature_count(features),
-      class_indices(classes), row_stride(stride) {}
+      class_indices(classes), row_stride(stride), not_applicable(mask) {}
 
 model::model(std::unique_ptr<detail::model_data> data) : data_(std::move(data)) {}
 model::~model() = default;
