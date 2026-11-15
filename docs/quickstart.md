@@ -93,6 +93,30 @@ model = c50.train_dense(names, values, class_indices)
 details = model.predict_details_dense(np.asarray([[0.0], [3.0]]))
 ```
 
+NaN marks a missing value, which a data file writes as `?`. A value that does
+not apply to a case, which a data file writes as `N/A`, needs the keyword-only
+`not_applicable` argument: a bool array of the same shape as `values`, in which
+`True` marks a not-applicable value. The matching element of `values` is
+ignored, so it may hold NaN or any other number. C5.0 treats the two kinds of
+absence differently, and a case with a not-applicable value follows a branch of
+its own. `train_dense`, `Model.predict_details_dense`,
+`Predictor.predict_details_dense`, and `Model.attribute_usage_dense` accept the
+argument. Training and prediction must pass the mask in the same way for the
+model to see the same cases:
+
+```python
+values = np.asarray([[0.0], [1.0], [2.0], [3.0], [0.0], [0.0]])
+not_applicable = np.asarray([[False], [False], [False], [False], [True], [True]])
+class_indices = np.asarray([0, 0, 1, 1, 0, 0], dtype=np.uintp)
+
+model = c50.train_dense(
+    names, values, class_indices, not_applicable=not_applicable
+)
+details = model.predict_details_dense(
+    np.asarray([[0.0]]), not_applicable=np.asarray([[True]])
+)
+```
+
 Use `ModelKind.RULES` to construct a rules model. `Options` exposes the native
 training controls.
 

@@ -30,7 +30,12 @@ and JSON exports use the same owned metadata. See {doc}`model-inspection`.
 The C++ API accepts a borrowed, row-major `c50::dense_dataset`. Its
 training and prediction overloads call the compiled C++ core. Continuous values
 are doubles, categorical values are zero-based indices into explicit schema
-values, and NaN denotes a missing value.
+values, and NaN denotes a missing value. An optional `not_applicable` member,
+a borrowed row-major array of `row_count * feature_count` bytes, marks
+not-applicable values. A nonzero byte makes that value not applicable, as `N/A`
+does in a data file, and the native code ignores the matching element of
+`values`. NaN stays missing and never becomes not applicable. The estimator
+does not pass a mask: it treats `None`, NaN, and `pd.NA` as missing.
 
 The Python estimator encodes array input directly into this dense
 representation. It no longer builds a second, whole-dataset C5.0 text buffer.
