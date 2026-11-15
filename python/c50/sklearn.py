@@ -39,6 +39,7 @@ from ._data import (
     fit_schema,
     is_integer_time_dtype,
 )
+from ._sentinel import NOT_APPLICABLE
 from .inspection import export_json as _export_json
 from .inspection import export_text as _export_text
 
@@ -1107,4 +1108,4 @@ def _time_frame(X: object) -> NDArray[Any] | None:
     return array
 
 
-__all__ = ["C50Classifier"]
+__all__ = ["NOT_APPLICABLE", "C50Classifier"]
