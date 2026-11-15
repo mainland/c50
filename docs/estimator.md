@@ -53,6 +53,8 @@ categories as unordered. C5.0 treats an ordered attribute with fewer than three
 categories in the training data as unordered.
 
 `None`, numeric NaN, `pd.NA`, and `pd.NaT` represent missing feature values.
+They stay missing: the estimator does not mark any value as not applicable,
+although the low-level `train_dense` interface can (see {doc}`quickstart`).
 A `Decimal` NaN, quiet or signaling, is missing like any other numeric NaN.
 Infinite continuous values, and finite values beyond the single-precision
 range of about 3.4e38, are rejected with a `ValueError` that names the feature
