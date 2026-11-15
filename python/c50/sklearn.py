@@ -226,9 +226,11 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
 
         Raises:
             TypeError: If a continuous feature contains a non-numeric value
-                other than :data:`c50.NOT_APPLICABLE`.
+                other than :data:`c50.NOT_APPLICABLE`, or if ``sample_weight``
+                contains a non-numeric object, including the marker.
             ValueError: If the data, schema, options, or cost matrix is
-                invalid.
+                invalid, or if ``sample_weight`` contains a string that does
+                not parse as a number.
         """
         self._clear_fitted_state()
         fitted = False
@@ -360,6 +362,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             An array of labels with the fitted class-label dtype.
 
         Raises:
+            TypeError: If a continuous feature contains a non-numeric value
+                other than :data:`c50.NOT_APPLICABLE`.
             ValueError: If the input shape or a feature value is invalid.
         """
         X_checked = self._validate_prediction_input(X)
@@ -391,6 +395,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             fitted class.
 
         Raises:
+            TypeError: If a continuous feature contains a non-numeric value
+                other than :data:`c50.NOT_APPLICABLE`.
             ValueError: If the input shape or a feature value is invalid.
         """
         X_checked = self._validate_prediction_input(X)
@@ -421,6 +427,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             becomes ``-inf``.
 
         Raises:
+            TypeError: If a continuous feature contains a non-numeric value
+                other than :data:`c50.NOT_APPLICABLE`.
             ValueError: If the input shape or a feature value is invalid.
         """
         probabilities = self.predict_proba(X)

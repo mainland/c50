@@ -134,7 +134,8 @@ private module, so unpickling returns the same object.
 - A continuous column, whether inferred or set through `categorical_features`,
   accepts the marker. Any other non-number still raises `TypeError`.
 - `y` cannot hold the marker: `fit` raises `ValueError`. `sample_weight` has no
-  N/A value.
+  N/A value: a weight that is the marker raises `TypeError`, as any other
+  non-numeric weight does (see [Sample weights](#sample-weights)).
 - `unknown_categories`, and categories that a dtype declared but training did
   not use, behave as before. A category named `"N/A"` is an ordinary level.
 - `export_text` and `export_json` show N/A branches, such as `'x' is N/A`.
@@ -298,10 +299,12 @@ computed after training on the training rows, in batches of
 ## Sample weights
 
 `fit` accepts `sample_weight`, either one finite, nonnegative weight per sample
-or a scalar. The estimator passes the weights to C5.0 as its case-weight
-attribute. C5.0 uses case weights when it counts cases but never tests them in
-a classifier. Without `sample_weight`, the names buffer has no case-weight
-attribute, and the classifier is unchanged.
+or a scalar. A weight that is a non-numeric object, including
+`c50.NOT_APPLICABLE`, raises `TypeError`. A string that does not parse as a
+number raises `ValueError`. The estimator passes the weights to C5.0 as its
+case-weight attribute. C5.0 uses case weights when it counts cases but never
+tests them in a classifier. Without `sample_weight`, the names buffer has no
+case-weight attribute, and the classifier is unchanged.
 
 C5.0 divides each case weight by the mean weight, so only the ratios between
 weights matter. Multiplying every weight by a constant does not change the
