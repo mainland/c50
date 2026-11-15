@@ -30,6 +30,9 @@ the names file does not declare or a nonfinite number, and the call raises
 ``ValueError`` with the line number. The ``c5.0`` program instead reports each
 bad value, replaces it with ``?``, and continues until ten errors.
 
+``NOT_APPLICABLE`` marks a not-applicable value in the input of
+``C50Classifier``. See ``docs/estimator.md``.
+
 The enumerations ``ModelKind``, ``TieOrder``, ``NodeKind``, and
 ``ConditionKind`` are ``enum.IntEnum`` types. Each member is a single object
 that compares equal to its integer and hashes as it does, and iteration,
@@ -64,6 +67,7 @@ from ._c50 import (
     train,
     train_dense,
 )
+from ._sentinel import NOT_APPLICABLE
 from .inspection import export_json, export_text
 
 # Version of the state that ``Model`` pickles. Increase it when the state
@@ -167,6 +171,7 @@ def _restore_enum(
 
 
 __all__ = [
+    "NOT_APPLICABLE",
     "C50Error",
     "ConditionKind",
     "ContinuousThreshold",
