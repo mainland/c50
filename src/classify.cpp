@@ -38,6 +38,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+namespace c50::core {
+
 
 
 /*************************************************************************/
@@ -714,3 +716,5 @@ void FreeClassifier(c50_context *Context, int trial)
 	FreeRules(Context->rules.sets[trial]);			Context->rules.sets[trial] = Nil;
     }
 }
+
+}  // namespace c50::core

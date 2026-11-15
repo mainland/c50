@@ -12,6 +12,8 @@
 #include <string>
 #include <utility>
 
+using namespace c50::core;
+
 namespace {
 
 const std::string names = "no, yes.\nx: continuous.\n";

@@ -5,6 +5,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+using namespace c50::core;
+
 int main(int argc, char *argv[])
 {
     static const char names[] =

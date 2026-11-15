@@ -6,6 +6,8 @@
 #include <string>
 #include <type_traits>
 
+using namespace c50::core;
+
 /* Copying a context or one of its state records would copy raw owning
  * pointers and free them twice. */
 static_assert(!std::is_copy_constructible_v<c50_context>);

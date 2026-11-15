@@ -42,6 +42,8 @@
 #include "c50_api_internal.h"
 #include <stdint.h>
 
+namespace c50::core {
+
 
 #define Inc 2048
 
@@ -557,3 +559,5 @@ void CheckValue(c50_context *Context, DataRec DVec, Attribute Att)
 	CVal(DVec, Att) = UNKNOWN;
     }
 }
+
+}  // namespace c50::core

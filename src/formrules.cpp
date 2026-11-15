@@ -47,6 +47,8 @@
 #include "c50_api_internal.h"
 #include <memory>
 
+namespace c50::core {
+
 
 /*************************************************************************/
 /*								  	 */
@@ -719,3 +721,5 @@ void FreeFormRuleData(c50_context *Context)
     Free(Context->rule_build.local_failure_count);					Context->rule_build.local_failure_count = Nil;
     Free(Context->rule_build.successors);						Context->rule_build.successors = Nil;
 }
+
+}  // namespace c50::core

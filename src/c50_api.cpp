@@ -8,6 +8,8 @@
 #include <utility>
 #include "c50_api_internal.h"
 
+namespace c50::core {
+
 int c50_diagnostic_printf(FILE *stream, const char *format, ...)
 {
     if (!stream) return 0;
@@ -17,6 +19,8 @@ int c50_diagnostic_printf(FILE *stream, const char *format, ...)
     va_end(arguments);
     return result;
 }
+
+}  // namespace c50::core
 
 c50::exception::exception(error_code code, const std::string &message)
     : std::runtime_error(message), code_(code) {}
@@ -37,6 +41,8 @@ c50::detail::context_state::~context_state()
     free(ignored_values);
     free(property_value);
 }
+
+namespace c50::core {
 
 std::unique_ptr<c50_context> c50_make_context()
 {
@@ -61,6 +67,8 @@ std::unique_ptr<c50_context> c50_make_context()
     return context;
 }
 
+}  // namespace c50::core
+
 c50::context::context() : state_(c50_make_context()) {}
 c50::context::~context() = default;
 c50::context::context(context &&) noexcept = default;
@@ -73,6 +81,8 @@ void c50::context::split_workers(unsigned count)
                         "split worker count must be between 1 and 8");
     state_->split_worker_count = count;
 }
+
+namespace c50::core {
 
 void c50_clear_prediction_state(c50_context *context)
 {
@@ -137,3 +147,5 @@ void c50_run_operation(c50_context *context, c50_operation_fn operation,
     context->operation_active = 0;
     if (failure) std::rethrow_exception(failure);
 }
+
+}  // namespace c50::core
