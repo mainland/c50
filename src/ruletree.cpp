@@ -44,6 +44,8 @@
 #include "c50_api_internal.h"
 #include <memory>
 
+namespace c50::core {
+
 namespace {
 struct RuleTreeDepthExceeded {};
 constexpr int MaxRuleTreeDepth = 512;
@@ -418,3 +420,5 @@ void FreeRuleTree(RuleTree RT)
     FreeUnlessNil(RT->Fire);
     Free(RT);
 }
+
+}  // namespace c50::core

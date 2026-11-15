@@ -42,6 +42,8 @@
 #include <cmath>
 #include <limits>
 
+namespace c50::core {
+
 
 namespace {
 
@@ -1304,3 +1306,5 @@ int wcswidth(const wchar_t *pwcs, size_t n)
   return width;
 }
 #endif
+
+}  // namespace c50::core

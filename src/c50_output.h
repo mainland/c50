@@ -8,6 +8,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
+namespace c50::core {
+
 typedef enum c50_output_kind
 {
     C50_OUTPUT_FILE,
@@ -49,5 +51,7 @@ unsigned char *c50_output_take_memory(c50_output *output, size_t *size);
 
 /* Close an owned file or release a memory buffer. */
 int c50_output_close(c50_output *output);
+
+}  // namespace c50::core
 
 #endif

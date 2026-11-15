@@ -7,6 +7,8 @@
 
 #include "c50_index.h"
 
+using namespace c50::core;
+
 static int failures;
 
 static void expect(const char *label, std::size_t actual, std::size_t expected)

@@ -39,6 +39,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+namespace c50::core {
+
 
 /*************************************************************************/
 /*									 */
@@ -151,3 +153,5 @@ void PrintDistribution(c50_context *Context, Attribute Att,
 	c50_diagnostic_printf(Context->io.output, "]\n");
     }
 }
+
+}  // namespace c50::core

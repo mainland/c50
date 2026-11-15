@@ -41,6 +41,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+namespace c50::core {
+
 
 
 /*************************************************************************/
@@ -607,3 +609,5 @@ void SubsetTest(c50_context *Context, Tree Node, Attribute Att)
 	CopyBits(Bytes, Context->splits.subsets[Att][S], Node->Subset[S]);
     }
 }
+
+}  // namespace c50::core

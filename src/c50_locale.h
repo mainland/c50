@@ -10,6 +10,8 @@
 #include <locale.h>
 #endif
 
+namespace c50::core {
+
 /* The core formats and parses numbers with C library functions that follow the
  * calling thread's locale. A c50_c_locale_scope makes the calling thread use
  * the C locale, so that model text, data, names, and costs read and write `.`
@@ -64,5 +66,7 @@ private:
     locale_t previous_;
 #endif
 };
+
+}  // namespace c50::core
 
 #endif

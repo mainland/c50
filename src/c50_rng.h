@@ -6,6 +6,8 @@
 
 #include <stdint.h>
 
+namespace c50::core {
+
 typedef struct
 {
     int first;
@@ -26,5 +28,7 @@ typedef struct
 
 double Drand48(Drand48State *state);
 void ResetDrand48(Drand48State *state);
+
+}  // namespace c50::core
 
 #endif
