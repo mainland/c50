@@ -38,6 +38,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+namespace c50::core {
+
 
 /*************************************************************************/
 /*									 */
@@ -410,3 +412,5 @@ float SE(float sum, float sumsq, int no)
 
     return sqrt( (double) (((sumsq - no * mean * mean) / (no - 1)) / no) );
 }
+
+}  // namespace c50::core

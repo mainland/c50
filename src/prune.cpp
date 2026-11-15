@@ -41,6 +41,8 @@
 #include <memory>
 #include "c50_api_internal.h"
 
+namespace c50::core {
+
 
 #define	  LocalVerbosity(x,s)	if (Sh >= 0) {Verbosity(x,s)}
 #define	  Intab(x)		Indent(Context, x, 0)
@@ -1097,3 +1099,5 @@ void SetGlobalUnitWeights(c50_context *Context, int LocalFlag)
 {
     Context->costs.unit_weights = ( LocalFlag != 0 );
 }
+
+}  // namespace c50::core

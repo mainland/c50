@@ -40,6 +40,8 @@
 #include <memory>
 #include "c50_api_internal.h"
 
+namespace c50::core {
+
 
 #define	TabSize		4
 #define Utility		ClassDist[0]
@@ -754,3 +756,5 @@ Tree CopyTree(c50_context *Context, Tree T)
 
     return owner.release();
 }
+
+}  // namespace c50::core

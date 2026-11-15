@@ -28,13 +28,17 @@ their current results.
 | Wheels for CPython 3.10 through 3.14 | Linux x86-64 and ARM64, macOS arm64 and x86-64, Windows AMD64 | `wheels.yml`, `wheels` | Build from the source distribution and test each wheel |
 
 Free-threaded Python, GPU arrays, and other compiler or platform combinations
-are not tested. Six tests run only on Linux. `in-memory-without-files`,
+are not tested. Seven tests run only on Linux. `in-memory-without-files`,
 `allocation-failure`, and `parallel-failure` need GNU or Clang on Linux because
 they link with `-Wl,--wrap`, and `writable-global-inventory` reads ELF symbols
-with GNU `nm`. `math-overloads` compiles each source twice, with and without `-DVerbOpt`,
-at `-O0 -fno-inline`. It fails when `nm` lists a math function overload for
-`float` or `long double`, such as `std::log(float)`, which C++ selects where
-Release 2.07's C calls the `double` function. It also fails when `nm` fails,
+with GNU `nm`. `core-namespace` lists the external symbols of `libc50_core.a`
+with `nm` and fails on any outside the `c50` and standard-library namespaces,
+except for a short allowlist. It does not run for a core compiled with
+link-time optimization. `math-overloads` compiles each source twice, with and
+without `-DVerbOpt`, at `-O0 -fno-inline`. It fails when `nm` lists a math
+function overload for `float` or `long double`, such as `std::log(float)`,
+which C++ selects where Release 2.07's C calls the `double` function. It also
+fails when `nm` fails,
 when no object lists a symbol, and when it does not report the `float`
 overload that `tests/math_overload_control.cpp` calls. The calls that match
 Release 2.07's precision cast the whole argument to `double`. An optimized

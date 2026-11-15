@@ -54,6 +54,8 @@
 #endif
 
 
+namespace c50::core {
+
 #define		SAMPLEUNIT	2000
 
 
@@ -1386,3 +1388,5 @@ void FindAllFreq(c50_context *Context, CaseNo Fp, CaseNo Lp)
 	}
     }
 }
+
+}  // namespace c50::core

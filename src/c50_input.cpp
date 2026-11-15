@@ -12,6 +12,8 @@
 #include "c50_input.h"
 #include "c50_api_internal.h"
 
+namespace c50::core {
+
 void c50_input_init_file(c50_input *input, FILE *file, c50_context *context)
 {
     input->buffer.resize(c50_input_block_size);
@@ -91,3 +93,5 @@ void c50_input_rewind(c50_input *input)
         input->end = input->data + input->size;
     }
 }
+
+}  // namespace c50::core

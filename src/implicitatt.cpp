@@ -45,6 +45,8 @@
 #include <string.h>
 #include <memory>
 
+namespace c50::core {
+
 struct c50_implicit_state
 {
     explicit c50_implicit_state(c50_context *owner) : context(owner)
@@ -1293,3 +1295,5 @@ AttValue EvaluateDef(c50_context *Context, Definition D, DataRec Case)
 	}
     }
 }
+
+}  // namespace c50::core

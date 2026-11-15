@@ -19,6 +19,8 @@
 #include "defns.i"
 #include "extern.i"
 
+namespace c50::core {
+
 using c50_model = c50::detail::model_data;
 using c50_predictions = c50::detail::prediction_data;
 using c50_model_kind = c50::model_kind;
@@ -26,6 +28,8 @@ using c50_options = c50::options;
 using c50_dense_dataset = c50::dense_dataset;
 using owned_model = std::unique_ptr<c50_model>;
 using owned_predictions = std::unique_ptr<c50_predictions>;
+
+}  // namespace c50::core
 
 struct c50::detail::model_data
 {
@@ -61,6 +65,8 @@ struct c50::detail::prediction_data
     std::vector<double> confidences;
     std::vector<double> scores;
 };
+
+namespace c50::core {
 
 /* The state records pass an operation's inputs and results through
  * c50_run_operation. Copying one would copy views of caller storage and the
@@ -720,6 +726,8 @@ static void CleanupPrediction(c50_context *Context, void *user_data)
     c50_clear_prediction_state(Context);
     Context->io.output = NULL;
 }
+
+}  // namespace c50::core
 
 namespace c50 {
 namespace {

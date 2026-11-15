@@ -847,6 +847,18 @@ if(BUILD_TESTING)
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/expected/writable-globals.txt"
         )
     endif()
+    # The check lists mangled names from the core archive, so it needs the
+    # native objects that a core compiled with link-time optimization lacks.
+    if(CMAKE_NM AND CMAKE_SYSTEM_NAME STREQUAL "Linux"
+       AND NOT c50_core_lto)
+        add_test(
+            NAME core-namespace
+            COMMAND
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_core_namespace.sh"
+                "${CMAKE_NM}"
+                "$<TARGET_FILE:c50_core>"
+        )
+    endif()
     if(CMAKE_NM AND CMAKE_SYSTEM_NAME STREQUAL "Linux"
        AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         add_test(

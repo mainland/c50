@@ -57,6 +57,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+namespace c50::core {
+
 /*************************************************************************/
 /*									 */
 /*	Grow single tree or sequence of boosted trees			 */
@@ -879,3 +881,5 @@ void RecordAttUsage(c50_context *Context, DataRec Case, int *Usage)
 	}
     }
 }
+
+}  // namespace c50::core
