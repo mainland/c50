@@ -162,7 +162,8 @@ private module, so unpickling returns the same object.
 - A continuous column, whether inferred or set through `categorical_features`,
   accepts the marker. Any other non-number still raises `TypeError`.
 - `y` cannot hold the marker: `fit` raises `ValueError`. `sample_weight` has no
-  N/A value.
+  N/A value: a weight that is the marker raises `TypeError`, as any other
+  non-numeric weight does (see {ref}`Sample weights <sample-weights>`).
 - `unknown_categories`, and categories that a dtype declared but training did
   not use, behave as before. A category named `"N/A"` is an ordinary level.
 - `export_text` and `export_json` show N/A branches, such as `'x' is N/A`.
@@ -333,6 +334,8 @@ trees. Tools such as `SelectFromModel` use it for relative ranking. Usage is
 computed after training on the training rows, in batches of
 `prediction_batch_size`.
 
+(sample-weights)=
+
 ## Sample weights
 
 `fit` accepts `sample_weight`, either one finite, nonnegative weight per sample
@@ -347,7 +350,8 @@ or a string. The estimator checks the type before it converts any weight to
   `ValueError`.
 - Anything else raises `TypeError`: arrays of datetime, timedelta, complex, and
   structured kinds, and in an object array `None`, `pandas.NA`, `pandas.NaT`,
-  dates, times, timedeltas, complex numbers, and any other object.
+  `c50.NOT_APPLICABLE`, dates, times, timedeltas, complex numbers, and any
+  other object.
 - A weight element that is a 0-d array is judged by its dtype. The element
   check comes first, before the shape check. Sequence or array elements of one
   common length whose items are of accepted types make a weight array with more

@@ -231,9 +231,10 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 weight by a constant does not change the classifier. Samples
                 with zero weight are removed before fitting. A weight is a real
                 number, including a ``bool`` or ``decimal.Decimal``, or a
-                string that parses as one. Arrays of other kinds and objects
-                such as ``None``, ``pandas.NA``, dates, times, timedeltas, and
-                complex numbers are rejected.
+                string that parses as one. An array of any other kind, or an
+                object that is neither, is rejected, including ``None``,
+                ``pandas.NA``, dates, times, timedeltas, complex numbers, and
+                the marker.
 
         Returns:
             This fitted estimator.
@@ -242,8 +243,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             TypeError: If a continuous feature contains a non-numeric value
                 other than :data:`c50.NOT_APPLICABLE`, or if ``sample_weight``
                 is an array of datetime, timedelta, complex, or structured kind
-                or holds an object other than a real number,
-                ``decimal.Decimal``, or a string.
+                or contains an object that is not a real number,
+                ``decimal.Decimal``, or string, including the marker.
             ValueError: If the data, schema, options, or cost matrix is
                 invalid, or if an input conversion to NumPy raises an
                 ``Exception`` other than ``MemoryError``, as for a tensor in
@@ -387,6 +388,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             An array of labels with the fitted class-label dtype.
 
         Raises:
+            TypeError: If a continuous feature contains a non-numeric value
+                other than :data:`c50.NOT_APPLICABLE`.
             ValueError: If the input shape or a feature value is invalid, or if
                 an array cannot be converted to NumPy.
         """
@@ -419,6 +422,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             fitted class.
 
         Raises:
+            TypeError: If a continuous feature contains a non-numeric value
+                other than :data:`c50.NOT_APPLICABLE`.
             ValueError: If the input shape or a feature value is invalid, or if
                 an array cannot be converted to NumPy.
         """
@@ -450,6 +455,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             becomes ``-inf``.
 
         Raises:
+            TypeError: If a continuous feature contains a non-numeric value
+                other than :data:`c50.NOT_APPLICABLE`.
             ValueError: If the input shape or a feature value is invalid, or if
                 an array cannot be converted to NumPy.
         """
