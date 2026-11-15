@@ -12,7 +12,7 @@ from typing import Any
 
 import c50
 import numpy as np
-from c50.sklearn import C50Classifier
+from c50.sklearn import NOT_APPLICABLE, C50Classifier
 from numpy.typing import NDArray
 
 if sys.version_info >= (3, 11):
@@ -62,6 +62,14 @@ assert_type(classifier, C50Classifier)
 labels: NDArray[Any] = classifier.predict(X)
 probabilities: NDArray[np.float64] = classifier.predict_proba(X)
 assert_type(classifier.export_text(max_depth=np.int64(1)), str)
+
+# One marker for not-applicable values, importable from both modules, goes in
+# an object array of feature values.
+assert NOT_APPLICABLE is c50.NOT_APPLICABLE
+marked: NDArray[np.object_] = np.asarray(
+    [[c50.NOT_APPLICABLE, 1.0], [2.0, NOT_APPLICABLE]], dtype=object
+)
+assert_type(classifier.predict(marked), NDArray[Any])
 
 inspection = model.inspect()
 assert_type(inspection, c50.ModelInspection)
