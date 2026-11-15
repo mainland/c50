@@ -15,12 +15,16 @@ changes.
 - The scikit-learn estimator, `c50.sklearn.C50Classifier`: its constructor
   parameters, methods, and fitted attributes, and the way it treats
   `NOT_APPLICABLE` in `X`.
-- The low-level Python API exported by the `c50` package: `train`,
-  `train_dense`, `load`, `Model`, `Options`, `Predictor`, `Predictions`, the
-  enumerations, `C50Error`, `export_text` and `export_json`, and the
-  not-applicable marker `NOT_APPLICABLE`, also importable from `c50.sklearn`.
-- The inspection records, from `ModelInspection` to `SplitCondition`, and the
-  fields of the JSON export for a given `format_version`.
+- The low-level Python API: the names in the `__all__` of the `c50` package,
+  and the `C50Classifier` and `NOT_APPLICABLE` names in the `__all__` of
+  `c50.sklearn`. These are `train`, `train_dense`, `load`, `Model`, `Options`,
+  `Predictor`, `Predictions`, the enumerations, `C50Error`, `export_text`,
+  `export_json`, the inspection records, and the not-applicable marker
+  `NOT_APPLICABLE`.
+- The eight inspection record classes `ModelInspection`, `TreeInspection`,
+  `TreeNode`, `TreeBranch`, `ContinuousThreshold`, `RuleInspection`,
+  `RulesetInspection`, and `SplitCondition`, and the fields of the JSON export
+  for a given `format_version`.
 - The C++ API declared in `<c50/c50.hpp>`, outside the `c50::detail`
   namespace, and the `C50::cpp` CMake target.
 - The command-line options and output of the `c5.0` and `report` programs, as
@@ -63,6 +67,14 @@ These are not part of the stable interface:
 - The `c50::detail` and `c50::core` namespaces in C++. The learning core, which
   the imported C5.0 sources implement, lives in `c50::core`, so a consumer that
   links the static library can define global names that the core also uses.
+- Python names outside the `__all__` rule above. These include the
+  `c50.inspection` module, the `c50.sklearn` aliases `ModelKindName`,
+  `TieOrderName`, `UnknownCategoryPolicy`, and `ClassWeight`, and the names
+  that `c50.sklearn` imports from `c50`, such as `Model`, `ModelKind`,
+  `Options`, and `TieOrder`. Import them from `c50`.
+- The `C50::core` CMake target, which the package exports because `C50::cpp`
+  links it. Link `C50::cpp`. This target is unrelated to the `c50::core`
+  namespace above.
 - The text of error messages. Match the exception type, or the C++
   `c50::error_code`, rather than the message.
 - The binary interface of the native library. Rebuild C++ consumers when the
