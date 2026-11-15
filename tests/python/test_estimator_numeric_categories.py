@@ -125,7 +125,7 @@ def test_object_column_merges_equal_int_and_float() -> None:
 
     assert schema.categories == ((0, 1, 2),)
     assert [type(v) for v in schema.categories[0]] == [int, int, int]
-    encoded = schema.dense_data(values.reshape(-1, 1), "error")
+    encoded = schema.dense_data(values.reshape(-1, 1), "error").values
     assert encoded[:, 0].tolist() == [1, 1, 2, 0, 0, 2]
 
 
@@ -155,7 +155,7 @@ def test_boolean_and_integer_categories_stay_distinct() -> None:
     schema = fit_schema(values, categorical_features=[0])
 
     assert schema.categories == ((False, True, 0, 1),)
-    encoded = schema.dense_data(values, "error")[:, 0]
+    encoded = schema.dense_data(values, "error").values[:, 0]
     assert encoded[0] != encoded[1]
     assert encoded[1] != encoded[2]
     assert encoded[1] == 3
@@ -241,7 +241,7 @@ def test_decimal_nan_is_a_missing_value(nan: Decimal) -> None:
     schema = fit_schema(column, categorical_features=[0])
 
     assert schema.categories == ((Decimal(1), Decimal(2)),)
-    encoded = schema.dense_data(column, "error")
+    encoded = schema.dense_data(column, "error").values
     assert np.isnan(encoded[:, 0]).tolist() == [False, True, False, True]
 
 
@@ -252,7 +252,9 @@ def test_decimal_signaling_nan_is_a_missing_value() -> None:
     schema = fit_schema(column, categorical_features=[0])
 
     assert schema.categories == ((Decimal(1), Decimal(2)),)
-    assert np.isnan(schema.dense_data(column, "error")[:, 0]).tolist() == [
+    assert np.isnan(
+        schema.dense_data(column, "error").values[:, 0]
+    ).tolist() == [
         False,
         True,
         False,

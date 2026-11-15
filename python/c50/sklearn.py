@@ -29,7 +29,15 @@ from sklearn.utils.validation import (
 )
 
 from ._c50 import Model, ModelKind, Options, TieOrder
-from ._data import Columns, Schema, dataframe_columns, encode_costs, fit_schema
+from ._data import (
+    Columns,
+    DenseData,
+    Schema,
+    dataframe_columns,
+    encode_costs,
+    fit_schema,
+)
+from ._sentinel import NOT_APPLICABLE
 from .inspection import export_json as _export_json
 from .inspection import export_text as _export_text
 
@@ -61,6 +69,10 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
     features are categorical by default. Set ``categorical_features`` to a
     sequence of column indices or names to override inference. When it is set,
     every unlisted feature is continuous.
+
+    A cell that holds :data:`c50.NOT_APPLICABLE` reaches C5.0 as ``N/A``. Type
+    inference ignores such cells, so a column of numbers and markers is
+    continuous. See ``docs/estimator.md``, section "Not-applicable values".
 
     The estimator converts arrays to the native dense representation, then
     delegates training and prediction to the low-level binding. It does not
@@ -213,7 +225,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             This fitted estimator.
 
         Raises:
-            TypeError: If a continuous feature contains a non-numeric value.
+            TypeError: If a continuous feature contains a non-numeric value
+                other than :data:`c50.NOT_APPLICABLE`.
             ValueError: If the data, schema, options, or cost matrix is
                 invalid.
         """
@@ -223,6 +236,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             self._validate_configuration()
             X = _host_array(X, "X")
             y = _host_array(y, "y")
+            _reject_not_applicable_labels(y)
             sample_weight = _host_array(sample_weight, "sample_weight")
             X_checked: NDArray[Any] | Columns
             if _is_column_frame(X):
@@ -270,31 +284,32 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             if weights is not None:
                 schema = dataclasses.replace(schema, case_weight=True)
             names_data = schema.names_data(classes.shape[0])
-            training_values = schema.dense_data(X_checked, "error", weights)
+            training = schema.dense_data(X_checked, "error", weights)
             native_class_indices = np.asarray(class_indices, dtype=np.uintp)
             costs_data = encode_costs(classes.shape[0], self.cost_matrix)
             options = self._native_options()
             model = Model.train_dense(
                 names_data,
-                training_values,
+                training.values,
                 native_class_indices,
                 self._native_model_kind(),
                 options,
                 costs_data,
                 self._native_workers(),
-                # training_values is private to this call, so no thread can
-                # modify it while training runs without the GIL.
+                # training is private to this call, so no thread can modify its
+                # arrays while training runs without the GIL.
                 copy=False,
+                not_applicable=training.not_applicable,
             )
 
-            usage = self._attribute_usage(model, training_values)[
+            usage = self._attribute_usage(model, training)[
                 : len(schema.features)
             ]
             total = usage.sum()
 
             self.classes_ = classes
             self.model_ = model
-            self.attribute_usage_ = usage / training_values.shape[0]
+            self.attribute_usage_ = usage / training.values.shape[0]
             self.feature_importances_ = (
                 usage / total if total else np.zeros_like(usage)
             )
@@ -350,8 +365,10 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         X_checked = self._validate_prediction_input(X)
         indices = np.empty(X_checked.shape[0], dtype=np.intp)
         predictor = self.model_.prepare_predictor()
-        for row_slice, values in self._prediction_batches(X_checked):
-            details = predictor.predict_details_dense(values)
+        for row_slice, batch in self._prediction_batches(X_checked):
+            details = predictor.predict_details_dense(
+                batch.values, not_applicable=batch.not_applicable
+            )
             indices[row_slice] = np.asarray(
                 details.class_indices, dtype=np.intp
             )
@@ -383,8 +400,10 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         )
         predicted = np.empty(X_checked.shape[0], dtype=np.intp)
         predictor = self.model_.prepare_predictor()
-        for row_slice, values in self._prediction_batches(X_checked):
-            details = predictor.predict_details_dense(values)
+        for row_slice, batch in self._prediction_batches(X_checked):
+            details = predictor.predict_details_dense(
+                batch.values, not_applicable=batch.not_applicable
+            )
             scores[row_slice] = np.asarray(details.scores, dtype=np.float64)
             predicted[row_slice] = np.asarray(
                 details.class_indices, dtype=np.intp
@@ -561,21 +580,28 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
     def _attribute_usage(
         self,
         model: Model,
-        values: NDArray[np.float64],
+        data: DenseData,
     ) -> NDArray[np.float64]:
         """Count, per C5.0 attribute, the training rows that use it."""
-        batch_size = self._batch_size() or max(1, values.shape[0])
-        usage = np.zeros(values.shape[1], dtype=np.float64)
-        for start in range(0, values.shape[0], batch_size):
+        rows, width = data.values.shape
+        batch_size = self._batch_size() or max(1, rows)
+        usage = np.zeros(width, dtype=np.float64)
+        for start in range(0, rows, batch_size):
+            batch = slice(start, start + batch_size)
             usage += model.attribute_usage_dense(
-                values[start : start + batch_size]
+                data.values[batch],
+                not_applicable=(
+                    None
+                    if data.not_applicable is None
+                    else data.not_applicable[batch]
+                ),
             )
         return usage
 
     def _prediction_batches(
         self,
         X: NDArray[Any] | Columns,
-    ) -> Iterator[tuple[slice, NDArray[np.float64]]]:
+    ) -> Iterator[tuple[slice, DenseData]]:
         batch_size = self._batch_size() or max(1, X.shape[0])
         for start in range(0, X.shape[0], batch_size):
             stop = min(start + batch_size, X.shape[0])
@@ -818,6 +844,27 @@ def _host_array(values: Any, name: str) -> Any:
         ) from exc
 
 
+def _reject_not_applicable_labels(y: object) -> None:
+    """Raise ``ValueError`` if ``y`` holds ``NOT_APPLICABLE``.
+
+    A class label is always applicable. Numeric and string arrays cannot hold
+    the marker, so only other inputs are searched.
+    """
+    dtype = getattr(y, "dtype", None)
+    if isinstance(dtype, np.dtype) and dtype.kind != "O":
+        return
+    try:
+        labels = np.asarray(y, dtype=object).ravel()
+    except (TypeError, ValueError):
+        # Let the input check report an input that is not an array of labels.
+        return
+    if any(label is NOT_APPLICABLE for label in labels):
+        raise ValueError(
+            "y contains c50.NOT_APPLICABLE; class labels cannot be not "
+            "applicable"
+        )
+
+
 def _is_column_frame(X: object) -> bool:
     """Return whether ``X`` is a DataFrame to convert column by column.
 
@@ -843,4 +890,4 @@ def _validation_dtype(X: ArrayLike) -> type[object] | None:
     return object
 
 
-__all__ = ["C50Classifier"]
+__all__ = ["NOT_APPLICABLE", "C50Classifier"]

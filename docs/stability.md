@@ -13,10 +13,12 @@ source compatible. Code that uses them as documented continues to work without
 changes.
 
 - The scikit-learn estimator, `c50.sklearn.C50Classifier`: its constructor
-  parameters, methods, and fitted attributes.
+  parameters, methods, and fitted attributes, and the way it treats
+  `NOT_APPLICABLE` in `X`.
 - The low-level Python API exported by the `c50` package: `train`,
   `train_dense`, `load`, `Model`, `Options`, `Predictor`, `Predictions`, the
-  enumerations, `C50Error`, and `export_text` and `export_json`.
+  enumerations, `C50Error`, `export_text` and `export_json`, and the
+  not-applicable marker `NOT_APPLICABLE`, also importable from `c50.sklearn`.
 - The inspection records, from `ModelInspection` to `SplitCondition`, and the
   fields of the JSON export for a given `format_version`.
 - The C++ API declared in `<c50/c50.hpp>`, outside the `c50::detail`
