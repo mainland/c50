@@ -437,7 +437,8 @@ void ErrorContext(c50_context *Context, int ErrNo, const char *S1,
 
     if ( Context->io.output ) c50_diagnostic_printf(Context->io.output, "\n");
 
-    if ( ErrNo == NOFILE || ErrNo == NOMEM || ErrNo == MODELFILE )
+    if ( ErrNo == NOFILE || ErrNo == NOMEM || ErrNo == MODELFILE ||
+	 ErrNo == NOXVALCASES )
     {
 	AppendFormatted(Buffer, "*** ");
     }
@@ -580,6 +581,11 @@ void ErrorContext(c50_context *Context, int ErrNo, const char *S1,
 	case BADDEF4:
 	    AppendFormatted(Buffer, E_BADDEF4, Context->schema.attribute_names[Context->schema.max_attribute]);
 	    WarningOnly = true;
+	    break;
+
+	case NOXVALCASES:
+	    AppendFormatted(Buffer, "cannot cross-validate with no cases\n");
+	    Quit = true;
 	    break;
 
 	case MODELFILE:
