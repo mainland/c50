@@ -53,20 +53,20 @@ categories as unordered. C5.0 treats an ordered attribute with fewer than three
 categories in the training data as unordered.
 
 `None`, numeric NaN, `pd.NA`, and `pd.NaT` represent missing feature values.
-They stay missing: the estimator does not mark any value as not applicable,
-although the low-level `train_dense` interface can (see {doc}`quickstart`).
-A `Decimal` NaN, quiet or signaling, is missing like any other numeric NaN.
-Infinite continuous values, and finite values beyond the single-precision
-range of about 3.4e38, are rejected with a `ValueError` that names the feature
-and, for numeric columns, the first row. C5.0 stores continuous values as
-single-precision floats. An unseen prediction-time category raises
-`ValueError` by default. Set `unknown_categories="missing"` to pass
-unseen categories to C5.0 as missing values. A category that a pandas
-`category` dtype declared during fitting, but that no training row used, is
-always passed as a missing value, as in `HistGradientBoostingClassifier`.
-Such categories are not in `categories_` and do not change the classifier, so
-a filtered DataFrame that keeps unused categories trains the same classifier
-as one without them.
+`pd.NA` means missing, not not applicable. To mark a value as not applicable,
+use `c50.NOT_APPLICABLE` (see
+{ref}`Not-applicable values <not-applicable-values>`). A `Decimal` NaN, quiet
+or signaling, is missing like any other numeric NaN. Infinite continuous
+values, and finite values beyond the single-precision range of about 3.4e38,
+are rejected with a `ValueError` that names the feature and, for numeric
+columns, the first row. C5.0 stores continuous values as single-precision
+floats. An unseen prediction-time category raises `ValueError` by default. Set
+`unknown_categories="missing"` to pass unseen categories to C5.0 as missing
+values. A category that a pandas `category` dtype declared during fitting, but
+that no training row used, is always passed as a missing value, as in
+`HistGradientBoostingClassifier`. Such categories are not in `categories_` and
+do not change the classifier, so a filtered DataFrame that keeps unused
+categories trains the same classifier as one without them.
 
 Real numbers match by value, and other values match only equal values of
 their own type. An integer category matches an equal float, so a model fitted
@@ -117,6 +117,61 @@ The estimator first converts a data frame, other than a pandas one, once
 with `numpy.asarray` to find out whether it holds dates or durations. An
 `Exception` from that conversion raises `ValueError`, and a `MemoryError`
 propagates, even when a second conversion would succeed.
+
+(not-applicable-values)=
+
+## Not-applicable values
+
+C5.0 distinguishes a missing value, which exists but is unknown, from a
+not-applicable (N/A) value, which the case has no basis to hold, such as the
+number of doors of a case that is not a car. C5.0 spreads a missing value over
+the branches of a split and sends an N/A value down a branch of its own, so the
+two can train different classifiers.
+
+Mark an N/A cell of `X` with the object `c50.NOT_APPLICABLE`, also importable
+as `c50.sklearn.NOT_APPLICABLE`. `fit`, `predict`, `predict_proba`, and
+`predict_log_proba` pass the cell to C5.0 as `N/A`, for continuous and
+categorical features alike, and the estimator trains the classifier that
+`c50.train` trains from text input with `N/A` in those places. A classifier fitted
+without N/A values may still predict for cases that have them.
+
+```python
+import numpy as np
+import c50
+from c50.sklearn import C50Classifier
+
+NA = c50.NOT_APPLICABLE
+X = np.array([[1.5, "a"], [NA, "b"], [2.5, NA], [0.5, "a"]] * 5, dtype=object)
+y = ["u", "v", "u", "v"] * 5
+classifier = C50Classifier(minimum_cases=1).fit(X, y)
+```
+
+The marker is a singleton. It equals only itself, is hashable, is not a number,
+and is not missing to `pandas.isna`. `repr` returns `c50.NOT_APPLICABLE`.
+Copying returns the same object, and a pickle names `c50.NOT_APPLICABLE`, not a
+private module, so unpickling returns the same object.
+
+- Type inference ignores the marker. A column whose other values are numbers is
+  continuous, and a column that holds only the marker and missing values is
+  continuous, like a column of only missing values. The marker is never a
+  category and never appears in `categories_`.
+- A pandas `category` column may list the marker among its categories. The
+  estimator treats that category as N/A, leaves it out of `categories_`, and
+  keeps the order of the other categories, including the order of an ordered
+  dtype.
+- A continuous column, whether inferred or set through `categorical_features`,
+  accepts the marker. Any other non-number still raises `TypeError`.
+- `y` cannot hold the marker: `fit` raises `ValueError`. `sample_weight` has no
+  N/A value.
+- `unknown_categories`, and categories that a dtype declared but training did
+  not use, behave as before. A category named `"N/A"` is an ordinary level.
+- `export_text` and `export_json` show N/A branches, such as `'x' is N/A`.
+
+A column that holds the marker has object dtype, which the estimator encodes one
+value at a time, more slowly than a `float64` column. Input without the marker
+takes the same path and costs as before. A transformer that converts object
+columns to numbers, such as `SimpleImputer`, rejects or drops the marker as it
+does any other non-number, so apply it only to columns without the marker.
 
 The adapter maps class labels and categorical values to internal tokens before
 constructing the C5.0 names buffer and dense feature matrix. Delimiters and
