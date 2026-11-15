@@ -379,6 +379,96 @@ run_zero_training()
     fi
 }
 
+# Cross-validation with no case left to validate: an empty data file, data in
+# which every case has an unknown class, or a sample that selects no case.
+# Release 2.07 divides by zero and dies from SIGFPE. This project reports the
+# error and exits 1.
+run_empty_cross_validation()
+{
+    empty_name=$1
+    empty_names=$2
+    empty_data=$3
+    shift 3
+
+    empty_dir="$test_dir/empty-cross-validation-$empty_name"
+    mkdir "$empty_dir"
+    printf '%s' "$empty_names" > "$empty_dir/empty.names"
+    printf '%s' "$empty_data" > "$empty_dir/empty.data"
+
+    set +e
+    (
+        cd "$empty_dir"
+        "$binary" -f empty "$@" > output.raw 2>&1
+    )
+    empty_exit_code=$?
+    set -e
+
+    if test "$empty_exit_code" -ne 1; then
+        printf 'cross-validation on no cases (%s) returned %d, expected 1\n' \
+            "$empty_name" "$empty_exit_code" >&2
+        cat "$empty_dir/output.raw" >&2
+        return 1
+    fi
+    if ! grep -F -x -e '*** cannot cross-validate with no cases' \
+        "$empty_dir/output.raw" > /dev/null; then
+        printf 'cross-validation on no cases (%s) did not report the error\n' \
+            "$empty_name" >&2
+        cat "$empty_dir/output.raw" >&2
+        return 1
+    fi
+}
+
+# Rules with a costs file on data with no cases or with one class among three.
+# The average cost of the rule normalization is then 0/0. Release 2.07 forms no
+# rules, writes the first class or the only class as the default, and exits 0.
+# This project does the same.
+run_rule_costs_degenerate()
+{
+    degenerate_name=$1
+    degenerate_data=$2
+    shift 2
+
+    degenerate_dir="$test_dir/rule-costs-$degenerate_name"
+    mkdir "$degenerate_dir"
+    cp "$script_dir/fixtures/multiclass/multiclass.names" "$degenerate_dir/"
+    cp "$script_dir/fixtures/multiclass/multiclass.test" "$degenerate_dir/"
+    printf '%s' "$degenerate_data" > "$degenerate_dir/multiclass.data"
+    printf 'red, green: 2\nblue, red: 3\n' > "$degenerate_dir/multiclass.costs"
+
+    set +e
+    (
+        cd "$degenerate_dir"
+        "$binary" -f multiclass -r "$@" > output.raw 2>&1
+    )
+    degenerate_exit_code=$?
+    set -e
+
+    if test "$degenerate_exit_code" -ne 0; then
+        printf 'rule costs on %s (%s) returned %d, expected 0\n' \
+            "$degenerate_name" "$*" "$degenerate_exit_code" >&2
+        cat "$degenerate_dir/output.raw" >&2
+        return 1
+    fi
+    if ! grep -F -x -e 'Default class: red' \
+        "$degenerate_dir/output.raw" > /dev/null; then
+        printf 'rule costs on %s (%s) did not default to red\n' \
+            "$degenerate_name" "$*" >&2
+        cat "$degenerate_dir/output.raw" >&2
+        return 1
+    fi
+    printf 'costs="1"\nentries="1"\nrules="0" default="red"\n' \
+        > "$degenerate_dir/rules.expected"
+    normalize_model "$degenerate_dir/multiclass.rules" |
+        LC_ALL=C sed -e '1d' > "$degenerate_dir/rules.actual"
+    if ! cmp -s "$degenerate_dir/rules.expected" \
+        "$degenerate_dir/rules.actual"; then
+        printf 'rule costs on %s (%s) wrote an unexpected model\n' \
+            "$degenerate_name" "$*" >&2
+        cat "$degenerate_dir/rules.actual" >&2
+        return 1
+    fi
+}
+
 run_invalid_option()
 {
     option_name=$1
@@ -503,58 +593,6 @@ expect_option_message sample-empty \
 expect_option_message folds-empty \
     "$illegal 0 -- should be between 2 and 1000" -X ''
 
-# Rules with a costs file on data with no cases or with one class among three.
-# The average cost of the rule normalization is then 0/0. Release 2.07 forms no
-# rules, writes the first class or the only class as the default, and exits 0.
-# This project does the same.
-run_rule_costs_degenerate()
-{
-    degenerate_name=$1
-    degenerate_data=$2
-    shift 2
-
-    degenerate_dir="$test_dir/rule-costs-$degenerate_name"
-    mkdir "$degenerate_dir"
-    cp "$script_dir/fixtures/multiclass/multiclass.names" "$degenerate_dir/"
-    cp "$script_dir/fixtures/multiclass/multiclass.test" "$degenerate_dir/"
-    printf '%s' "$degenerate_data" > "$degenerate_dir/multiclass.data"
-    printf 'red, green: 2\nblue, red: 3\n' > "$degenerate_dir/multiclass.costs"
-
-    set +e
-    (
-        cd "$degenerate_dir"
-        "$binary" -f multiclass -r "$@" > output.raw 2>&1
-    )
-    degenerate_exit_code=$?
-    set -e
-
-    if test "$degenerate_exit_code" -ne 0; then
-        printf 'rule costs on %s (%s) returned %d, expected 0\n' \
-            "$degenerate_name" "$*" "$degenerate_exit_code" >&2
-        cat "$degenerate_dir/output.raw" >&2
-        return 1
-    fi
-    if ! grep -F -x -e 'Default class: red' \
-        "$degenerate_dir/output.raw" > /dev/null; then
-        printf 'rule costs on %s (%s) did not default to red\n' \
-            "$degenerate_name" "$*" >&2
-        cat "$degenerate_dir/output.raw" >&2
-        return 1
-    fi
-    printf 'costs="1"\nentries="1"\nrules="0" default="red"\n' \
-        > "$degenerate_dir/rules.expected"
-    normalize_model "$degenerate_dir/multiclass.rules" |
-        LC_ALL=C sed -e '1d' > "$degenerate_dir/rules.actual"
-    if ! cmp -s "$degenerate_dir/rules.expected" \
-        "$degenerate_dir/rules.actual"; then
-        printf 'rule costs on %s (%s) wrote an unexpected model\n' \
-            "$degenerate_name" "$*" >&2
-        cat "$degenerate_dir/rules.actual" >&2
-        return 1
-    fi
-}
-
-
 run_case basic tree tree
 run_case basic rules rules -r
 run_case basic subsets tree -s
@@ -615,6 +653,29 @@ run_zero_training winnow '' 'Evaluation on test data (7 cases):' -w
 run_zero_training subsets '' 'Evaluation on test data (7 cases):' -s
 run_zero_training --no-test cross-validation '1.0,alpha,false,low
 ' 'Evaluation on hold-out data (1 cases):' -X 2
+empty_names_plain='c.
+x: continuous.
+c: a, b.
+'
+empty_names_bare='c.
+c: a, b.
+'
+run_empty_cross_validation tree "$empty_names_plain" '' -X 3
+run_empty_cross_validation two-folds "$empty_names_plain" '' -X 2
+run_empty_cross_validation rules "$empty_names_plain" '' -X 3 -r
+run_empty_cross_validation no-attributes "$empty_names_bare" '' -X 3
+run_empty_cross_validation no-attributes-rules "$empty_names_bare" '' -X 3 -r
+empty_names_group='c.
+x: continuous.
+g: a, b.
+c: a, b.
+'
+run_empty_cross_validation unknown-class "$empty_names_group" '1, a, ?
+2, b, ?
+' -X 3
+run_empty_cross_validation sample-selects-none "$empty_names_group" '1, a, a
+2, b, b
+' -X 2 -S 1
 one_class_data='1, circle, red.
 2, circle, red.
 3, circle, red.

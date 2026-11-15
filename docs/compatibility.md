@@ -427,6 +427,13 @@ entry points still reject zero training cases with `ValueError`. Release 2.07
 also copies zero bytes through null pointers in this case, which is undefined
 behavior but has no visible effect. This project skips those copies.
 
+Cross-validation (`-X`) is different when no case remains to validate: the
+data file is empty, every case has an unknown class, or `-S` selects no case.
+The attributes do not matter. Release 2.07 divides by zero while it sizes the
+folds and dies from `SIGFPE` (status 136) in each of these cases. `c5.0`
+instead prints `cannot cross-validate with no cases` and exits with status 1.
+Runs with one or more remaining cases are unchanged.
+
 ## Pruning with two-class costs
 
 With two classes and a costs file, C5.0 weights each training case by a
