@@ -29,6 +29,17 @@ Text inputs end a call at the first bad value, such as a discrete value that
 the names file does not declare or a nonfinite number, and the call raises
 ``ValueError`` with the line number. The ``c5.0`` program instead reports each
 bad value, replaces it with ``?``, and continues until ten errors.
+
+The enumerations ``ModelKind``, ``TieOrder``, ``NodeKind``, and
+``ConditionKind`` are ``enum.IntEnum`` types. Each member is a single object
+that compares equal to its integer and hashes as it does, and iteration,
+``Enumeration["NAME"]``, and ``Enumeration(value)`` work. A function or
+attribute that expects an enumeration accepts only a member of that
+enumeration. It raises ``TypeError`` for a plain ``int``, a name, or a member
+of another enumeration, even one with the same integer. ``str()`` and
+``format()`` of a member return ``"Type.NAME"`` on every Python version, not
+the integer that ``enum.IntEnum`` returns on Python 3.11 and later, and
+``repr()`` returns ``"<Type.NAME: value>"``.
 """
 
 from ._c50 import (
@@ -66,7 +77,7 @@ def _restore_model(
     """Rebuild a pickled ``Model`` from its serialized text.
 
     Pickles name this function, not ``c50._c50``, so that they do not depend on
-    the extension module's layout or on pybind11's enumeration protocol.
+    the extension module's layout or on the enumerations.
 
     Args:
         version: The pickle format version.

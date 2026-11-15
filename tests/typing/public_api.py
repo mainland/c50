@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import enum
 import sys
 from typing import Any
 
@@ -72,15 +73,19 @@ assert_type(c50.export_json(inspection), str)
 predictor = model.prepare_predictor()
 assert_type(predictor.predict_details(""), c50.Predictions)
 
-# The enumerations are pybind11 enums, not enum.Enum: members and the
-# attributes below exist, but iteration and subscripting fail at run time.
-assert_type(c50.ModelKind.TREE, c50.ModelKind)
-assert_type(c50.ModelKind.TREE.name, str)
-assert_type(c50.ModelKind.TREE.value, int)
-assert_type(c50.ModelKind.__members__, dict[str, c50.ModelKind])
-for _member in c50.ModelKind:  # type: ignore[attr-defined]
-    pass
+# The enumerations are enum.IntEnum types: members iterate, subscript, and
+# compare equal to their integers.
+assert_type(c50.ModelKind["TREE"], c50.ModelKind)
+assert_type(c50.ModelKind(1), c50.ModelKind)
+assert_type(list(c50.TieOrder), list[c50.TieOrder])
+assert_type(model.inspect().kind, c50.ModelKind)
+assert issubclass(c50.NodeKind, enum.IntEnum)
+assert issubclass(c50.ConditionKind, int)
 
 
-def _lookup(enumeration: type[c50.TieOrder]) -> None:
-    enumeration["STABLE"]  # type: ignore[index]
+def _check_member(kind: c50.ModelKind, number: int) -> None:
+    assert_type(kind.name, str)
+    assert_type(kind.value, int)
+    assert_type(int(kind), int)
+    assert_type(kind == number, bool)
+    assert_type(kind + 1, int)

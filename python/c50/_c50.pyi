@@ -2,97 +2,46 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from typing import Any, ClassVar, SupportsIndex, final
+import enum
+from typing import Any, SupportsIndex, final
 
 import numpy as np
 from numpy.typing import NDArray
 
 class C50Error(RuntimeError): ...
 
-@final
-class ModelKind:
-    """A pybind11 enumeration, not an ``enum.Enum``.
+class ModelKind(enum.IntEnum):
+    """Serialized classifier representations supported by C5.0."""
 
-    It cannot be iterated or subscripted. Use the members, ``__members__``,
-    ``name``, and ``value``.
+    TREE = 0
+    """A decision tree or boosted tree ensemble."""
+    RULES = 1
+    """A ruleset or boosted ruleset ensemble."""
+
+class TieOrder(enum.IntEnum):
+    """Order of equal continuous values when evaluating splits."""
+
+    REFERENCE = 0
+    """Reproduce the tie order of the reference C5.0 learner."""
+    STABLE = 1
+    """Keep equal values in case order with a faster sort.
+
+    Classifiers are deterministic on every platform but may differ from the
+    reference learner.
     """
 
-    TREE: ClassVar[ModelKind]
-    RULES: ClassVar[ModelKind]
-    __members__: ClassVar[dict[str, ModelKind]]
-    @property
-    def name(self) -> str: ...
-    @property
-    def value(self) -> int: ...
-    def __int__(self) -> int: ...
-    def __index__(self) -> int: ...
-    def __eq__(self, other: object) -> bool: ...
-    def __hash__(self) -> int: ...
+class NodeKind(enum.IntEnum):
+    LEAF = 0
+    DISCRETE = 1
+    THRESHOLD = 2
+    SUBSET = 3
 
-@final
-class TieOrder:
-    """A pybind11 enumeration, not an ``enum.Enum``.
-
-    It cannot be iterated or subscripted. Use the members, ``__members__``,
-    ``name``, and ``value``.
-    """
-
-    REFERENCE: ClassVar[TieOrder]
-    STABLE: ClassVar[TieOrder]
-    __members__: ClassVar[dict[str, TieOrder]]
-    @property
-    def name(self) -> str: ...
-    @property
-    def value(self) -> int: ...
-    def __int__(self) -> int: ...
-    def __index__(self) -> int: ...
-    def __eq__(self, other: object) -> bool: ...
-    def __hash__(self) -> int: ...
-
-@final
-class NodeKind:
-    """A pybind11 enumeration, not an ``enum.Enum``.
-
-    It cannot be iterated or subscripted. Use the members, ``__members__``,
-    ``name``, and ``value``.
-    """
-
-    LEAF: ClassVar[NodeKind]
-    DISCRETE: ClassVar[NodeKind]
-    THRESHOLD: ClassVar[NodeKind]
-    SUBSET: ClassVar[NodeKind]
-    __members__: ClassVar[dict[str, NodeKind]]
-    @property
-    def name(self) -> str: ...
-    @property
-    def value(self) -> int: ...
-    def __int__(self) -> int: ...
-    def __index__(self) -> int: ...
-    def __eq__(self, other: object) -> bool: ...
-    def __hash__(self) -> int: ...
-
-@final
-class ConditionKind:
-    """A pybind11 enumeration, not an ``enum.Enum``.
-
-    It cannot be iterated or subscripted. Use the members, ``__members__``,
-    ``name``, and ``value``.
-    """
-
-    NOT_APPLICABLE: ClassVar[ConditionKind]
-    EQUALS: ClassVar[ConditionKind]
-    LESS_EQUAL: ClassVar[ConditionKind]
-    GREATER: ClassVar[ConditionKind]
-    IN_SUBSET: ClassVar[ConditionKind]
-    __members__: ClassVar[dict[str, ConditionKind]]
-    @property
-    def name(self) -> str: ...
-    @property
-    def value(self) -> int: ...
-    def __int__(self) -> int: ...
-    def __index__(self) -> int: ...
-    def __eq__(self, other: object) -> bool: ...
-    def __hash__(self) -> int: ...
+class ConditionKind(enum.IntEnum):
+    NOT_APPLICABLE = 0
+    EQUALS = 1
+    LESS_EQUAL = 2
+    GREATER = 3
+    IN_SUBSET = 4
 
 @final
 class SplitCondition:

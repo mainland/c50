@@ -30,6 +30,29 @@ every member exhaustively. A major release may remove or change any of these
 interfaces. A release deprecates an interface, with a `DeprecationWarning` in
 Python, at least one minor release before a major release removes it.
 
+The enumerations `ModelKind`, `TieOrder`, `NodeKind`, and `ConditionKind` are
+`enum.IntEnum` types. A later 1.x release keeps them `enum.IntEnum` types, keeps
+each member's name and integer, and keeps these properties:
+
+- A member compares equal to its integer and to a member of another
+  enumeration with the same integer, and hashes as its integer. Code that
+  compares a member with an integer, or that uses a member as a dictionary key
+  beside integers, must account for this.
+- Iteration, `Enumeration["NAME"]`, and `Enumeration(value)` work.
+- `str()` and `format()` of a member return `Type.NAME` on every supported
+  Python version, and `repr()` returns `<Type.NAME: value>`. A plain
+  `enum.IntEnum` returns the integer from `str()` on Python 3.11 and later, so
+  these differ from the standard behavior on those versions. Use `name` and
+  `value` when code needs a specific form.
+- A function, method, or attribute that expects an enumeration accepts only a
+  member of that enumeration and raises `TypeError` for a plain `int`, a name,
+  or a member of another enumeration.
+
+Earlier prereleases exposed these types as pybind11 enumerations, which were
+not `enum.Enum` instances, did not iterate, and compared unequal to integers.
+Prerelease code that relied on any of that, such as a test that `member == 1`
+is false, behaves differently.
+
 These are not part of the stable interface:
 
 - Python names that begin with an underscore, including the `c50._c50` and
@@ -79,7 +102,8 @@ change classifiers, such as `ties="stable"`, are exceptions by design.
   `TieOrder`, `NodeKind`, and `ConditionKind` support pickling, at every
   protocol. An enumeration pickle calls `c50._restore_enum` with the
   enumeration and the member by name, not `c50._c50` or the member's integer
-  value, and unpickling returns the member itself. Every 1.x release loads
+  value, as `enum.IntEnum` would by default, and unpickling returns the member
+  itself. Every 1.x release loads
   enumeration pickles saved by an earlier 1.x release, because only a major
   release removes an enumeration member, as "Stable interfaces" states.
   `Options`, `Predictions`, `Predictor`, and the inspection objects raise
