@@ -81,15 +81,19 @@ Destruction and move assignment require exclusive access to the object.
 Text views and dense arrays are borrowed for the duration of a call. The caller
 must keep their storage alive and unchanged until the call returns. Dense
 row strides are measured in `double` elements, with zero meaning the feature
-count. NaN denotes missing data. Use text input for not-applicable values and
-schemas unsupported by the dense interface.
-
+count. NaN denotes missing data. The optional `dense_dataset::not_applicable`
+mask marks not-applicable values. It holds `row_count * feature_count` bytes
+with no padding, whatever the row stride, and the caller keeps it alive and
+unchanged for the call, like `values`. A nonzero byte makes the value not
+applicable and hides the matching element of `values`; the library never
+writes the mask. Concurrent operations may share one mask if none writes it.
 Each dense operation checks the schema before the dataset. A schema that the
 dense interface does not support raises `error_code::unsupported` whatever the
 rows, width, stride, or buffers. A dataset that fails a later check raises
 `error_code::invalid_argument`. A buffer is required only when the operation
 can address one of its elements, so `values` may be null when `row_count` or
 `feature_count` is zero.
+Use text input for schemas unsupported by the dense interface.
 
 ## Stack use
 
@@ -192,10 +196,13 @@ The binding does not copy text arguments. A `str` cannot change, and the call
 keeps it alive, so native code reads its UTF-8 representation in place after
 the binding releases the GIL.
 
-`train_dense` copies `values` before releasing the GIL. With `copy=False`, it
-reads a float64, C-contiguous array directly, and the caller must ensure that
-no thread modifies the array until training returns. Other dtypes and layouts
-are converted into a temporary array. The scikit-learn estimator uses
+`train_dense` copies `values` and `not_applicable` before releasing the GIL.
+With `copy=False`, it reads a float64, C-contiguous `values` array and a
+C-contiguous bool `not_applicable` array directly, and the caller must ensure
+that no thread modifies either array until training returns. Other dtypes and
+layouts of `values`, and other layouts of `not_applicable`, are converted into
+a temporary array. A `not_applicable` array must have a bool dtype and the
+shape of `values`. The scikit-learn estimator uses
 `copy=False` for its private encoded matrix.
 
 Python `Model` objects expose immutable classifier data. `Options` remains a
@@ -207,7 +214,8 @@ does not affect that call.
 native state described above. Its `predict_details` and `predict_details_dense`
 methods return ordinary `Predictions`. Calls on one Python predictor acquire an
 instance lock after releasing the GIL. Independent predictors can run in
-parallel. Dense inputs are copied before releasing the GIL. Persist the source
+parallel. Dense inputs, including `not_applicable`, are copied before
+releasing the GIL. Persist the source
 `Model`, which supports pickling, and recreate predictors after loading it.
 
 The scikit-learn estimator creates one predictor per `predict` or
