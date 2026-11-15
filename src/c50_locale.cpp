@@ -14,6 +14,8 @@
 #include <locale.h>
 #include <stdlib.h>
 
+namespace c50::core {
+
 c50_c_locale::c50_c_locale() {}
 c50_c_locale::~c50_c_locale() {}
 
@@ -41,7 +43,11 @@ c50_c_locale_scope::~c50_c_locale_scope()
     _configthreadlocale(previous_configuration_);
 }
 
+}  // namespace c50::core
+
 #else
+
+namespace c50::core {
 
 c50_c_locale::c50_c_locale() : handle_(newlocale(LC_ALL_MASK, "C", nullptr))
 {
@@ -72,5 +78,7 @@ c50_c_locale_scope::~c50_c_locale_scope()
 {
     uselocale(previous_);
 }
+
+}  // namespace c50::core
 
 #endif

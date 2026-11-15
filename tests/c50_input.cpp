@@ -12,6 +12,8 @@
 #include "c50_input.h"
 #include "c50_api_internal.h"
 
+using namespace c50::core;
+
 static std::string read_bytes(c50_input *input)
 {
     std::string bytes;

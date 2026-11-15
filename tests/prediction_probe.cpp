@@ -7,6 +7,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+using namespace c50::core;
+
 static void Usage(void)
 {
     fprintf(stderr, "Usage: prediction-probe <filestem> <tree|rules>\n");

@@ -14,6 +14,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+using namespace c50::core;
+
 static int failures;
 
 static void expect_int(const char *label, int actual, int expected)

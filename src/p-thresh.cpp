@@ -39,6 +39,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+namespace c50::core {
+
 
 /*************************************************************************/
 /*									 */
@@ -319,3 +321,5 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 
     Context->costs.unit_weights = PrevUnitWeights;
 }
+
+}  // namespace c50::core

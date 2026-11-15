@@ -50,6 +50,8 @@
 #include <sys/resource.h>
 #endif
 
+using namespace c50::core;
+
 // A value that is not a number at all, or that has trailing text, ends the
 // option list as an unrecognized option, as in Release 2.07. Empty text is the
 // number 0, because Release 2.07 only tests the end pointer that strtod and
