@@ -7,6 +7,8 @@
 
 #include "c50_output.h"
 
+using namespace c50::core;
+
 static int CheckAutomaticCleanup(void)
 {
     c50_output output;

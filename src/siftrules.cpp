@@ -41,6 +41,8 @@
 #include "c50_api_internal.h"
 #include <memory>
 
+namespace c50::core {
+
 
 /*************************************************************************/
 /*									 */
@@ -1286,3 +1288,5 @@ void FreeSiftRuleData(c50_context *Context)
 	FreeUnlessNil(Context->rule_selection.total_votes);				Context->rule_selection.total_votes = Nil;
     }
 }
+
+}  // namespace c50::core

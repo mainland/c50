@@ -38,6 +38,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+namespace c50::core {
+
 
 void PrintConfusionMatrix(c50_context *Context, CaseNo *ConfusionMat)
 /*   --------------------  */
@@ -200,3 +202,5 @@ void PrintUsageInfo(c50_context *Context, CaseNo *Usage)
 	Usage[Best] = 0;
     }
 }
+
+}  // namespace c50::core

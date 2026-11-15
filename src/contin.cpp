@@ -38,6 +38,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+namespace c50::core {
+
 #define	PartInfo(n) (-(n)*Log((n)/Workspace.Cases))
 
 
@@ -630,3 +632,5 @@ ContValue GreatestValueBelow(c50_context *Context, ContValue Th, CaseNo *Ep)
 
     return Context->training.environment->SRec[Low].V;
 }
+
+}  // namespace c50::core

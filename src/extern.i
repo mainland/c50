@@ -27,4 +27,8 @@
 
 
 
+namespace c50::core {
+
 extern	int		NCPU;
+
+}  // namespace c50::core

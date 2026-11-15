@@ -46,6 +46,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+namespace c50::core {
+
 static constexpr DiscrValue DynamicValueChunk = 100;
 
 /*************************************************************************/
@@ -817,3 +819,5 @@ int InChar(c50_context *Context, c50_input *f)
     return static_cast<unsigned char>(
         Context->line_buffer[Context->line_buffer_position++]);
 }
+
+}  // namespace c50::core

@@ -9,6 +9,8 @@
 #include "c50_api_internal.h"
 #include "defns.i"
 
+namespace c50::core {
+
 namespace {
 
 c50::split_condition condition(c50_context *Context, BranchType kind,
@@ -137,3 +139,5 @@ c50::model_inspection c50_build_inspection(c50_context *Context)
     }
     return result;
 }
+
+}  // namespace c50::core
