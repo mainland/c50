@@ -279,11 +279,12 @@ The hooks check and never rewrite files. Fix a finding with
 
 CMake leaves the Python binding disabled by default. From the repository root,
 use the environment prepared above to enable the binding and its tests.
-Install pybind11 in that environment so CMake can find its configuration files.
-The selected Python interpreter must also have its development headers.
+Install pybind11 3.0 or later in that environment so CMake can find its
+configuration files. The selected Python interpreter must also have its
+development headers.
 
 ```sh
-.venv/bin/python -m pip install 'pybind11>=2.13'
+.venv/bin/python -m pip install 'pybind11>=3.0'
 cmake -S . -B build/python \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DC50_BUILD_PYTHON=ON \
