@@ -73,6 +73,10 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
     sequence of column indices or names to override inference. When it is set,
     every unlisted feature is continuous.
 
+    A cell that holds :data:`c50.NOT_APPLICABLE` reaches C5.0 as ``N/A``. Type
+    inference ignores such cells, so a column of numbers and markers is
+    continuous. See ``docs/estimator.md``, section "Not-applicable values".
+
     The estimator converts arrays to the native dense representation, then
     delegates training and prediction to the low-level binding. It does not
     implement a separate learning algorithm.
@@ -235,10 +239,11 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             This fitted estimator.
 
         Raises:
-            TypeError: If a continuous feature contains a non-numeric value, or
-                if ``sample_weight`` is an array of datetime, timedelta,
-                complex, or structured kind or holds an object other than a
-                real number, ``decimal.Decimal``, or a string.
+            TypeError: If a continuous feature contains a non-numeric value
+                other than :data:`c50.NOT_APPLICABLE`, or if ``sample_weight``
+                is an array of datetime, timedelta, complex, or structured kind
+                or holds an object other than a real number,
+                ``decimal.Decimal``, or a string.
             ValueError: If the data, schema, options, or cost matrix is
                 invalid, or if an input conversion to NumPy raises an
                 ``Exception`` other than ``MemoryError``, as for a tensor in

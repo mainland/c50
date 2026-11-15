@@ -35,7 +35,9 @@ a borrowed row-major array of `row_count * feature_count` bytes, marks
 not-applicable values. A nonzero byte makes that value not applicable, as `N/A`
 does in a data file, and the native code ignores the matching element of
 `values`. NaN stays missing and never becomes not applicable. The estimator
-does not pass a mask: it treats `None`, NaN, and `pd.NA` as missing.
+passes the mask for cells that hold `c50.NOT_APPLICABLE` and treats `None`,
+NaN, `pd.NA`, and `pd.NaT` as missing. The "Not-applicable values" section of
+the [estimator guide](estimator.md) describes the marker.
 
 The Python estimator encodes array input directly into this dense
 representation. It no longer builds a second, whole-dataset C5.0 text buffer.
