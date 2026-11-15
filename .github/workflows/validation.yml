@@ -64,6 +64,7 @@ jobs:
           make -j2 test
           make -j2 c5.0dbg
           C50_BINARY="$PWD/c5.0dbg" ./tests/test_verbose.sh
+          C50_BINARY="$PWD/c5.0dbg" ./tests/test_cli.sh
 
   # Python packages compile the core with C50_PRIVATE_CORE, and inlining
   # across source files can change floating-point rounding where the compiler
