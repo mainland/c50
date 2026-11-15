@@ -505,15 +505,19 @@ Train a C5.0 classifier from a dense NumPy feature matrix.
 
 Continuous columns contain their numeric values. Categorical columns contain
 zero-based indices into the explicit values declared by ``names``. NaN denotes
-a missing feature. The returned model parses its serialized text without a
-tree depth limit, because the library wrote it.
+a missing feature. A true element of ``not_applicable`` marks the value of that
+case and feature as not applicable, which C5.0 treats differently from missing
+(the data-file ``N/A`` as opposed to ``?``). The matching element of ``values``
+is then ignored, whatever it holds. The returned model parses its serialized
+text without a tree depth limit, because the library wrote it.
 
 Training runs without the global interpreter lock, so by default it copies
-``values`` first. With ``copy=False``, training reads a float64, C-contiguous
-``values`` array directly, which avoids holding a second copy of the matrix.
-The caller must then ensure that no thread modifies ``values`` until the call
-returns. Arrays with another dtype or layout are always converted into a
-temporary array that no other code can modify.
+``values`` and ``not_applicable`` first. With ``copy=False``, training reads a
+float64, C-contiguous ``values`` array and a C-contiguous bool
+``not_applicable`` array directly, which avoids holding a second copy of the
+matrices. The caller must then ensure that no thread modifies either array
+until the call returns. Arrays with another dtype or layout are always
+converted into a temporary array that no other code can modify.
 
 Args:
     names: Contents of a C5.0 names file.
@@ -527,15 +531,21 @@ Args:
     costs: Contents of a C5.0 costs file, or an empty string.
     split_workers: Number of native split-evaluation workers, from 1
         through 8.
-    copy: Whether to copy ``values`` before training.
+    copy: Whether to copy ``values`` and ``not_applicable`` before training.
+    not_applicable: Keyword-only. None, or a bool array with the same shape
+        as ``values`` whose true elements mark not-applicable values. A
+        value under a true element is never checked, so it may be NaN or out
+        of range. The class has no not-applicable value.
 
 Returns:
     The trained model.
 
 Raises:
-    ValueError: If an array has the wrong shape or dtype, ``values`` cannot be
-        converted to a float64 array (the error chains the cause), the row
-        counts differ, a class index or a value is out of range, or an option,
+    ValueError: If an array has the wrong shape or dtype, ``values`` cannot
+        be converted to a float64 array (the error chains the cause), the
+        row counts differ, a class
+        index or a value is out of range, ``not_applicable``
+        does not have a bool dtype or the shape of ``values``, or an option,
         the schema, or the costs are invalid.
     C50Error: If the schema has an implicit, ignored, label, date, time, or
         timestamp attribute, a class attribute, or a discrete attribute
@@ -549,19 +559,24 @@ Raises:
 const char predict_details_dense_doc[] = R"doc(
 Predict a dense NumPy feature matrix.
 
-The matrix uses the same continuous, categorical, and missing-value encoding
-as ``train_dense``.
+The matrix uses the same continuous, categorical, missing-value, and
+not-applicable encoding as ``train_dense``. The call always copies its
+arguments before it releases the global interpreter lock.
 
 Args:
     values: A two-dimensional matrix with one column per feature and one row
         per case.
+    not_applicable: Keyword-only. None, or a bool array with the same shape
+        as ``values`` whose true elements mark not-applicable values.
 
 Returns:
     The labels, confidences, and per-class scores of the rows.
 
 Raises:
     ValueError: If the array is not two-dimensional, has the wrong number of
-        columns, or holds a value that is out of range for its feature.
+        columns, or holds a value that is out of range for its feature, or
+        if ``not_applicable`` does not have a bool dtype or the shape of
+        ``values``.
     C50Error: If the model's schema has an implicit, ignored, label, date,
         time, or timestamp attribute, a class attribute, or a discrete
         attribute without explicit values, which the dense interface does not
@@ -604,13 +619,17 @@ matches ``attribute_usage`` for the equivalent data-file contents.
 Args:
     values: A two-dimensional matrix with one column per feature and one row
         per case.
+    not_applicable: Keyword-only. None, or a bool array with the same shape
+        as ``values`` whose true elements mark not-applicable values.
 
 Returns:
     One count per attribute.
 
 Raises:
     ValueError: If the array is not two-dimensional, has the wrong number of
-        columns, or holds a value that is out of range for its feature.
+        columns, or holds a value that is out of range for its feature, or
+        if ``not_applicable`` does not have a bool dtype or the shape of
+        ``values``.
     C50Error: If the model's schema has an implicit, ignored, label, date,
         time, or timestamp attribute, a class attribute, or a discrete
         attribute without explicit values, which the dense interface does not
@@ -622,6 +641,60 @@ Raises:
 template<class T>
 using dense_values = py::array_t<
     T, py::array::c_style | py::array::forcecast>;
+
+// A validated not-applicable mask for one dense call. It owns whatever keeps
+// the bytes alive while the GIL is released: a private copy, or a reference to
+// the caller's C-contiguous bool array when the caller promised not to modify
+// it. Without a mask, data() is null.
+class mask_argument
+{
+public:
+    mask_argument() = default;
+
+    mask_argument(const std::optional<py::array> &mask,
+                  const py::array &values, bool copy)
+    {
+        if ( ! mask )
+        {
+            return;
+        }
+        if ( mask->dtype().kind() != 'b' )
+        {
+            throw py::value_error("not_applicable must have a bool dtype");
+        }
+        if ( mask->ndim() != values.ndim() )
+        {
+            throw py::value_error(
+                "not_applicable must have the same shape as values");
+        }
+        for ( py::ssize_t axis = 0; axis < values.ndim(); ++axis )
+        {
+            if ( mask->shape(axis) != values.shape(axis) )
+            {
+                throw py::value_error(
+                    "not_applicable must have the same shape as values");
+            }
+        }
+        // Another layout is converted into a temporary that no other code
+        // can modify.
+        array_ = py::array_t<bool, py::array::c_style | py::array::forcecast>(
+            *mask);
+        data_ = reinterpret_cast<const unsigned char *>(array_.data());
+        if ( copy )
+        {
+            bytes_.assign(data_, data_ + array_.size());
+            data_ = bytes_.data();
+            array_ = py::array_t<bool, py::array::c_style>();
+        }
+    }
+
+    const unsigned char *data() const noexcept { return data_; }
+
+private:
+    py::array_t<bool, py::array::c_style> array_;
+    std::vector<unsigned char> bytes_;
+    const unsigned char *data_ = nullptr;
+};
 
 template<class T>
 std::vector<std::size_t> copy_checked_classes(const dense_values<T> &classes)
@@ -731,14 +804,18 @@ public:
         return predictor_.predict(cases.view());
     }
 
-    c50::predictions predict_details_dense(const dense_values<double> &values)
+    c50::predictions predict_details_dense(
+        const dense_values<double> &values,
+        const std::optional<py::array> &not_applicable)
     {
         if ( values.ndim() != 2 )
             throw py::value_error("values must be a two-dimensional array");
+        const mask_argument mask(not_applicable, values, true);
         std::vector<double> copy(static_cast<std::size_t>(values.size()));
         std::copy_n(values.data(), copy.size(), copy.data());
         const c50::dense_dataset dataset(copy.data(), static_cast<std::size_t>(values.shape(0)),
-                                        static_cast<std::size_t>(values.shape(1)));
+                                        static_cast<std::size_t>(values.shape(1)),
+                                        nullptr, 0, mask.data());
         py::gil_scoped_release release;
         std::lock_guard<std::mutex> lock(mutex_);
         return predictor_.predict(dataset);
@@ -857,7 +934,8 @@ public:
                                     c50::options options,
                                     const text_argument &costs,
                                     const worker_count_argument &split_workers,
-                                    bool copy)
+                                    bool copy,
+                                    const std::optional<py::array> &not_applicable)
     {
         const dense_values<double> &values = matrix.array();
         if ( values.ndim() != 2 )
@@ -875,6 +953,9 @@ public:
         }
 
         const auto indices = checked_classes(class_indices);
+        // The mask follows values: a private copy, or the caller's array
+        // when copy is false.
+        const mask_argument mask(not_applicable, values, copy);
         // The argument keeps values alive while the GIL is released. Without
         // a copy, the caller guarantees that no thread modifies it.
         std::vector<double> value_copy;
@@ -886,7 +967,8 @@ public:
         }
         const c50::dense_dataset dataset(
             data, static_cast<std::size_t>(values.shape(0)),
-            static_cast<std::size_t>(values.shape(1)), indices.data());
+            static_cast<std::size_t>(values.shape(1)), indices.data(), 0,
+            mask.data());
         c50::context context;
         context.split_workers(split_workers.count());
         py::gil_scoped_release release;
@@ -934,18 +1016,22 @@ public:
         return model_.predict(context, cases.view());
     }
 
-    c50::predictions predict_details_dense(const dense_values<double> &values) const
+    c50::predictions predict_details_dense(
+        const dense_values<double> &values,
+        const std::optional<py::array> &not_applicable) const
     {
         if ( values.ndim() != 2 )
         {
             throw py::value_error("values must be a two-dimensional array");
         }
+        const mask_argument mask(not_applicable, values, true);
 
         std::vector<double> value_copy(static_cast<std::size_t>(values.size()));
         std::copy_n(values.data(), value_copy.size(), value_copy.data());
         const c50::dense_dataset dataset(
             value_copy.data(), static_cast<std::size_t>(values.shape(0)),
-            static_cast<std::size_t>(values.shape(1)));
+            static_cast<std::size_t>(values.shape(1)), nullptr, 0,
+            mask.data());
         c50::context context;
         py::gil_scoped_release release;
         return model_.predict(context, dataset);
@@ -959,18 +1045,21 @@ public:
     }
 
     std::vector<std::size_t> attribute_usage_dense(
-        const dense_values<double> &values) const
+        const dense_values<double> &values,
+        const std::optional<py::array> &not_applicable) const
     {
         if ( values.ndim() != 2 )
         {
             throw py::value_error("values must be a two-dimensional array");
         }
+        const mask_argument mask(not_applicable, values, true);
 
         std::vector<double> value_copy(static_cast<std::size_t>(values.size()));
         std::copy_n(values.data(), value_copy.size(), value_copy.data());
         const c50::dense_dataset dataset(
             value_copy.data(), static_cast<std::size_t>(values.shape(0)),
-            static_cast<std::size_t>(values.shape(1)));
+            static_cast<std::size_t>(values.shape(1)), nullptr, 0,
+            mask.data());
         c50::context context;
         py::gil_scoped_release release;
         return model_.attribute_usage(context, dataset);
@@ -1336,7 +1425,8 @@ GIL while training, loading, or predicting.
         .def("predict_details", &python_predictor::predict_details,
              predict_details_doc, py::arg("cases"))
         .def("predict_details_dense", &python_predictor::predict_details_dense,
-             predict_details_dense_doc, py::arg("values"));
+             predict_details_dense_doc, py::arg("values"), py::kw_only(),
+             py::arg("not_applicable") = py::none());
 
     py::class_<python_model>(
         module, "Model",
@@ -1357,7 +1447,8 @@ GIL while training, loading, or predicting.
                     py::arg("options") = c50::options(),
                     py::arg("costs") = "",
                     py::arg("split_workers") = 1,
-                    py::arg("copy") = true)
+                    py::arg("copy") = true, py::kw_only(),
+                    py::arg("not_applicable") = py::none())
         .def_static("load", &python_model::load,
                     load_doc,
                     py::arg("names"), py::arg("serialized_data"),
@@ -1387,11 +1478,13 @@ GIL while training, loading, or predicting.
         .def("predict_details", &python_model::predict_details,
              predict_details_doc, py::arg("cases"))
         .def("predict_details_dense", &python_model::predict_details_dense,
-             predict_details_dense_doc, py::arg("values"))
+             predict_details_dense_doc, py::arg("values"), py::kw_only(),
+             py::arg("not_applicable") = py::none())
         .def("attribute_usage", &python_model::attribute_usage,
              attribute_usage_doc, py::arg("cases"))
         .def("attribute_usage_dense", &python_model::attribute_usage_dense,
-             attribute_usage_dense_doc, py::arg("values"))
+             attribute_usage_dense_doc, py::arg("values"), py::kw_only(),
+             py::arg("not_applicable") = py::none())
         .def("predict", &python_model::predict,
              predict_doc, py::arg("cases"))
         .def("predict_scores", &python_model::predict_scores,
@@ -1428,7 +1521,8 @@ GIL while training, loading, or predicting.
                py::arg("options") = c50::options(),
                py::arg("costs") = "",
                py::arg("split_workers") = 1,
-               py::arg("copy") = true);
+               py::arg("copy") = true, py::kw_only(),
+               py::arg("not_applicable") = py::none());
     module.def("load", &python_model::load,
                load_doc,
                py::arg("names"), py::arg("serialized_data"),
