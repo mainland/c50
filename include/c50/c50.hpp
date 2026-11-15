@@ -103,16 +103,16 @@ struct options {
 /**
  * Borrowed row-major dense data. Arrays must remain valid throughout the call.
  * Discrete values are zero-based schema indices. NaN denotes missing values.
- * Not-applicable values require the text interface. A schema with an
- * implicit, ignored, label, date, time, or timestamp attribute, a class
- * attribute, or a discrete attribute without explicit values requires the
- * text interface. Each dense operation runs every schema check before any
- * check of the dataset. It rejects such a schema with error_code::unsupported,
- * whatever the dataset's rows, feature count, stride, or buffers. The dataset
- * checks then follow, and a dataset that fails one raises
- * error_code::invalid_argument. A buffer is required only when the operation
- * can address one of its elements, so values needs a nonnull pointer only when
- * row_count and feature_count are both nonzero.
+ * The not_applicable mask denotes not-applicable values, which are distinct
+ * from missing values. A schema with an implicit, ignored, label, date, time,
+ * or timestamp attribute, a class attribute, or a discrete attribute without
+ * explicit values requires the text interface. Each dense operation runs
+ * every schema check before any check of the dataset. It rejects such a
+ * schema with error_code::unsupported, whatever the dataset's rows, feature
+ * count, stride, or buffers. The dataset checks then follow, and a dataset
+ * that fails one raises error_code::invalid_argument. A buffer is required
+ * only when the operation can address one of its elements, so values needs
+ * a nonnull pointer only when row_count and feature_count are both nonzero.
  * The caller must provide storage for all addressed elements.
  */
 struct dense_dataset {
@@ -121,6 +121,20 @@ struct dense_dataset {
     std::size_t feature_count = 0;        /**< Must match the explicit schema. */
     const std::size_t *class_indices = nullptr; /**< Zero-based labels, required for training. */
     std::size_t row_stride = 0;          /**< Elements between rows, zero means feature_count. */
+    /** Borrowed row-major not-applicable mask, or null for none.
+     *
+     * The mask has row_count * feature_count bytes with no padding, whatever
+     * row_stride is, and must remain valid and unmodified throughout each
+     * call that reads the dataset. The dataset does not own it, and the
+     * library never writes it. A nonzero byte makes the value of that row
+     * and feature not applicable, exactly as "N/A" does in the text
+     * interface. The corresponding element of values is then ignored,
+     * whatever it holds, including NaN and values that are not finite or
+     * are outside the schema. A zero byte leaves the value to values, where
+     * NaN is missing. The mask has no entry for the class, which is never
+     * not applicable. Reading the mask never modifies the dataset, so
+     * concurrent operations may share one mask if none writes it. */
+    const unsigned char *not_applicable = nullptr;
 
     /** Construct an empty borrowed dataset. */
     dense_dataset() = default;
@@ -129,9 +143,12 @@ struct dense_dataset {
      * @param rows Row count.
      * @param features Feature count.
      * @param classes Zero-based training labels, or null for prediction.
-     * @param stride Elements between rows, zero means features. */
+     * @param stride Elements between rows, zero means features.
+     * @param mask Borrowed not-applicable mask of rows * features bytes, or
+     *        null for none. See not_applicable. */
     dense_dataset(const double *values, std::size_t rows, std::size_t features,
-                  const std::size_t *classes = nullptr, std::size_t stride = 0);
+                  const std::size_t *classes = nullptr, std::size_t stride = 0,
+                  const unsigned char *mask = nullptr);
 };
 
 /** Move-only owner of mutable operation workspace. */
