@@ -13,15 +13,29 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from numbers import Integral, Real
-from typing import Any, Literal, TypeAlias, cast
+from typing import Any, Literal, NamedTuple, TypeAlias, cast
 
 import numpy as np
 from numpy.typing import NDArray
+
+from ._sentinel import NOT_APPLICABLE
 
 Array: TypeAlias = NDArray[Any]
 CategoryKey: TypeAlias = tuple[type[object], object]
 UnknownCategoryPolicy: TypeAlias = Literal["error", "missing"]
 RowSelection: TypeAlias = slice | NDArray[np.bool_]
+
+
+class DenseData(NamedTuple):
+    """The native dense encoding of a table.
+
+    ``not_applicable`` is ``None`` unless some value is not applicable. It is
+    then a Boolean array with the shape of ``values``, true where the input
+    held ``NOT_APPLICABLE``. ``values`` holds NaN under it.
+    """
+
+    values: NDArray[np.float64]
+    not_applicable: NDArray[np.bool_] | None
 
 
 @dataclass(frozen=True)
@@ -252,8 +266,12 @@ class Schema:
         unknown_categories: UnknownCategoryPolicy,
         case_weights: NDArray[np.float64] | None = None,
         first_row: int = 0,
-    ) -> NDArray[np.float64]:
+    ) -> DenseData:
         """Encode features as the native dense matrix representation.
+
+        A cell that holds ``NOT_APPLICABLE`` becomes a true element of the
+        returned mask. The mask is built only when some cell does, and is
+        ``None`` otherwise.
 
         A schema with a case-weight attribute encodes ``case_weights`` after
         the features, or missing values when none are given. ``first_row`` is
@@ -273,12 +291,19 @@ class Schema:
         encoded = np.empty((columns.rows, width), dtype=np.float64, order="C")
         if self.case_weight:
             encoded[:, -1] = math.nan if case_weights is None else case_weights
+        not_applicable: NDArray[np.bool_] | None = None
         for feature_index, feature in enumerate(self.features):
             stored = columns.arrays[feature_index]
             if isinstance(stored, CodedColumn) and feature.categorical:
-                encoded[:, feature_index] = _encode_coded(
+                encoded[:, feature_index], unavailable = _encode_coded(
                     feature, stored, feature_index, unknown_categories
                 )
+                if unavailable is not None:
+                    if not_applicable is None:
+                        not_applicable = np.zeros(
+                            encoded.shape, dtype=np.bool_
+                        )
+                    not_applicable[:, feature_index] = unavailable
                 continue
             if isinstance(stored, NullableNumbers) and not feature.categorical:
                 column = stored.floats()
@@ -291,13 +316,21 @@ class Schema:
                 continue
 
             for row_index, value in enumerate(column):
+                if value is NOT_APPLICABLE:
+                    if not_applicable is None:
+                        not_applicable = np.zeros(
+                            encoded.shape, dtype=np.bool_
+                        )
+                    not_applicable[row_index, feature_index] = True
+                    encoded[row_index, feature_index] = math.nan
+                    continue
                 encoded[row_index, feature_index] = _encode_dense_value(
                     feature,
                     value,
                     feature_index,
                     unknown_categories,
                 )
-        return encoded
+        return DenseData(encoded, not_applicable)
 
 
 def fit_schema(
@@ -394,7 +427,11 @@ def _object_values(column: Column) -> Array:
 
 
 def _infer_coded_categorical(column: CodedColumn) -> bool:
-    values = [column.value(code) for code in column.present_codes()]
+    values = [
+        value
+        for value in (column.value(code) for code in column.present_codes())
+        if value is not NOT_APPLICABLE
+    ]
     return bool(values) and not all(
         isinstance(value, Real) and not isinstance(value, bool)
         for value in values
@@ -413,7 +450,10 @@ def _fit_coded(column: CodedColumn, feature_index: int) -> FeatureSchema:
         else column.present_codes()
     )
     for code in codes:
-        _add_category(categories, keys, column.value(code), feature_index)
+        value = column.value(code)
+        # A category that marks not-applicable values is not a level.
+        if value is not NOT_APPLICABLE:
+            _add_category(categories, keys, value, feature_index)
     if not column.categorical_dtype:
         categories = _canonical_order(categories)
     lookup = {
@@ -427,6 +467,7 @@ def _fit_coded(column: CodedColumn, feature_index: int) -> FeatureSchema:
             for key in (
                 _category_key(_normalize_scalar(value), feature_index)
                 for value in column.values
+                if value is not NOT_APPLICABLE
             )
             if key not in lookup
         )
@@ -440,12 +481,24 @@ def _encode_coded(
     column: CodedColumn,
     feature_index: int,
     unknown_categories: UnknownCategoryPolicy,
-) -> NDArray[np.float64]:
+) -> tuple[NDArray[np.float64], NDArray[np.bool_] | None]:
+    """Return the encoded column and its not-applicable rows, if any.
+
+    The rows are ``None`` when no category of the column marks a value as not
+    applicable.
+    """
     # Map each code that occurs to its fitted index, to -2 if its category was
-    # declared but unused in training, or to -1 if it is unseen.
+    # declared but unused in training, to -3 if it marks not-applicable values,
+    # or to -1 if it is unseen.
     mapping = np.full(len(column.values), -1, dtype=np.intp)
+    marks_not_applicable = False
     for code in np.unique(column.codes[column.codes >= 0]):
-        key = _category_key(column.value(code), feature_index)
+        value = column.value(code)
+        if value is NOT_APPLICABLE:
+            mapping[code] = -3
+            marks_not_applicable = True
+            continue
+        key = _category_key(value, feature_index)
         index = feature.lookup.get(key)
         if index is not None:
             mapping[code] = index
@@ -454,6 +507,11 @@ def _encode_coded(
 
     encoded = np.full(len(column), math.nan)
     rows = np.flatnonzero(column.codes >= 0)
+    unavailable: NDArray[np.bool_] | None = None
+    if marks_not_applicable:
+        unavailable = np.zeros(len(column), dtype=np.bool_)
+        unavailable[rows] = mapping[column.codes[rows]] == -3
+        rows = rows[~unavailable[rows]]
     rows = rows[mapping[column.codes[rows]] != -2]
     indices = mapping[column.codes[rows]]
     unseen = indices < 0
@@ -463,7 +521,7 @@ def _encode_coded(
             f"X contains unseen category {value!r} in feature {feature_index}"
         )
     encoded[rows[~unseen]] = indices[~unseen]
-    return encoded
+    return encoded, unavailable
 
 
 def _as_columns(X: Array | Columns) -> Columns:
@@ -533,7 +591,9 @@ def _infer_categorical(column: Array) -> bool:
     if column.dtype.kind == "b":
         return True
     values = [
-        _normalize_scalar(value) for value in column if not _is_missing(value)
+        _normalize_scalar(value)
+        for value in column
+        if value is not NOT_APPLICABLE and not _is_missing(value)
     ]
     return bool(values) and not all(
         isinstance(value, Real) and not isinstance(value, bool)
@@ -548,7 +608,7 @@ def _fit_categories(
     categories: list[object] = []
     keys: dict[CategoryKey, int] = {}
     for raw_value in column:
-        if _is_missing(raw_value):
+        if raw_value is NOT_APPLICABLE or _is_missing(raw_value):
             continue
         _add_category(
             categories, keys, _normalize_scalar(raw_value), feature_index
@@ -690,7 +750,7 @@ def _validate_continuous(column: Array, feature_index: int) -> None:
         )
         return
     for value in column:
-        if _is_missing(value):
+        if value is NOT_APPLICABLE or _is_missing(value):
             continue
         _continuous_value(value, feature_index)
 
