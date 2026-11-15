@@ -19,7 +19,7 @@ endif()
 
 # The library and Python package share a version, which differs from the
 # imported C5.0 release number. CMake versions have no prerelease labels, so
-# prereleases such as 1.0.0a1 use the version they precede.
+# prereleases such as 1.0.0rc1 use the version they precede.
 project(C50 VERSION 1.0.0 LANGUAGES CXX)
 
 # A Python build from a release tag must match the library version. Builds
