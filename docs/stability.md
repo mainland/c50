@@ -3,7 +3,7 @@
 The `c50` Python package, the native library, and its CMake package share one
 version number and follow [semantic versioning](https://semver.org). This page
 states what each version promises. It applies from version 1.0.0 onward.
-Prereleases such as `1.0.0a1` make no promises: interfaces may still change
+Prereleases such as `1.0.0rc1` make no promises: interfaces may still change
 before 1.0.0.
 
 ## Stable interfaces

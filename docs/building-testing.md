@@ -312,7 +312,7 @@ ctest --test-dir build/python --output-on-failure
 
 The `c50` Python distribution has its own version sequence, independent of the
 imported C5.0 Release 2.07 GPL Edition. `setuptools-scm` derives the package
-version from Git tags beginning with `v` and a digit, such as `v1.0.0a1`. The
+version from Git tags beginning with `v` and a digit, such as `v1.0.0rc1`. The
 upstream `c5.0-2.07` tag does not participate in package version discovery.
 Commits after a package tag receive development versions with a commit
 identifier.
@@ -320,7 +320,7 @@ identifier.
 The native library and its CMake package share this version, so C++ consumers
 request it with `find_package(C50 1.0 CONFIG REQUIRED)`. Packages with the same
 major version are compatible. CMake versions have no prerelease labels, so a
-prerelease such as `1.0.0a1` has the CMake version of the release it precedes,
+prerelease such as `1.0.0rc1` has the CMake version of the release it precedes,
 `1.0.0`. Before tagging a release, set the version in the `project()` command
 in `CMakeLists.txt` to the tag's release number. A Python build from a release
 tag fails at configuration when the two differ. The command-line programs and
