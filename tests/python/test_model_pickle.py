@@ -90,6 +90,50 @@ def test_enumeration_pickle_names_the_public_module(
     assert copy.deepcopy(member) is member
 
 
+# Pickles of c50.TieOrder.STABLE that the release with pybind11 enumerations
+# wrote, at every protocol. Every 1.x release must load them, as
+# docs/stability.md promises.
+_RECORDED_ENUMERATION_PICKLES: list[bytes] = [
+    b"cc50\n_restore_enum\np0\n(VTieOrder\np1\nVSTABLE\np2\ntp3\nRp4\n.",
+    (
+        b"cc50\n_restore_enum\nq\x00(X\x08\x00\x00\x00TieOrderq\x01"
+        b"X\x06\x00\x00\x00STABLEq\x02tq\x03Rq\x04."
+    ),
+    (
+        b"\x80\x02cc50\n_restore_enum\nq\x00X\x08\x00\x00\x00TieOrderq\x01"
+        b"X\x06\x00\x00\x00STABLEq\x02\x86q\x03Rq\x04."
+    ),
+    (
+        b"\x80\x03cc50\n_restore_enum\nq\x00X\x08\x00\x00\x00TieOrderq\x01"
+        b"X\x06\x00\x00\x00STABLEq\x02\x86q\x03Rq\x04."
+    ),
+    (
+        b"\x80\x04\x951\x00\x00\x00\x00\x00\x00\x00\x8c\x03c50\x94"
+        b"\x8c\r_restore_enum\x94\x93\x94\x8c\x08TieOrder\x94\x8c\x06STABLE"
+        b"\x94\x86\x94R\x94."
+    ),
+    (
+        b"\x80\x05\x951\x00\x00\x00\x00\x00\x00\x00\x8c\x03c50\x94"
+        b"\x8c\r_restore_enum\x94\x93\x94\x8c\x08TieOrder\x94\x8c\x06STABLE"
+        b"\x94\x86\x94R\x94."
+    ),
+]
+
+
+@pytest.mark.parametrize("data", _RECORDED_ENUMERATION_PICKLES)
+def test_recorded_enumeration_pickles_load(data: bytes) -> None:
+    assert pickle.loads(data) is c50.TieOrder.STABLE
+
+
+def test_current_pickles_equal_the_recorded_pickles() -> None:
+    # The pickle bytes are stable across the supported Python versions for
+    # these protocols, so a change in what the enumerations pickle shows here.
+    current = [
+        pickle.dumps(c50.TieOrder.STABLE, protocol) for protocol in _PROTOCOLS
+    ]
+    assert current == _RECORDED_ENUMERATION_PICKLES
+
+
 @pytest.mark.parametrize(
     ("arguments", "error"),
     [
