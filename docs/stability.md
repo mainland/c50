@@ -35,7 +35,9 @@ These are not part of the stable interface:
 - Python names that begin with an underscore, including the `c50._c50` and
   `c50._data` modules, except the pickle entry points that "Saved models"
   lists.
-- The `c50::detail` namespace in C++.
+- The `c50::detail` and `c50::core` namespaces in C++. The learning core, which
+  the imported C5.0 sources implement, lives in `c50::core`, so a consumer that
+  links the static library can define global names that the core also uses.
 - The text of error messages. Match the exception type, or the C++
   `c50::error_code`, rather than the message.
 - The binary interface of the native library. Rebuild C++ consumers when the
