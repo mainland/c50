@@ -31,7 +31,7 @@ def test_schema_encodes_continuous_and_categorical_features() -> None:
         "class_0, class_1.\n\nfeature_0: continuous.\n"
         "feature_1: value_0, value_1.\n"
     )
-    assert schema.dense_data(X, "error") == pytest.approx(
+    assert schema.dense_data(X, "error").values == pytest.approx(
         np.asarray([[0.5, 1], [1.25, 0], [2, 1]], dtype=float)
     )
 
@@ -48,7 +48,7 @@ def test_schema_infers_categories_and_encodes_missing_values() -> None:
     schema = fit_schema(X, categorical_features=None)
 
     assert schema.categorical_indices == (1,)
-    encoded = schema.dense_data(X, "error")
+    encoded = schema.dense_data(X, "error").values
     assert encoded[0] == pytest.approx([1.0, 0.0])
     assert np.all(np.isnan(encoded[1]))
 
@@ -86,7 +86,7 @@ def test_schema_controls_unseen_category_behavior() -> None:
 
     with pytest.raises(ValueError, match="unseen category 'green'"):
         schema.dense_data(unseen, "error")
-    assert np.isnan(schema.dense_data(unseen, "missing")[0, 0])
+    assert np.isnan(schema.dense_data(unseen, "missing").values[0, 0])
 
 
 def test_schema_rejects_nonfinite_continuous_values() -> None:
@@ -103,7 +103,7 @@ def test_strings_are_categories_not_missing_values() -> None:
     schema = fit_schema(X, categorical_features=None)
 
     assert schema.categories == ((b"nan", "", "nan"),)
-    encoded = schema.dense_data(X, "error")[:, 0]
+    encoded = schema.dense_data(X, "error").values[:, 0]
     np.testing.assert_array_equal(encoded, [2, 0, 1, np.nan, np.nan])
 
 
@@ -134,7 +134,7 @@ def test_dataframe_columns_keep_numeric_dtypes() -> None:
     schema = fit_schema(columns, categorical_features=None)
     assert schema.categorical_indices == (2, 3, 4)
     np.testing.assert_array_equal(
-        schema.dense_data(columns[1:], "error"),
+        schema.dense_data(columns[1:], "error").values,
         np.asarray([[1.5, 2, 0, 1, 1], [2.5, 3, 1, 0, 0]]),
     )
 
@@ -162,7 +162,7 @@ def test_coded_columns_use_dtype_or_sorted_order() -> None:
     # neither depends on the order of the rows.
     assert schema.categories == (("a", "b", "c"), ("x", "y", "z"), ())
     np.testing.assert_array_equal(
-        schema.dense_data(columns, "error"),
+        schema.dense_data(columns, "error").values,
         np.asarray(
             [
                 [1, 1, 1],
@@ -407,4 +407,4 @@ def test_largest_single_precision_value_is_accepted() -> None:
 
     schema = fit_schema(X, categorical_features=())
 
-    assert schema.dense_data(X, "error")[0, 0] == -limit
+    assert schema.dense_data(X, "error").values[0, 0] == -limit
