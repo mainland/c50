@@ -12,6 +12,8 @@
 
 namespace c50::detail { struct context_state; }
 
+namespace c50::core {
+
 /* The number of bytes that one refill reads from a file. */
 constexpr size_t c50_input_block_size = 65536;
 
@@ -65,5 +67,7 @@ inline int c50_input_getc(c50_input *input)
 bool c50_input_read_line(c50_input *input, std::string &line);
 
 void c50_input_rewind(c50_input *input);
+
+}  // namespace c50::core
 
 #endif

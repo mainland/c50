@@ -20,6 +20,8 @@
 #include "c50_output.h"
 #include "c50_rng.h"
 
+namespace c50::core {
+
 struct c50_implicit_state;
 struct _datablockrec;
 struct _split_workspace;
@@ -286,6 +288,11 @@ struct c50_io_state : c50_state_record
 
 using c50_context = c50::detail::context_state;
 
+}  // namespace c50::core
+
+/* Library code outside the core namespace names core entities directly. */
+namespace c50 { using namespace core; }
+
 /* Test access to a model's private state. Library code reads the state
    directly. */
 struct c50::detail::model_access
@@ -364,6 +371,8 @@ struct c50::detail::context_state
     Drand48State held_out_random{};
 };
 
+namespace c50::core {
+
 typedef void (*c50_operation_fn)(c50_context *context, void *user_data);
 typedef void (*c50_operation_cleanup_fn)(c50_context *context,
                                          void *user_data);
@@ -405,5 +414,7 @@ inline int c50_diagnostic_putc(int character, FILE *stream)
 {
     return stream ? fputc(character, stream) : character;
 }
+
+}  // namespace c50::core
 
 #endif

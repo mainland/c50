@@ -7,6 +7,8 @@
 
 #include "c50_output.h"
 
+namespace c50::core {
+
 c50_output::c50_output() noexcept
     : kind(C50_OUTPUT_MEMORY), file(NULL), data(NULL), size(0), capacity(0),
       owns_file(0)
@@ -137,3 +139,5 @@ int c50_output_close(c50_output *output)
     output->owns_file = 0;
     return result;
 }
+
+}  // namespace c50::core

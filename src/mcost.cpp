@@ -40,6 +40,8 @@
 #include "c50_api_internal.h"
 #include <cerrno>
 
+namespace c50::core {
+
 
 void GetMCostsInput(c50_context *Context, c50_input *Cf)
 /*   --------------  */
@@ -178,3 +180,5 @@ void GetMCosts(c50_context *Context, FILE *Cf)
     GetMCostsInput(Context, &Input);
     fclose(Cf);
 }
+
+}  // namespace c50::core

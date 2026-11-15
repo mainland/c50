@@ -6,6 +6,8 @@
 
 #include <cstddef>
 
+namespace c50::core {
+
 /* Index of element (row, column) of a table stored row by row with the given
    row stride, computed in size_t.  The tables that the learner indexes this
    way (confusion matrices, boost votes, discrete frequencies) are allocated
@@ -17,5 +19,7 @@ inline std::size_t FlatIndex(std::size_t row, std::size_t stride,
 {
     return row * stride + column;
 }
+
+}  // namespace c50::core
 
 #endif

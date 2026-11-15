@@ -39,6 +39,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+namespace c50::core {
+
 
 /*************************************************************************/
 /*									 */
@@ -137,3 +139,5 @@ assert(p >= 0 && p <= 20);
 	if (Context->progress.update_file) fflush(Context->progress.update_file);
     }
 }
+
+}  // namespace c50::core

@@ -44,6 +44,8 @@
 #include <memory>
 #include <limits>
 
+namespace c50::core {
+
 static constexpr size_t RuleConditionChunk = 100;
 static constexpr size_t SerializedRuleChunk = 100;
 
@@ -1157,3 +1159,5 @@ Set MakeSubset(c50_context *Context, Attribute Att)
 
     return owner.release();
 }
+
+}  // namespace c50::core

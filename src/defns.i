@@ -55,11 +55,13 @@
 
 #include <c50/c50.hpp>
 
-using c50_context = c50::detail::context_state;
-
 #include "c50_input.h"
 #include "c50_rng.h"
 #include "text.i"
+
+namespace c50::core {
+
+using c50_context = c50::detail::context_state;
 
 
 
@@ -315,8 +317,13 @@ typedef  union  _attribute_value
 	 }
 	 AttValue, *DataRec;
 
+
+}  // namespace c50::core
+
 #include "c50_sort.h"
 #include "c50_index.h"
+
+namespace c50::core {
 
 #define  CVal(Case,Att)		Case[Att]._cont_val
 #define  DVal(Case,Att)		Case[Att]._discr_val
@@ -852,3 +859,5 @@ void	    Prepare(c50_context *Context);
 void	    Shuffle(c50_context *Context, int *Vec);
 void	    Summary(c50_context *Context);
 float	    SE(float sum, float sumsq, int no);
+
+}  // namespace c50::core

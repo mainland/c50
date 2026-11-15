@@ -40,6 +40,8 @@
 #include "c50_api_internal.h"
 #include <memory>
 
+namespace c50::core {
+
 
 /*************************************************************************/
 /*								  	 */
@@ -583,3 +585,5 @@ void PrintCondition(c50_context *Context, Condition C)
 	    c50_diagnostic_printf(Context->io.output, "}\n");
     }
 }
+
+}  // namespace c50::core

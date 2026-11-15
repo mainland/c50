@@ -43,6 +43,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+namespace c50::core {
+
 
 
 /*************************************************************************/
@@ -253,3 +255,5 @@ void SortCasesByAttribute(c50_context *Context, CaseNo Fp, CaseNo Lp,
     PartitionSort(Context->cases.records, Fp, Lp,
 		  [Att](DataRec Case) { return CVal(Case, Att); });
 }
+
+}  // namespace c50::core

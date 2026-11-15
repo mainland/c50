@@ -5,6 +5,8 @@
 #ifndef C50_SORT_H
 #define C50_SORT_H
 
+namespace c50::core {
+
 #ifdef USEDOUBLE
 typedef double C50SortValue;
 #else
@@ -36,5 +38,7 @@ void Cachesort(int first, int last, SortRec *records);
 void StableCachesort(int first, int last, SortRec *records,
                      SortRec *record_scratch, C50SortKey *keys,
                      C50SortKey *key_scratch);
+
+}  // namespace c50::core
 
 #endif

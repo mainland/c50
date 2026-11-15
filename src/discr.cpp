@@ -38,6 +38,8 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
+namespace c50::core {
+
 
 /*************************************************************************/
 /*									 */
@@ -311,3 +313,5 @@ void DiscreteTest(c50_context *Context, Tree Node, Attribute Att)
 	Node->Tested   = Att;
     }
 }
+
+}  // namespace c50::core

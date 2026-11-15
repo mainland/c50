@@ -41,6 +41,8 @@
 
 #include <limits>
 
+namespace c50::core {
+
 /*************************************************************************/
 /*									 */
 /*	Winnow attributes by constructing a tree from half the data.	 */
@@ -419,3 +421,5 @@ void ScanTree(Tree T, Boolean *used)
 	}
     }
 }
+
+}  // namespace c50::core

@@ -16,6 +16,8 @@
 
 #include "c50_sort.h"
 
+using namespace c50::core;
+
 namespace
 {
 
