@@ -31,17 +31,30 @@ class TieOrder(enum.IntEnum):
     """
 
 class NodeKind(enum.IntEnum):
+    """Tree node representation in an inspection snapshot."""
+
     LEAF = 0
+    """Terminal class distribution."""
     DISCRETE = 1
+    """One branch per categorical value, including N/A."""
     THRESHOLD = 2
+    """Continuous cutoff, possibly with soft thresholds."""
     SUBSET = 3
+    """Branches containing subsets of categorical values."""
 
 class ConditionKind(enum.IntEnum):
+    """A tree branch or rule condition, independent of node encodings."""
+
     NOT_APPLICABLE = 0
+    """The feature has the distinct N/A value."""
     EQUALS = 1
+    """The feature equals the one named category."""
     LESS_EQUAL = 2
+    """The feature is at or below the cutoff."""
     GREATER = 3
+    """The feature is above the cutoff."""
     IN_SUBSET = 4
+    """The feature belongs to the named subset."""
 
 @final
 class SplitCondition:
