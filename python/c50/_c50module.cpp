@@ -1116,74 +1116,124 @@ void translate_c50_exception(std::exception_ptr pointer)
 
 void bind_inspection(py::module_ &module)
 {
-    py::native_enum<c50::node_kind>(module, "NodeKind", "enum.IntEnum")
-        .value("LEAF", c50::node_kind::leaf)
-        .value("DISCRETE", c50::node_kind::discrete)
-        .value("THRESHOLD", c50::node_kind::threshold)
-        .value("SUBSET", c50::node_kind::subset)
+    py::native_enum<c50::node_kind>(
+        module, "NodeKind", "enum.IntEnum",
+        "Tree node representation in an inspection snapshot.")
+        .value("LEAF", c50::node_kind::leaf,
+               "Terminal class distribution.")
+        .value("DISCRETE", c50::node_kind::discrete,
+               "One branch per categorical value, including N/A.")
+        .value("THRESHOLD", c50::node_kind::threshold,
+               "Continuous cutoff, possibly with soft thresholds.")
+        .value("SUBSET", c50::node_kind::subset,
+               "Branches containing subsets of categorical values.")
         .finalize();
-    py::native_enum<c50::condition_kind>(module, "ConditionKind",
-                                         "enum.IntEnum")
-        .value("NOT_APPLICABLE", c50::condition_kind::not_applicable)
-        .value("EQUALS", c50::condition_kind::equals)
-        .value("LESS_EQUAL", c50::condition_kind::less_equal)
-        .value("GREATER", c50::condition_kind::greater)
-        .value("IN_SUBSET", c50::condition_kind::in_subset)
+    py::native_enum<c50::condition_kind>(
+        module, "ConditionKind", "enum.IntEnum",
+        "A tree branch or rule condition, independent of node encodings.")
+        .value("NOT_APPLICABLE", c50::condition_kind::not_applicable,
+               "The feature has the distinct N/A value.")
+        .value("EQUALS", c50::condition_kind::equals,
+               "The feature equals the one named category.")
+        .value("LESS_EQUAL", c50::condition_kind::less_equal,
+               "The feature is at or below the cutoff.")
+        .value("GREATER", c50::condition_kind::greater,
+               "The feature is above the cutoff.")
+        .value("IN_SUBSET", c50::condition_kind::in_subset,
+               "The feature belongs to the named subset.")
         .finalize();
     py::class_<c50::split_condition>(module, "SplitCondition",
         "Owned inspection metadata. Fields are read-only and lists are copies.")
-        .def_readonly("feature", &c50::split_condition::feature)
-        .def_readonly("kind", &c50::split_condition::kind)
-        .def_readonly("cut", &c50::split_condition::cut)
-        .def_readonly("values", &c50::split_condition::values)
-        .def_readonly("includes_not_applicable", &c50::split_condition::includes_not_applicable);
+        .def_readonly("feature", &c50::split_condition::feature,
+                      "Zero-based schema attribute index.")
+        .def_readonly("kind", &c50::split_condition::kind,
+                      "Comparison kind.")
+        .def_readonly("cut", &c50::split_condition::cut,
+                      "Cutoff for LESS_EQUAL and GREATER, otherwise zero.")
+        .def_readonly("values", &c50::split_condition::values,
+                      "Ordinary categories for EQUALS and IN_SUBSET.")
+        .def_readonly("includes_not_applicable", &c50::split_condition::includes_not_applicable,
+                      "N/A membership, for IN_SUBSET only.");
     py::class_<c50::continuous_threshold>(module, "ContinuousThreshold",
         "Owned inspection metadata. Fields are read-only and lists are copies.")
-        .def_readonly("cut", &c50::continuous_threshold::cut)
-        .def_readonly("lower", &c50::continuous_threshold::lower)
-        .def_readonly("midpoint", &c50::continuous_threshold::midpoint)
-        .def_readonly("upper", &c50::continuous_threshold::upper);
+        .def_readonly("cut", &c50::continuous_threshold::cut,
+                      "Printed decision cutoff.")
+        .def_readonly("lower", &c50::continuous_threshold::lower,
+                      "Lower soft-threshold point.")
+        .def_readonly("midpoint", &c50::continuous_threshold::midpoint,
+                      "Middle soft-threshold point.")
+        .def_readonly("upper", &c50::continuous_threshold::upper,
+                      "Upper soft-threshold point.");
     py::class_<c50::tree_branch>(module, "TreeBranch",
         "Owned inspection metadata. Fields are read-only and lists are copies.")
-        .def_readonly("condition", &c50::tree_branch::condition)
-        .def_readonly("child", &c50::tree_branch::child);
+        .def_readonly("condition", &c50::tree_branch::condition,
+                      "Branch condition in native branch order.")
+        .def_readonly("child", &c50::tree_branch::child,
+                      "Zero-based child node index.");
     py::class_<c50::tree_node>(module, "TreeNode",
         "Owned inspection metadata. Fields are read-only and lists are copies.")
-        .def_readonly("kind", &c50::tree_node::kind)
-        .def_readonly("feature", &c50::tree_node::feature)
-        .def_readonly("predicted_class", &c50::tree_node::predicted_class)
-        .def_readonly("case_weight", &c50::tree_node::case_weight)
-        .def_readonly("class_weights", &c50::tree_node::class_weights)
-        .def_readonly("threshold", &c50::tree_node::threshold)
-        .def_readonly("branches", &c50::tree_node::branches);
+        .def_readonly("kind", &c50::tree_node::kind,
+                      "Leaf or split representation.")
+        .def_readonly("feature", &c50::tree_node::feature,
+                      "Tested attribute, None at a leaf.")
+        .def_readonly("predicted_class", &c50::tree_node::predicted_class,
+                      "Stored class, not a cost-adjusted prediction.")
+        .def_readonly("case_weight", &c50::tree_node::case_weight,
+                      "Sum of serialized class weights, possibly zero.")
+        .def_readonly("class_weights", &c50::tree_node::class_weights,
+                      "Weighted support in class-name order.")
+        .def_readonly("threshold", &c50::tree_node::threshold,
+                      "Present only for thresholds.")
+        .def_readonly("branches", &c50::tree_node::branches,
+                      "Ordered branches, empty at a leaf.");
     py::class_<c50::tree_inspection>(module, "TreeInspection",
         "Owned inspection metadata. Fields are read-only and lists are copies.")
-        .def_readonly("nodes", &c50::tree_inspection::nodes)
-        .def_readonly("leaf_count", &c50::tree_inspection::leaf_count)
-        .def_readonly("supported_leaf_count", &c50::tree_inspection::supported_leaf_count)
-        .def_readonly("depth", &c50::tree_inspection::depth)
-        .def_readonly("supported_depth", &c50::tree_inspection::supported_depth)
-        .def_readonly("feature_use", &c50::tree_inspection::feature_use);
+        .def_readonly("nodes", &c50::tree_inspection::nodes,
+                      "Independently owned node records.")
+        .def_readonly("leaf_count", &c50::tree_inspection::leaf_count,
+                      "All leaves, including zero-support leaves.")
+        .def_readonly("supported_leaf_count", &c50::tree_inspection::supported_leaf_count,
+                      "Leaves with positive case weight.")
+        .def_readonly("depth", &c50::tree_inspection::depth,
+                      "Maximum node depth in edges from the root.")
+        .def_readonly("supported_depth", &c50::tree_inspection::supported_depth,
+                      "Maximum positive-support leaf depth.")
+        .def_readonly("feature_use", &c50::tree_inspection::feature_use,
+                      "Split counts in attribute-name order.");
     py::class_<c50::rule_inspection>(module, "RuleInspection",
         "Owned rule metadata in serialized order.")
-        .def_readonly("conditions", &c50::rule_inspection::conditions)
-        .def_readonly("predicted_class", &c50::rule_inspection::predicted_class)
-        .def_readonly("cover", &c50::rule_inspection::cover)
-        .def_readonly("correct", &c50::rule_inspection::correct)
-        .def_readonly("prior", &c50::rule_inspection::prior)
-        .def_readonly("vote", &c50::rule_inspection::vote);
+        .def_readonly("conditions", &c50::rule_inspection::conditions,
+                      "Conjunction in serialized order.")
+        .def_readonly("predicted_class", &c50::rule_inspection::predicted_class,
+                      "Zero-based rule conclusion.")
+        .def_readonly("cover", &c50::rule_inspection::cover,
+                      "Weighted cases covered by the rule.")
+        .def_readonly("correct", &c50::rule_inspection::correct,
+                      "Weighted covered cases with the concluded class.")
+        .def_readonly("prior", &c50::rule_inspection::prior,
+                      "Prior reconstructed from serialized cover, correct, and lift.")
+        .def_readonly("vote", &c50::rule_inspection::vote,
+                      "Native confidence vote in integer thousandths.");
     py::class_<c50::ruleset_inspection>(module, "RulesetInspection",
         "Owned ruleset with ordered rules and a fallback class.")
-        .def_readonly("default_class", &c50::ruleset_inspection::default_class)
-        .def_readonly("rules", &c50::ruleset_inspection::rules)
-        .def_readonly("feature_use", &c50::ruleset_inspection::feature_use);
+        .def_readonly("default_class", &c50::ruleset_inspection::default_class,
+                      "Zero-based fallback class.")
+        .def_readonly("rules", &c50::ruleset_inspection::rules,
+                      "Rules in serialized order.")
+        .def_readonly("feature_use", &c50::ruleset_inspection::feature_use,
+                      "Condition counts per schema attribute.");
     py::class_<c50::model_inspection>(module, "ModelInspection",
         "Owned inspection metadata. Fields are read-only and lists are copies.")
-        .def_readonly("kind", &c50::model_inspection::kind)
-        .def_readonly("class_names", &c50::model_inspection::class_names)
-        .def_readonly("feature_names", &c50::model_inspection::feature_names)
-        .def_readonly("trees", &c50::model_inspection::trees)
-        .def_readonly("rulesets", &c50::model_inspection::rulesets);
+        .def_readonly("kind", &c50::model_inspection::kind,
+                      "Source classifier representation.")
+        .def_readonly("class_names", &c50::model_inspection::class_names,
+                      "Classes in prediction-score order.")
+        .def_readonly("feature_names", &c50::model_inspection::feature_names,
+                      "All schema attributes in source order.")
+        .def_readonly("trees", &c50::model_inspection::trees,
+                      "Tree components, empty for rules models.")
+        .def_readonly("rulesets", &c50::model_inspection::rulesets,
+                      "Ruleset components in serialized order.");
 }
 
 // pybind11 objects have no pickle support unless a class defines it. Without a
