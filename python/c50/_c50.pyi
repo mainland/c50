@@ -182,9 +182,15 @@ class Predictions:
 class Predictor:
     def predict_details(self, cases: str) -> Predictions: ...
     def predict_details_dense(
-        self, values: NDArray[np.float64]
+        self,
+        values: NDArray[np.float64],
+        *,
+        not_applicable: NDArray[np.bool_] | None = None,
     ) -> Predictions:
         """Predict a dense matrix.
+
+        A true element of ``not_applicable`` marks that value as not
+        applicable, which is distinct from NaN (missing).
 
         Raises:
             C50Error: If the model's schema has an implicit, ignored, label,
@@ -215,6 +221,8 @@ class Model:
         costs: str = "",
         split_workers: SupportsIndex = 1,
         copy: bool = True,
+        *,
+        not_applicable: NDArray[np.bool_] | None = None,
     ) -> Model: ...
     @staticmethod
     def load(
@@ -239,9 +247,15 @@ class Model:
     def inspect(self) -> ModelInspection: ...
     def predict_details(self, cases: str) -> Predictions: ...
     def predict_details_dense(
-        self, values: NDArray[np.float64]
+        self,
+        values: NDArray[np.float64],
+        *,
+        not_applicable: NDArray[np.bool_] | None = None,
     ) -> Predictions:
         """Predict a dense matrix.
+
+        A true element of ``not_applicable`` marks that value as not
+        applicable, which is distinct from NaN (missing).
 
         Raises:
             C50Error: If the model's schema has an implicit, ignored, label,
@@ -251,8 +265,16 @@ class Model:
                 matter.
         """
     def attribute_usage(self, cases: str) -> list[int]: ...
-    def attribute_usage_dense(self, values: NDArray[np.float64]) -> list[int]:
+    def attribute_usage_dense(
+        self,
+        values: NDArray[np.float64],
+        *,
+        not_applicable: NDArray[np.bool_] | None = None,
+    ) -> list[int]:
         """Count attribute usage for a dense matrix.
+
+        A true element of ``not_applicable`` marks that value as not
+        applicable, which is distinct from NaN (missing).
 
         Raises:
             C50Error: If the model's schema has an implicit, ignored, label,
@@ -281,6 +303,8 @@ def train_dense(
     costs: str = "",
     split_workers: SupportsIndex = 1,
     copy: bool = True,
+    *,
+    not_applicable: NDArray[np.bool_] | None = None,
 ) -> Model: ...
 def load(
     names: str,

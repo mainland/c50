@@ -589,6 +589,14 @@ attributes, not-applicable values, case weights, costs, sampling, subsets, and
 serialized-model reloads. They exercise both parallel split evaluation and its
 serial fallback conditions.
 
+`dense-not-applicable` and `tests/python/test_dense_not_applicable.py` train
+trees, rules, boosted ensembles, subset splits, winnowed attributes, sampling,
+and costs from dense input with a not-applicable mask and from the equivalent
+text input with `N/A`. They compare the serialized model without its time
+stamp, the predictions, and the attribute usage. The values under the mask
+hold the real value, NaN, or an out-of-range value in turn. The Python file
+also checks the mask's shape, dtype, layout, and `copy=False` handling.
+
 The same test runs four simultaneous independent fits, each requesting four
 split workers, with trees, rules, and opposing class assignments. Repeated fits
 must reproduce their single-worker classifiers and predictions, and concurrent
