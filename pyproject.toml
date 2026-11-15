@@ -23,7 +23,7 @@ authors = [
 ]
 keywords = ["C5.0", "decision trees", "rule learning", "classification", "scikit-learn"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Operating System :: MacOS",

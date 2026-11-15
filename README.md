@@ -5,7 +5,7 @@ while preserving its learning behavior and model compatibility. It provides a
 compiled C++17 library, compatible command-line programs, and Python bindings.
 
 The
-[project documentation](https://github.com/mainland/c50/blob/v1.0.0a1/docs/index.md)
+[project documentation](https://github.com/mainland/c50/blob/v1.0.0rc1/docs/index.md)
 contains build and testing guides, ownership and concurrency contracts, and
 generated C++ and Python API references. The repository includes configuration
 for publishing that site on Read the Docs.
@@ -86,7 +86,7 @@ with:
 python -m pip install --pre c50
 ```
 
-`--pre` is needed while only prerelease versions, such as `1.0.0a1`, are
+`--pre` is needed while only prerelease versions, such as `1.0.0rc1`, are
 published. Releases include wheels for Linux x86-64 and ARM64, macOS arm64 and
 x86-64, and Windows x86-64. To build and install from a source checkout
 instead, run this from the repository root:
@@ -152,7 +152,7 @@ text buffer and batches prediction to bound temporary native storage. Training
 remains in-memory. Set `n_jobs` to enable bounded parallel evaluation of
 eligible attribute splits with up to 8 workers. The default is one worker.
 Other training phases remain serial. The detailed input, concurrency, and
-[large-dataset](https://github.com/mainland/c50/blob/v1.0.0a1/docs/large-datasets.md)
+[large-dataset](https://github.com/mainland/c50/blob/v1.0.0rc1/docs/large-datasets.md)
 contracts are in the project documentation.
 
 Run `./c5.0 -h` to see the available command-line options. C5.0 uses a file
@@ -206,7 +206,7 @@ ctest --test-dir build/tsan --output-on-failure
 
 The whole distribution is licensed under the GNU General Public License,
 version 3 or, at your option, any later version (`GPL-3.0-or-later`). See
-[gpl.txt](https://github.com/mainland/c50/blob/v1.0.0a1/gpl.txt).
+[gpl.txt](https://github.com/mainland/c50/blob/v1.0.0rc1/gpl.txt).
 
 The imported C5.0 Release 2.07 source is copyright 2010 RuleQuest Research Pty
 Ltd, released under the same license. Files that this project modified keep
