@@ -30,6 +30,7 @@ from sklearn.utils.validation import (
 
 from ._c50 import Model, ModelKind, Options, TieOrder
 from ._data import Columns, Schema, dataframe_columns, encode_costs, fit_schema
+from ._sentinel import NOT_APPLICABLE
 from .inspection import export_json as _export_json
 from .inspection import export_text as _export_text
 
@@ -843,4 +844,4 @@ def _validation_dtype(X: ArrayLike) -> type[object] | None:
     return object
 
 
-__all__ = ["C50Classifier"]
+__all__ = ["NOT_APPLICABLE", "C50Classifier"]
