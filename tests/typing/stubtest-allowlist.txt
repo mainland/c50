@@ -7,11 +7,12 @@ c50._c50.Model
 c50._c50.Options
 c50._c50.Predictions
 
-# pybind11 enums also use the native metaclass.
-c50._c50.ModelKind
-c50._c50.TieOrder
-c50._c50.NodeKind
-c50._c50.ConditionKind
+# pybind11 adds a capsule that marks each enumeration as a native enum. It is
+# a private implementation detail.
+c50._c50.ModelKind.__pybind11_native_enum__
+c50._c50.TieOrder.__pybind11_native_enum__
+c50._c50.NodeKind.__pybind11_native_enum__
+c50._c50.ConditionKind.__pybind11_native_enum__
 
 # Model and Predictions intentionally have no public constructor.
 c50._c50.Model.__init__

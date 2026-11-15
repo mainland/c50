@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include <pybind11/native_enum.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -943,17 +944,20 @@ void translate_c50_exception(std::exception_ptr pointer)
 
 void bind_inspection(py::module_ &module)
 {
-    py::enum_<c50::node_kind>(module, "NodeKind")
+    py::native_enum<c50::node_kind>(module, "NodeKind", "enum.IntEnum")
         .value("LEAF", c50::node_kind::leaf)
         .value("DISCRETE", c50::node_kind::discrete)
         .value("THRESHOLD", c50::node_kind::threshold)
-        .value("SUBSET", c50::node_kind::subset);
-    py::enum_<c50::condition_kind>(module, "ConditionKind")
+        .value("SUBSET", c50::node_kind::subset)
+        .finalize();
+    py::native_enum<c50::condition_kind>(module, "ConditionKind",
+                                         "enum.IntEnum")
         .value("NOT_APPLICABLE", c50::condition_kind::not_applicable)
         .value("EQUALS", c50::condition_kind::equals)
         .value("LESS_EQUAL", c50::condition_kind::less_equal)
         .value("GREATER", c50::condition_kind::greater)
-        .value("IN_SUBSET", c50::condition_kind::in_subset);
+        .value("IN_SUBSET", c50::condition_kind::in_subset)
+        .finalize();
     py::class_<c50::split_condition>(module, "SplitCondition",
         "Owned inspection metadata. Fields are read-only and lists are copies.")
         .def_readonly("feature", &c50::split_condition::feature)
@@ -1017,7 +1021,16 @@ void bind_inspection(py::module_ &module)
 // __reduce__ one that fails with TypeError, and give every enumeration one
 // that pickles the member by type and member name through the public package
 // at every protocol, like a Model, so that the pickle does not name this
-// module or depend on the integer values.
+// module or depend on the integer values. An enumeration is an enum.IntEnum,
+// whose own __reduce_ex__ takes precedence over __reduce__ when pickle and copy
+// look for either, so the enumerations get both.
+//
+// An enum.IntEnum prints as its integer from Python 3.11 on and as its
+// qualified name before. Give every enumeration the qualified name at every
+// version, which is also what the earlier pybind11 enumerations printed. The
+// formatted text must not depend on the version either. The format function of
+// enum.IntEnum formats the integer from Python 3.11 on, so give every
+// enumeration a format function that formats the string form.
 void bind_pickle_support(py::module_ &module)
 {
     const py::object reject_pickle = py::cpp_function(
@@ -1039,6 +1052,25 @@ void bind_pickle_support(py::module_ &module)
         py::name("__reduce__"), py::is_method(py::none()),
         py::doc("Return the pickle state: the type name and the member "
                 "name."));
+    const py::object reduce_enum_ex = py::cpp_function(
+        [reduce_enum](const py::object &self, const py::object &) {
+            return reduce_enum(self);
+        },
+        py::name("__reduce_ex__"), py::is_method(py::none()),
+        py::doc("Return the pickle state at any protocol."));
+    const py::object enum_format = py::cpp_function(
+        [](const py::object &self, const py::object &specification) {
+            return py::str(self).attr("__format__")(specification);
+        },
+        py::name("__format__"), py::is_method(py::none()),
+        py::doc("Format the type name and the member name."));
+    const py::object enum_to_string = py::cpp_function(
+        [](const py::object &self) {
+            return py::str(py::type::of(self).attr("__name__"))
+                + py::str(".") + py::str(self.attr("name"));
+        },
+        py::name("__str__"), py::is_method(py::none()),
+        py::doc("Return the type name and the member name."));
 
     const std::string module_name = module.attr("__name__").cast<std::string>();
     for ( const auto item : py::dict(module.attr("__dict__")) )
@@ -1058,6 +1090,9 @@ void bind_pickle_support(py::module_ &module)
         if ( py::hasattr(type, "__members__") )
         {
             type.attr("__reduce__") = reduce_enum;
+            type.attr("__reduce_ex__") = reduce_enum_ex;
+            type.attr("__str__") = enum_to_string;
+            type.attr("__format__") = enum_format;
         }
         else if ( !py::dict(type.attr("__dict__")).contains("__reduce__") )
         {
@@ -1083,23 +1118,25 @@ GIL while training, loading, or predicting.
         "Python exception.";
     py::register_exception_translator(&translate_c50_exception);
 
-    py::enum_<c50::model_kind>(
-        module, "ModelKind",
+    py::native_enum<c50::model_kind>(
+        module, "ModelKind", "enum.IntEnum",
         "Serialized classifier representations supported by C5.0.")
         .value("TREE", c50::model_kind::tree,
                "A decision tree or boosted tree ensemble.")
         .value("RULES", c50::model_kind::rules,
-               "A ruleset or boosted ruleset ensemble.");
+               "A ruleset or boosted ruleset ensemble.")
+        .finalize();
 
-    py::enum_<c50::tie_order>(
-        module, "TieOrder",
+    py::native_enum<c50::tie_order>(
+        module, "TieOrder", "enum.IntEnum",
         "Order of equal continuous values when evaluating splits.")
         .value("REFERENCE", c50::tie_order::reference,
                "Reproduce the tie order of the reference C5.0 learner.")
         .value("STABLE", c50::tie_order::stable,
                "Keep equal values in case order with a faster sort. "
                "Classifiers are deterministic on every platform but may "
-               "differ from the reference learner.");
+               "differ from the reference learner.")
+        .finalize();
 
     module.def(
         "_count_index",

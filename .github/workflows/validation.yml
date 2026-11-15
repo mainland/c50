@@ -239,7 +239,7 @@ jobs:
       - name: Check the benchmark's separate Python build
         if: matrix.python == '3.12' && matrix.dependencies == 'latest'
         run: |
-          python -m pip install 'pybind11>=2.13.6'
+          python -m pip install 'pybind11>=3.0'
           python tests/benchmark_smoke.py --build-python
       - name: Build strict Doxygen and Sphinx documentation
         if: matrix.python == '3.12' && matrix.dependencies == 'latest'
