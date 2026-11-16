@@ -1,0 +1,6 @@
+id="See5/C5.0 2.07 GPL Edition <date>"
+costs="1"
+entries="1"
+rules="1" default="low"
+conds="1" cover="1" ok="1" lift="4" class="high"
+type="2" att="x" cut="-3.5" result="<"

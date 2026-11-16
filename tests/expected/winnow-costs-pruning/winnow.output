@@ -1,0 +1,41 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `winnow-costs-pruning'
+	Winnow attributes
+	Pruning confidence level 5%
+
+Read 10 cases (1 attributes) from winnow-costs-pruning.data
+Read misclassification costs from winnow-costs-pruning.costs
+
+No attributes winnowed
+
+Decision tree:
+
+x <= -1: a (2.5/1.2)
+x > -1: b (7.5/0.8)
+
+
+Evaluation on training data (10 cases):
+
+	       Decision Tree
+	  -----------------------
+	  Size      Errors   Cost
+
+	     2    1(10.0%)   0.30   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     1     1    (a): class a
+	           8    (b): class b
+
+
+	Attribute usage:
+
+	     40%  x
+
+
+Time: <elapsed> secs
