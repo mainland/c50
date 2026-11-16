@@ -1,0 +1,11 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[tool.codespell]
+# The fixtures and expected outputs hold generated text and bytes that the
+# project compares exactly. `ExtraC`, `aLow`, `DElt`, and `StreamIn` are
+# identifiers of the imported sources, and `non-existant`, `compexity`, and
+# `Tabluate` are misspellings in their comments.
+skip = "tests/expected/*,tests/fixtures/*,tests/fuzz/corpus/*"
+ignore-words-list = "extrac,alow,delt,streamin,non-existant,compexity,tabluate"
