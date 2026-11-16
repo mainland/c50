@@ -1,0 +1,38 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `costs-pruning'
+	Pruning confidence level 5%
+
+Read 6 cases (1 attributes) from costs-pruning.data
+Read misclassification costs from costs-pruning.costs
+
+Decision tree:
+
+x <= -3.5: high (2/1)
+x > -3.5: low (4)
+
+
+Evaluation on training data (6 cases):
+
+	       Decision Tree
+	  -----------------------
+	  Size      Errors   Cost
+
+	     2    0( 0.0%)   0.00   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     5          (a): class low
+	           1    (b): class high
+
+
+	Attribute usage:
+
+	     50%  x
+
+
+Time: <elapsed> secs

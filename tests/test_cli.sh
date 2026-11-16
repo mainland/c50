@@ -307,6 +307,14 @@ run_case basic cross-validation - -X 5 -I 17
 run_case print-rounding cross-validation - -X 3 -b -I 3
 run_case boost boost tree -t 5
 run_case case-weight case-weight tree
+# Two-class costs and a low confidence factor raise the pessimistic error
+# estimate of the root's subtree above the number of cases, and neither branch
+# of the root is a subtree. Release 2.07 replaces the root with a branch that
+# does not exist and crashes, in winnowing's trial tree for the second fixture,
+# so these runs have no reference output. This project keeps the root's split.
+run_case costs-pruning tree tree --with-costs -c 5
+run_case costs-pruning rules rules --with-costs -c 5 -r
+run_case winnow-costs-pruning winnow tree --with-costs -w -c 5
 run_case implicit implicit tree
 run_case implicit-unknown tree tree
 run_case implicit-literals tree tree
