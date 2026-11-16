@@ -1,0 +1,24 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Markdown lint settings for the documentation and READMEs.
+
+[global]
+line-length = 79
+
+[MD013]
+# rumdl accepts a line whose last word alone crosses the limit. Fill prose
+# strictly at 79 columns anyway.
+line-length = 79
+# Wrapped output, tables, and displayed mathematics keep their own widths.
+code-blocks = false
+tables = false
+math-blocks = false
+
+[per-file-ignores]
+# Sphinx directives and cross-reference labels are MyST syntax, not plain
+# Markdown. The fences of `{toctree}` take no language, and `(label)=` defines
+# the anchors that `#label` links name.
+"docs/index.md" = ["MD040"]
+"docs/algorithm.md" = ["MD051"]

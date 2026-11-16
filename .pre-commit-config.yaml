@@ -1,0 +1,30 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Run `pre-commit run --all-files` to check the whole tree.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: debug-statements
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.32.0
+    hooks:
+      - id: zizmor
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.3
+    hooks:
+      - id: codespell
+        args: [--toml, pyproject.toml]
+        # Before Python 3.11, codespell reads the TOML file through `tomli`.
+        additional_dependencies: [tomli]
+  - repo: https://github.com/rvben/rumdl-pre-commit
+    rev: v0.3.4
+    hooks:
+      - id: rumdl

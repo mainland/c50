@@ -1,0 +1,20 @@
+# Copyright 2026 Geoffrey Mainland.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Actions are pinned by commit hash, so only Dependabot moves them. It does
+# not manage Python packages: the pinned checkers in `pyproject.toml` change
+# deliberately.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    # Development happens on `dev`, not on the default branch.
+    target-branch: dev
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 14
+    groups:
+      actions:
+        patterns: ["*"]
