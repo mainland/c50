@@ -1,4 +1,5 @@
-/* Modified 2026 by Geoffrey Mainland: own pruning scratch during unwinding. */
+/* Modified 2026 by Geoffrey Mainland: own pruning scratch during unwinding,
+   and never replace a tree with a missing branch. */
 /*************************************************************************/
 /*									 */
 /*  Copyright 2010 Rulequest Research Pty Ltd.				 */
@@ -150,7 +151,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
     CaseNo	i, Bp, Ep, Missing;
     CaseCount	Cases=0, KnownCases, *BranchCases, MissingCases,
 		*SmallBranches, SmallBranchCases=0,
-		Errs, SaveErrs, TreeErrs, LeafErrs, ExtraLeafErrs=0, BestBrErrs;
+		Errs, SaveErrs, TreeErrs, LeafErrs, ExtraLeafErrs=0, BestBrErrs=0;
     double	Factor, *LocalClassDist;
     DiscrValue	v, BestBr=0;
     ClassNo	c, BestClass=1;
@@ -363,10 +364,6 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 	BestBrErrs = T->Branch[BestBr]->Errors;
 	T->Branch[BestBr]->Errors = SaveErrs;
     }
-    else
-    {
-	BestBrErrs = Context->cases.max_case+1;
-    }
 
     LocalVerbosity(2,
 	Intab(Sh);
@@ -380,9 +377,18 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 	}
 	fprintf(Context->io.output, "]\n"))
 
-    /*  See whether tree should be replaced with leaf or best branch  */
+    /*  See whether tree should be replaced with leaf or best branch.
 
-    if ( LeafErrs + ExtraLeafErrs <= BestBrErrs + 0.1 &&
+	Release 2.07 gave a missing best branch Context->cases.max_case+1
+	errors, as a bound that no error estimate reaches.  With two
+	classes and costs, ExtraErrs scales the extra errors by the other
+	class's weight multiplier, so the tree's and the leaf's estimates
+	can exceed the bound.  Release 2.07 then replaced the tree with
+	branch 0, which is null, and crashed.  This project's fix compares
+	the best branch only when there is one.  Every node that Release
+	2.07 prunes without crashing is pruned as before.  */
+
+    if ( ( ! BestBr || LeafErrs + ExtraLeafErrs <= BestBrErrs + 0.1 ) &&
 	 LeafErrs + ExtraLeafErrs <= TreeErrs + 0.1 )
     {
 	LocalVerbosity(2,
@@ -393,7 +399,7 @@ void EstimateErrs(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp,
 	T->Errors = LeafErrs + ExtraLeafErrs;
     }
     else
-    if ( BestBrErrs <= TreeErrs + 0.1 )
+    if ( BestBr && BestBrErrs <= TreeErrs + 0.1 )
     {
 	LocalVerbosity(2,
 	    Intab(Sh);

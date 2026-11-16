@@ -72,6 +72,34 @@ int main()
                 ignored.serialized_data() != ordinary.serialized_data())
                 throw std::runtime_error("ignored costs changed training");
         }
+        // Two-class costs scale the pessimistic error estimate of a leaf by
+        // the other class's weight multiplier. In both datasets the estimate
+        // for the root's subtree then exceeds the number of cases, and neither
+        // branch of the root is a subtree. Release 2.07 replaced the root with
+        // a branch that does not exist and crashed: in the final tree for the
+        // first dataset, and in winnowing's trial tree for the second. The
+        // root's split must stay.
+        c50::options pessimistic;
+        pessimistic.confidence_factor = 0.05;
+        for (auto kind : {c50::model_kind::tree, c50::model_kind::rules}) {
+            auto model = c50::model::train(context, kind,
+                "low, high.\nx: continuous.\n",
+                "?, low\n-3.5, high\n?, low\n0.5, low\n0, low\n?, low\n",
+                pessimistic, "low, high: 5\n");
+            auto result = model.predict(context, "-3.5, ?\n0.5, ?\n");
+            if (result.class_index(0) != 1 || result.class_index(1) != 0)
+                throw std::runtime_error("costs pruned the root's split");
+        }
+        c50::options winnowing = pessimistic;
+        winnowing.winnow = true;
+        auto winnowed = c50::model::train(context, c50::model_kind::tree,
+            "a, b.\nx: continuous.\n",
+            "?, b\n?, b\n0, b\n?, b\n1, b\n-1, a\n?, a\n?, b\n2, b\n?, b\n",
+            winnowing, "b, a: 3\n");
+        auto winnowed_result = winnowed.predict(context, "-1, ?\n2, ?\n");
+        if (winnowed_result.class_index(0) != 0 ||
+            winnowed_result.class_index(1) != 1)
+            throw std::runtime_error("winnowing with costs pruned the split");
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
         return 1;
