@@ -216,13 +216,14 @@ def assert_same_predictions(
     np.testing.assert_array_equal(left.scores, right.scores)
 
 
-@given(dataset=datasets())
-@settings(
-    deadline=None,
-    max_examples=40,
-    suppress_health_check=[HealthCheck.too_slow],
-)
-def test_text_and_dense_interfaces_are_equivalent(dataset: Dataset) -> None:
+def check_text_and_dense_equivalence(dataset: Dataset) -> None:
+    """Require that the text and dense interfaces agree on one dataset.
+
+    The property test and the slow property hunt both call this function.
+
+    Args:
+        dataset: Generated problem to train through both interfaces.
+    """
     options = c50.Options()
     options.subset_splits = dataset.subset_splits
     options.winnow = dataset.winnow
@@ -285,3 +286,13 @@ def test_text_and_dense_interfaces_are_equivalent(dataset: Dataset) -> None:
         row_count,
         class_count,
     )
+
+
+@given(dataset=datasets())
+@settings(
+    deadline=None,
+    max_examples=40,
+    suppress_health_check=[HealthCheck.too_slow],
+)
+def test_text_and_dense_interfaces_are_equivalent(dataset: Dataset) -> None:
+    check_text_and_dense_equivalence(dataset)

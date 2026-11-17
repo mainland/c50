@@ -77,7 +77,9 @@ docs = [
 # Contributor tools. The lint environment installs them with
 # `pip install --group dev`, which needs pip 25.1 or newer. The checkers whose
 # findings matter are pinned exactly, so that every environment reproduces them.
+# mypy reads Hypothesis's types through the property test and the hunt.
 dev = [
+    "hypothesis>=6.112",
     "mypy==2.4.1",
     "numpy>=1.26",
     "pandas>=2.2",
@@ -155,9 +157,10 @@ files = [
     "tests/check_sdist.py",
     "tests/run_built_python.py",
     "tests/built_python_site",
+    "tests/slow/property_hunt.py",
     "tests/reference",
 ]
-mypy_path = "python"
+mypy_path = "python:tests/python"
 strict = true
 warn_unreachable = true
 enable_error_code = [
