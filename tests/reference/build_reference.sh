@@ -80,11 +80,21 @@ fi
 output_dir=$(CDPATH= cd "$(dirname "$output")" && pwd)
 output=$output_dir/$(basename "$output")
 
+# Release 2.07 calls finite(), which the macOS headers no longer declare, and
+# Apple Clang rejects calls to undeclared functions. isfinite() gives the same
+# result for every double, so the substitution changes no arithmetic. glibc
+# still declares finite(), so other systems compile the source unchanged.
+platform_flags=
+case $(uname -s) in
+Darwin) platform_flags=-Dfinite=isfinite ;;
+esac
+
 (
     cd "$source_dir"
     # shellcheck disable=SC2086 # The list holds plain file names.
     cat defns.i $sources | grep -E -v 'defns.i|extern.i' > "$work_dir/c50gt.c"
     # -ffp-contract=off keeps the reference to x86-64 arithmetic on targets
     # with fused multiply-add. It changes nothing on x86-64.
-    gcc -ffloat-store -w -O3 -ffp-contract=off ${C50_REFERENCE_CFLAGS:-} -I. -o "$output" "$work_dir/c50gt.c" -lm
+    gcc -ffloat-store -w -O3 -ffp-contract=off $platform_flags \
+        ${C50_REFERENCE_CFLAGS:-} -I. -o "$output" "$work_dir/c50gt.c" -lm
 )
