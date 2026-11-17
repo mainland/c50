@@ -229,6 +229,24 @@ python3 -m venv .venv
 .venv/bin/python -m pytest
 ```
 
+The property test draws its examples with Hypothesis. Every pytest run, also
+under CTest and in CI, uses the `reproducible` profile that
+`tests/python/conftest.py` defines. The profile derandomizes the examples and
+ignores the example database, so the same tree draws the same examples on every
+host, and a failure can be reproduced and bisected. To draw new examples, name
+the `explore` profile:
+
+```sh
+.venv/bin/python -m pytest --hypothesis-profile=explore \
+    tests/python/test_dense_properties.py
+```
+
+A failing example from either profile prints a `@reproduce_failure` line with a
+blob. Add that decorator to the failing test, above `@given`, to replay the
+example, then remove it after the fix. The blob is valid only for the printed
+Hypothesis version. The default profile need not draw an example that
+`explore` found, so add a regression test for it.
+
 The tutorial test runs the code in {doc}`tutorial` and checks the results that
 its text reports. It downloads two datasets from OpenML on first use, so it is
 skipped unless `C50_NETWORK_TESTS=1` is set:
