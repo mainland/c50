@@ -808,6 +808,29 @@ if(C50_ENABLE_SANITIZERS AND C50_BUILD_PYTHON)
         "ASAN_OPTIONS=detect_leaks=0:halt_on_error=1")
 endif()
 
+# The Hypothesis property test draws a few dozen examples. This target draws
+# as many as asked and logs each before it trains, so that a crash leaves its
+# input behind. It is not part of the default build or tests. Run it with
+# `cmake --build build --target property-hunt`. C50_PROPERTY_HUNT_SEED,
+# C50_PROPERTY_HUNT_EXAMPLES, and C50_PROPERTY_HUNT_LOG override its defaults,
+# which tests/slow/property_hunt.py documents. The log defaults to a file in
+# the build directory. C50_PROPERTY_HUNT_REPLAY names a log, and the target
+# then trains its last example, with the same environment as a hunt.
+if(C50_BUILD_PYTHON AND UNIX)
+    add_custom_target(
+        property-hunt
+        COMMAND ${CMAKE_COMMAND} -E env ${c50_python_sanitizer_environment}
+                ${Python_EXECUTABLE}
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_built_python.py"
+                "${CMAKE_CURRENT_BINARY_DIR}/python"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/slow/property_hunt.py"
+        DEPENDS c50_python
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        USES_TERMINAL
+        VERBATIM
+    )
+endif()
+
 if(BUILD_TESTING)
     add_test(NAME input-stream COMMAND c50_input_test)
     add_test(NAME output-stream COMMAND c50_output_test)
@@ -877,7 +900,7 @@ if(BUILD_TESTING)
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         )
         set_tests_properties(python-license-notices PROPERTIES SKIP_RETURN_CODE 77)
-        # The benchmark suite requires Linux or macOS.
+        # The benchmark suite requires Linux or macOS, as property-hunt does.
         if(UNIX)
             add_test(
                 NAME benchmark-smoke
