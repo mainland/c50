@@ -584,7 +584,11 @@ if(UNIX)
 endif()
 
 if(BUILD_TESTING OR C50_BUILD_FUZZERS)
-    add_library(c50_fuzz_target STATIC tests/fuzz/parser_target.cpp)
+    add_library(
+        c50_fuzz_target STATIC
+        tests/fuzz/parser_target.cpp
+        tests/fuzz/training_target.cpp
+    )
     target_link_libraries(c50_fuzz_target PUBLIC C50::cpp)
     list(APPEND C50_COMPILE_TARGETS c50_fuzz_target)
 
@@ -592,6 +596,29 @@ if(BUILD_TESTING OR C50_BUILD_FUZZERS)
     target_link_libraries(c50_fuzz_seed_replay PRIVATE c50_fuzz_target)
     list(APPEND C50_COMPILE_TARGETS c50_fuzz_seed_replay)
     list(APPEND C50_EXECUTABLE_TARGETS c50_fuzz_seed_replay)
+
+    # The driver trains pseudorandom inputs for as long as asked. It builds
+    # everywhere, and the `training-fuzz-driver-arguments` test checks its
+    # argument handling. The `training-fuzz-hunt` target runs it for a long
+    # time through a shell script, so it exists only on Unix. Run it with
+    # `cmake --build build --target training-fuzz-hunt`. C50_HUNT_SEED,
+    # C50_HUNT_COUNT, and C50_HUNT_INPUT override the defaults in
+    # tests/fuzz/run-hunt.sh.
+    add_executable(c50_training_fuzz_driver tests/fuzz/training_driver.cpp)
+    target_link_libraries(c50_training_fuzz_driver PRIVATE c50_fuzz_target)
+    list(APPEND C50_COMPILE_TARGETS c50_training_fuzz_driver)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_training_fuzz_driver)
+    if(UNIX)
+        add_custom_target(
+            training-fuzz-hunt
+            COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/run-hunt.sh"
+                    $<TARGET_FILE:c50_training_fuzz_driver>
+                    "${CMAKE_CURRENT_BINARY_DIR}/training-hunt-input"
+            DEPENDS c50_training_fuzz_driver
+            USES_TERMINAL
+            VERBATIM
+        )
+    endif()
 endif()
 
 if(C50_BUILD_FUZZERS)
@@ -776,10 +803,19 @@ if(BUILD_TESTING)
     set_tests_properties(tree-depth PROPERTIES TIMEOUT 120)
     set_tests_properties(parser-validation PROPERTIES TIMEOUT 120)
     add_test(
-        NAME parser-fuzz-seeds
+        NAME fuzz-seeds
         COMMAND c50_fuzz_seed_replay
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/corpus"
     )
+    add_test(
+        NAME training-fuzz-driver-arguments
+        COMMAND ${CMAKE_COMMAND}
+                "-DDRIVER=$<TARGET_FILE:c50_training_fuzz_driver>"
+                "-DWORKDIR=${CMAKE_CURRENT_BINARY_DIR}/training-driver-arguments"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/driver_arguments.cmake"
+    )
+    # A driver that accepts an invalid count trains until it stops.
+    set_tests_properties(training-fuzz-driver-arguments PROPERTIES TIMEOUT 60)
     add_test(NAME cpp-validation COMMAND c50_cpp_validation)
     add_test(NAME operation-failure COMMAND c50_operation_failure)
     add_test(NAME cpp-api COMMAND c50_cpp_api)
