@@ -61,6 +61,15 @@ The core also allocates row- and attribute-dependent split, sort, pruning, and
 boosting workspaces. Boosting adds substantial row-by-class state, so a single
 tree is the appropriate baseline for both memory and interpretability.
 
+Subset splits (`subset_splits`, or `-s`) allocate two square tables of doubles
+and a table of Bell numbers, each dimensioned by the largest number of values
+of any discrete attribute in the schema, not by the attribute under test. Each
+split worker also holds its own copy of the two square tables. Memory and the
+time to fill the tables grow roughly with the square of that number, as in
+Release 2.07. A categorical column with thousands of distinct values, such as
+an identifier, can need gigabytes. Leave `subset_splits` off for such
+attributes, or reduce their cardinality first.
+
 The public dense interface rejects more than `INT_MAX` rows or features because
 the release 2.07 algorithm uses signed `int` indices internally. Dense schemas
 currently require ordinary explicit continuous or categorical input
