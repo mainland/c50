@@ -17,9 +17,12 @@ fi
 test_dir=$(mktemp -d "${TMPDIR:-/tmp}/c50-cli-test.XXXXXX")
 trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
 
+# Program output may carry bytes that are not valid text, such as the
+# `date-bytes` fixture's. BSD `sed` rejects them in a UTF-8 locale, so every
+# `sed` runs byte-oriented in the C locale.
 normalize_output()
 {
-    sed \
+    LC_ALL=C sed \
         -e 's|^C5\.0 \[Release 2\.07 GPL Edition\].*$|C5.0 [Release 2.07 GPL Edition] <timestamp>|' \
         -e 's|^Time: .* secs$|Time: <elapsed> secs|' \
         -e 's/[[:space:]]*$//' \
@@ -28,7 +31,7 @@ normalize_output()
 
 normalize_model()
 {
-    sed \
+    LC_ALL=C sed \
         -e 's|^id="See5/C5\.0 2\.07 GPL Edition [0-9-][0-9-]*"$|id="See5/C5.0 2.07 GPL Edition <date>"|' \
         "$1"
 }
@@ -176,8 +179,16 @@ run_missing_file_format()
 # A failure that `Error` does not print, such as a classifier file that cannot
 # be written, reports its message once on the output stream. Release 2.07
 # exits 0 for the same write failure, so the exit status has no reference.
+# The case needs `/dev/full` to open for writing and fail on close. Only Linux
+# and the BSDs behave so. macOS has no `/dev/full`, and under MSYS the device
+# exists but a symbolic link to it cannot be opened for writing, so other
+# platforms skip the case.
 run_unwritable_classifier()
 {
+    case $(uname -s) in
+        Linux|*BSD) ;;
+        *) return 0 ;;
+    esac
     if test ! -c /dev/full; then
         return 0
     fi
@@ -261,13 +272,19 @@ run_read_error()
 # failure. Release 2.07 reports neither failure and exits 0, so the exit status
 # has no reference. This project reports the later failure once and exits 1.
 # Reading a directory fails on Linux, macOS, and the BSDs only, so other
-# platforms skip the read cases.
+# platforms skip the read cases. The `full` case also needs `/dev/full` to
+# open for writing and fail on close, which holds on Linux and the BSDs only.
+# macOS lacks the device and MSYS cannot open a link to it, so they skip it.
 run_failure_after_bad_values()
 {
     after_kind=$1
     after_message=$2
     case $after_kind in
         full)
+            case $(uname -s) in
+                Linux|*BSD) ;;
+                *) return 0 ;;
+            esac
             if test ! -c /dev/full; then
                 return 0
             fi
@@ -442,7 +459,7 @@ run_rule_costs_degenerate()
     printf 'costs="1"\nentries="1"\nrules="0" default="red"\n' \
         > "$degenerate_dir/rules.expected"
     normalize_model "$degenerate_dir/multiclass.rules" |
-        sed -e '1d' > "$degenerate_dir/rules.actual"
+        LC_ALL=C sed -e '1d' > "$degenerate_dir/rules.actual"
     if ! cmp -s "$degenerate_dir/rules.expected" \
         "$degenerate_dir/rules.actual"; then
         printf 'rule costs on %s (%s) wrote an unexpected model\n' \
