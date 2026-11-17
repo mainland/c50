@@ -38,12 +38,34 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Only the address and undefined behavior job tests the Python module.
+      # CMake preloads the AddressSanitizer runtime into those tests.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: matrix.kind == 'address-undefined-leak'
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install the test dependencies
+        if: matrix.kind == 'address-undefined-leak'
+        run: python -m pip install '.[test]' 'pybind11>=3.0'
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: '2'
       - name: Configure and build
         run: |
+          python_options=()
+          if [ "$KIND" = address-undefined-leak ]; then
+            python_options=(
+              -DC50_BUILD_PYTHON=ON
+              "-DPython_EXECUTABLE=$(command -v python)"
+              "-Dpybind11_DIR=$(python -m pybind11 --cmakedir)"
+            )
+          fi
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
-            -D${{ matrix.option }}=ON
+            -D${{ matrix.option }}=ON "${python_options[@]}"
           cmake --build build --parallel 2
+        env:
+          KIND: ${{ matrix.kind }}
       - name: Check address, undefined behavior, and leaks
         if: matrix.kind == 'address-undefined-leak'
         run: ctest --test-dir build --output-on-failure
