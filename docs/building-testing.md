@@ -18,7 +18,7 @@ their current results.
 | Linux x86-64 | AFL++ `afl-clang-lto` | `sanitizers.yml`, `afl-seed-replay` | Replay of the checked-in fuzz seeds |
 | Linux ARM64 | GCC on `ubuntu-24.04-arm` | `validation.yml`, `native` | Native build, CTest, and installed consumers |
 | Linux x86-64 and ARM64 | GCC on `ubuntu-24.04` and `ubuntu-24.04-arm` | `reference-comparison.yml`, `release-207` | Trees, rules, and console output compared with C5.0 Release 2.07 built from `main`. ARM64 also builds with `-ffp-contract=off`. |
-| macOS ARM64 | AppleClang on `macos-14` | `validation.yml`, `native` | Native build, CTest, and installed consumers |
+| macOS ARM64 | AppleClang on `macos-15` | `validation.yml`, `native` | Native build, CTest, and installed consumers |
 | Linux x86-64 and ARM64, macOS ARM64 | GCC on Linux, AppleClang on macOS | `validation.yml`, `private-core` | Release build and CTest with `C50_PRIVATE_CORE`, the Python packages' core configuration |
 | Linux x86-64 | Clang on `ubuntu-24.04` | `validation.yml`, `private-core-clang` | Release build and CTest with `C50_PRIVATE_CORE` and no interprocedural optimization variable, so that the programs link against Clang's LLVM bitcode core |
 | Windows x86-64 | MSVC on `windows-2022`, Python 3.12 | `validation.yml`, `windows` | Native build, CTest, installed consumers, and Python tests |
