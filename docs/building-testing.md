@@ -530,6 +530,66 @@ memory:
 cmake --build build --target index-overflow-large
 ```
 
+## Training fuzz hunt
+
+CTest replays a seed corpus of the training target, which trains small
+decoded problems through the text and dense interfaces and compares the
+results. The seeded driver `c50_training_fuzz_driver` trains pseudorandom
+inputs for as long as asked. It builds on every platform, and CTest runs it
+only to check its argument handling. Run a long hunt on Linux or macOS with the
+`training-fuzz-hunt` target, which needs a shell, and add the sanitizer options
+to a build with `C50_ENABLE_SANITIZERS`:
+
+```sh
+C50_HUNT_SEED=1 C50_HUNT_COUNT=100000 \
+    cmake --build build --target training-fuzz-hunt
+```
+
+The input format, the environment variables, and how to replay a finding are
+in the Training target part of Parser fuzzing.
+
+## Python property hunt
+
+The Hypothesis test of the text and dense interfaces draws a few dozen
+examples. `tests/slow/property_hunt.py` runs the same strategy and the same
+check on as many examples as asked. It is not part of the default build or
+tests. It writes each example to a log, flushed and synced to disk, before it
+trains. A segmentation fault ends the process before Hypothesis can print its
+example, so the last line of the log holds the input of a crash. Configure
+with `C50_BUILD_PYTHON`, and add `C50_ENABLE_SANITIZERS` to run the extension
+under the sanitizers, which the target preloads as `python-api` does:
+
+```sh
+C50_PROPERTY_HUNT_SEED=1 C50_PROPERTY_HUNT_EXAMPLES=20000 \
+    cmake --build build --target property-hunt
+```
+
+`C50_PROPERTY_HUNT_SEED` defaults to 1, `C50_PROPERTY_HUNT_EXAMPLES` to 1,000,
+and `C50_PROPERTY_HUNT_LOG` to `property-hunt.jsonl` in the build directory.
+The same seed draws the same examples. After a crash or a failed check, train
+the last logged example again, under a debugger if needed:
+
+```sh
+C50_PROPERTY_HUNT_REPLAY="$PWD/build/property-hunt.jsonl" \
+    cmake --build build --target property-hunt
+```
+
+The target gives the replay the environment of a hunt, including the sanitizer
+runtime that a sanitizer build needs before it can import the extension. To
+replay outside CMake with a build that has no sanitizers, run the script
+directly:
+
+```sh
+python tests/run_built_python.py build/python tests/slow/property_hunt.py \
+    --replay build/property-hunt.jsonl
+```
+
+The script exits with status 2, before it opens a log, when Python runs
+optimized (`-O`, `-OO`, or `PYTHONOPTIMIZE`), because that removes the
+assertions of the checks and a replay would pass on a failing example.
+
+A bounded run establishes only that no failure occurred in those examples.
+
 ## API documentation
 
 Build the warning-strict Doxygen reference directly with CMake:

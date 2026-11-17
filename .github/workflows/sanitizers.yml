@@ -96,5 +96,7 @@ jobs:
           -DCMAKE_CXX_COMPILER=afl-clang-lto++
           -DBUILD_TESTING=OFF
           -DC50_BUILD_FUZZERS=ON
-      - name: Replay checked-in fuzz seeds
-        run: cmake --build build/afl --target fuzz-seeds --parallel 2
+      - name: Build the AFL++ harnesses and replay checked-in fuzz seeds
+        run: >-
+          cmake --build build/afl --target fuzz-harnesses fuzz-seeds
+          --parallel 2
