@@ -577,7 +577,11 @@ if(UNIX)
 endif()
 
 if(BUILD_TESTING OR C50_BUILD_FUZZERS)
-    add_library(c50_fuzz_target STATIC tests/fuzz/parser_target.cpp)
+    add_library(
+        c50_fuzz_target STATIC
+        tests/fuzz/parser_target.cpp
+        tests/fuzz/training_target.cpp
+    )
     target_link_libraries(c50_fuzz_target PUBLIC C50::cpp)
     list(APPEND C50_COMPILE_TARGETS c50_fuzz_target)
 
@@ -585,6 +589,30 @@ if(BUILD_TESTING OR C50_BUILD_FUZZERS)
     target_link_libraries(c50_fuzz_seed_replay PRIVATE c50_fuzz_target)
     list(APPEND C50_COMPILE_TARGETS c50_fuzz_seed_replay)
     list(APPEND C50_EXECUTABLE_TARGETS c50_fuzz_seed_replay)
+
+    # The driver trains pseudorandom inputs for as long as asked, so it is
+    # not part of the default build or tests. Run it explicitly with
+    # `cmake --build build --target training-fuzz-hunt`. C50_HUNT_SEED,
+    # C50_HUNT_COUNT, and C50_HUNT_INPUT override the defaults in
+    # tests/fuzz/run-hunt.sh.
+    if(UNIX)
+        add_executable(
+            c50_training_fuzz_driver EXCLUDE_FROM_ALL
+            tests/fuzz/training_driver.cpp
+        )
+        target_link_libraries(c50_training_fuzz_driver PRIVATE c50_fuzz_target)
+        list(APPEND C50_COMPILE_TARGETS c50_training_fuzz_driver)
+        list(APPEND C50_EXECUTABLE_TARGETS c50_training_fuzz_driver)
+        add_custom_target(
+            training-fuzz-hunt
+            COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/run-hunt.sh"
+                    $<TARGET_FILE:c50_training_fuzz_driver>
+                    "${CMAKE_CURRENT_BINARY_DIR}/training-hunt-input"
+            DEPENDS c50_training_fuzz_driver
+            USES_TERMINAL
+            VERBATIM
+        )
+    endif()
 endif()
 
 if(C50_BUILD_FUZZERS)
@@ -609,19 +637,21 @@ if(C50_BUILD_FUZZERS)
     else()
         set(c50_fuzz_memory_limit 512)
     endif()
-    set(fuzz_kind 0)
-    foreach(parser schema implicit tree rules cases costs)
-        math(EXPR fuzz_kind "${fuzz_kind} + 1")
-        set(target c50_fuzz_${parser})
-        add_executable(${target} tests/fuzz/parser.cpp)
-        target_compile_definitions(${target} PRIVATE C50_FUZZ_KIND=${fuzz_kind})
-        # AFL++ interprets this compatibility option by linking aflpp_driver.
+    # AFL++ interprets -fsanitize=fuzzer by linking aflpp_driver.
+    function(c50_add_fuzz_harness name source kind dictionary)
+        set(target c50_fuzz_${name})
+        add_executable(${target} ${source})
+        if(kind)
+            target_compile_definitions(${target} PRIVATE C50_FUZZ_KIND=${kind})
+        endif()
         target_link_options(${target} PRIVATE -fsanitize=fuzzer)
         target_link_libraries(${target} PRIVATE c50_fuzz_target)
-        list(APPEND C50_COMPILE_TARGETS ${target})
-        list(APPEND C50_EXECUTABLE_TARGETS ${target})
+        set(C50_COMPILE_TARGETS ${C50_COMPILE_TARGETS} ${target}
+            PARENT_SCOPE)
+        set(C50_EXECUTABLE_TARGETS ${C50_EXECUTABLE_TARGETS} ${target}
+            PARENT_SCOPE)
         add_custom_target(
-            fuzz-smoke-${parser}
+            fuzz-smoke-${name}
             COMMAND
                 ${CMAKE_COMMAND} -E env
                 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1
@@ -631,17 +661,28 @@ if(C50_BUILD_FUZZERS)
                 ${C50_SH_EXECUTABLE}
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/run-afl.sh"
                 "${C50_AFL_FUZZ_EXECUTABLE}"
-                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/corpus/${parser}"
-                "${CMAKE_CURRENT_BINARY_DIR}/afl-output/${parser}"
-                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/parser.dict"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/corpus/${name}"
+                "${CMAKE_CURRENT_BINARY_DIR}/afl-output/${name}"
+                "${dictionary}"
                 5
                 $<TARGET_FILE:${target}>
             DEPENDS ${target}
             USES_TERMINAL
             VERBATIM
         )
-        add_dependencies(fuzz-smoke fuzz-smoke-${parser})
+        add_dependencies(fuzz-smoke fuzz-smoke-${name})
+    endfunction()
+
+    set(fuzz_kind 0)
+    foreach(parser schema implicit tree rules cases costs)
+        math(EXPR fuzz_kind "${fuzz_kind} + 1")
+        c50_add_fuzz_harness(
+            ${parser} tests/fuzz/parser.cpp ${fuzz_kind}
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/parser.dict"
+        )
     endforeach()
+    # The training format is binary, so the parser dictionary does not apply.
+    c50_add_fuzz_harness(training tests/fuzz/training.cpp "" "")
 endif()
 
 if(C50_ENABLE_THREAD_SANITIZER)
@@ -758,6 +799,28 @@ if(C50_ENABLE_SANITIZERS AND C50_BUILD_PYTHON)
         "ASAN_OPTIONS=detect_leaks=0:halt_on_error=1")
 endif()
 
+# The Hypothesis property test draws a few dozen examples. This target draws
+# as many as asked and logs each before it trains, so that a crash leaves its
+# input behind. It is not part of the default build or tests. Run it with
+# `cmake --build build --target property-hunt`. C50_PROPERTY_HUNT_SEED,
+# C50_PROPERTY_HUNT_EXAMPLES, and C50_PROPERTY_HUNT_LOG override its defaults,
+# which tests/slow/property_hunt.py documents. The log defaults to a file in
+# the build directory.
+if(C50_BUILD_PYTHON AND UNIX)
+    add_custom_target(
+        property-hunt
+        COMMAND ${CMAKE_COMMAND} -E env ${c50_python_sanitizer_environment}
+                ${Python_EXECUTABLE}
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_built_python.py"
+                "${CMAKE_CURRENT_BINARY_DIR}/python"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/slow/property_hunt.py"
+        DEPENDS c50_python
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        USES_TERMINAL
+        VERBATIM
+    )
+endif()
+
 if(BUILD_TESTING)
     add_test(NAME input-stream COMMAND c50_input_test)
     add_test(NAME output-stream COMMAND c50_output_test)
@@ -769,7 +832,7 @@ if(BUILD_TESTING)
     set_tests_properties(tree-depth PROPERTIES TIMEOUT 120)
     set_tests_properties(parser-validation PROPERTIES TIMEOUT 120)
     add_test(
-        NAME parser-fuzz-seeds
+        NAME fuzz-seeds
         COMMAND c50_fuzz_seed_replay
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/corpus"
     )

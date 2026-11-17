@@ -24,8 +24,15 @@ else
     input=$corpus
 fi
 
-"$afl_fuzz" -V "$seconds" -i "$input" -o "$output" \
-    -x "$dictionary" -G 4096 -m "${C50_AFL_MEMORY_LIMIT:-512}" \
+# An empty dictionary argument means that the target has none.
+if [ -n "$dictionary" ]; then
+    set -- -x "$dictionary"
+else
+    set --
+fi
+
+"$afl_fuzz" -V "$seconds" -i "$input" -o "$output" "$@" \
+    -G 4096 -m "${C50_AFL_MEMORY_LIMIT:-512}" \
     -t "${C50_AFL_TIMEOUT:-5000}" -- "$target"
 
 for finding in crashes hangs; do
