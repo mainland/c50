@@ -1,6 +1,7 @@
 /* Copyright 2026 Geoffrey Mainland. */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "parser_target.hpp"
+#include "training_target.hpp"
 
 #include <algorithm>
 #include <array>
@@ -58,6 +59,10 @@ int main(int argc, char **argv)
                 const auto input = read(path);
                 c50::test::exercise_parser(kind, input.data(), input.size());
             }
+        for (const auto &path : files(std::filesystem::path(argv[1]) / "training")) {
+            const auto input = read(path);
+            c50::test::exercise_training(input.data(), input.size());
+        }
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
         return 1;
