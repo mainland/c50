@@ -186,6 +186,31 @@ ASAN_OPTIONS=detect_leaks=0 \
 Leak detection is disabled in the example because ptrace restrictions prevent
 LeakSanitizer from running reliably in some containers.
 
+### Python module under the sanitizers
+
+The Python module is supported in a sanitizer build on Linux. Add
+`-DC50_BUILD_PYTHON=ON` and the interpreter options of
+{ref}`the CMake and CTest section <cmake-and-ctest>` to the configuration. The
+interpreter does not link the AddressSanitizer runtime, so CMake preloads the
+shared runtime into `python-api` and `benchmark-smoke` with `LD_PRELOAD`. Plain
+`ctest` then works as in a build without Python. For GCC, CMake preloads
+`libasan.so` and then `libstdc++.so`, because the interpreter does not link
+libstdc++ and the runtime cannot intercept the first C++ exception without it.
+For Clang, CMake links the module with `-shared-libasan` and preloads the
+`libclang_rt.asan` shared library that the compiler reports. Configuration
+fails if the compiler reports no such library or the platform is not Linux.
+
+Leak detection is off for these two tests, because CPython does not free all
+its memory at exit and LeakSanitizer would report the interpreter. CMake sets
+their `ASAN_OPTIONS` to `detect_leaks=0:halt_on_error=1`, which replaces the
+value in the calling environment. The other tests keep the caller's
+`ASAN_OPTIONS`. The type checks `python-typecheck` and `python-stubtest` are
+not registered in a sanitizer build.
+
+The `address-undefined-leak` job of `.github/workflows/sanitizers.yml` runs
+this configuration with Clang. The ThreadSanitizer job tests the native code
+only.
+
 ## LeakSanitizer
 
 On a host where the AddressSanitizer runtime supports LeakSanitizer, reuse the
@@ -292,6 +317,8 @@ codespell flags wrongly to `ignore-words-list` in `pyproject.toml`.
 Run `.venv/bin/pre-commit install` once to run the hooks before each commit.
 The hooks check and never rewrite files. Fix a finding with
 `.venv/bin/python -m ruff check --fix` or `.venv/bin/python -m ruff format`.
+
+(cmake-and-ctest)=
 
 ### CMake and CTest
 

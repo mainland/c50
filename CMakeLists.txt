@@ -706,6 +706,65 @@ if(C50_ENABLE_SANITIZERS)
     endif()
 endif()
 
+# A Python process loads the instrumented extension module, but the
+# interpreter does not link the AddressSanitizer runtime. Preload the shared
+# runtime into the Python tests instead. Clang links its runtime statically
+# unless asked otherwise, so the module links the shared one. The GCC runtime
+# intercepts __cxa_throw and looks up the real function when it loads. The
+# interpreter does not link libstdc++, so the lookup fails at the first
+# exception unless libstdc++ is preloaded after the runtime.
+function(c50_find_runtime result)
+    set(found "")
+    foreach(name IN LISTS ARGN)
+        execute_process(
+            COMMAND "${CMAKE_CXX_COMPILER}" -print-file-name=${name}
+            OUTPUT_VARIABLE candidate
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
+        if(IS_ABSOLUTE "${candidate}" AND EXISTS "${candidate}")
+            set(found "${candidate}")
+            break()
+        endif()
+    endforeach()
+    if(NOT found)
+        message(FATAL_ERROR
+                "C50_ENABLE_SANITIZERS with C50_BUILD_PYTHON needs a shared "
+                "library that ${CMAKE_CXX_COMPILER} does not report. Looked "
+                "for: ${ARGN}")
+    endif()
+    set(${result} "${found}" PARENT_SCOPE)
+endfunction()
+
+set(c50_python_sanitizer_environment "")
+if(C50_ENABLE_SANITIZERS AND C50_BUILD_PYTHON)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(FATAL_ERROR
+                "C50_ENABLE_SANITIZERS with C50_BUILD_PYTHON requires Linux, "
+                "which preloads the AddressSanitizer runtime")
+    endif()
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        c50_find_runtime(c50_asan_runtime libasan.so)
+        c50_find_runtime(c50_cxx_runtime libstdc++.so)
+        set(c50_preload "${c50_asan_runtime}:${c50_cxx_runtime}")
+    else()
+        target_link_options(c50_python PRIVATE -shared-libasan)
+        c50_find_runtime(
+            c50_asan_runtime
+            libclang_rt.asan-${CMAKE_SYSTEM_PROCESSOR}.so
+            libclang_rt.asan.so
+        )
+        set(c50_preload "${c50_asan_runtime}")
+    endif()
+    message(STATUS "Preloading ${c50_preload} into the Python tests")
+    # CPython does not free all its memory at exit, so LeakSanitizer would
+    # report the interpreter. ENVIRONMENT replaces a variable, so give the
+    # whole option string.
+    set(c50_python_sanitizer_environment
+        "LD_PRELOAD=${c50_preload}"
+        "ASAN_OPTIONS=detect_leaks=0:halt_on_error=1")
+endif()
+
 if(BUILD_TESTING)
     add_test(NAME input-stream COMMAND c50_input_test)
     add_test(NAME output-stream COMMAND c50_output_test)
@@ -739,6 +798,14 @@ if(BUILD_TESTING)
                 "$<TARGET_FILE:c50_parallel_workload>"
     )
     if(C50_BUILD_PYTHON)
+        set(c50_python_api_environment
+            "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python"
+            "SCIPY_ARRAY_API=1"
+            ${c50_python_sanitizer_environment})
+        set(c50_benchmark_environment
+            "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python"
+            "C50_BENCHMARK_MODULE_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}/python"
+            ${c50_python_sanitizer_environment})
         add_test(
             NAME python-api
             COMMAND ${Python_EXECUTABLE}
@@ -749,8 +816,7 @@ if(BUILD_TESTING)
         set_tests_properties(
             python-api
             PROPERTIES
-                ENVIRONMENT
-                    "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python;SCIPY_ARRAY_API=1"
+                ENVIRONMENT "${c50_python_api_environment}"
         )
         add_test(
             NAME python-license-notices
@@ -771,8 +837,7 @@ if(BUILD_TESTING)
             set_tests_properties(
                 benchmark-smoke
                 PROPERTIES
-                    ENVIRONMENT
-                        "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python;C50_BENCHMARK_MODULE_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}/python"
+                    ENVIRONMENT "${c50_benchmark_environment}"
             )
         endif()
         if(NOT C50_ENABLE_SANITIZERS AND NOT C50_ENABLE_THREAD_SANITIZER)
