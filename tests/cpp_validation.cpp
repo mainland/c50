@@ -203,15 +203,15 @@ static void dense_support_checks()
             });
         }
     }
-    const char names[] = "a, b.\nx: continuous.\ny: continuous.\n";
-    auto model = c50::model::train(context, c50::model_kind::tree, names, "0,1,a\n1,2,b\n");
+    const char dense_schema[] = "a, b.\nx: continuous.\ny: continuous.\n";
+    auto model = c50::model::train(context, c50::model_kind::tree, dense_schema, "0,1,a\n1,2,b\n");
     for (std::size_t width : {1u, 3u}) {
         const c50::dense_dataset cases(values, 2, width);
         const c50::dense_dataset training(values, 2, width, classes);
         rejects(invalid, [&] { model.predict(context, cases); });
         rejects(invalid, [&] { model.attribute_usage(context, cases); });
         rejects(invalid, [&] {
-            c50::model::train(context, c50::model_kind::tree, names, training);
+            c50::model::train(context, c50::model_kind::tree, dense_schema, training);
         });
     }
 }

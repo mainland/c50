@@ -28,7 +28,7 @@ int main()
     expect("row", FlatIndex(3, 7, 0), 21);
     expect("small", FlatIndex(3, 7, 5), 26);
 
-    if (sizeof(std::size_t) < 8) {
+    if constexpr (sizeof(std::size_t) < 8) {
         std::puts("index-overflow: size_t is narrower than 64 bits, "
                   "boundary cases skipped");
         return failures == 0 ? 0 : 1;
