@@ -1,6 +1,6 @@
 # Parser fuzz targets
 
-The six AFL++ targets use the public C++ interface and accept at most 4096
+The six AFL++ parser targets use the public C++ interface and accept at most 4096
 bytes per input. Each iteration reuses the context for a known valid model and
 prediction after the tested operation. Parse, argument, unsupported-format, and
 missing-cost errors are expected. Unexpected exceptions, sanitizer failures,
@@ -14,13 +14,16 @@ hangs, and failed recovery are findings.
 | `rules` | Complete serialized rules or rule-ensemble contents. |
 | `cases` | Cases for continuous `x` and categorical `color`. |
 | `costs` | Costs for classes `no` and `yes`. |
+| `training` | A decoded classification problem, as the last section describes. |
 
-The fixed schema has classes `no` and `yes`, continuous attribute `x`, and
-categorical attribute `color` with levels `red`, `blue`, and `green`. The
-implicit and costs targets train on four fixed cases. The remaining targets
-load or predict without training. The engine-neutral target implementation also
-supports deterministic seed replay through CTest. AFL++ uses the thin
-`LLVMFuzzerTestOneInput` compatibility entry point supplied by `aflpp_driver`.
+The training target, which has its own section at the end, is not a parser
+target. The fixed schema of the parser targets has classes `no` and `yes`,
+continuous attribute `x`, and categorical attribute `color` with levels `red`,
+`blue`, and `green`. The implicit and costs targets train on four fixed cases.
+The remaining targets load or predict without training. The engine-neutral
+target implementation also supports deterministic seed replay through CTest.
+AFL++ uses the thin `LLVMFuzzerTestOneInput` compatibility entry point supplied
+by `aflpp_driver`.
 
 Install AFL++, then configure a separate build with its LLVM LTO compiler
 wrappers:
@@ -159,3 +162,9 @@ cp input.bin tests/fuzz/corpus/training/NAME
 ```
 
 A bounded run establishes only that no finding occurred in those inputs.
+
+The AFL++ harness `c50_fuzz_training` runs the same target, and
+`fuzz-smoke-training` runs it for five seconds from `corpus/training` with no
+dictionary, because the format is binary. It adds coverage guidance for longer
+campaigns. Run it as described above, with `-i tests/fuzz/corpus/training` and
+the target `build/afl/c50_fuzz_training`.
