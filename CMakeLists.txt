@@ -638,24 +638,28 @@ if(C50_BUILD_FUZZERS)
         VERBATIM
     )
     add_custom_target(fuzz-smoke)
+    # Builds every AFL++ harness without running it.
+    add_custom_target(fuzz-harnesses)
     if(C50_ENABLE_SANITIZERS)
         set(c50_fuzz_memory_limit none)
     else()
         set(c50_fuzz_memory_limit 512)
     endif()
-    set(fuzz_kind 0)
-    foreach(parser schema implicit tree rules cases costs)
-        math(EXPR fuzz_kind "${fuzz_kind} + 1")
-        set(target c50_fuzz_${parser})
-        add_executable(${target} tests/fuzz/parser.cpp)
-        target_compile_definitions(${target} PRIVATE C50_FUZZ_KIND=${fuzz_kind})
-        # AFL++ interprets this compatibility option by linking aflpp_driver.
+    # AFL++ interprets -fsanitize=fuzzer by linking aflpp_driver.
+    function(c50_add_fuzz_harness name source kind dictionary)
+        set(target c50_fuzz_${name})
+        add_executable(${target} ${source})
+        if(kind)
+            target_compile_definitions(${target} PRIVATE C50_FUZZ_KIND=${kind})
+        endif()
         target_link_options(${target} PRIVATE -fsanitize=fuzzer)
         target_link_libraries(${target} PRIVATE c50_fuzz_target)
-        list(APPEND C50_COMPILE_TARGETS ${target})
-        list(APPEND C50_EXECUTABLE_TARGETS ${target})
+        set(C50_COMPILE_TARGETS ${C50_COMPILE_TARGETS} ${target}
+            PARENT_SCOPE)
+        set(C50_EXECUTABLE_TARGETS ${C50_EXECUTABLE_TARGETS} ${target}
+            PARENT_SCOPE)
         add_custom_target(
-            fuzz-smoke-${parser}
+            fuzz-smoke-${name}
             COMMAND
                 ${CMAKE_COMMAND} -E env
                 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1
@@ -665,17 +669,29 @@ if(C50_BUILD_FUZZERS)
                 ${C50_SH_EXECUTABLE}
                 "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/run-afl.sh"
                 "${C50_AFL_FUZZ_EXECUTABLE}"
-                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/corpus/${parser}"
-                "${CMAKE_CURRENT_BINARY_DIR}/afl-output/${parser}"
-                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/parser.dict"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/corpus/${name}"
+                "${CMAKE_CURRENT_BINARY_DIR}/afl-output/${name}"
+                "${dictionary}"
                 5
                 $<TARGET_FILE:${target}>
             DEPENDS ${target}
             USES_TERMINAL
             VERBATIM
         )
-        add_dependencies(fuzz-smoke fuzz-smoke-${parser})
+        add_dependencies(fuzz-smoke fuzz-smoke-${name})
+        add_dependencies(fuzz-harnesses ${target})
+    endfunction()
+
+    set(fuzz_kind 0)
+    foreach(parser schema implicit tree rules cases costs)
+        math(EXPR fuzz_kind "${fuzz_kind} + 1")
+        c50_add_fuzz_harness(
+            ${parser} tests/fuzz/parser.cpp ${fuzz_kind}
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fuzz/parser.dict"
+        )
     endforeach()
+    # The training format is binary, so the parser dictionary does not apply.
+    c50_add_fuzz_harness(training tests/fuzz/training.cpp "" "")
 endif()
 
 if(C50_ENABLE_THREAD_SANITIZER)
