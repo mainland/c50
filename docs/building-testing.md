@@ -524,6 +524,23 @@ memory:
 cmake --build build --target index-overflow-large
 ```
 
+## Training fuzz hunt
+
+CTest replays a seed corpus of the training target, which trains small
+decoded problems through the text and dense interfaces and compares the
+results. The seeded driver trains pseudorandom inputs for as long as asked and
+is not part of the default build or tests. Run it on Linux or macOS with the
+`training-fuzz-hunt` target, and add the sanitizer options to a build with
+`C50_ENABLE_SANITIZERS`:
+
+```sh
+C50_HUNT_SEED=1 C50_HUNT_COUNT=100000 \
+    cmake --build build --target training-fuzz-hunt
+```
+
+The input format, the environment variables, and how to replay a finding are
+in the Training target part of Parser fuzzing.
+
 ## API documentation
 
 Build the warning-strict Doxygen reference directly with CMake:
