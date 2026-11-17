@@ -17,7 +17,7 @@ their current results.
 | Linux x86-64 | GCC | `sanitizers.yml`, `native` | CTest under ThreadSanitizer |
 | Linux x86-64 | AFL++ `afl-clang-lto` | `sanitizers.yml`, `afl-seed-replay` | Replay of the checked-in fuzz seeds |
 | Linux ARM64 | GCC on `ubuntu-24.04-arm` | `validation.yml`, `native` | Native build, CTest, and installed consumers |
-| Linux x86-64 and ARM64 | GCC on `ubuntu-24.04` and `ubuntu-24.04-arm` | `reference-comparison.yml`, `release-207` | Trees, rules, and console output compared with C5.0 Release 2.07 built from `main`. ARM64 also builds with `-ffp-contract=off`. |
+| Linux x86-64 and ARM64, macOS ARM64 | GCC on `ubuntu-24.04` and `ubuntu-24.04-arm`, AppleClang on `macos-15` | `reference-comparison.yml`, `release-207` | Trees, rules, and console output compared with C5.0 Release 2.07 built from `main`. ARM64 and macOS also build with `-ffp-contract=off`. |
 | macOS ARM64 | AppleClang on `macos-15` | `validation.yml`, `native` | Native build, CTest, and installed consumers |
 | Linux x86-64 and ARM64, macOS ARM64 | GCC on Linux, AppleClang on macOS | `validation.yml`, `private-core` | Release build and CTest with `C50_PRIVATE_CORE`, the Python packages' core configuration |
 | Linux x86-64 | Clang on `ubuntu-24.04` | `validation.yml`, `private-core-clang` | Release build and CTest with `C50_PRIVATE_CORE` and no interprocedural optimization variable, so that the programs link against Clang's LLVM bitcode core |
@@ -491,12 +491,16 @@ before winnowing and Release 2.07 does not. The cases do not train a
 `timestamp` attribute. The comparison does not cover prediction and report
 output.
 
-`.github/workflows/reference-comparison.yml` runs the check on `ubuntu-24.04`
-and on the ARM64 runner `ubuntu-24.04-arm`. The reference never fuses
-multiplications and additions. The default ARM64 entry shows whether the
-library's default build matches the x86-64 classifier, and a second ARM64
-entry, which builds the library with `-ffp-contract=off`, shows whether that
-flag restores it.
+`.github/workflows/reference-comparison.yml` runs the check on `ubuntu-24.04`,
+on the ARM64 runner `ubuntu-24.04-arm`, and on `macos-15`, which builds the
+library with Apple Clang. The reference never fuses multiplications and
+additions. Each default ARM64 or macOS entry shows whether the library's
+default build matches the x86-64 classifier, and a second entry on the same
+runner, which builds the library with `-ffp-contract=off`, shows whether that
+flag restores it. Apple Clang contracts within a statement by default, and GCC
+contracts across statements. The macOS entries use the system `python3`, `awk`,
+`tar`, and `mktemp`, and the `gcc` command, which is Apple Clang unless a
+Homebrew GCC replaces it. Apple Clang ignores `-ffloat-store`.
 
 ## Sort and worker-equivalence tests
 

@@ -21,10 +21,13 @@ jobs:
   # Build C5.0 Release 2.07 from the `main` branch and train generated data
   # with it and with the library's c5.0. The trees, rules, and console output
   # must match. The script builds the reference with -ffp-contract=off, so it
-  # keeps the x86-64 arithmetic on every runner. The default ARM64 entry then
-  # shows whether the library's default build matches the x86-64 classifier,
-  # and the entry that builds the library with -ffp-contract=off shows whether
-  # that flag restores it.
+  # keeps the x86-64 arithmetic on every runner. The default ARM64 and macOS
+  # entries then show whether the library's default build matches the x86-64
+  # classifier, and the entries that build the library with -ffp-contract=off
+  # show whether that flag restores it. The macOS entries use Apple Clang,
+  # which contracts multiplications and additions within a statement by
+  # default. On macOS, `gcc` is Apple Clang or a Homebrew GCC. Either one
+  # builds the reference with the flags that the script passes.
   release-207:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -37,6 +40,10 @@ jobs:
           - os: ubuntu-24.04-arm
             flags: ''
           - os: ubuntu-24.04-arm
+            flags: '-ffp-contract=off'
+          - os: macos-15
+            flags: ''
+          - os: macos-15
             flags: '-ffp-contract=off'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
