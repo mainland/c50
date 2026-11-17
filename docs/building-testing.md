@@ -26,6 +26,7 @@ their current results.
 | Python 3.10 | joblib 1.3.0, NumPy 1.26.4, pandas 2.2.3, scikit-learn 1.6.1 | `validation.yml`, `python-and-docs` | Python tests, mypy, stubtest, and the benchmark smoke test |
 | Python 3.11 through 3.14 | Latest releases | `validation.yml`, `python-and-docs` | As for Python 3.10. Python 3.12 also runs the tutorial test and builds the documentation. |
 | Wheels for CPython 3.10 through 3.14 | Linux x86-64 and ARM64, macOS arm64 and x86-64, Windows AMD64 | `wheels.yml`, `wheels` | Build from the source distribution and test each wheel |
+| Windows AMD64 wheels for CPython 3.10 through 3.14 | `windows-2022` runner, `servercore:ltsc2022` container with process isolation, embeddable CPython | `wheels.yml`, `windows-clean-import` | Import each wheel and train and predict with a tree and a ruleset in a container without the Visual C++ Redistributable |
 
 Free-threaded Python, GPU arrays, and other compiler or platform combinations
 are not tested. Seven tests run only on Linux. `in-memory-without-files`,
@@ -433,9 +434,34 @@ built.
 The Windows wheels import `MSVCP140.dll`, which Python installers do not ship.
 `[tool.cibuildwheel.windows]` runs `delvewheel repair`, which copies the DLL
 into the wheel's `c50.libs` directory. The repair runs only on a Windows
-build. Before a release, check that the release candidate's Windows wheels
-list no unbundled `MSVCP140.dll` import and that one imports in an
-environment without the Visual C++ runtime.
+build. The extension also imports `VCRUNTIME140.dll` and
+`VCRUNTIME140_1.dll`, which CPython for Windows ships next to `python.exe`, and
+the Universal C Runtime, which is part of Windows 10 and later.
+
+GitHub's Windows runners have the Visual C++ Redistributable, so the wheel
+tests cannot detect a missing runtime DLL. The `windows-clean-import` job
+tests each Windows wheel where the redistributable is absent. For each of
+CPython 3.10 through 3.14, it runs `tests/windows_clean_import.ps1` in a
+`mcr.microsoft.com/windows/servercore:ltsc2022` container started with
+`--isolation=process`, with the wheelhouse, the tests, and an embeddable
+CPython from python.org mounted read-only. The job checks the downloaded
+embeddable package against a pinned SHA-256 digest. The script then:
+
+1. Fails if `System32`, `SysWOW64`, or a `PATH` directory holds a C++ library
+   of the Visual C++ Redistributable, such as `msvcp140.dll`, `msvcp140_1.dll`,
+   or `concrt140.dll`, because the test would prove nothing. The .NET
+   Framework's private `msvcp140_clr0400.dll`, which Server Core includes, does
+   not count, because no import of `msvcp140.dll` resolves to it.
+2. Unpacks the wheel into a directory that it adds to the interpreter's
+   `._pth` file. A wheel has no runtime dependencies, so unpacking installs it.
+3. Runs `tests/windows_clean_import.py`, which imports `c50`, requires that
+   the process loaded the wheel's `msvcp140-<hash>.dll` and no system
+   `msvcp140.dll`, and trains and predicts with a tree and a ruleset from text
+   input. The test does not install NumPy, so it does not cover dense input.
+
+The `checksums` job needs the `windows-clean-import` job, so a failure blocks
+the digests that a release uses. The job does not test pip installation,
+the estimator, or the dependencies of the `sklearn` extra.
 
 ## Comparison with Release 2.07
 
