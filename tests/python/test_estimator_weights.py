@@ -730,3 +730,285 @@ def test_variable_width_string_missing_sentinels_follow_the_element_rule(
     else:
         with pytest.raises(error):
             C50Classifier().fit(X, y, sample_weight=weights)
+
+
+def _three_class_problem() -> tuple[list[list[int]], list[int]]:
+    return [[0]] * 8 + [[1]] * 8 + [[2]] * 8, [0] * 8 + [1] * 8 + [2] * 8
+
+
+@pytest.mark.parametrize(
+    "scale",
+    [
+        decimal.Decimal(1),
+        decimal.Decimal("1e-300"),
+        decimal.Decimal("1e300"),
+        decimal.Decimal("5e-324"),
+        fractions.Fraction(1, 10**300),
+        10**300,
+    ],
+    ids=["1", "1e-300", "1e300", "5e-324", "Fraction 1e-300", "int 1e300"],
+)
+def test_scaled_weights_within_float64_keep_every_class(scale: object) -> None:
+    X, y = _three_class_problem()
+    weights = [scale] * 8 + [5 * scale] * 16  # type: ignore[operator]
+    reference = C50Classifier().fit(X, y, sample_weight=[1.0] * 8 + [5.0] * 16)
+
+    fitted = C50Classifier().fit(X, y, sample_weight=weights)
+
+    assert fitted.classes_.tolist() == [0, 1, 2]
+    np.testing.assert_array_equal(
+        fitted.predict([[0], [1], [2]]), reference.predict([[0], [1], [2]])
+    )
+
+
+# NumPy's longdouble is as narrow as float64 on Windows and on Apple ARM64, and
+# a double-double on PowerPC has float64's exponent range, so the itemsize does
+# not tell. Compare the ranges, overflow and underflow separately.
+_LONGDOUBLE_OVERFLOWS_LATER = (
+    np.finfo(np.longdouble).maxexp > np.finfo(np.float64).maxexp
+)
+_LONGDOUBLE_UNDERFLOWS_LATER = (
+    np.finfo(np.longdouble).smallest_subnormal
+    < np.finfo(np.float64).smallest_subnormal
+)
+
+
+def _longdouble_above_float64() -> np.longdouble:
+    """Return a longdouble that float64 cannot hold, or infinity."""
+    if _LONGDOUBLE_OVERFLOWS_LATER:
+        return np.longdouble("1e4000")
+    return np.longdouble(np.inf)
+
+
+def _longdouble_below_float64() -> np.longdouble:
+    """Return a longdouble that float64 rounds to zero, or zero."""
+    if _LONGDOUBLE_UNDERFLOWS_LATER:
+        return np.longdouble("1e-4000")
+    return np.longdouble(0)
+
+
+def _out_of_range_message(weights: object) -> str:
+    """Return the message that a weight outside float64 raises.
+
+    A longdouble as narrow as float64 holds infinity and zero themselves, so
+    the first is an infinite weight and the second an all-zero array.
+    """
+    if isinstance(weights, np.floating) and np.isinf(weights):
+        return "must contain only finite values"
+    if (
+        isinstance(weights, np.ndarray)
+        and weights.dtype.kind == "f"
+        and not weights.any()
+    ):
+        return "cannot be zero for every sample"
+    return "rounded to float64"
+
+
+def _out_of_range_weights() -> dict[str, object]:
+    return {
+        "Decimal 1e-324 scale": [decimal.Decimal("1e-324")] * 8
+        + [decimal.Decimal("5e-324")] * 16,
+        "Decimal 1e400": decimal.Decimal("1e400"),
+        "int 10**400": 10**400,
+        "int 10**400 list": [10**400] * 24,
+        "Fraction 10**400": fractions.Fraction(10**400),
+        "Fraction 1 / 10**400": fractions.Fraction(1, 10**400),
+        "string 1e400": "1e400",
+        "string 1e-400": ["1e-400"] * 24,
+        "bytes array 1e-400": np.array([b"1e-400"] * 24),
+        "longdouble 1e4000": _longdouble_above_float64(),
+        "longdouble 1e-4000 array": np.full(24, _longdouble_below_float64()),
+        "object array with one underflow": np.asarray(
+            [1.0] * 23 + [decimal.Decimal("1e-400")], dtype=object
+        ),
+    }
+
+
+@pytest.mark.parametrize("name", sorted(_out_of_range_weights()))
+def test_weights_outside_float64_raise_value_error(name: str) -> None:
+    # A weight that rounds to infinity or to zero would change the ratios
+    # between weights, so scale invariance cannot hold for it.
+    X, y = _three_class_problem()
+    weights = _out_of_range_weights()[name]
+    classifier = C50Classifier()
+
+    with pytest.raises(ValueError, match=_out_of_range_message(weights)):
+        classifier.fit(X, y, sample_weight=weights)
+    assert not hasattr(classifier, "model_")
+
+
+def test_subnormal_float64_weights_keep_their_rescaling() -> None:
+    X, y = _three_class_problem()
+    weights = np.array([5e-324] * 8 + [2.5e-323] * 16)
+    reference = C50Classifier().fit(X, y, sample_weight=[1.0] * 8 + [5.0] * 16)
+
+    fitted = C50Classifier().fit(X, y, sample_weight=weights)
+
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
+
+
+def _zero_weight_inputs() -> dict[str, object]:
+    """Map a label to weights that hold zeros outside the float64 path."""
+    values = [0, 1, 2, 1, 2, 1, 2, 0]
+    return {
+        "float list": [float(v) for v in values],
+        "int list": values,
+        "string list": [str(v) for v in values],
+        "unicode array": np.array([str(v) for v in values]),
+        "bytes array": np.array([str(v).encode() for v in values]),
+        "Decimal list": [decimal.Decimal(v) for v in values],
+        "Decimal zero among floats": [decimal.Decimal(0), *values[1:]],
+        "Fraction list": [fractions.Fraction(v) for v in values],
+        "Fraction zero among floats": [fractions.Fraction(0), *values[1:]],
+        "longdouble array": np.array(values, dtype=np.longdouble),
+        "longdouble list": [np.longdouble(v) for v in values],
+        "Float64 Series": pd.Series(values, dtype="Float64"),
+        "Int64 Series": pd.Series(values, dtype="Int64"),
+        "object Series": pd.Series([float(v) for v in values], dtype=object),
+    }
+
+
+@pytest.mark.parametrize("name", sorted(_zero_weight_inputs()))
+def test_zero_weights_outside_the_float64_path_remove_samples(
+    name: str,
+) -> None:
+    # Each zero is exact, so it removes its sample instead of raising the range
+    # error that a nonzero weight rounding to zero raises.
+    X = [[0], [1], [2], [3]] * 2
+    y = [0, 0, 1, 1] * 2
+    expected = [0.0, 1.0, 2.0, 1.0, 2.0, 1.0, 2.0, 0.0]
+
+    fitted = C50Classifier().fit(
+        X, y, sample_weight=_zero_weight_inputs()[name]
+    )
+    reference = C50Classifier().fit(X, y, sample_weight=expected)
+
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
+    np.testing.assert_array_equal(fitted.predict(X), reference.predict(X))
+
+
+def _weight_outcome(weights: object) -> tuple[str, str]:
+    """Fit on eight samples and return the model text or the error."""
+    X = [[0], [1], [2], [3]] * 2
+    y = [0, 0, 1, 1] * 2
+    try:
+        fitted = C50Classifier().fit(X, y, sample_weight=weights)
+    except (TypeError, ValueError) as exc:
+        return type(exc).__name__, str(exc)
+    return "trained", without_date(fitted.model_.serialized_data)
+
+
+@pytest.mark.parametrize("text", ["0\x00", "inf\x00", "1e-400\x00", "0.5\x00"])
+@pytest.mark.parametrize("make", [np.str_, np.bytes_])
+def test_numpy_string_scalars_read_trailing_nuls_as_numpy_does(
+    make: type, text: str
+) -> None:
+    value = make(text if make is np.str_ else text.encode())
+    array = np.array([value] + [make("1" if make is np.str_ else b"1")] * 7)
+    assert array.dtype.kind in "US"
+
+    assert _weight_outcome([value, *[1.0] * 7]) == _weight_outcome(array)
+
+
+def test_python_string_with_a_nul_stays_rejected() -> None:
+    for text in ("0.5\x00", "0\x00"):
+        with pytest.raises(ValueError, match="could not convert"):
+            C50Classifier().fit(
+                [[0], [1], [2], [3]],
+                [0, 0, 1, 1],
+                sample_weight=[text, 1.0, 1.0, 1.0],
+            )
+
+
+ZERO_STRINGS = [
+    "0e1000000000000000000",
+    "0E+1000000000000000000",
+    "0e-1999999999999999998",
+    "0e-3000000000000000000",
+    "0e100000000000000000000000",
+    "+0e1000000000000000000",
+    "-0e1000000000000000000",
+    "-0.00E-3000000000000000000",
+    "0_0e1000000000000000000",
+    " \t0e1000000000000000000\n",
+    "\N{ARABIC-INDIC DIGIT ZERO}e1000000000000000000",
+]
+
+
+def _zero_string_weights() -> dict[str, object]:
+    result: dict[str, object] = {}
+    for text in ZERO_STRINGS:
+        result[f"list {text!r}"] = [text, *["1"] * 7]
+        result[f"unicode array {text!r}"] = np.array([text, *["1"] * 7])
+        if text.isascii():
+            result[f"bytes array {text!r}"] = np.array(
+                [text.encode(), *[b"1"] * 7]
+            )
+    return result
+
+
+@pytest.mark.parametrize("name", sorted(_zero_string_weights()))
+def test_zero_strings_with_huge_exponents_remove_samples(name: str) -> None:
+    # A zero mantissa makes the weight zero whatever the exponent, although
+    # Decimal cannot parse an exponent of this size.
+    X = [[0], [1], [2], [3]] * 2
+    y = [0, 0, 1, 1] * 2
+
+    fitted = C50Classifier().fit(
+        X, y, sample_weight=_zero_string_weights()[name]
+    )
+    reference = C50Classifier().fit(X, y, sample_weight=[0.0] + [1.0] * 7)
+
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "1e-3000000000000000000",
+        "1e3000000000000000000",
+        "0.1e-2000000000000000000",
+    ],
+)
+def test_nonzero_strings_with_huge_exponents_still_raise(text: str) -> None:
+    for weights in ([text, *["1"] * 7], np.array([text, *["1"] * 7])):
+        with pytest.raises(ValueError, match="rounded to float64"):
+            C50Classifier().fit(
+                [[0], [1], [2], [3]] * 2,
+                [0, 0, 1, 1] * 2,
+                sample_weight=weights,
+            )
+
+
+@pytest.mark.parametrize("trapped", [True, False])
+def test_string_weights_ignore_the_callers_decimal_context(
+    trapped: bool,
+) -> None:
+    # Decimal reports an unparsable string through the thread's context. With
+    # the trap off it returns NaN, which hid the zero mantissa, and with the
+    # trap on it left the caller's flag set.
+    X = [[0], [1], [2], [3]] * 2
+    y = [0, 0, 1, 1] * 2
+    reference = C50Classifier().fit(X, y, sample_weight=[0.0] + [1.0] * 7)
+    zero = ["0e1000000000000000000"] + ["1"] * 7
+    nonzero = ["1e1000000000000000000"] + ["1"] * 7
+
+    with decimal.localcontext() as context:
+        context.traps[decimal.InvalidOperation] = trapped
+        context.clear_flags()
+        fitted = C50Classifier().fit(X, y, sample_weight=zero)
+        assert not any(context.flags.values())
+        with pytest.raises(ValueError, match="rounded to float64"):
+            C50Classifier().fit(X, y, sample_weight=nonzero)
+        assert not any(context.flags.values())
+        assert context.traps[decimal.InvalidOperation] is trapped
+
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
