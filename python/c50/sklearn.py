@@ -944,7 +944,17 @@ def _checked_weight_values(sample_weight: ArrayLike) -> NDArray[Any]:
 
 
 def _weight_text(element: str | bytes) -> str | None:
-    """Return the text of a string weight, or ``None`` if it cannot decode."""
+    """Return the text of a string weight, or ``None`` if it cannot decode.
+
+    NumPy's converter ignores the trailing NULs of a NumPy string or bytes
+    scalar, as it does for the elements of a ``U`` or ``S`` array. The exact
+    checks must read the same text, so they drop them from such a scalar. A
+    Python string keeps them, and ``Decimal`` and ``float`` reject it.
+    """
+    if isinstance(element, np.str_):
+        return str(element).rstrip("\x00")
+    if isinstance(element, np.bytes_):
+        element = bytes(element).rstrip(b"\x00")
     if isinstance(element, str):
         return element
     try:

@@ -1089,6 +1089,39 @@ def test_numpy_scalar_types_stay_accepted(make: type, container: str) -> None:
     )
 
 
+def _weight_outcome(weights: object) -> tuple[str, str]:
+    """Fit on eight samples and return the model text or the error."""
+    X = [[0], [1], [2], [3]] * 2
+    y = [0, 0, 1, 1] * 2
+    try:
+        fitted = C50Classifier().fit(X, y, sample_weight=weights)
+    except (TypeError, ValueError) as exc:
+        return type(exc).__name__, str(exc)
+    return "trained", without_date(fitted.model_.serialized_data)
+
+
+@pytest.mark.parametrize("text", ["0\x00", "inf\x00", "1e-400\x00", "0.5\x00"])
+@pytest.mark.parametrize("make", [np.str_, np.bytes_])
+def test_numpy_string_scalars_read_trailing_nuls_as_numpy_does(
+    make: type, text: str
+) -> None:
+    value = make(text if make is np.str_ else text.encode())
+    array = np.array([value] + [make("1" if make is np.str_ else b"1")] * 7)
+    assert array.dtype.kind in "US"
+
+    assert _weight_outcome([value, *[1.0] * 7]) == _weight_outcome(array)
+
+
+def test_python_string_with_a_nul_stays_rejected() -> None:
+    for text in ("0.5\x00", "0\x00"):
+        with pytest.raises(ValueError, match="could not convert"):
+            C50Classifier().fit(
+                [[0], [1], [2], [3]],
+                [0, 0, 1, 1],
+                sample_weight=[text, 1.0, 1.0, 1.0],
+            )
+
+
 _LONGDOUBLE = np.longdouble
 
 # Each type maps to the values that represent 0, 1, and 2, and to the values
