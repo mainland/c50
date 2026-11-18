@@ -84,9 +84,11 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             boosting. A value that is not an integer raises ``ValueError`` at
             ``fit``, as the estimator documentation describes. That includes a
             ``bool``, ``numpy.bool_``, and ``numpy.timedelta64``.
-        subset_splits: Allow subset splits for categorical features. Memory and
-            time grow roughly with the square of the largest number of
-            categories in any categorical feature.
+        subset_splits: Allow subset splits for categorical features. Memory,
+            and the time to fill the tables, grow roughly with the square of
+            the largest number of categories in any categorical feature. The
+            search for the best subsets can take time that grows with the cube
+            of the number of categories of the feature under test.
         winnow: Enable attribute winnowing.
         global_pruning: Enable global tree pruning.
         probabilistic_thresholds: Use probabilistic thresholds for continuous

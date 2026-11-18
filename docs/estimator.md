@@ -215,7 +215,10 @@ The estimator exposes the low-level training options as cloneable constructor
 parameters. `model_kind="tree"` builds a tree, and `model_kind="rules"` builds
 a rule set. The remaining parameters control boosting, subset splits,
 winnowing, pruning, probabilistic thresholds, sampling, and their corresponding
-native numeric settings.
+native numeric settings. `subset_splits` needs memory that grows with the
+square of the largest number of categories in any categorical feature, and its
+search can take time that grows with the cube of the number of categories of
+the feature under test. See {doc}`large-datasets`.
 
 `n_jobs` sets the maximum number of native split-evaluation workers. `None`
 means one worker unless a `joblib.parallel_config` context sets another value,

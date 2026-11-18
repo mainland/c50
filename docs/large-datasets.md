@@ -66,9 +66,13 @@ and a table of Bell numbers, each dimensioned by the largest number of values
 of any discrete attribute in the schema, not by the attribute under test. Each
 split worker also holds its own copy of the two square tables. Memory and the
 time to fill the tables grow roughly with the square of that number, as in
-Release 2.07. A categorical column with thousands of distinct values, such as
-an identifier, can need gigabytes. Leave `subset_splits` off for such
-attributes, or reduce their cardinality first.
+Release 2.07. The search itself can take longer. It merges the values of the
+attribute under test pair by pair, and each merge rescans the remaining pairs,
+so a search over `n` values examines the sum of `k*(k-1)/2` pairs for `k` from
+3 to `n`, which grows roughly as `n**3/6`. A categorical column with thousands
+of distinct values, such as an identifier, can need gigabytes and a long time.
+Leave `subset_splits` off for such attributes, or reduce their cardinality
+first.
 
 The public dense interface rejects more than `INT_MAX` rows or features because
 the release 2.07 algorithm uses signed `int` indices internally. Dense schemas
