@@ -222,15 +222,17 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         Args:
             X: Dense two-dimensional training data.
             y: One-dimensional class labels.
-            sample_weight: Optional nonnegative weight for each sample. C5.0
-                uses weights relative to their mean, so multiplying every
-                weight by a constant does not change the classifier. Samples
-                with zero weight are removed before fitting. A weight is a real
-                number, including a ``bool`` or ``decimal.Decimal``, or a
-                string that parses as one. An array of any other kind, or an
-                object that is neither, is rejected, including ``None``,
-                ``pandas.NA``, dates, times, timedeltas, complex numbers, and
-                the marker.
+            sample_weight: Optional weight for each sample, either one finite,
+                nonnegative scalar or one such value per sample. C5.0 uses
+                weights relative to their mean, so multiplying every weight by
+                a constant does not change the classifier, provided that every
+                weight stays within the range of ``float64`` after rounding to
+                it. Samples with zero weight are removed before fitting. A
+                weight is a real number, including a ``bool`` or
+                ``decimal.Decimal``, or a string that parses as one. An array
+                of any other kind, or an object that is neither, is rejected,
+                including ``None``, ``pandas.NA``, dates, times, timedeltas,
+                complex numbers, and the marker.
 
         Returns:
             This fitted estimator.
@@ -243,7 +245,10 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 ``decimal.Decimal``, or string, including the marker.
             ValueError: If the data, schema, options, or cost matrix is
                 invalid, or if ``sample_weight`` contains a string that does
-                not parse as a number.
+                not parse as a number, a NaN, an infinity, or a negative
+                number. A finite weight also raises it when rounding to
+                ``float64`` makes it infinite, or makes it zero although it is
+                not.
         """
         self._clear_fitted_state()
         fitted = False

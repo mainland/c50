@@ -647,9 +647,7 @@ def _three_class_problem() -> tuple[list[list[int]], list[int]]:
 def test_scaled_weights_within_float64_keep_every_class(scale: object) -> None:
     X, y = _three_class_problem()
     weights = [scale] * 8 + [5 * scale] * 16  # type: ignore[operator]
-    reference = C50Classifier().fit(
-        X, y, sample_weight=[1.0] * 8 + [5.0] * 16
-    )
+    reference = C50Classifier().fit(X, y, sample_weight=[1.0] * 8 + [5.0] * 16)
 
     fitted = C50Classifier().fit(X, y, sample_weight=weights)
 
