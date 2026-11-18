@@ -161,13 +161,22 @@ to `training-hunt-input` in the build directory. An exception prints the seed
 and the index, and the input file holds the input. An abrupt stop, such as a
 signal, an abort, or a sanitizer report, prints nothing. The input file then
 holds the bytes of the input being trained, because the driver writes it
-before each training. Replay those bytes directly. Make a directory
-`DIR` with the empty subdirectories `schema`, `implicit`, `tree`, `rules`,
-`cases`, and `costs`, copy the file to `DIR/training/input`, and run
-`build/c50_fuzz_seed_replay DIR`. Alternatively, pass the file as the argument
-of a `c50_fuzz_training` harness build, which runs each file named on its
-command line. To replay or keep a finding by its seed and
-index, run the driver directly, then copy the file into `corpus/training`:
+before each training. Replay those bytes directly. Make a directory `DIR`
+with the empty subdirectories `schema`, `implicit`, `tree`, `rules`, `cases`,
+and `costs`, and with the subdirectory `training` that holds the file as
+`input`, then run `c50_fuzz_seed_replay` on it:
+
+```bash
+DIR=$(mktemp -d)
+mkdir "$DIR"/{schema,implicit,tree,rules,cases,costs,training}
+cp build/training-hunt-input "$DIR"/training/input
+build/c50_fuzz_seed_replay "$DIR"
+```
+
+Alternatively, pass the file as the argument of a `c50_fuzz_training` harness
+build, which runs each file named on its command line. To replay or keep a
+finding by its seed and index, run the driver directly, then copy the file
+into `corpus/training`:
 
 ```sh
 build/c50_training_fuzz_driver SEED 1 input.bin INDEX
