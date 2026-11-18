@@ -11,15 +11,17 @@ static void require(bool condition, const char *message)
 {
     if (!condition) throw std::runtime_error(message);
 }
-template<class F> static void rejects(c50::error_code code, F operation)
+template<class F> static void rejects(c50::error_code code, F operation,
+                                      const std::string &label = {})
 {
+    const std::string where = label.empty() ? "" : " (" + label + ")";
     try { operation(); }
     catch (const c50::exception &error) {
-        require(error.code() == code, error.what());
-        require(*error.what(), "missing diagnostic");
+        require(error.code() == code, (error.what() + where).c_str());
+        require(*error.what(), ("missing diagnostic" + where).c_str());
         return;
     }
-    throw std::runtime_error("invalid input accepted");
+    throw std::runtime_error("invalid input accepted" + where);
 }
 template<class F> static void bounds(F operation)
 {
@@ -196,11 +198,11 @@ static void dense_support_checks()
             const c50::dense_dataset cases(values, 2, width);
             const c50::dense_dataset training(values, 2, width, classes);
             const auto unsupported = c50::error_code::unsupported;
-            rejects(unsupported, [&] { model.predict(context, cases); });
-            rejects(unsupported, [&] { model.attribute_usage(context, cases); });
+            rejects(unsupported, [&] { model.predict(context, cases); }, label);
+            rejects(unsupported, [&] { model.attribute_usage(context, cases); }, label);
             rejects(unsupported, [&] {
                 c50::model::train(context, c50::model_kind::tree, schema.names, training);
-            });
+            }, label);
         }
     }
     const char dense_schema[] = "a, b.\nx: continuous.\ny: continuous.\n";
