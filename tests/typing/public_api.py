@@ -7,19 +7,12 @@
 from __future__ import annotations
 
 import enum
-import sys
-from typing import Any
+from typing import Any, assert_type
 
 import c50
 import numpy as np
 from c50.sklearn import NOT_APPLICABLE, C50Classifier
 from numpy.typing import NDArray
-
-if sys.version_info >= (3, 11):
-    from typing import assert_type
-else:
-    from typing_extensions import assert_type
-
 
 options = c50.Options()
 assert_type(options.trials, int)
