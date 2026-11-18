@@ -15,7 +15,10 @@ libraries themselves use `pytest.importorskip`.
 from __future__ import annotations
 
 import array
+import mmap
 import os
+import sys
+import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -513,3 +516,124 @@ def test_pyarrow_nanosecond_weights_raise_type_error() -> None:
     for value in weights:
         with pytest.raises(TypeError, match="numbers or strings"):
             _fit(sample_weight=value)
+
+
+class _LibraryError(Exception):
+    """An exception type of a library, as polars raises its own."""
+
+
+class _RaisesOwnError(_TensorLike):
+    """Refuses its conversion with an exception of its own kind."""
+
+    def __array__(
+        self, dtype: Any = None, copy: bool | None = None
+    ) -> np.ndarray:
+        raise _LibraryError("the library cannot convert this array")
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_any_exception_of_a_conversion_raises_value_error(role: str) -> None:
+    values = X if _DIMENSIONS.get(role, 2) == 2 else Y.astype(float)
+    with pytest.raises(ValueError, match=_NAMES[role]) as caught:
+        _call(role, _RaisesOwnError(values))
+    assert "cannot be converted to a NumPy array" in str(caught.value)
+    assert isinstance(caught.value.__cause__, _LibraryError)
+
+
+def test_an_exception_that_is_not_an_exception_propagates() -> None:
+    class Panic(BaseException):
+        pass
+
+    class Panicking(_TensorLike):
+        def __array__(
+            self, dtype: Any = None, copy: bool | None = None
+        ) -> np.ndarray:
+            raise Panic
+
+    with pytest.raises(Panic):
+        _fit(X=Panicking(X))
+
+
+def _raising_probes() -> dict[str, Any]:
+    class ColumnsRaise(_TensorLike):
+        @property
+        def columns(self) -> list[str]:
+            raise RuntimeError("columns not available")
+
+    closed = mmap.mmap(-1, 64)
+    closed.close()
+    released = memoryview(np.ones(60))
+    released.release()
+    cases: dict[str, Any] = {
+        "columns": ColumnsRaise(X),
+        "closed-mmap": closed,
+        "released-memoryview": released,
+    }
+    if sys.version_info >= (3, 12):
+
+        class Locked:
+            def __buffer__(self, flags: int) -> memoryview:
+                raise BufferError("buffer is locked")
+
+        cases["buffer"] = Locked()
+    return cases
+
+
+@pytest.mark.parametrize("role", ["fit_X", "y", "sample_weight", "predict_X"])
+def test_failing_probes_of_an_input_raise_value_error(role: str) -> None:
+    for value in _raising_probes().values():
+        with pytest.raises(ValueError, match=_NAMES[role]) as caught:
+            _call(role, value)
+        assert "cannot be converted to a NumPy array" in str(caught.value)
+        assert caught.value.__cause__ is not None
+
+
+def test_polars_lazy_frames_fail_without_a_column_warning() -> None:
+    # scikit-learn warns about the data types of a lazy frame in some versions.
+    # Only the question of whether the frame has columns is the estimator's.
+    pl = pytest.importorskip("polars")
+    lazy = pl.LazyFrame({"a": X[:, 0]})
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with pytest.raises(ValueError, match="2D array"):
+            _fit(X=lazy)
+    assert not [w for w in caught if "column names" in str(w.message)]
+
+
+def test_buffer_objects_keep_their_results() -> None:
+    weights = np.arange(60) % 3 + 1
+    expected = _fit(sample_weight=weights.astype(np.uint8))
+    for buffer in (
+        bytearray(weights.astype(np.uint8).tobytes()),
+        memoryview(weights.astype(np.uint8)),
+        array.array("B", weights.astype(np.uint8).tobytes()),
+    ):
+        _same_classifier(_fit(sample_weight=buffer), expected)
+
+
+@pytest.mark.parametrize("name", ["Int128", "UInt128"])
+def test_polars_128_bit_integers_are_refused_by_name(name: str) -> None:
+    pl = pytest.importorskip("polars")
+    dtype = getattr(pl, name, None)
+    if dtype is None:
+        pytest.skip(f"this polars has no {name}")
+    column = pl.Series(np.arange(60) % 3, dtype=dtype)
+    try:
+        np.asarray(column)
+    except Exception:
+        panic = None
+    except BaseException as exc:
+        # polars 2.0 panics, and a panic is not an Exception.
+        panic = type(exc)
+    else:
+        pytest.skip(f"this polars converts {name}")
+    if panic is None:
+        with pytest.raises(ValueError, match="y cannot be converted"):
+            _fit(y=column)
+        with pytest.raises(ValueError, match="sample_weight cannot be conv"):
+            _fit(sample_weight=column)
+    else:
+        with pytest.raises(panic):
+            _fit(y=column)
+        with pytest.raises(panic):
+            _fit(sample_weight=column)

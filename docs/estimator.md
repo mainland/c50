@@ -244,8 +244,12 @@ every input:
 An object that NumPy cannot read as an array, such as a sparse matrix, goes to
 scikit-learn unchanged. Results are NumPy arrays. The array's library decides
 whether it can be converted. An array in GPU or other device memory, a tensor
-that requires gradients, and a `bfloat16` tensor raise `ValueError` that names
-the input and chains the library's exception. Move such an array to CPU memory,
+that requires gradients, a `bfloat16` tensor, and a polars array of 128-bit
+integers raise `ValueError` that names the input and chains the library's
+exception, whatever the exception's type, as do an object whose protocol probe
+raises. A `BaseException` that is not an `Exception`, such as the
+`PanicException` of polars 2.0, propagates. So does an error that a data frame
+of step 3 raises in scikit-learn's own conversion. Move an array to CPU memory,
 detach it, or convert its dtype first. See the
 [scikit-learn Array API contract](https://scikit-learn.org/stable/modules/array_api.html).
 

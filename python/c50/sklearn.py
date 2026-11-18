@@ -11,6 +11,7 @@ import decimal
 import json
 import re
 import sys
+import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
@@ -264,11 +265,14 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 the marker.
             ValueError: If the data, schema, options, or cost matrix is
                 invalid, if an array cannot be converted to NumPy, as for a
-                tensor in device memory, or if ``sample_weight`` contains a
-                string that does not parse as a number, a NaN, an infinity, or
-                a negative number. A finite weight also raises it when rounding
-                to ``float64`` makes it infinite, or makes it zero although it
-                is not.
+                tensor in device memory or a 128-bit polars integer array, or
+                if ``sample_weight`` contains a string that does not parse as a
+                number, a NaN, an infinity, or a negative number. A finite
+                weight also raises it when rounding to ``float64`` makes it
+                infinite, or makes it zero although it is not. An exception of
+                any other kind that the conversion raises, such as the
+                ``PanicException`` that polars 2.0 raises for a 128-bit integer
+                array, propagates.
         """
         self._clear_fitted_state()
         fitted = False
@@ -1223,7 +1227,13 @@ def _is_pandas_object(values: object) -> bool:
 
 def _is_data_frame(values: object) -> bool:
     """Return whether ``values`` has ``__dataframe__`` or ``columns``."""
-    return hasattr(values, "__dataframe__") or hasattr(values, "columns")
+    if hasattr(values, "__dataframe__"):
+        return True
+    with warnings.catch_warnings():
+        # A polars LazyFrame warns about its performance when asked for its
+        # columns, and the question here is only whether the attribute exists.
+        warnings.simplefilter("ignore")
+        return hasattr(values, "columns")
 
 
 def _exports_buffer(values: object) -> bool:
@@ -1272,22 +1282,24 @@ def _host_array(values: Any, name: str) -> Any:
         The input, or a NumPy array that holds it.
 
     Raises:
-        ValueError: If the array's library refuses the conversion.
+        ValueError: If an array's library, or the probe of the input, raises an
+            ``Exception``, whatever its type. A ``BaseException`` that is not
+            an ``Exception``, such as the ``PanicException`` of polars,
+            propagates, because catching it would also catch
+            ``KeyboardInterrupt``.
     """
-    if (
-        isinstance(values, _PASSED_UNCHANGED)
-        or _is_pandas_object(values)
-        or _is_data_frame(values)
-    ):
-        return values
-    if not (
-        any(hasattr(values, protocol) for protocol in _ARRAY_PROTOCOLS)
-        or _exports_buffer(values)
-    ):
+    if isinstance(values, _PASSED_UNCHANGED) or _is_pandas_object(values):
         return values
     try:
+        if _is_data_frame(values):
+            return values
+        if not (
+            any(hasattr(values, protocol) for protocol in _ARRAY_PROTOCOLS)
+            or _exports_buffer(values)
+        ):
+            return values
         return np.asarray(values)
-    except (BufferError, RuntimeError, TypeError, ValueError) as exc:
+    except Exception as exc:
         raise ValueError(
             f"{name} cannot be converted to a NumPy array: {exc} C5.0 runs on "
             "the CPU, so the array must be in CPU memory and have a dtype "
