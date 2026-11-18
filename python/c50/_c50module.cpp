@@ -258,6 +258,33 @@ double checked_double(const py::handle &source, const char *field)
     return value;
 }
 
+// Convert with NumPy, as the converting pass of an array_t parameter does, but
+// keep the Python error. pybind11 clears the error of a failed conversion, so
+// the caller could neither say why it failed nor tell a MemoryError or a
+// KeyboardInterrupt from an object that NumPy cannot read. An Exception other
+// than MemoryError becomes a ValueError chained to it. MemoryError and any
+// exception that is not an Exception propagate as they are.
+py::object convert_to_float64(py::handle source)
+{
+    try
+    {
+        return py::module_::import("numpy").attr("asarray")(
+            source, py::arg("dtype") = "float64", py::arg("order") = "C");
+    }
+    catch ( py::error_already_set &error )
+    {
+        if ( !error.matches(PyExc_Exception) ||
+             error.matches(PyExc_MemoryError) )
+        {
+            throw;
+        }
+        py::raise_from(
+            error, PyExc_ValueError,
+            "values cannot be converted to a float64 array");
+        throw py::error_already_set();
+    }
+}
+
 } // namespace
 
 namespace pybind11::detail
@@ -299,8 +326,10 @@ struct type_caster<text_argument>
     }
 };
 
-// Accept what a float64 array parameter accepts. When the conversion fails in
-// the converting pass, raise ValueError instead of rejecting the argument.
+// Accept what a float64 array parameter accepts. A float64 C-contiguous array
+// is read directly. In the converting pass, NumPy converts anything else, and
+// a failure raises ValueError that chains its cause instead of rejecting the
+// argument.
 template <>
 struct type_caster<training_matrix>
 {
@@ -310,18 +339,22 @@ struct type_caster<training_matrix>
     bool load(handle source, bool convert)
     {
         make_caster<training_matrix::array_type> array;
-        if ( array.load(source, convert) )
+        if ( !array.load(source, false) )
         {
-            value = training_matrix(
-                cast_op<training_matrix::array_type &&>(std::move(array)));
-            return true;
+            if ( !convert )
+            {
+                return false;
+            }
+            const object converted = convert_to_float64(source);
+            if ( !array.load(converted, false) )
+            {
+                throw py::value_error(
+                    "values cannot be converted to a float64 array");
+            }
         }
-        if ( convert )
-        {
-            throw py::value_error(
-                "values cannot be converted to a float64 array");
-        }
-        return false;
+        value = training_matrix(
+            cast_op<training_matrix::array_type &&>(std::move(array)));
+        return true;
     }
 };
 
@@ -509,7 +542,8 @@ Returns:
 
 Raises:
     ValueError: If an array has the wrong shape or dtype, ``values`` cannot
-        be converted to a float64 array, the row counts differ, a class
+        be converted to a float64 array (the error chains the cause), the
+        row counts differ, a class
         index or a value is out of range, ``not_applicable``
         does not have a bool dtype or the shape of ``values``, or an option,
         the schema, or the costs are invalid.
@@ -517,7 +551,9 @@ Raises:
         timestamp attribute, a class attribute, or a discrete attribute
         without explicit values, which dense data does not support. The
         number of columns does not matter.
-    MemoryError: If memory is exhausted.
+    MemoryError: If memory is exhausted, including while converting
+        ``values``. A ``KeyboardInterrupt`` or any other exception that is not
+        an ``Exception`` raised by that conversion also propagates.
 )doc";
 
 const char predict_details_dense_doc[] = R"doc(
