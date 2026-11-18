@@ -146,13 +146,14 @@ A `VerbOpt` build also checks split-diagnostic order and the resulting
 classifier. The verbose code contains assertions that the build checks only
 when `NDEBUG` is undefined, so configure it with `-DCMAKE_BUILD_TYPE=Debug`. A
 build of another type compiles the assertions out and the test passes without
-checking them. Configure the flag for C++ sources, then run the focused test:
+checking them. Configure the flag for C++ sources, then run the two CLI tests:
 
 ```sh
 cmake -S . -B build/verbose -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_CXX_FLAGS=-DVerbOpt
 cmake --build build/verbose
-ctest --test-dir build/verbose -R cli-verbose-regression --output-on-failure
+ctest --test-dir build/verbose -R '^cli(-verbose)?-regression$' \
+    --output-on-failure
 ```
 
 ## Clang
@@ -259,8 +260,10 @@ The property test draws its examples with Hypothesis. Every pytest run, also
 under CTest and in CI, uses the `reproducible` profile that
 `tests/python/conftest.py` defines. The profile derandomizes the examples and
 ignores the example database, so the same tree draws the same examples on every
-host, and a failure can be reproduced and bisected. To draw new examples, name
-the `explore` profile:
+host with the same Hypothesis version. Different versions can draw different
+examples from the same source, so record the Hypothesis version with each
+reproduction. A failure can then be reproduced and bisected. To draw new
+examples, name the `explore` profile:
 
 ```sh
 .venv/bin/python -m pytest --hypothesis-profile=explore \
@@ -271,7 +274,9 @@ A failing example from either profile prints a `@reproduce_failure` line with a
 blob. Add that decorator to the failing test, above `@given`, to replay the
 example, then remove it after the fix. The blob is valid only for the printed
 Hypothesis version. The default profile need not draw an example that
-`explore` found, so add a regression test for it.
+`explore` found, so add a regression test for it. A concrete example survives
+Hypothesis upgrades, unlike a draw sequence. Keep a failing example as an
+`@example` of the test or as a record of the property-hunt log.
 
 The tutorial test runs the code in {doc}`tutorial` and checks the results that
 its text reports. It downloads two datasets from OpenML on first use, so it is
@@ -591,6 +596,16 @@ C50_PROPERTY_HUNT_SEED=1 C50_PROPERTY_HUNT_EXAMPLES=20000 \
 and `C50_PROPERTY_HUNT_LOG` to `property-hunt.jsonl` in the build directory.
 The same seed draws the same examples. After a crash or a failed check, train
 the last logged example again, under a debugger if needed:
+
+```sh
+C50_PROPERTY_HUNT_REPLAY="$PWD/build/property-hunt.jsonl" \
+    cmake --build build --target property-hunt
+```
+
+The target gives the replay the environment of a hunt, including the sanitizer
+runtime that a sanitizer build needs before it can import the extension. To
+replay outside CMake with a build that has no sanitizers, run the script
+directly:
 
 ```sh
 python tests/run_built_python.py build/python tests/slow/property_hunt.py \

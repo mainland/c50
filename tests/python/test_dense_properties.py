@@ -167,16 +167,46 @@ def stable_model_data(model: c50.Model) -> str:
     return content
 
 
+def assert_prediction_shape(
+    predictions: c50.Predictions,
+    row_count: int,
+    class_count: int,
+) -> None:
+    """Require one label, confidence, and score vector per case.
+
+    Comparing two results with each other accepts two empty results for a
+    nonempty dataset, so the dimensions come from the dataset.
+
+    Args:
+        predictions: Result of predicting every case of the dataset.
+        row_count: Number of cases in the dataset.
+        class_count: Number of classes in the schema.
+    """
+    assert len(predictions.class_names) == class_count
+    assert len(predictions.class_indices) == row_count
+    assert len(predictions.confidences) == row_count
+    assert len(predictions.scores) == row_count
+    assert all(len(row) == class_count for row in predictions.scores)
+
+
 def assert_same_predictions(
     left: c50.Predictions,
     right: c50.Predictions,
+    row_count: int,
+    class_count: int,
 ) -> None:
     """Require identical labels, confidences, and class-score vectors.
 
     Args:
         left: First prediction result.
         right: Prediction result expected to match the first.
+        row_count: Number of cases in the dataset, which both results must
+            have.
+        class_count: Number of classes in the schema, which both results must
+            have.
     """
+    assert_prediction_shape(left, row_count, class_count)
+    assert_prediction_shape(right, row_count, class_count)
     assert left.class_names == right.class_names
     assert left.class_indices == right.class_indices
     assert np.isfinite(left.confidences).all()
@@ -224,9 +254,14 @@ def check_text_and_dense_equivalence(dataset: Dataset) -> None:
 
     assert stable_model_data(dense_model) == stable_model_data(text_model)
 
+    row_count = len(dataset.dense_cases)
+    class_count = int(dataset.class_indices.max()) + 1
+
     text_predictions = text_model.predict_details(dataset.text_cases)
     dense_predictions = dense_model.predict_details_dense(dataset.dense_cases)
-    assert_same_predictions(dense_predictions, text_predictions)
+    assert_same_predictions(
+        dense_predictions, text_predictions, row_count, class_count
+    )
 
     loaded_text_model = c50.load(
         text_model.names_data,
@@ -243,10 +278,14 @@ def check_text_and_dense_equivalence(dataset: Dataset) -> None:
     assert_same_predictions(
         loaded_text_model.predict_details(dataset.text_cases),
         text_predictions,
+        row_count,
+        class_count,
     )
     assert_same_predictions(
         loaded_dense_model.predict_details_dense(dataset.dense_cases),
         dense_predictions,
+        row_count,
+        class_count,
     )
 
 

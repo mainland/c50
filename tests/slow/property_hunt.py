@@ -22,7 +22,10 @@ failed check.
 
 The options default to the environment variables `C50_PROPERTY_HUNT_LOG`,
 `C50_PROPERTY_HUNT_EXAMPLES`, and `C50_PROPERTY_HUNT_SEED`, and then to fixed
-values.
+values. `C50_PROPERTY_HUNT_REPLAY` defaults `--replay`, so that the CMake
+target, which sets the environment that a sanitizer build needs, can replay a
+log. The target runs in the build directory, so name the log by an absolute
+path or one relative to that directory.
 """
 
 from __future__ import annotations
@@ -62,10 +65,18 @@ def record(log: IO[str], dataset: Dataset) -> None:
         value = getattr(dataset, field.name)
         if isinstance(value, np.ndarray):
             value = value.tolist()
+            if value and field.name.startswith("dense_"):
+                value = [
+                    [
+                        None if element != element else element
+                        for element in row
+                    ]
+                    for row in value
+                ]
         elif isinstance(value, c50.ModelKind):
             value = value.name
         fields[field.name] = value
-    log.write(json.dumps(fields, allow_nan=True) + "\n")
+    log.write(json.dumps(fields, allow_nan=False) + "\n")
     log.flush()
     os.fsync(log.fileno())
 
@@ -77,14 +88,21 @@ def load_last(path: Path) -> Dataset:
         path: Log written by `record`.
 
     Returns:
-        The last example, with the types that `datasets` draws.
+        The last example, with the types that `datasets` draws. A JSON `null`
+        in a dense array reads as NaN, as does the `NaN` token of older logs.
     """
     lines = path.read_text().splitlines()
     if not lines:
         raise SystemExit(f"{path} holds no example")
     fields = json.loads(lines[-1])
     for name in ("dense_training", "dense_cases"):
-        fields[name] = np.asarray(fields[name], dtype=np.float64)
+        fields[name] = np.asarray(
+            [
+                [np.nan if element is None else element for element in row]
+                for row in fields[name]
+            ],
+            dtype=np.float64,
+        )
     fields["class_indices"] = np.asarray(
         fields["class_indices"], dtype=np.uintp
     )
@@ -156,6 +174,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         "--replay",
         type=Path,
         metavar="LOG",
+        default=(
+            Path(os.environ["C50_PROPERTY_HUNT_REPLAY"])
+            if os.environ.get("C50_PROPERTY_HUNT_REPLAY")
+            else None
+        ),
         help="train the last example of LOG and exit",
     )
     args = parser.parse_args(argv)
