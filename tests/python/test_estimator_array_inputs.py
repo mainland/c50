@@ -449,3 +449,49 @@ def test_polars_and_pyarrow_columns_work_as_y_and_weights() -> None:
         (pa.chunked_array([Y]), pa.chunked_array([W])),
     ):
         _same_classifier(_fit(y=y, sample_weight=weights), _reference)
+
+
+_STAMPS = np.datetime64("2020-01-01", "ns") + np.arange(60).astype(
+    "timedelta64[ns]"
+)
+
+
+@pytest.mark.parametrize("kind", ["datetime64[ns]", "timedelta64[ns]"])
+def test_interface_only_nanosecond_weights_raise_type_error(kind: str) -> None:
+    # The stub has no `dtype` attribute, so the conversion alone decides what
+    # the weight check sees.
+    weights = _STAMPS.astype(kind)
+    with pytest.raises(TypeError, match="numbers or strings"):
+        _fit(sample_weight=_InterfaceOnly(weights))
+    with pytest.raises(TypeError, match="numbers or strings"):
+        _fit(sample_weight=weights)
+
+
+def test_polars_nanosecond_weights_raise_type_error() -> None:
+    pl = pytest.importorskip("polars")
+    stamps = pl.Series(_STAMPS)
+    weights = [
+        stamps,
+        stamps.dt.replace_time_zone("UTC"),
+        pl.Series(_STAMPS - _STAMPS[0]),
+        pl.Series(_STAMPS - _STAMPS[0], dtype=pl.Duration("ns")),
+    ]
+    for value in weights:
+        with pytest.raises(TypeError, match="numbers or strings"):
+            _fit(sample_weight=value)
+
+
+def test_pyarrow_nanosecond_weights_raise_type_error() -> None:
+    pa = pytest.importorskip("pyarrow")
+    stamps = pa.array(_STAMPS)
+    durations = pa.array(_STAMPS - _STAMPS[0])
+    weights = [
+        stamps,
+        pa.chunked_array([stamps]),
+        pa.array(_STAMPS, pa.timestamp("ns", tz="UTC")),
+        durations,
+        pa.chunked_array([durations, durations]),
+    ]
+    for value in weights:
+        with pytest.raises(TypeError, match="numbers or strings"):
+            _fit(sample_weight=value)

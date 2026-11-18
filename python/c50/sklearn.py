@@ -277,9 +277,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             X = _host_array(X, "X")
             y = _host_array(y, "y")
             _reject_not_applicable_labels(y)
-            sample_weight = _host_array(
-                sample_weight, "sample_weight", weights=True
-            )
+            sample_weight = _host_array(sample_weight, "sample_weight")
             X_checked: NDArray[Any] | Columns
             if _is_column_frame(X):
                 y_checked = validate_data(self, y=y, reset=True)
@@ -1221,7 +1219,7 @@ def _exports_buffer(values: object) -> bool:
     return True
 
 
-def _host_array(values: Any, name: str, *, weights: bool = False) -> Any:
+def _host_array(values: Any, name: str) -> Any:
     """Return ``values`` for validation, converting arrays that NumPy can read.
 
     Every array-like input of ``fit`` and the prediction methods passes through
@@ -1239,10 +1237,10 @@ def _host_array(values: Any, name: str, *, weights: bool = False) -> Any:
     4. Arrays from an Array API library are converted with ``numpy.asarray``.
     5. Any other object that NumPy reads as an array, through ``__array__``,
        ``__array_interface__``, ``__array_struct__``, or the buffer protocol,
-       is converted with ``numpy.asarray``. For ``weights``, an object without
-       a NumPy ``dtype`` becomes an object array of its own elements, so that
-       the element check sees a missing value as it is. Any other object, such
-       as a sparse matrix, is returned unchanged for scikit-learn to judge.
+       is converted with ``numpy.asarray``, which keeps the dtype that the
+       array's library hands over, such as ``datetime64[ns]``. Any other
+       object, such as a sparse matrix, is returned unchanged for
+       scikit-learn to judge.
 
     C5.0 runs on the CPU, so the array's library decides whether the conversion
     is possible, which excludes arrays in GPU or other device memory, arrays
@@ -1253,7 +1251,6 @@ def _host_array(values: Any, name: str, *, weights: bool = False) -> Any:
     Args:
         values: The input.
         name: The name of the parameter, for error messages.
-        weights: Whether the input holds sample weights.
 
     Returns:
         The input, or a NumPy array that holds it.
@@ -1273,14 +1270,7 @@ def _host_array(values: Any, name: str, *, weights: bool = False) -> Any:
         or _exports_buffer(values)
     ):
         return values
-    as_objects = (
-        weights
-        and not hasattr(values, "__array_namespace__")
-        and not isinstance(getattr(values, "dtype", None), np.dtype)
-    )
     try:
-        if as_objects:
-            return np.asarray(values, dtype=object)
         return np.asarray(values)
     except (BufferError, RuntimeError, TypeError, ValueError) as exc:
         raise ValueError(

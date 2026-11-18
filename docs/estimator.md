@@ -213,9 +213,11 @@ every input:
 5. Any other object that NumPy reads as an array is converted with
    `numpy.asarray`. That includes PyTorch CPU tensors, polars and pyarrow
    arrays, and objects that implement `__array__`, `__array_interface__`,
-   `__array_struct__`, or the buffer protocol. A `sample_weight` without a NumPy
-   `dtype` becomes an object array of its elements, so that the checks in
-   [Sample weights](#sample-weights) see each element as it is.
+   `__array_struct__`, or the buffer protocol. The result has the dtype that
+   the array's library hands to NumPy, which the checks in
+   [Sample weights](#sample-weights) judge as they judge a NumPy array. A
+   polars or pyarrow array of nanosecond dates or durations raises `TypeError`
+   as a weight, as a NumPy array does.
 
 An object that NumPy cannot read as an array, such as a sparse matrix, goes to
 scikit-learn unchanged. Results are NumPy arrays. The array's library decides
