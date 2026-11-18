@@ -101,21 +101,26 @@ names in `export_text` show the form that occurs first in the training rows.
 The same holds for the tuples `(1,)` and `(1.0,)`. The classifier and its
 predictions do not depend on the form.
 
-Dates and durations are categorical in every unit. A NumPy array of `D`, `s`,
-`ms`, or `us` units gives `datetime.date`, `datetime.datetime`, and
-`datetime.timedelta` categories. Nanosecond values stay `numpy.datetime64` and
-`numpy.timedelta64` scalars, because NumPy converts them to `int` when it
-converts an array to `object`. The two forms are different types, so they never
-match. A model fitted on `datetime64[ns]` data rejects the same instants in
+Dates and durations are categorical in every unit. NumPy converts most units
+to Python objects when it converts an array to `object`, and the categories are
+those objects: `datetime.date` for `datetime64` in `Y`, `M`, `W`, and `D`,
+`datetime.datetime` for `datetime64` in `h`, `m`, `s`, `ms`, and `us`, and
+`datetime.timedelta` for `timedelta64` in `W`, `D`, `h`, `m`, `s`, `ms`, and
+`us`. NumPy converts `datetime64` in `ns`, `ps`, `fs`, and `as`, and
+`timedelta64` in `Y`, `M`, `ns`, `ps`, `fs`, and `as`, to `int`. The estimator
+keeps those values as `numpy.datetime64` and `numpy.timedelta64` scalars, so
+they stay categories. The two forms are different types, so they never match. A
+model fitted on `datetime64[ns]` data rejects the same instants in
 `datetime64[us]` as unseen under `unknown_categories="error"`, and the reverse.
-Cast the data to the unit of the training data first. Nanosecond arrays, lists
-or object arrays of nanosecond scalars, and polars and pyarrow tables whose
+Cast the data to the unit of the training data first. Values of two units in
+the scalar group, such as `ns` and `ps`, have one type and match by value.
+Arrays, lists or object arrays of scalars, and polars and pyarrow tables whose
 columns are all nanosecond dates or durations give the same classifier and the
-same `categories_`. A polars or pyarrow table that mixes such a column with
-columns of another type reaches C5.0 as the library's own conversion of the
-whole table makes it, and polars converts a nanosecond date in a table with
-float columns to floats, so cast those columns to `us` first. A nanosecond
-`NaT` is missing, as it is in the other units.
+same `categories_`. polars and pyarrow hold no other unit of the scalar group.
+A polars or pyarrow table that mixes a nanosecond column with columns of
+another type reaches C5.0 as the library's own conversion of the whole table
+makes it, and polars converts a nanosecond date in a table with float columns
+to floats, so cast those columns to `us` first. `NaT` is missing in every unit.
 
 ## Not-applicable values
 

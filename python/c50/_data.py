@@ -835,9 +835,32 @@ def _is_number(value: object) -> bool:
     )
 
 
+# The units in which NumPy converts a date or duration to ``int`` when it
+# converts to ``object``, so that ``item()`` and ``astype(object)`` lose the
+# type. The other units become ``datetime.date``, ``datetime.datetime``, and
+# ``datetime.timedelta``. A duration in years or months has no
+# ``datetime.timedelta``, so it becomes an ``int`` too.
+_INTEGER_TIME_UNITS: dict[str, frozenset[str]] = {
+    "M": frozenset({"ns", "ps", "fs", "as"}),
+    "m": frozenset({"Y", "M", "ns", "ps", "fs", "as"}),
+}
+
+
+def is_integer_time_dtype(dtype: np.dtype[Any]) -> bool:
+    """Return whether NumPy converts ``dtype`` to ``int`` objects.
+
+    This holds for ``datetime64`` in nanoseconds and finer, and for
+    ``timedelta64`` in nanoseconds and finer, years, and months. The estimator
+    keeps such values as ``numpy.datetime64`` and ``numpy.timedelta64``
+    scalars, so that the feature stays categorical.
+    """
+    units = _INTEGER_TIME_UNITS.get(dtype.kind)
+    return units is not None and np.datetime_data(dtype)[0] in units
+
+
 def _normalize_scalar(value: object) -> object:
     if isinstance(value, (np.datetime64, np.timedelta64)) and (
-        np.datetime_data(value.dtype)[0] == "ns"
+        is_integer_time_dtype(value.dtype)
     ):
         # item() would return an int, which makes the value continuous.
         return value

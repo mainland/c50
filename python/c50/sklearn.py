@@ -41,6 +41,7 @@ from ._data import (
     dataframe_columns,
     encode_costs,
     fit_schema,
+    is_integer_time_dtype,
 )
 from ._sentinel import NOT_APPLICABLE
 from .inspection import export_json as _export_json
@@ -293,7 +294,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 validate_data(self, X, reset=True, skip_check_array=True)
                 check_consistent_length(X, y_checked)
                 X_checked = dataframe_columns(X)
-            elif (stamps := _nanosecond_frame(X)) is not None:
+            elif (stamps := _time_frame(X)) is not None:
                 y_checked = validate_data(self, y=y, reset=True)
                 validate_data(self, X, reset=True, skip_check_array=True)
                 check_consistent_length(X, y_checked)
@@ -307,7 +308,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                     dtype=_validation_dtype(X),
                     ensure_all_finite=False,
                 )
-                X_checked = _nanosecond_scalars(X_array)
+                X_checked = _time_scalars(X_array)
             check_classification_targets(y_checked)
 
             weights = _relative_sample_weight(
@@ -636,10 +637,10 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         if _is_column_frame(X):
             validate_data(self, X, reset=False, skip_check_array=True)
             return dataframe_columns(X)
-        if (stamps := _nanosecond_frame(X)) is not None:
+        if (stamps := _time_frame(X)) is not None:
             validate_data(self, X, reset=False, skip_check_array=True)
             return stamps
-        return _nanosecond_scalars(
+        return _time_scalars(
             cast(
                 NDArray[Any],
                 validate_data(
@@ -1356,50 +1357,47 @@ def _is_column_frame(X: object) -> bool:
     )
 
 
-def _is_nanosecond(dtype: np.dtype[Any]) -> bool:
-    """Return whether ``dtype`` is a datetime or timedelta in nanoseconds."""
-    return dtype.kind in "Mm" and np.datetime_data(dtype)[0] == "ns"
-
-
 def _validation_dtype(X: ArrayLike) -> type[object] | None:
     """Preserve numeric arrays while retaining mixed Python scalar types.
 
-    An array of nanosecond dates or durations also keeps its dtype, because the
-    conversion to ``object`` that scikit-learn performs turns its values into
-    integers. ``_nanosecond_scalars`` converts it afterwards.
+    An array of dates or durations whose values NumPy converts to ``int``
+    objects also keeps its dtype, because scikit-learn's conversion to
+    ``object`` would make the feature continuous. ``_time_scalars`` converts it
+    afterwards.
     """
     if isinstance(X, np.ndarray) or _is_pandas_object(X):
         dtype = getattr(X, "dtype", None)
         if dtype is not None and np.dtype(dtype).kind in "iufb":
             return None
-    if isinstance(X, np.ndarray) and _is_nanosecond(X.dtype):
+    if isinstance(X, np.ndarray) and is_integer_time_dtype(X.dtype):
         return None
     return object
 
 
-def _nanosecond_scalars(X: NDArray[Any]) -> NDArray[Any]:
-    """Return an array of nanosecond dates or durations as scalar objects.
+def _time_scalars(X: NDArray[Any]) -> NDArray[Any]:
+    """Return an array of integer-converted dates or durations as scalars.
 
     The scalars stay ``numpy.datetime64`` and ``numpy.timedelta64`` values.
-    NumPy converts these units to ``int`` when it converts an array to
-    ``object``, which would make the feature continuous. Any other array is
-    returned unchanged.
+    NumPy converts the units of ``is_integer_time_dtype`` to ``int`` when it
+    converts an array to ``object``, which would make the feature continuous.
+    Any other array is returned unchanged.
     """
-    if not _is_nanosecond(X.dtype):
+    if not is_integer_time_dtype(X.dtype):
         return X
     result = np.empty(X.shape, dtype=object)
     result.flat[:] = list(X.flat)
     return result
 
 
-def _nanosecond_frame(X: object) -> NDArray[Any] | None:
-    """Return the cells of a data frame of nanosecond values as scalars.
+def _time_frame(X: object) -> NDArray[Any] | None:
+    """Return the cells of a data frame of such dates or durations as scalars.
 
     Only a data frame that is not a pandas object and whose conversion to a
-    NumPy array holds nanosecond dates or durations qualifies, as a polars
-    table or a pyarrow table of those columns does. scikit-learn converts such
-    a frame through ``object``, which turns the values into integers. For any
-    other input the result is ``None``.
+    NumPy array holds dates or durations of the units of
+    ``is_integer_time_dtype`` qualifies, as a polars table or a pyarrow table
+    of nanosecond columns does. scikit-learn converts such a frame through
+    ``object``, which turns the values into integers. For any other input the
+    result is ``None``.
     """
     if (
         isinstance(X, np.ndarray)
@@ -1412,9 +1410,9 @@ def _nanosecond_frame(X: object) -> NDArray[Any] | None:
     except Exception:
         # The conversion that scikit-learn performs reports the error.
         return None
-    if array.ndim != 2 or not _is_nanosecond(array.dtype):
+    if array.ndim != 2 or not is_integer_time_dtype(array.dtype):
         return None
-    return _nanosecond_scalars(array)
+    return _time_scalars(array)
 
 
 __all__ = ["NOT_APPLICABLE", "C50Classifier"]

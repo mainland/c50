@@ -4,13 +4,13 @@
 
 """Tests that dates and durations are categorical in every unit.
 
-NumPy converts nanosecond dates and durations to `int` when it converts an
-array to `object`, while the coarser units become `datetime.date`,
-`datetime.datetime`, and `datetime.timedelta`. The estimator keeps nanosecond
-values as `numpy.datetime64` and `numpy.timedelta64` scalars, so that each unit
-is categorical, and a model fitted on one unit rejects the same instants in
-another unit as unseen. Each case below fits or predicts with the same values
-in one unit, one container, and one role.
+NumPy converts dates and durations in some units to `int` when it converts an
+array to `object`, while the other units become `datetime.date`,
+`datetime.datetime`, and `datetime.timedelta`. The estimator keeps the values
+of the first group as `numpy.datetime64` and `numpy.timedelta64` scalars, so
+that each unit is categorical, and a model fitted on one unit rejects the same
+instants in another unit as unseen. Each case below fits or predicts with the
+same values in one unit, one container, and one role.
 """
 
 from __future__ import annotations
@@ -21,20 +21,32 @@ from typing import Any
 
 import numpy as np
 import pytest
+from c50._data import is_integer_time_dtype
 from c50.sklearn import C50Classifier
 from model_text import without_date
 
 OFFSETS = np.arange(24) % 4
 LABELS = np.asarray(["no", "yes", "no", "no"])[OFFSETS]
 UNITS = ("D", "s", "us", "ns")
+ALL_UNITS = (
+    *("Y", "M", "W", "D", "h", "m", "s", "ms", "us"),
+    *("ns", "ps", "fs", "as"),
+)
 KINDS = ("date", "duration")
+# The units of each kind that NumPy converts to `int` under `astype(object)`.
+# `test_the_scalar_units_are_the_ones_that_numpy_converts_to_int` checks them
+# against NumPy, and the other units are the ones that were categorical before.
+SCALAR_UNITS = {
+    "date": ("ns", "ps", "fs", "as"),
+    "duration": ("Y", "M", "ns", "ps", "fs", "as"),
+}
 
 
 def _values(kind: str, unit: str) -> np.ndarray:
     steps = OFFSETS.astype(f"timedelta64[{unit}]")
     if kind == "duration":
         return steps
-    return np.datetime64("2020-01-01", unit) + steps
+    return np.datetime64("1970-01-01", unit) + steps
 
 
 def _object_array(values: np.ndarray) -> np.ndarray:
@@ -67,9 +79,9 @@ def _pyarrow_zoned(values: np.ndarray) -> Any:
 # units that the container can hold and the kinds that it can hold.
 _Make = Callable[[np.ndarray], Any]
 CONTAINERS: dict[str, tuple[_Make, tuple[str, ...], tuple[str, ...]]] = {
-    "ndarray": (lambda v: v.reshape(-1, 1), UNITS, KINDS),
-    "object-array": (_object_array, UNITS, KINDS),
-    "nested-list": (lambda v: [[x] for x in v], UNITS, KINDS),
+    "ndarray": (lambda v: v.reshape(-1, 1), ALL_UNITS, KINDS),
+    "object-array": (_object_array, ALL_UNITS, KINDS),
+    "nested-list": (lambda v: [[x] for x in v], ALL_UNITS, KINDS),
     "polars": (_polars, ("us", "ns"), KINDS),
     "pyarrow": (_pyarrow, ("s", "us", "ns"), KINDS),
     "polars-zoned": (_polars_zoned, ("ns",), ("date",)),
@@ -93,7 +105,7 @@ def _reference(kind: str) -> C50Classifier:
 
 
 def _is_scalar_category(category: object, kind: str, unit: str) -> bool:
-    if unit == "ns":
+    if unit in SCALAR_UNITS[kind]:
         return isinstance(
             category, np.datetime64 if kind == "date" else np.timedelta64
         )
@@ -128,6 +140,7 @@ def test_predict_matches_microseconds(kind: str, unit: str, name: str) -> None:
     make = CONTAINERS[name][0]
     values = make(_values(kind, unit))
     classifier = _fit(values)
+    assert list(classifier.categorical_features_) == [0]
     reference = _reference(kind)
     expected = reference.predict(_values(kind, "us").reshape(-1, 1))
     np.testing.assert_array_equal(classifier.predict(values), expected)
@@ -138,14 +151,29 @@ def test_predict_matches_microseconds(kind: str, unit: str, name: str) -> None:
 
 
 @pytest.mark.parametrize("kind", KINDS)
-def test_named_categorical_column_holds_numpy_scalars(kind: str) -> None:
+@pytest.mark.parametrize("unit", ALL_UNITS)
+def test_named_categorical_column_holds_the_expected_form(
+    kind: str, unit: str
+) -> None:
     classifier = _fit(
-        _values(kind, "ns").reshape(-1, 1), categorical_features=[0]
+        _values(kind, unit).reshape(-1, 1), categorical_features=[0]
     )
     assert all(
-        _is_scalar_category(category, kind, "ns")
+        _is_scalar_category(category, kind, unit)
         for category in classifier.categories_[0]
     )
+
+
+@pytest.mark.parametrize("kind", ["M", "m"])
+@pytest.mark.parametrize("unit", ALL_UNITS)
+def test_the_scalar_units_are_the_ones_that_numpy_converts_to_int(
+    kind: str, unit: str
+) -> None:
+    dtype = np.dtype(f"{kind}8[{unit}]")
+    converted = np.zeros(1, dtype=dtype).astype(object)[0]
+    name = "date" if kind == "M" else "duration"
+    assert isinstance(converted, int) == (unit in SCALAR_UNITS[name])
+    assert is_integer_time_dtype(dtype) == (unit in SCALAR_UNITS[name])
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -156,7 +184,7 @@ def test_not_a_time_is_missing_in_every_unit(kind: str) -> None:
         return values
 
     reference = _fit(column("us").reshape(-1, 1))
-    for unit in UNITS:
+    for unit in ALL_UNITS:
         classifier = _fit(column(unit).reshape(-1, 1))
         assert without_date(classifier.model_.serialized_data) == without_date(
             reference.model_.serialized_data
@@ -168,16 +196,23 @@ def test_not_a_time_is_missing_in_every_unit(kind: str) -> None:
         )
 
 
-@pytest.mark.parametrize("kind", KINDS)
-def test_instants_in_another_unit_are_unseen(kind: str) -> None:
-    nanoseconds = _values(kind, "ns").reshape(-1, 1)
-    microseconds = _values(kind, "us").reshape(-1, 1)
-    for fitted, other in (
-        (nanoseconds, microseconds),
-        (microseconds, nanoseconds),
-    ):
-        classifier = _fit(fitted)
-        with pytest.raises(ValueError, match="unseen category"):
-            classifier.predict(other)
-        lenient = _fit(fitted, unknown_categories="missing")
-        assert lenient.predict(other).shape == (len(other),)
+@pytest.mark.parametrize(
+    ("kind", "unit"),
+    [(kind, unit) for kind in KINDS for unit in SCALAR_UNITS[kind]],
+)
+def test_scalar_units_and_other_units_never_match(
+    kind: str, unit: str
+) -> None:
+    # The categories match by type. A NumPy scalar never equals a `datetime`
+    # object, so the first value, which has the same instant in every unit, is
+    # unseen in a model of the other form. Units within the NumPy group share a
+    # type, so they are not part of this rule.
+    scalars = _values(kind, unit).reshape(-1, 1)
+    for other_unit in ("us", "D"):
+        others = _values(kind, other_unit).reshape(-1, 1)
+        for fitted, other in ((scalars, others), (others, scalars)):
+            classifier = _fit(fitted)
+            with pytest.raises(ValueError, match="unseen category"):
+                classifier.predict(other)
+            lenient = _fit(fitted, unknown_categories="missing")
+            assert lenient.predict(other).shape == (len(other),)
