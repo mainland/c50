@@ -140,7 +140,12 @@ confidence factor 0.05 and a cost of 5 or 3. The second also winnows. The
 other seeds cover trees and rules, boosting, sampling, subsets, soft
 thresholds, and not-applicable values.
 
-The seeded driver runs outside the default tests. It derives input `i` of
+The seeded driver `c50_training_fuzz_driver` builds on every platform, and
+the `training-fuzz-driver-arguments` test checks its argument handling. The
+driver trains for as long as asked, so only the `training-fuzz-hunt` target,
+which needs a shell, runs a long hunt, and it exists only on Linux and macOS.
+The driver accepts only nonnegative decimal integers and exits with status 2,
+before it creates the input file, on anything else. It derives input `i` of
 seed `s` from `std::mt19937_64`, whose sequence the C++ standard specifies, so
 that two numbers replay any input on any platform. It writes the input to a
 file before it trains, so that a crash leaves the input behind. Build and run

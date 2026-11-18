@@ -563,10 +563,11 @@ cmake --build build --target index-overflow-large
 
 CTest replays a seed corpus of the training target, which trains small
 decoded problems through the text and dense interfaces and compares the
-results. The seeded driver trains pseudorandom inputs for as long as asked and
-is not part of the default build or tests. Run it on Linux or macOS with the
-`training-fuzz-hunt` target, and add the sanitizer options to a build with
-`C50_ENABLE_SANITIZERS`:
+results. The seeded driver `c50_training_fuzz_driver` trains pseudorandom
+inputs for as long as asked. It builds on every platform, and CTest runs it
+only to check its argument handling. Run a long hunt on Linux or macOS with the
+`training-fuzz-hunt` target, which needs a shell, and add the sanitizer options
+to a build with `C50_ENABLE_SANITIZERS`:
 
 ```sh
 C50_HUNT_SEED=1 C50_HUNT_COUNT=100000 \

@@ -16,6 +16,7 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <random>
 #include <string>
 #include <vector>
@@ -40,11 +41,21 @@ std::vector<std::uint8_t> generate(std::uint64_t seed, std::uint64_t index)
     return bytes;
 }
 
+// Parse a nonnegative decimal integer. Accept digits only, with no sign, no
+// whitespace, and no value above the 64-bit range.
 std::uint64_t parse(const char *text, const char *what)
 {
-    char *end = nullptr;
-    const unsigned long long value = std::strtoull(text, &end, 10);
-    if (*text == '\0' || *end != '\0') {
+    constexpr std::uint64_t limit = std::numeric_limits<std::uint64_t>::max();
+    std::uint64_t value = 0;
+    bool valid = *text != '\0';
+    for (const char *digit = text; valid && *digit != '\0'; ++digit) {
+        const bool is_digit = *digit >= '0' && *digit <= '9';
+        const std::uint64_t next =
+            is_digit ? static_cast<std::uint64_t>(*digit - '0') : 0;
+        if (!is_digit || value > (limit - next) / 10) valid = false;
+        else value = value * 10 + next;
+    }
+    if (!valid) {
         std::cerr << "invalid " << what << ": " << text << '\n';
         std::exit(2);
     }
