@@ -284,8 +284,13 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 validate_data(self, X, reset=True, skip_check_array=True)
                 check_consistent_length(X, y_checked)
                 X_checked = dataframe_columns(X)
+            elif (stamps := _nanosecond_frame(X)) is not None:
+                y_checked = validate_data(self, y=y, reset=True)
+                validate_data(self, X, reset=True, skip_check_array=True)
+                check_consistent_length(X, y_checked)
+                X_checked = stamps
             else:
-                X_checked, y_checked = validate_data(
+                X_array, y_checked = validate_data(
                     self,
                     X,
                     y,
@@ -293,6 +298,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                     dtype=_validation_dtype(X),
                     ensure_all_finite=False,
                 )
+                X_checked = _nanosecond_scalars(X_array)
             check_classification_targets(y_checked)
 
             weights = _relative_sample_weight(
@@ -615,15 +621,20 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         if _is_column_frame(X):
             validate_data(self, X, reset=False, skip_check_array=True)
             return dataframe_columns(X)
-        return cast(
-            NDArray[Any],
-            validate_data(
-                self,
-                X,
-                reset=False,
-                dtype=_validation_dtype(X),
-                ensure_all_finite=False,
-            ),
+        if (stamps := _nanosecond_frame(X)) is not None:
+            validate_data(self, X, reset=False, skip_check_array=True)
+            return stamps
+        return _nanosecond_scalars(
+            cast(
+                NDArray[Any],
+                validate_data(
+                    self,
+                    X,
+                    reset=False,
+                    dtype=_validation_dtype(X),
+                    ensure_all_finite=False,
+                ),
+            )
         )
 
     def _attribute_usage(
@@ -1210,6 +1221,11 @@ def _is_pandas_object(values: object) -> bool:
     )
 
 
+def _is_data_frame(values: object) -> bool:
+    """Return whether ``values`` has ``__dataframe__`` or ``columns``."""
+    return hasattr(values, "__dataframe__") or hasattr(values, "columns")
+
+
 def _exports_buffer(values: object) -> bool:
     """Return whether ``values`` supports the buffer protocol."""
     try:
@@ -1261,8 +1277,7 @@ def _host_array(values: Any, name: str) -> Any:
     if (
         isinstance(values, _PASSED_UNCHANGED)
         or _is_pandas_object(values)
-        or hasattr(values, "__dataframe__")
-        or hasattr(values, "columns")
+        or _is_data_frame(values)
     ):
         return values
     if not (
@@ -1318,13 +1333,65 @@ def _is_column_frame(X: object) -> bool:
     )
 
 
+def _is_nanosecond(dtype: np.dtype[Any]) -> bool:
+    """Return whether ``dtype`` is a datetime or timedelta in nanoseconds."""
+    return dtype.kind in "Mm" and np.datetime_data(dtype)[0] == "ns"
+
+
 def _validation_dtype(X: ArrayLike) -> type[object] | None:
-    """Preserve numeric arrays while retaining mixed Python scalar types."""
+    """Preserve numeric arrays while retaining mixed Python scalar types.
+
+    An array of nanosecond dates or durations also keeps its dtype, because the
+    conversion to ``object`` that scikit-learn performs turns its values into
+    integers. ``_nanosecond_scalars`` converts it afterwards.
+    """
     if isinstance(X, np.ndarray) or _is_pandas_object(X):
         dtype = getattr(X, "dtype", None)
         if dtype is not None and np.dtype(dtype).kind in "iufb":
             return None
+    if isinstance(X, np.ndarray) and _is_nanosecond(X.dtype):
+        return None
     return object
+
+
+def _nanosecond_scalars(X: NDArray[Any]) -> NDArray[Any]:
+    """Return an array of nanosecond dates or durations as scalar objects.
+
+    The scalars stay ``numpy.datetime64`` and ``numpy.timedelta64`` values.
+    NumPy converts these units to ``int`` when it converts an array to
+    ``object``, which would make the feature continuous. Any other array is
+    returned unchanged.
+    """
+    if not _is_nanosecond(X.dtype):
+        return X
+    result = np.empty(X.shape, dtype=object)
+    result.flat[:] = list(X.flat)
+    return result
+
+
+def _nanosecond_frame(X: object) -> NDArray[Any] | None:
+    """Return the cells of a data frame of nanosecond values as scalars.
+
+    Only a data frame that is not a pandas object and whose conversion to a
+    NumPy array holds nanosecond dates or durations qualifies, as a polars
+    table or a pyarrow table of those columns does. scikit-learn converts such
+    a frame through ``object``, which turns the values into integers. For any
+    other input the result is ``None``.
+    """
+    if (
+        isinstance(X, np.ndarray)
+        or _is_pandas_object(X)
+        or not _is_data_frame(X)
+    ):
+        return None
+    try:
+        array = np.asarray(X)
+    except Exception:
+        # The conversion that scikit-learn performs reports the error.
+        return None
+    if array.ndim != 2 or not _is_nanosecond(array.dtype):
+        return None
+    return _nanosecond_scalars(array)
 
 
 __all__ = ["NOT_APPLICABLE", "C50Classifier"]

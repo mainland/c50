@@ -92,6 +92,22 @@ names in `export_text` show the form that occurs first in the training rows.
 The same holds for the tuples `(1,)` and `(1.0,)`. The classifier and its
 predictions do not depend on the form.
 
+Dates and durations are categorical in every unit. A NumPy array of `D`, `s`,
+`ms`, or `us` units gives `datetime.date`, `datetime.datetime`, and
+`datetime.timedelta` categories. Nanosecond values stay `numpy.datetime64` and
+`numpy.timedelta64` scalars, because NumPy converts them to `int` when it
+converts an array to `object`. The two forms are different types, so they never
+match. A model fitted on `datetime64[ns]` data rejects the same instants in
+`datetime64[us]` as unseen under `unknown_categories="error"`, and the reverse.
+Cast the data to the unit of the training data first. Nanosecond arrays, lists
+or object arrays of nanosecond scalars, and polars and pyarrow tables whose
+columns are all nanosecond dates or durations give the same classifier and the
+same `categories_`. A polars or pyarrow table that mixes such a column with
+columns of another type reaches C5.0 as the library's own conversion of the
+whole table makes it, and polars converts a nanosecond date in a table with
+float columns to floats, so cast those columns to `us` first. A nanosecond
+`NaT` is missing, as it is in the other units.
+
 ## Not-applicable values
 
 C5.0 distinguishes a missing value, which exists but is unknown, from a
