@@ -106,12 +106,17 @@ struct options {
  * The not_applicable mask denotes not-applicable values, which are distinct
  * from missing values. A schema with an implicit, ignored, label, date, time,
  * or timestamp attribute, a class attribute, or a discrete attribute without
- * explicit values requires the text interface. Each dense operation rejects
- * such a schema with error_code::unsupported, whatever the feature count.
+ * explicit values requires the text interface. Each dense operation runs
+ * every schema check before any check of the dataset. It rejects such a
+ * schema with error_code::unsupported, whatever the dataset's rows, feature
+ * count, stride, or buffers. The dataset checks then follow, and a dataset
+ * that fails one raises error_code::invalid_argument. A buffer is required
+ * only when the operation can address one of its elements, so values needs
+ * a nonnull pointer only when row_count and feature_count are both nonzero.
  * The caller must provide storage for all addressed elements.
  */
 struct dense_dataset {
-    const double *values = nullptr;      /**< Feature data, null only for zero rows. */
+    const double *values = nullptr;      /**< Feature data, null only for zero rows or zero features. */
     std::size_t row_count = 0;            /**< Training requires at least one row. */
     std::size_t feature_count = 0;        /**< Must match the explicit schema. */
     const std::size_t *class_indices = nullptr; /**< Zero-based labels, required for training. */

@@ -274,9 +274,15 @@ static const char *ValidateOptions(const c50_options *options)
     return NULL;
 }
 
+/* The dataset checks.  They run after every schema check, so that an
+   unsupported schema raises unsupported whatever the dataset holds.  A buffer
+   is required only when the operation can address one of its elements, which
+   needs a nonzero row count and a nonzero feature count. */
 static const char *ValidateDenseDataset(const c50_dense_dataset *dataset,
                                         int training)
 {
+    const bool addressable = dataset->row_count && dataset->feature_count;
+
     if ( dataset->row_count > INT_MAX )
     {
         return "dense dataset has too many rows";
@@ -289,16 +295,15 @@ static const char *ValidateDenseDataset(const c50_dense_dataset *dataset,
     {
         return "dense training dataset contains no rows";
     }
-    if ( dataset->row_count && ! dataset->values )
+    if ( addressable && ! dataset->values )
     {
         return "dense dataset values are NULL";
     }
-    if ( dataset->row_count &&
-         dataset->row_stride < dataset->feature_count )
+    if ( addressable && dataset->row_stride < dataset->feature_count )
     {
         return "dense dataset row_stride is smaller than feature_count";
     }
-    if ( dataset->row_count && dataset->row_stride &&
+    if ( addressable &&
          dataset->row_count > SIZE_MAX / dataset->row_stride )
     {
         return "dense dataset dimensions overflow size_t";
@@ -318,12 +323,14 @@ static void DenseError(c50_context *Context, c50::error_code status,
 }
 
 static void ValidateDenseSchema(c50_context *Context,
-                                const c50_dense_dataset *dataset)
+                                const c50_dense_dataset *dataset,
+                                Boolean Train)
 {
     Attribute Att;
 
-    /* The schema checks come first, so that an unsupported schema raises
-       unsupported whatever the width of the caller's array. */
+    /* Every schema check comes first, so that an unsupported schema raises
+       unsupported whatever the rows, width, stride, or buffers of the
+       caller's dataset. */
     if ( Context->schema.class_attribute )
     {
         DenseError(Context, c50::error_code::unsupported,
@@ -353,6 +360,10 @@ static void ValidateDenseSchema(c50_context *Context,
         }
     }
 
+    if ( const char *message = ValidateDenseDataset(dataset, Train) )
+    {
+        DenseError(Context, c50::error_code::invalid_argument, message);
+    }
     if ( dataset->feature_count !=
          (size_t) Context->schema.max_attribute )
     {
@@ -370,7 +381,7 @@ static void LoadDenseData(c50_context *Context,
     Boolean SelectTrain;
     DataRec DVec;
 
-    ValidateDenseSchema(Context, dataset);
+    ValidateDenseSchema(Context, dataset, Train);
     Context->cases.max_case = -1;
     Context->max_label = 0;
     Context->cases.records =
@@ -764,11 +775,11 @@ void validate_options(const options &settings)
         throw exception(error_code::invalid_argument, error);
 }
 
-dense_dataset validate_dense(dense_dataset dataset, bool training)
+/* Normalize the stride. The dataset checks run inside the operation, after
+   the schema checks. */
+dense_dataset validate_dense(dense_dataset dataset)
 {
     if (!dataset.row_stride) dataset.row_stride = dataset.feature_count;
-    if (const auto error = ValidateDenseDataset(&dataset, training))
-        throw exception(error_code::invalid_argument, error);
     return dataset;
 }
 }
@@ -813,7 +824,7 @@ predictions predictor::predict(std::string_view cases)
 
 predictions predictor::predict(const dense_dataset &cases)
 {
-    auto dataset = validate_dense(cases, false);
+    auto dataset = validate_dense(cases);
     c50_predict_state state{};
     state.dense_dataset = &dataset;
     return predictions(RunPredictor(*data_, state));
@@ -858,7 +869,7 @@ model model::train(context &workspace, model_kind kind, std::string_view names,
 {
     validate_model_inputs(kind, names, costs);
     validate_options(settings);
-    auto dataset = validate_dense(training, true);
+    auto dataset = validate_dense(training);
     c50_train_state state{};
     state.kind = kind;
     state.options = settings;
@@ -908,7 +919,7 @@ predictions model::predict(context &workspace, std::string_view cases) const
 
 predictions model::predict(context &workspace, const dense_dataset &cases) const
 {
-    auto dataset = validate_dense(cases, false);
+    auto dataset = validate_dense(cases);
     c50_predict_state state{};
     state.model = data_.get();
     state.dense_dataset = &dataset;
@@ -933,7 +944,7 @@ std::vector<std::size_t> model::attribute_usage(context &workspace,
 std::vector<std::size_t> model::attribute_usage(context &workspace,
                                                 const dense_dataset &cases) const
 {
-    auto dataset = validate_dense(cases, false);
+    auto dataset = validate_dense(cases);
     std::vector<std::size_t> usage;
     c50_predict_state state{};
     state.model = data_.get();

@@ -190,31 +190,60 @@ static void dense_support_checks()
     c50::context context;
     const double values[] = {0, 0, 0, 0, 0, 0, 0, 0};
     const std::size_t classes[] = {0, 1};
+    const auto unsupported = c50::error_code::unsupported;
+    // Every dense operation checks the schema before the dataset, so the
+    // rows, the width, and the buffers must not decide the result. The
+    // widths include zero, which leaves no element addressable, and the
+    // null-buffer variants include a dataset that has no storage at all.
+    const auto exercise = [&](c50::model &model, const std::string &names_data,
+                              const std::string &label, std::size_t width,
+                              c50::error_code expected) {
+        for (std::size_t rows : {0u, 2u}) {
+            for (bool null_buffers : {false, true}) {
+                const std::string where = label + " at width " +
+                    std::to_string(width) + ", " + std::to_string(rows) +
+                    " rows" + (null_buffers ? ", null buffers" : "");
+                const c50::dense_dataset cases(
+                    null_buffers ? nullptr : values, rows, width);
+                const c50::dense_dataset training(
+                    null_buffers ? nullptr : values, rows, width,
+                    null_buffers ? nullptr : classes);
+                auto predictor = model.prepare_predictor();
+                rejects(expected, [&] { model.predict(context, cases); },
+                        where + ", predict");
+                rejects(expected, [&] { model.attribute_usage(context, cases); },
+                        where + ", attribute usage");
+                rejects(expected, [&] { predictor.predict(cases); },
+                        where + ", predictor");
+                rejects(expected, [&] {
+                    c50::model::train(context, c50::model_kind::tree,
+                                      names_data, training);
+                }, where + ", train");
+            }
+        }
+    };
     for (const auto &schema : schemas) {
         auto model = c50::model::train(context, c50::model_kind::tree, schema.names, schema.data);
-        for (std::size_t width : {schema.width - 1, schema.width, schema.width + 1}) {
-            if (width == 0) continue;
-            const std::string label = std::string(schema.kind) + " at width " + std::to_string(width);
-            const c50::dense_dataset cases(values, 2, width);
-            const c50::dense_dataset training(values, 2, width, classes);
-            const auto unsupported = c50::error_code::unsupported;
-            rejects(unsupported, [&] { model.predict(context, cases); }, label);
-            rejects(unsupported, [&] { model.attribute_usage(context, cases); }, label);
-            rejects(unsupported, [&] {
-                c50::model::train(context, c50::model_kind::tree, schema.names, training);
-            }, label);
-        }
+        for (std::size_t width : {std::size_t{0}, schema.width, schema.width + 1})
+            exercise(model, schema.names, schema.kind, width, unsupported);
     }
     const char dense_schema[] = "a, b.\nx: continuous.\ny: continuous.\n";
     auto model = c50::model::train(context, c50::model_kind::tree, dense_schema, "0,1,a\n1,2,b\n");
-    for (std::size_t width : {1u, 3u}) {
+    // A supported schema still rejects a mismatched width, zero included.
+    // Zero rows with training are rejected for their own reason.
+    for (std::size_t width : {0u, 1u, 3u}) {
+        const std::string label = "supported at width " + std::to_string(width);
         const c50::dense_dataset cases(values, 2, width);
         const c50::dense_dataset training(values, 2, width, classes);
-        rejects(invalid, [&] { model.predict(context, cases); });
-        rejects(invalid, [&] { model.attribute_usage(context, cases); });
+        auto predictor = model.prepare_predictor();
+        rejects(invalid, [&] { model.predict(context, cases); }, label);
+        rejects(invalid, [&] { model.attribute_usage(context, cases); }, label);
+        rejects(invalid, [&] { predictor.predict(cases); }, label);
         rejects(invalid, [&] {
             c50::model::train(context, c50::model_kind::tree, dense_schema, training);
-        });
+        }, label);
+        const c50::dense_dataset none(nullptr, 2, width);
+        rejects(invalid, [&] { model.predict(context, none); }, label + ", null buffer");
     }
 }
 
