@@ -561,3 +561,68 @@ def test_nested_sequences_still_fail_the_shape_check(weights: object) -> None:
         C50Classifier().fit(
             [[0], [1], [2], [3]], [0, 0, 1, 1], sample_weight=weights
         )
+
+
+STRING_DTYPE = getattr(getattr(np, "dtypes", None), "StringDType", None)
+needs_string_dtype = pytest.mark.skipif(
+    STRING_DTYPE is None, reason="NumPy has no variable-width string dtype"
+)
+
+
+@needs_string_dtype
+def test_variable_width_numeric_strings_train_the_float64_classifier() -> None:
+    assert STRING_DTYPE is not None
+    X = [[0], [1], [2], [3]]
+    y = [0, 0, 1, 1]
+    weights = np.array(["1", "2", "1", "2"], dtype=STRING_DTYPE())
+
+    fitted = C50Classifier().fit(X, y, sample_weight=weights)
+    reference = C50Classifier().fit(X, y, sample_weight=[1.0, 2.0, 1.0, 2.0])
+
+    assert _body(fitted.model_.serialized_data) == _body(
+        reference.model_.serialized_data
+    )
+
+
+@needs_string_dtype
+def test_variable_width_strings_that_do_not_parse_raise_value_error() -> None:
+    assert STRING_DTYPE is not None
+    weights = np.array(["1", "x", "1", "2"], dtype=STRING_DTYPE())
+
+    with pytest.raises(ValueError, match="could not convert"):
+        C50Classifier().fit(
+            [[0], [1], [2], [3]], [0, 0, 1, 1], sample_weight=weights
+        )
+
+
+@needs_string_dtype
+@pytest.mark.parametrize(
+    ("sentinel", "error"),
+    [
+        (None, TypeError),
+        (pd.NA, TypeError),
+        (float("nan"), ValueError),
+        ("2", None),
+    ],
+    ids=["None", "pandas.NA", "NaN", "string"],
+)
+def test_variable_width_string_missing_sentinels_follow_the_element_rule(
+    sentinel: object, error: type[Exception] | None
+) -> None:
+    assert STRING_DTYPE is not None
+    X = [[0], [1], [2], [3]]
+    y = [0, 0, 1, 1]
+    dtype = STRING_DTYPE(na_object=sentinel)
+    weights = np.array(["1", sentinel, "1", "2"], dtype=dtype)
+
+    if error is None:
+        fitted = C50Classifier().fit(X, y, sample_weight=weights)
+        reference = C50Classifier().fit(
+            X, y, sample_weight=[1.0, 2.0, 1.0, 2.0]
+        )
+        assert _body(fitted.model_.serialized_data) == _body(
+            reference.model_.serialized_data
+        )
+    else:
+        with pytest.raises(error):
+            C50Classifier().fit(X, y, sample_weight=weights)

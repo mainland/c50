@@ -877,6 +877,9 @@ def _checked_weight_values(sample_weight: ArrayLike) -> NDArray[Any]:
             np.asarray(sample_weight, dtype=object)
         )
     kind = values.dtype.kind
+    if kind == "T":
+        values = values.astype(object)
+        kind = "O"
     if kind in "biufUS":
         return values
     if kind == "O":
