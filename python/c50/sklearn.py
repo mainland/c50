@@ -780,52 +780,107 @@ def _class_sample_weight(
     return weights
 
 
-def _is_weight_number(element: object) -> bool:
-    """Return whether an object element of ``sample_weight`` is acceptable.
+def _is_weight_type(kind: type) -> bool:
+    """Return whether objects of a type are acceptable weights.
 
     A weight is a real number, a ``decimal.Decimal``, or a string.
     ``numpy.timedelta64`` subclasses ``numpy.signedinteger``, so it needs an
     explicit exclusion.
     """
-    if isinstance(element, np.timedelta64):
+    if issubclass(kind, np.timedelta64):
         return False
-    return isinstance(element, (Real, Decimal, np.bool_, str, bytes))
+    return issubclass(kind, (Real, Decimal, np.bool_, str, bytes))
 
 
-def _check_weight_types(sample_weight: ArrayLike) -> None:
-    """Raise ``TypeError`` unless ``sample_weight`` holds numbers or strings.
+def _is_weight_number(element: object) -> bool:
+    """Return whether an object element of ``sample_weight`` is acceptable."""
+    return _is_weight_type(type(element))
+
+
+def _checked_weight_objects(values: NDArray[Any]) -> NDArray[Any]:
+    """Return an object array of weights after checking each element.
+
+    Checking each distinct type once keeps the check fast for a long list of
+    one type. A failure reports the first element of an unacceptable type.
+    """
+    flat = values.ravel()
+    if all(_is_weight_type(kind) for kind in set(map(type, flat))):
+        return values
+    for element in flat:
+        if not _is_weight_number(element):
+            raise TypeError(
+                "sample_weight must hold numbers or strings, not "
+                f"{type(element).__name__}"
+            )
+    return values
+
+
+def _unwrap_weight_elements(values: NDArray[Any]) -> NDArray[Any]:
+    """Prepare the object array of a sequence for the element check.
+
+    A 0-d array element is replaced by the scalar that it holds, which keeps
+    its dtype, so that it is judged like any other element. An element that is
+    a sequence or an array with dimensions makes the weights nested, which
+    raises ``ValueError`` like a nested weight array.
+    """
+    flat = values.ravel()
+    kinds = set(map(type, flat))
+    if not any(issubclass(kind, (list, tuple, np.ndarray)) for kind in kinds):
+        return values
+    unwrapped = np.empty(flat.shape, dtype=object)
+    for index, element in enumerate(flat):
+        if isinstance(element, np.ndarray) and element.ndim == 0:
+            element = element[()]
+        elif isinstance(element, (list, tuple, np.ndarray)):
+            raise ValueError(
+                "sample_weight must be a scalar or a one-dimensional array "
+                "of weights"
+            )
+        unwrapped[index] = element
+    return unwrapped.reshape(values.shape)
+
+
+def _checked_weight_values(sample_weight: ArrayLike) -> NDArray[Any]:
+    """Return the weights as an array, or raise unless they are numbers.
 
     The check runs before any conversion to ``float64``, which would turn
     dates, ``None``, and other objects into numbers or NaN, and would drop the
-    imaginary part of complex numbers. Arrays of boolean, integer, unsigned,
-    float, and string kinds pass. In an object array, each element must be a
-    real number, a ``decimal.Decimal``, or a string.
+    imaginary part of complex numbers. The caller converts the returned array,
+    never the original object, so that the checked elements are the converted
+    ones.
+
+    A NumPy array, or an object that NumPy reads as one, keeps its dtype.
+    Arrays of boolean, integer, unsigned, float, and string kinds pass. A
+    variable-width string array is read as an object array of its elements. In
+    an object array, each element must be a real number, a ``decimal.Decimal``,
+    or a string.
 
     A pandas array with an extension dtype, such as ``Int64``, converts its
     missing values to NaN under a default ``numpy.asarray``. It is converted to
     an object array instead, so that ``pandas.NA`` is rejected like any other
-    object.
+    object. A list, a tuple, or a scalar becomes an object array of its
+    original elements, because NumPy's dtype inference turns a mixture of
+    strings and complex numbers or dates into strings.
     """
     dtype = getattr(sample_weight, "dtype", None)
+    values: NDArray[Any]
     if (
         dtype is not None
         and not isinstance(dtype, np.dtype)
         and hasattr(sample_weight, "to_numpy")
     ):
         values = np.asarray(sample_weight.to_numpy(dtype=object))
-    else:
+    elif isinstance(dtype, np.dtype):
         values = np.asarray(sample_weight)
+    else:
+        values = _unwrap_weight_elements(
+            np.asarray(sample_weight, dtype=object)
+        )
     kind = values.dtype.kind
     if kind in "biufUS":
-        return
+        return values
     if kind == "O":
-        for element in values.ravel():
-            if not _is_weight_number(element):
-                raise TypeError(
-                    "sample_weight must hold numbers or strings, not "
-                    f"{type(element).__name__}"
-                )
-        return
+        return _checked_weight_objects(values)
     raise TypeError(
         f"sample_weight must hold numbers or strings, not dtype {values.dtype}"
     )
@@ -846,8 +901,9 @@ def _relative_sample_weight(
             return None
         weights = class_weights
     else:
-        _check_weight_types(sample_weight)
-        weights = np.asarray(sample_weight, dtype=np.float64)
+        weights = np.asarray(
+            _checked_weight_values(sample_weight), dtype=np.float64
+        )
         if weights.ndim == 0:
             weights = np.full(sample_count, weights)
         if weights.shape != (sample_count,):

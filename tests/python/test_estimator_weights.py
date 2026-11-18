@@ -10,6 +10,7 @@ import datetime as dt
 import decimal
 import fractions
 import pickle
+import warnings
 
 import c50
 import numpy as np
@@ -485,3 +486,78 @@ def test_nonfinite_numeric_weights_remain_value_errors(
 
     with pytest.raises(ValueError, match="finite"):
         C50Classifier().fit(X, y, sample_weight=weights)
+
+
+def _mixed_weights() -> dict[str, tuple[list[object], np.ndarray]]:
+    """Map a label to a mixed list and the object array of its elements."""
+    cases: dict[str, list[object]] = {
+        "numpy complex128 and strings": [np.complex128(1 + 2j), "1", "1", "1"],
+        "numpy complex64 and bytes": [np.complex64(1 + 2j), b"1", b"1", b"1"],
+        "python complex and strings": [1 + 2j, "1", "1", "1"],
+        "numpy datetime64 and strings": [np.datetime64("1970-01-02")]
+        + ["1"] * 3,
+        "date and strings": [dt.date(1970, 1, 2), "1", "1", "1"],
+        "None and strings": [None, "1", "1", "1"],
+        "complex and floats": [1 + 2j, 1.0, 1.0, 1.0],
+    }
+    result = {}
+    for name, elements in cases.items():
+        array = np.empty(len(elements), dtype=object)
+        for index, element in enumerate(elements):
+            array[index] = element
+        result[name] = (elements, array)
+    return result
+
+
+@pytest.mark.parametrize("name", sorted(_mixed_weights()))
+def test_mixed_lists_and_object_arrays_raise_the_same_type_error(
+    name: str,
+) -> None:
+    # NumPy infers a string array from a list of strings and a complex number
+    # or a date. The estimator must judge and convert the original elements.
+    elements, array = _mixed_weights()[name]
+    X = [[0], [1], [2], [3]]
+    y = [0, 0, 1, 1]
+    messages = []
+    for weights in (elements, array):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with pytest.raises(TypeError, match="numbers or strings") as info:
+                C50Classifier().fit(X, y, sample_weight=weights)
+        messages.append(str(info.value))
+    assert messages[0] == messages[1]
+
+
+def test_lists_of_zero_dimensional_arrays_train_the_float64_classifier() -> (
+    None
+):
+    X = [[0], [1], [2], [3]]
+    y = [0, 0, 1, 1]
+    expected = C50Classifier().fit(X, y, sample_weight=[1.0, 2.0, 1.0, 2.0])
+
+    for weights in (
+        [np.array(1.0), np.array(2.0), np.array(1.0), np.array(2.0)],
+        [np.array("1"), np.array("2"), np.array("1"), np.array("2")],
+        [np.array(1), np.array(2.0), "1", decimal.Decimal(2)],
+    ):
+        fitted = C50Classifier().fit(X, y, sample_weight=weights)
+        assert _body(fitted.model_.serialized_data) == _body(
+            expected.model_.serialized_data
+        )
+
+    for weights in (
+        [np.array(1j), "1", "1", "1"],
+        [np.array(np.datetime64("1970-01-02")), 1.0, 1.0, 1.0],
+    ):
+        with pytest.raises(TypeError, match="numbers or strings"):
+            C50Classifier().fit(X, y, sample_weight=weights)
+
+
+@pytest.mark.parametrize(
+    "weights", [[[1.0, 2.0], [3.0, 4.0]], [[1.0], [2.0, 3.0]], [[1.0]] * 4]
+)
+def test_nested_sequences_still_fail_the_shape_check(weights: object) -> None:
+    with pytest.raises(ValueError, match=r"one-dimensional|shape"):
+        C50Classifier().fit(
+            [[0], [1], [2], [3]], [0, 0, 1, 1], sample_weight=weights
+        )
