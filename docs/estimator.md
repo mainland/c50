@@ -384,6 +384,10 @@ estimator checks the type before it converts any weight to `float64`:
   leave it. A `numpy.longdouble` can leave the range only where it is wider
   than `float64`, which excludes Windows and macOS on ARM64.
 
+A `numpy.ma.MaskedArray` of weights is read without its mask, as scikit-learn
+reads it, so a masked weight keeps its data value. Set a weight to zero to
+remove its sample.
+
 The estimator passes the weights to C5.0 as its case-weight attribute. C5.0
 uses case weights when it counts cases but never tests them in a classifier.
 Without `sample_weight`, the names buffer has no case-weight attribute, and the
