@@ -12,7 +12,7 @@ provides the compatible C5.0 text formats and a typed dense NumPy boundary.
    :members:
    :show-inheritance:
 
-.. py:data:: c50.NOT_APPLICABLE
+.. py:data:: NOT_APPLICABLE
 
    Marks a value of ``X`` that is not applicable to its case.
 
