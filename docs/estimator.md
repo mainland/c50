@@ -367,6 +367,14 @@ or a string. The estimator checks the type before it converts any weight to
   value that the conversion produces. A null in a polars or pyarrow numeric
   array becomes NaN and raises `ValueError`. A null in a string or Boolean
   array becomes `None` and raises `TypeError`.
+- A negative weight raises `ValueError`.
+- The estimator rounds each weight to the nearest `float64`. A finite weight
+  that rounds to infinity, or a nonzero weight that rounds to zero, raises
+  `ValueError`. This applies to a Python `int`, a `decimal.Decimal`, a
+  `fractions.Fraction`, a `numpy.longdouble`, and a string, which can hold
+  values outside the range of `float64`. A `numpy.longdouble` can leave the
+  range only where it is wider than `float64`, which excludes Windows and
+  macOS on ARM64.
 
 The estimator passes the weights to C5.0 as its case-weight attribute. C5.0
 uses case weights when it counts cases but never tests them in a classifier.
@@ -375,8 +383,10 @@ classifier is unchanged.
 
 C5.0 divides each case weight by the mean weight, so only the ratios between
 weights matter. Multiplying every weight by a constant does not change the
-classifier. The estimator divides the weights by their mean before training.
-The resulting ratios must fit C5.0's single-precision case weights.
+classifier, provided that every weight stays within the range of `float64`
+after rounding. A weight outside that range raises `ValueError` instead of
+changing the ratios. The estimator divides the weights by their mean before
+training. The resulting ratios must fit C5.0's single-precision case weights.
 
 A weight of 2 is therefore not equivalent to repeating a sample. Repetition
 increases the total weight, while C5.0 rescales the weights to the number of
