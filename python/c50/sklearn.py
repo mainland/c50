@@ -10,6 +10,7 @@ import dataclasses
 import json
 import sys
 from collections.abc import Iterator, Mapping, Sequence
+from decimal import Decimal
 from importlib.metadata import PackageNotFoundError, version
 from numbers import Integral, Real
 from typing import Any, Literal, SupportsIndex, TypeAlias, cast
@@ -223,7 +224,12 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             sample_weight: Optional nonnegative weight for each sample. C5.0
                 uses weights relative to their mean, so multiplying every
                 weight by a constant does not change the classifier. Samples
-                with zero weight are removed before fitting.
+                with zero weight are removed before fitting. A weight is a real
+                number, including a ``bool`` or ``decimal.Decimal``, or a
+                string that parses as one. An array of any other kind, or an
+                object that is neither, is rejected, including ``None``,
+                ``pandas.NA``, dates, times, timedeltas, complex numbers, and
+                the marker.
 
         Returns:
             This fitted estimator.
@@ -231,7 +237,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         Raises:
             TypeError: If a continuous feature contains a non-numeric value
                 other than :data:`c50.NOT_APPLICABLE`, or if ``sample_weight``
-                contains a non-numeric object, including the marker.
+                is an array of datetime, timedelta, complex, or structured kind
+                or contains an object that is not a real number,
+                ``decimal.Decimal``, or string, including the marker.
             ValueError: If the data, schema, options, or cost matrix is
                 invalid, or if ``sample_weight`` contains a string that does
                 not parse as a number.
@@ -772,6 +780,57 @@ def _class_sample_weight(
     return weights
 
 
+def _is_weight_number(element: object) -> bool:
+    """Return whether an object element of ``sample_weight`` is acceptable.
+
+    A weight is a real number, a ``decimal.Decimal``, or a string.
+    ``numpy.timedelta64`` subclasses ``numpy.signedinteger``, so it needs an
+    explicit exclusion.
+    """
+    if isinstance(element, np.timedelta64):
+        return False
+    return isinstance(element, (Real, Decimal, np.bool_, str, bytes))
+
+
+def _check_weight_types(sample_weight: ArrayLike) -> None:
+    """Raise ``TypeError`` unless ``sample_weight`` holds numbers or strings.
+
+    The check runs before any conversion to ``float64``, which would turn
+    dates, ``None``, and other objects into numbers or NaN, and would drop the
+    imaginary part of complex numbers. Arrays of boolean, integer, unsigned,
+    float, and string kinds pass. In an object array, each element must be a
+    real number, a ``decimal.Decimal``, or a string.
+
+    A pandas array with an extension dtype, such as ``Int64``, converts its
+    missing values to NaN under a default ``numpy.asarray``. It is converted to
+    an object array instead, so that ``pandas.NA`` is rejected like any other
+    object.
+    """
+    dtype = getattr(sample_weight, "dtype", None)
+    if (
+        dtype is not None
+        and not isinstance(dtype, np.dtype)
+        and hasattr(sample_weight, "to_numpy")
+    ):
+        values = np.asarray(sample_weight.to_numpy(dtype=object))
+    else:
+        values = np.asarray(sample_weight)
+    kind = values.dtype.kind
+    if kind in "biufUS":
+        return
+    if kind == "O":
+        for element in values.ravel():
+            if not _is_weight_number(element):
+                raise TypeError(
+                    "sample_weight must hold numbers or strings, not "
+                    f"{type(element).__name__}"
+                )
+        return
+    raise TypeError(
+        f"sample_weight must hold numbers or strings, not dtype {values.dtype}"
+    )
+
+
 def _relative_sample_weight(
     sample_weight: ArrayLike | None,
     class_weights: NDArray[np.float64] | None,
@@ -787,6 +846,7 @@ def _relative_sample_weight(
             return None
         weights = class_weights
     else:
+        _check_weight_types(sample_weight)
         weights = np.asarray(sample_weight, dtype=np.float64)
         if weights.ndim == 0:
             weights = np.full(sample_count, weights)

@@ -6,6 +6,9 @@
 
 from __future__ import annotations
 
+import datetime as dt
+import decimal
+import fractions
 import pickle
 
 import c50
@@ -329,3 +332,152 @@ def test_non_numeric_continuous_value_raises_in_every_prediction_method() -> (
     ):
         with pytest.raises(TypeError, match="continuous"):
             method(cases)
+
+
+def _object_weights(element: object) -> np.ndarray:
+    values = np.asarray(weighted_problem()[2], dtype=object)
+    values[3] = element
+    return values
+
+
+REJECTED_WEIGHTS = {
+    "datetime64 array": lambda: np.full(120, "2020-01-01", dtype="M8[D]"),
+    "NaT array": lambda: np.full(120, "NaT", dtype="M8[D]"),
+    "timedelta64 array": lambda: np.ones(120).astype("m8[s]"),
+    "complex array": lambda: np.ones(120, dtype=complex),
+    "complex64 array": lambda: np.ones(120, dtype=np.complex64),
+    "structured array": lambda: np.ones(120, dtype=[("w", "f8")]),
+    "None": lambda: _object_weights(None),
+    "pandas.NA": lambda: _object_weights(pd.NA),
+    "pandas.NaT": lambda: _object_weights(pd.NaT),
+    "date": lambda: _object_weights(dt.date(2020, 1, 1)),
+    "datetime": lambda: _object_weights(dt.datetime(2020, 1, 1)),
+    "time": lambda: _object_weights(dt.time(1)),
+    "timedelta": lambda: _object_weights(dt.timedelta(1)),
+    "numpy datetime64": lambda: _object_weights(np.datetime64("2020-01-01")),
+    "numpy timedelta64": lambda: _object_weights(np.timedelta64(1, "s")),
+    "complex": lambda: _object_weights(1 + 0j),
+    "list in an array": lambda: _object_weights([1.0]),
+    "list with None": lambda: [None, *weighted_problem()[2][1:]],
+    "scalar None": lambda: np.asarray(None),
+    "scalar date": lambda: dt.date(2020, 1, 1),
+    "scalar complex": lambda: 2 + 0j,
+    "scalar numpy timedelta64": lambda: np.timedelta64(5, "s"),
+    "datetime Series": lambda: pd.Series(pd.to_datetime(["2020-01-01"] * 120)),
+    "timedelta Series": lambda: pd.Series(pd.to_timedelta(np.ones(120), "s")),
+    "Int64 Series with NA": lambda: pd.Series(
+        [1, None, *[1] * 118], dtype="Int64"
+    ),
+    "Float64 Series with NA": lambda: pd.Series(
+        [1, None, *[1] * 118], dtype="Float64"
+    ),
+    "boolean Series with NA": lambda: pd.Series(
+        [True, None, *[True] * 118], dtype="boolean"
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(REJECTED_WEIGHTS))
+def test_weights_that_are_not_numbers_or_strings_raise_type_error(
+    name: str,
+) -> None:
+    # The rule is applied before any conversion to float64, which would turn
+    # dates into numbers, None into NaN, and complex numbers into their real
+    # parts.
+    X, y, _ = weighted_problem()
+    classifier = C50Classifier()
+
+    with pytest.raises(TypeError, match="numbers or strings"):
+        classifier.fit(X, y, sample_weight=REJECTED_WEIGHTS[name]())
+    assert not hasattr(classifier, "model_")
+
+
+def _accepted_weights() -> dict[str, tuple[object, np.ndarray]]:
+    """Map a label to a weight input and the float64 weights it denotes."""
+    weights = np.where(np.arange(120) % 3 == 0, 1.0, 2.0)
+    ints = np.where(np.arange(120) % 3 == 0, 1, 2)
+    return {
+        "float64 list": (weights.tolist(), weights),
+        "int tuple": (tuple(ints.tolist()), weights),
+        "bool list": ([True] * 120, np.ones(120)),
+        "float32 array": (weights.astype(np.float32), weights),
+        "float16 array": (weights.astype(np.float16), weights),
+        "int8 array": (ints.astype(np.int8), weights),
+        "uint64 array": (ints.astype(np.uint64), weights),
+        "bool array": (np.ones(120, dtype=bool), np.ones(120)),
+        "string list": ([str(v) for v in ints], weights),
+        "bytes array": (ints.astype("S1"), weights),
+        "object array": (weights.astype(object), weights),
+        "object array of numpy scalars": (
+            np.asarray([np.float32(v) for v in weights], dtype=object),
+            weights,
+        ),
+        "object array of Fractions": (
+            np.asarray(
+                [fractions.Fraction(int(v)) for v in ints], dtype=object
+            ),
+            weights,
+        ),
+        "object array of numpy bool": (
+            np.asarray([np.bool_(True)] * 120, dtype=object),
+            np.ones(120),
+        ),
+        "object array of Decimals": (
+            np.asarray([decimal.Decimal(int(v)) for v in ints], dtype=object),
+            weights,
+        ),
+        "Decimal list": ([decimal.Decimal(int(v)) for v in ints], weights),
+        "scalar Decimal": (decimal.Decimal("2.5"), np.ones(120)),
+        "scalar int": (3, np.ones(120)),
+        "scalar float": (2.5, np.ones(120)),
+        "scalar numpy float32": (np.float32(2), np.ones(120)),
+        "scalar string": ("2", np.ones(120)),
+        "int64 Series": (pd.Series(ints), weights),
+        "float64 Series": (pd.Series(weights), weights),
+        "Int64 Series": (pd.Series(ints, dtype="Int64"), weights),
+        "Float64 Series": (pd.Series(weights, dtype="Float64"), weights),
+        "boolean Series": (
+            pd.Series([True] * 120, dtype="boolean"),
+            np.ones(120),
+        ),
+        "string Series": (pd.Series([str(v) for v in ints]), weights),
+    }
+
+
+@pytest.mark.parametrize("name", sorted(_accepted_weights()))
+def test_numeric_and_string_weights_train_the_float64_classifier(
+    name: str,
+) -> None:
+    X, y, _ = weighted_problem()
+    weights, expected = _accepted_weights()[name]
+
+    fitted = C50Classifier().fit(X, y, sample_weight=weights)
+    reference = C50Classifier().fit(X, y, sample_weight=expected)
+
+    assert fitted.model_.serialized_data == reference.model_.serialized_data
+
+
+@pytest.mark.parametrize(
+    "weights",
+    [
+        pd.Series([np.nan, *[1.0] * 119]),
+        pd.Series([np.inf, *[1.0] * 119]),
+        np.asarray([np.nan, *[1.0] * 119], dtype=object),
+        ["inf", *["1"] * 119],
+        np.asarray(
+            [decimal.Decimal("NaN"), *[decimal.Decimal(1)] * 119], dtype=object
+        ),
+        np.asarray(
+            [decimal.Decimal("Infinity"), *[decimal.Decimal(1)] * 119],
+            dtype=object,
+        ),
+        decimal.Decimal("Infinity"),
+    ],
+)
+def test_nonfinite_numeric_weights_remain_value_errors(
+    weights: object,
+) -> None:
+    X, y, _ = weighted_problem()
+
+    with pytest.raises(ValueError, match="finite"):
+        C50Classifier().fit(X, y, sample_weight=weights)

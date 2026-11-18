@@ -302,12 +302,25 @@ computed after training on the training rows, in batches of
 ## Sample weights
 
 `fit` accepts `sample_weight`, either one finite, nonnegative weight per sample
-or a scalar. A weight that is a non-numeric object, including
-`c50.NOT_APPLICABLE`, raises `TypeError`. A string that does not parse as a
-number raises `ValueError`. The estimator passes the weights to C5.0 as its
-case-weight attribute. C5.0 uses case weights when it counts cases but never
-tests them in a classifier. Without `sample_weight`, the names buffer has no
-case-weight attribute, and the classifier is unchanged.
+or a scalar. A weight is a real number, including `bool` and `decimal.Decimal`,
+or a string. The estimator checks the type before it converts any weight to
+`float64`:
+
+- Arrays of boolean, integer, unsigned, and floating-point kinds are accepted,
+  as are Python and NumPy real numbers and `decimal.Decimal` in lists, object
+  arrays, and pandas columns.
+- A string that parses as a number is accepted, and one that does not raises
+  `ValueError`.
+- Anything else raises `TypeError`: arrays of datetime, timedelta, complex, and
+  structured kinds, and in an object array `None`, `pandas.NA`, `pandas.NaT`,
+  `c50.NOT_APPLICABLE`, dates, times, timedeltas, complex numbers, and any
+  other object.
+- A NaN or infinite number, including a `decimal.Decimal`, raises `ValueError`.
+
+The estimator passes the weights to C5.0 as its case-weight attribute. C5.0
+uses case weights when it counts cases but never tests them in a classifier.
+Without `sample_weight`, the names buffer has no case-weight attribute, and the
+classifier is unchanged.
 
 C5.0 divides each case weight by the mean weight, so only the ratios between
 weights matter. Multiplying every weight by a constant does not change the
