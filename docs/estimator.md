@@ -101,22 +101,37 @@ names in `export_text` show the form that occurs first in the training rows.
 The same holds for the tuples `(1,)` and `(1.0,)`. The classifier and its
 predictions do not depend on the form.
 
-Dates and durations are categorical in every unit. NumPy converts most units
-to Python objects when it converts an array to `object`, and the categories are
+Dates and durations are categorical when NumPy converts them to
+`datetime.date`, `datetime.datetime`, or `datetime.timedelta`, or when their
+unit is in the scalar group described below. NumPy converts most units to
+Python objects when it converts an array to `object`, and the categories are
 those objects: `datetime.date` for `datetime64` in `Y`, `M`, `W`, and `D`,
 `datetime.datetime` for `datetime64` in `h`, `m`, `s`, `ms`, and `us`, and
 `datetime.timedelta` for `timedelta64` in `W`, `D`, `h`, `m`, `s`, `ms`, and
 `us`. NumPy converts `datetime64` in `ns`, `ps`, `fs`, and `as`, and
 `timedelta64` in `Y`, `M`, `ns`, `ps`, `fs`, and `as`, to `int`. The estimator
-keeps those values as `numpy.datetime64` and `numpy.timedelta64` scalars, so
-they stay categories. The two forms are different types, so they never match. A
-model fitted on `datetime64[ns]` data rejects the same instants in
-`datetime64[us]` as unseen under `unknown_categories="error"`, and the reverse.
+keeps those values, which form the scalar group, as `numpy.datetime64` and
+`numpy.timedelta64` scalars, so they stay categories. The two forms are
+different types, so they never match. A model fitted on `datetime64[ns]` data
+rejects the same instants in `datetime64[us]` as unseen under
+`unknown_categories="error"`, and the reverse.
+
 Within the scalar group, a value's unit and step are part of its category, so
 equal values in two units, such as `ns` and `ps`, or `Y` and `M`, are different
 categories on every NumPy release. A model fitted on one rejects the other as
 unseen, and a column that mixes them has one category for each unit. Cast the
 data to the unit of the training data first.
+
+NumPy also converts some values to `int` in the other units, for reasons that
+depend on the value: dates outside the years 1 to 9999, durations longer than
+`datetime.timedelta.max`, and `timedelta64` in the generic unit, which has no
+unit. Those values stay integers. A column in which every value converts to
+`int` trains as continuous, and a column that mixes such values with dates or
+durations is categorical, with the integers as categories of their own. Cast
+the data to a unit and a range that avoid them to keep the feature categorical.
+NumPy 1.26 converts some durations longer than the maximum to a wrong
+`datetime.timedelta` instead, so keep durations within it.
+
 Arrays, lists or object arrays of scalars, and polars and pyarrow tables whose
 columns are all nanosecond dates or durations give the same classifier and the
 same `categories_`. polars and pyarrow hold no other unit of the scalar group.

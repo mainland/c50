@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Tests that dates and durations are categorical in every unit.
+"""Tests that dates and durations are categorical, unit by unit.
 
 NumPy converts dates and durations in some units to `int` when it converts an
 array to `object`, while the other units become `datetime.date`,
@@ -10,7 +10,8 @@ array to `object`, while the other units become `datetime.date`,
 of the first group as `numpy.datetime64` and `numpy.timedelta64` scalars, so
 that each unit is categorical, and a model fitted on one unit rejects the same
 instants in another unit as unseen. Each case below fits or predicts with the
-same values in one unit, one container, and one role.
+same values in one unit, one container, and one role. The last tests cover the
+values that NumPy converts to `int` whatever their unit, which are continuous.
 """
 
 from __future__ import annotations
@@ -314,3 +315,49 @@ def test_calendar_and_linear_durations_train_in_one_column(
     assert classifier.predict(X).shape == (len(X),)
     lenient = _fit(X, unknown_categories="missing")
     assert lenient.predict(X).shape == (len(X),)
+
+
+# Values that NumPy converts to `int` for reasons other than their unit, with
+# the units that convert other values to objects. The predicate looks at the
+# unit only, so these stay integers, and the feature trains as continuous.
+VALUE_DEPENDENT = {
+    "date-after-9999": np.datetime64("10000-01-01", "D")
+    + OFFSETS.astype("timedelta64[D]"),
+    "date-before-year-1": np.datetime64("-0001-01-01", "D")
+    + OFFSETS.astype("timedelta64[D]"),
+    "seconds-after-9999": np.datetime64("300000-01-01", "s")
+    + OFFSETS.astype("timedelta64[s]"),
+    "duration-beyond-max": ((OFFSETS + 1) * 10**10).astype("timedelta64[D]"),
+    "generic-duration": OFFSETS.astype("timedelta64"),
+}
+
+
+def _skip_if_numpy_wraps(name: str) -> None:
+    # NumPy 1.26 converts some durations beyond `timedelta.max` to a wrong
+    # `timedelta` instead of an `int`, so only NumPy 2 gives a fixed result.
+    if (
+        name == "duration-beyond-max"
+        and np.lib.NumpyVersion(np.__version__) < "2.0.0"
+    ):
+        pytest.skip("NumPy 1.26 wraps durations beyond timedelta.max")
+
+
+@pytest.mark.parametrize("name", VALUE_DEPENDENT)
+def test_values_that_numpy_converts_for_other_reasons_stay_integers(
+    name: str,
+) -> None:
+    _skip_if_numpy_wraps(name)
+    values = VALUE_DEPENDENT[name]
+    assert all(isinstance(x, int) for x in values.astype(object))
+    assert not is_integer_time_dtype(values.dtype)
+    classifier = _fit(values.reshape(-1, 1))
+    assert len(classifier.categorical_features_) == 0
+
+
+def test_integers_among_dates_are_categories_of_their_own() -> None:
+    values = _values("date", "D").astype("datetime64[D]")
+    values[0] = np.datetime64("10000-01-01", "D")
+    classifier = _fit(values.reshape(-1, 1))
+    assert list(classifier.categorical_features_) == [0]
+    kinds = {type(category) for category in classifier.categories_[0]}
+    assert kinds == {int, datetime.date}
