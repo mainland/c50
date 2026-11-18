@@ -722,3 +722,45 @@ def test_subnormal_float64_weights_keep_their_rescaling() -> None:
     assert without_date(fitted.model_.serialized_data) == without_date(
         reference.model_.serialized_data
     )
+
+
+def _zero_weight_inputs() -> dict[str, object]:
+    """Map a label to weights that hold zeros outside the float64 path."""
+    values = [0, 1, 2, 1, 2, 1, 2, 0]
+    return {
+        "float list": [float(v) for v in values],
+        "int list": values,
+        "string list": [str(v) for v in values],
+        "unicode array": np.array([str(v) for v in values]),
+        "bytes array": np.array([str(v).encode() for v in values]),
+        "Decimal list": [decimal.Decimal(v) for v in values],
+        "Decimal zero among floats": [decimal.Decimal(0), *values[1:]],
+        "Fraction list": [fractions.Fraction(v) for v in values],
+        "Fraction zero among floats": [fractions.Fraction(0), *values[1:]],
+        "longdouble array": np.array(values, dtype=np.longdouble),
+        "longdouble list": [np.longdouble(v) for v in values],
+        "Float64 Series": pd.Series(values, dtype="Float64"),
+        "Int64 Series": pd.Series(values, dtype="Int64"),
+        "object Series": pd.Series([float(v) for v in values], dtype=object),
+    }
+
+
+@pytest.mark.parametrize("name", sorted(_zero_weight_inputs()))
+def test_zero_weights_outside_the_float64_path_remove_samples(
+    name: str,
+) -> None:
+    # Each zero is exact, so it removes its sample instead of raising the range
+    # error that a nonzero weight rounding to zero raises.
+    X = [[0], [1], [2], [3]] * 2
+    y = [0, 0, 1, 1] * 2
+    expected = [0.0, 1.0, 2.0, 1.0, 2.0, 1.0, 2.0, 0.0]
+
+    fitted = C50Classifier().fit(
+        X, y, sample_weight=_zero_weight_inputs()[name]
+    )
+    reference = C50Classifier().fit(X, y, sample_weight=expected)
+
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
+    np.testing.assert_array_equal(fitted.predict(X), reference.predict(X))
