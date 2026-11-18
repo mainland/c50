@@ -2,6 +2,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include <c50/c50.hpp>
 #include "split_failure_hooks.hpp"
+#include "model_text.hpp"
 #include <atomic>
 #include <condition_variable>
 #include <cstdio>
@@ -98,8 +99,7 @@ void split_test_point(split_test_event event, std::size_t worker)
 
 static std::string body(const c50::model &model)
 {
-    const auto serialized = model.serialized_data();
-    return serialized.substr(serialized.find('\n') + 1);
+    return without_stamp(model.serialized_data());
 }
 
 int main()

@@ -19,6 +19,7 @@ import pandas as pd
 import pytest
 from c50._data import fit_schema
 from c50.sklearn import C50Classifier
+from model_text import without_date
 from numpy.typing import NDArray
 from sklearn.base import clone
 from sklearn.model_selection import GridSearchCV, cross_val_score
@@ -159,13 +160,6 @@ def category_frame(
     return frame
 
 
-def body(model_text: str) -> list[str]:
-    """Return a model without the line that has the time stamp."""
-    return [
-        line for line in model_text.splitlines() if not line.startswith("id=")
-    ]
-
-
 def native_probabilities(
     predictions: c50.Predictions,
 ) -> NDArray[np.float64]:
@@ -265,7 +259,7 @@ def test_estimator_matches_text_input_with_not_applicable(
         build_input(kind, cells(values, mask, g_levels, h_levels)),
         labels_of(classes),
     )
-    assert body(fitted.model_.serialized_data) == body(
+    assert without_date(fitted.model_.serialized_data) == without_date(
         expected_model.serialized_data
     )
 
@@ -304,7 +298,7 @@ def test_not_applicable_only_at_prediction(name: str, kind: str) -> None:
     fitted = estimator(settings).fit(
         build_input(kind, train), labels_of(classes)
     )
-    assert body(fitted.model_.serialized_data) == body(
+    assert without_date(fitted.model_.serialized_data) == without_date(
         expected_model.serialized_data
     )
 
@@ -353,7 +347,7 @@ def test_batches_and_zero_weights_keep_the_mask() -> None:
     weighted = estimator({"prediction_batch_size": 7}).fit(
         X, y, sample_weight=weights
     )
-    assert body(weighted.model_.serialized_data) == body(
+    assert without_date(weighted.model_.serialized_data) == without_date(
         reference.model_.serialized_data
     )
     np.testing.assert_array_equal(
@@ -455,7 +449,7 @@ def test_category_dtype_of_numbers_and_the_sentinel_is_continuous() -> None:
     reference = estimator({}).fit(
         pd.DataFrame(objects, columns=list(COLUMNS)), labels_of(classes)
     )
-    assert body(fitted.model_.serialized_data) == body(
+    assert without_date(fitted.model_.serialized_data) == without_date(
         reference.model_.serialized_data
     )
 
@@ -491,7 +485,7 @@ def test_continuous_features_accept_the_sentinel() -> None:
             for row, flags, k in zip(values, mask, classes, strict=True)
         ),
     )
-    assert body(forced.model_.serialized_data) == body(
+    assert without_date(forced.model_.serialized_data) == without_date(
         expected.serialized_data
     )
     # Another object is still not a number.

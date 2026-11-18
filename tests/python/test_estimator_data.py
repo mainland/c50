@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from c50._data import dataframe_columns, encode_costs, fit_schema
+from model_text import without_date
 
 
 def test_schema_encodes_continuous_and_categorical_features() -> None:
@@ -210,7 +211,9 @@ def test_declared_unused_categories_predict_as_missing() -> None:
     fitted = C50Classifier(**options).fit(train_declared, y)
     # Declared categories do not change the classifier or fitted categories.
     assert fitted.model_.names_data == reference.model_.names_data
-    assert fitted.model_.serialized_data == reference.model_.serialized_data
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
     assert [list(c) for c in fitted.categories_] == [
         list(c) for c in reference.categories_
     ]
@@ -335,7 +338,7 @@ def test_permuted_training_rows_train_the_same_classifier() -> None:
 
     def body(X: pd.DataFrame, labels: np.ndarray) -> str:
         model = C50Classifier(minimum_cases=1).fit(X, labels).model_
-        return model.serialized_data.split("\n", 1)[1]
+        return without_date(model.serialized_data)
 
     reference = body(frame, y)
     for seed in range(3):

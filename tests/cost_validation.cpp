@@ -1,6 +1,7 @@
 /* Copyright 2026 Geoffrey Mainland. */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include <c50/c50.hpp>
+#include "model_text.hpp"
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
@@ -69,7 +70,8 @@ int main()
                                              "no, yes: 0\nyes, no: 0\n");
             auto ordinary = c50::model::train(context, kind, names, data);
             if (!ignored.costs_data().empty() ||
-                ignored.serialized_data() != ordinary.serialized_data())
+                without_stamp(ignored.serialized_data()) !=
+                    without_stamp(ordinary.serialized_data()))
                 throw std::runtime_error("ignored costs changed training");
         }
         // Two-class costs scale the pessimistic error estimate of a leaf by

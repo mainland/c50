@@ -10,6 +10,7 @@ from pathlib import Path
 
 import c50
 import pytest
+from model_text import without_date
 
 TESTS = Path(__file__).resolve().parents[1]
 
@@ -38,13 +39,6 @@ CASES = [
 ]
 
 
-def _body(serialized: str) -> list[str]:
-    """Return a serialized classifier without its dated id line."""
-    lines = serialized.splitlines()
-    assert lines[0].startswith('id="See5/C5.0 2.07 GPL Edition ')
-    return lines[1:]
-
-
 @pytest.mark.parametrize(("fixture", "filename", "settings"), CASES)
 def test_imported_program_models_load_and_predict(
     fixture: str, filename: str, settings: dict[str, object]
@@ -71,7 +65,9 @@ def test_imported_program_models_load_and_predict(
     )
     trained = c50.train(names, data, kind, options, costs)
 
-    assert _body(legacy.serialized_data) == _body(trained.serialized_data)
+    assert without_date(legacy.serialized_data) == without_date(
+        trained.serialized_data
+    )
     cases = data
     if (directory / f"{fixture}.test").exists():
         cases += (directory / f"{fixture}.test").read_text()

@@ -6,6 +6,7 @@
 #include <utility>
 
 #include <c50/c50.hpp>
+#include "model_text.hpp"
 
 static_assert(!std::is_copy_constructible<c50::context>::value,
               "contexts must not be copyable");
@@ -79,7 +80,8 @@ int main()
         dense_training_values, 6, 1, dense_training_classes);
     c50::model dense_trained = c50::model::train(
         context, c50::model_kind::tree, names, dense_training, options);
-    if ( dense_trained.serialized_data() != trained.serialized_data() ) return 1;
+    if ( without_stamp(dense_trained.serialized_data()) !=
+         without_stamp(trained.serialized_data()) ) return 1;
 
     c50::predictions result = trained.predict(context, cases);
     if ( result.size() != 2 || result.class_count() != 2 ||

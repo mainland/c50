@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 import sklearn
 from c50.sklearn import C50Classifier
+from model_text import without_date
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import (
@@ -57,7 +58,7 @@ def mixed_frame() -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
 
 
 def model_data(estimator: C50Classifier) -> str:
-    return str(estimator.model_.serialized_data)
+    return without_date(str(estimator.model_.serialized_data))
 
 
 def test_column_transformer_pipeline_keeps_pandas_columns() -> None:

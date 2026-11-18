@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from c50.sklearn import C50Classifier
-from test_legacy_models import _body
+from model_text import without_date
 
 
 def weighted_problem() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -42,8 +42,8 @@ def test_unit_and_scaled_weights_preserve_the_classifier() -> None:
     scalar = C50Classifier().fit(X, y, sample_weight=3.0)
 
     for fitted in (unit, scalar):
-        assert (
-            fitted.model_.serialized_data == unweighted.model_.serialized_data
+        assert without_date(fitted.model_.serialized_data) == without_date(
+            unweighted.model_.serialized_data
         )
         np.testing.assert_array_equal(
             fitted.predict_proba(X), unweighted.predict_proba(X)
@@ -52,7 +52,9 @@ def test_unit_and_scaled_weights_preserve_the_classifier() -> None:
     weighted = C50Classifier().fit(X, y, sample_weight=weights)
     for scale in (1e-30, 7.5, 1e30):
         scaled = C50Classifier().fit(X, y, sample_weight=weights * scale)
-        assert scaled.model_.serialized_data == weighted.model_.serialized_data
+        assert without_date(scaled.model_.serialized_data) == without_date(
+            weighted.model_.serialized_data
+        )
 
 
 def test_weights_change_the_classifier() -> None:
@@ -61,7 +63,9 @@ def test_weights_change_the_classifier() -> None:
     unweighted = C50Classifier().fit(X, y)
     weighted = C50Classifier().fit(X, y, sample_weight=weights)
 
-    assert weighted.model_.serialized_data != unweighted.model_.serialized_data
+    assert without_date(weighted.model_.serialized_data) != without_date(
+        unweighted.model_.serialized_data
+    )
     assert "case weight: continuous." in weighted.model_.names_data
     assert "case weight" not in unweighted.model_.names_data
 
@@ -89,7 +93,9 @@ def test_extreme_uniform_weights_preserve_the_classifier(
         fitted = C50Classifier(class_weight=class_weight).fit(
             X, y, sample_weight=weights
         )
-    assert fitted.model_.serialized_data == expected.model_.serialized_data
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        expected.model_.serialized_data
+    )
     np.testing.assert_array_equal(
         fitted.predict_proba(X), expected.predict_proba(X)
     )
@@ -112,7 +118,9 @@ def test_subnormal_products_preserve_relative_weights() -> None:
         fitted = C50Classifier(class_weight={"yes": 1e-160, "no": 1e-160}).fit(
             X, y, sample_weight=weights * 1e-160
         )
-    assert fitted.model_.serialized_data == expected.model_.serialized_data
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        expected.model_.serialized_data
+    )
     np.testing.assert_array_equal(
         fitted.predict_proba(X), expected.predict_proba(X)
     )
@@ -156,7 +164,9 @@ def test_weights_match_the_native_case_weight_attribute(
         classifier._native_options(),
     )
 
-    assert classifier.model_.serialized_data == native.serialized_data
+    assert without_date(classifier.model_.serialized_data) == without_date(
+        native.serialized_data
+    )
 
 
 def test_zero_weights_remove_samples() -> None:
@@ -173,7 +183,9 @@ def test_zero_weights_remove_samples() -> None:
         sample_weight=np.concatenate((weights, [0.0, 0.0])),
     )
 
-    assert padded.model_.serialized_data == kept.model_.serialized_data
+    assert without_date(padded.model_.serialized_data) == without_date(
+        kept.model_.serialized_data
+    )
     assert padded.classes_.tolist() == ["no", "yes"]
     assert padded.categories_[3].tolist() == kept.categories_[3].tolist()
     np.testing.assert_array_equal(
@@ -199,7 +211,9 @@ def test_dataframe_weights_and_weighted_model_round_trip() -> None:
         frame.to_numpy(dtype=object), y, sample_weight=weights
     )
 
-    assert classifier.model_.serialized_data == expected.model_.serialized_data
+    assert without_date(classifier.model_.serialized_data) == without_date(
+        expected.model_.serialized_data
+    )
     probabilities = classifier.predict_proba(frame)
     np.testing.assert_array_equal(
         probabilities, expected.predict_proba(frame.to_numpy(dtype=object))
@@ -242,12 +256,17 @@ def test_class_weights_are_sample_weights_by_class() -> None:
         X, y, sample_weight=weights
     )
 
-    assert mapped.model_.serialized_data == expected.model_.serialized_data
-    assert scaled.model_.serialized_data == expected.model_.serialized_data
-    assert partial.model_.serialized_data == expected.model_.serialized_data
-    assert (
-        combined.model_.serialized_data
-        == C50Classifier()
+    assert without_date(mapped.model_.serialized_data) == without_date(
+        expected.model_.serialized_data
+    )
+    assert without_date(scaled.model_.serialized_data) == without_date(
+        expected.model_.serialized_data
+    )
+    assert without_date(partial.model_.serialized_data) == without_date(
+        expected.model_.serialized_data
+    )
+    assert without_date(combined.model_.serialized_data) == without_date(
+        C50Classifier()
         .fit(X, y, sample_weight=weights * by_class)
         .model_.serialized_data
     )
@@ -273,7 +292,9 @@ def test_balanced_class_weights_favor_the_minority_class() -> None:
     balanced = C50Classifier(class_weight="balanced").fit(X, y)
     expected = C50Classifier().fit(X, y, sample_weight=balanced_weights)
 
-    assert balanced.model_.serialized_data == expected.model_.serialized_data
+    assert without_date(balanced.model_.serialized_data) == without_date(
+        expected.model_.serialized_data
+    )
     assert np.count_nonzero(balanced.predict(X) == "rare") > np.count_nonzero(
         plain.predict(X) == "rare"
     )
@@ -457,7 +478,7 @@ def test_numeric_and_string_weights_train_the_float64_classifier(
     reference = C50Classifier().fit(X, y, sample_weight=expected)
 
     # The id line holds the local date of each fit.
-    assert _body(fitted.model_.serialized_data) == _body(
+    assert without_date(fitted.model_.serialized_data) == without_date(
         reference.model_.serialized_data
     )
 
@@ -541,7 +562,7 @@ def test_lists_of_zero_dimensional_arrays_train_the_float64_classifier() -> (
         [np.array(1), np.array(2.0), "1", decimal.Decimal(2)],
     ):
         fitted = C50Classifier().fit(X, y, sample_weight=weights)
-        assert _body(fitted.model_.serialized_data) == _body(
+        assert without_date(fitted.model_.serialized_data) == without_date(
             expected.model_.serialized_data
         )
 
@@ -579,7 +600,7 @@ def test_variable_width_numeric_strings_train_the_float64_classifier() -> None:
     fitted = C50Classifier().fit(X, y, sample_weight=weights)
     reference = C50Classifier().fit(X, y, sample_weight=[1.0, 2.0, 1.0, 2.0])
 
-    assert _body(fitted.model_.serialized_data) == _body(
+    assert without_date(fitted.model_.serialized_data) == without_date(
         reference.model_.serialized_data
     )
 
@@ -620,7 +641,7 @@ def test_variable_width_string_missing_sentinels_follow_the_element_rule(
         reference = C50Classifier().fit(
             X, y, sample_weight=[1.0, 2.0, 1.0, 2.0]
         )
-        assert _body(fitted.model_.serialized_data) == _body(
+        assert without_date(fitted.model_.serialized_data) == without_date(
             reference.model_.serialized_data
         )
     else:
@@ -698,6 +719,6 @@ def test_subnormal_float64_weights_keep_their_rescaling() -> None:
 
     fitted = C50Classifier().fit(X, y, sample_weight=weights)
 
-    assert _body(fitted.model_.serialized_data) == _body(
+    assert without_date(fitted.model_.serialized_data) == without_date(
         reference.model_.serialized_data
     )

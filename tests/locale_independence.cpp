@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <c50/c50.hpp>
+#include "model_text.hpp"
 
 #ifdef _WIN32
 int main()
@@ -87,7 +88,7 @@ snapshot run(c50::model_kind kind, const std::string &loaded_text)
 
 bool equal(const snapshot &left, const snapshot &right)
 {
-    return left.text == right.text && left.classes == right.classes &&
+    return without_stamp(left.text) == without_stamp(right.text) && left.classes == right.classes &&
            left.cuts == right.cuts;
 }
 

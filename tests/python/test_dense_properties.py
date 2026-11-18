@@ -12,6 +12,7 @@ import c50
 import numpy as np
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+from model_text import without_date
 from numpy.typing import NDArray
 
 
@@ -161,10 +162,8 @@ def datasets(draw: st.DrawFn) -> Dataset:
 
 
 def stable_model_data(model: c50.Model) -> str:
-    """Remove the date-bearing identifier and retain classifier content."""
-    _, separator, content = model.serialized_data.partition("\n")
-    assert separator
-    return content
+    """Remove the date in the identifier and retain classifier content."""
+    return without_date(model.serialized_data)
 
 
 def assert_prediction_shape(
