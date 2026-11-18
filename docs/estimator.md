@@ -253,7 +253,8 @@ C5.0 runs on the CPU. The estimator reads `X`, `y`, `sample_weight`, and
 the same order for every input:
 
 1. NumPy arrays, including masked arrays, NumPy and Python scalars, strings,
-   bytes, lists, tuples, and `None` are used as they are.
+   bytes, lists, tuples, and `None` are used as they are. A masked array keeps
+   its data values, and its mask is ignored.
 2. pandas objects (`DataFrame`, `Series`, `Index`, and extension arrays) are
    used as they are, with the column-wise conversion described above.
 3. Objects with `__dataframe__` or a `columns` attribute, such as polars and
@@ -443,7 +444,9 @@ estimator checks the type before it converts any weight to `float64`:
 
 A `numpy.ma.MaskedArray` of weights is read without its mask, as scikit-learn
 reads it, so a masked weight keeps its data value. Set a weight to zero to
-remove its sample.
+remove its sample. A masked `X` is read the same way, by its data values and
+without its mask, so a masked cell is not a missing value. Set a missing cell
+to `NaN` or `None` instead.
 
 The estimator passes the weights to C5.0 as its case-weight attribute. C5.0
 uses case weights when it counts cases but never tests them in a classifier.

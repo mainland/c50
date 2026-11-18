@@ -695,6 +695,18 @@ def _fit_costs(cost_matrix: Any) -> C50Classifier:
     )
 
 
+def test_a_masked_x_is_read_by_its_data_values() -> None:
+    # The mask does not make a cell missing, as the guide states.
+    masked = _masked(X)
+    masked[:20, 0] = np.ma.masked
+    reference = _fit()
+    candidate = _fit(X=masked)
+    _same_classifier(candidate, reference)
+    np.testing.assert_array_equal(
+        candidate.predict_proba(masked), reference.predict_proba(X)
+    )
+
+
 def test_cost_matrix_containers_give_the_numpy_result() -> None:
     reference = _fit_costs(COSTS)
     containers: list[Any] = [
