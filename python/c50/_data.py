@@ -399,12 +399,23 @@ def encode_costs(class_count: int, cost_matrix: object | None) -> str:
     if cost_matrix is None:
         return ""
 
-    if np.asarray(cost_matrix).dtype.kind in "cMm":
+    try:
+        kind = np.asarray(cost_matrix).dtype.kind
+        costs = None if kind in "cMm" else np.asarray(cost_matrix, dtype=float)
+    except MemoryError:
+        raise
+    except Exception as exc:
+        # NumPy raises TypeError, ValueError, or another exception, depending
+        # on the object that fails to convert, such as a complex number in an
+        # object array, a missing pandas value, or a dict.
+        raise ValueError(
+            f"cost_matrix must hold real numbers that convert to float: {exc}"
+        ) from exc
+    if costs is None:
         raise ValueError(
             "cost_matrix must hold real numbers, not complex, datetime, or "
             "timedelta values"
         )
-    costs = np.asarray(cost_matrix, dtype=float)
     expected_shape = (class_count, class_count)
     if costs.shape != expected_shape:
         raise ValueError(

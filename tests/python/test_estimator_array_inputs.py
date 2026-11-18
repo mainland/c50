@@ -15,6 +15,7 @@ libraries themselves use `pytest.importorskip`.
 from __future__ import annotations
 
 import array
+import datetime
 import mmap
 import os
 import sys
@@ -742,6 +743,26 @@ def test_cost_matrix_of_another_kind_raises_value_error(
         warnings.simplefilter("error")
         with pytest.raises(ValueError, match="real numbers"):
             _fit_costs(cost_matrix)
+
+
+def _cost_objects() -> dict[str, Any]:
+    return {
+        "complex-objects": np.array([[0, 2 + 5j], [1, 0]], dtype=object),
+        "timedelta-objects": [[0, datetime.timedelta(days=2)], [1, 0]],
+        "pandas-na": pd.DataFrame([[0, pd.NA], [1, 0]], dtype="Int64"),
+        "dict": {0: 1.0, 1: 2.0},
+        "generator": (row for row in [[0, 2], [1, 0]]),
+        "text": [["a", "b"], ["c", "d"]],
+    }
+
+
+@pytest.mark.parametrize("name", list(_cost_objects()))
+def test_cost_matrix_that_does_not_convert_to_float_raises_value_error(
+    name: str,
+) -> None:
+    with pytest.raises(ValueError, match="real numbers") as excinfo:
+        _fit_costs(_cost_objects()[name])
+    assert excinfo.value.__cause__ is not None
 
 
 @pytest.mark.parametrize("name", ["polars", "pyarrow"])

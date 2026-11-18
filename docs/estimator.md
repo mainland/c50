@@ -351,12 +351,14 @@ no seed is drawn, and a supplied `RandomState` is not advanced.
 `cost_matrix` accepts an optional square array in predicted-by-actual order.
 Entry `[predicted, actual]` is the cost of predicting the row class when the
 column class is correct. The array is converted like `X`, and it must hold real
-numbers: a complex, datetime, or timedelta array raises `ValueError`. Entries
-must be finite and nonnegative, and diagonal entries must be zero. Costs must
-fit the native single-precision representation. Each actual-class column must
-have a positive, representable sum of error costs. Consequently, binary
-off-diagonal costs must be positive. Individual zero costs are supported in
-multiclass matrices whose columns satisfy this requirement.
+numbers. An array of complex, datetime, or timedelta values, and any object
+that does not convert to `float`, such as a `dict`, a generator, `pandas.NA`,
+or a complex number in an object array, raises `ValueError`. Entries must be
+finite and nonnegative, and diagonal entries must be zero. Costs must fit the
+native single-precision representation. Each actual-class column must have a
+positive, representable sum of error costs. Consequently, binary off-diagonal
+costs must be positive. Individual zero costs are supported in multiclass
+matrices whose columns satisfy this requirement.
 
 `ignore_costs=True` ignores costs during both training and prediction. The
 model retains no costs data in this mode.
