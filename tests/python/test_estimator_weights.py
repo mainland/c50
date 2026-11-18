@@ -895,3 +895,65 @@ def test_each_accepted_weight_type_follows_the_range_rule(name: str) -> None:
         for held in ([one] * 7 + [outside], outside):
             with pytest.raises(ValueError, match="rounded to float64"):
                 C50Classifier().fit(X, y, sample_weight=held)
+
+
+ZERO_STRINGS = [
+    "0e1000000000000000000",
+    "0E+1000000000000000000",
+    "0e-1999999999999999998",
+    "0e-3000000000000000000",
+    "0e100000000000000000000000",
+    "+0e1000000000000000000",
+    "-0e1000000000000000000",
+    "-0.00E-3000000000000000000",
+    "0_0e1000000000000000000",
+    " \t0e1000000000000000000\n",
+    "\N{ARABIC-INDIC DIGIT ZERO}e1000000000000000000",
+]
+
+
+def _zero_string_weights() -> dict[str, object]:
+    result: dict[str, object] = {}
+    for text in ZERO_STRINGS:
+        result[f"list {text!r}"] = [text, *["1"] * 7]
+        result[f"unicode array {text!r}"] = np.array([text, *["1"] * 7])
+        if text.isascii():
+            result[f"bytes array {text!r}"] = np.array(
+                [text.encode(), *[b"1"] * 7]
+            )
+    return result
+
+
+@pytest.mark.parametrize("name", sorted(_zero_string_weights()))
+def test_zero_strings_with_huge_exponents_remove_samples(name: str) -> None:
+    # A zero mantissa makes the weight zero whatever the exponent, although
+    # Decimal cannot parse an exponent of this size.
+    X = [[0], [1], [2], [3]] * 2
+    y = [0, 0, 1, 1] * 2
+
+    fitted = C50Classifier().fit(
+        X, y, sample_weight=_zero_string_weights()[name]
+    )
+    reference = C50Classifier().fit(X, y, sample_weight=[0.0] + [1.0] * 7)
+
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "1e-3000000000000000000",
+        "1e3000000000000000000",
+        "0.1e-2000000000000000000",
+    ],
+)
+def test_nonzero_strings_with_huge_exponents_still_raise(text: str) -> None:
+    for weights in ([text, *["1"] * 7], np.array([text, *["1"] * 7])):
+        with pytest.raises(ValueError, match="rounded to float64"):
+            C50Classifier().fit(
+                [[0], [1], [2], [3]] * 2,
+                [0, 0, 1, 1] * 2,
+                sample_weight=weights,
+            )

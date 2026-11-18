@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import re
 import sys
 from collections.abc import Iterator, Mapping, Sequence
 from decimal import Decimal, InvalidOperation
@@ -916,20 +917,34 @@ def _checked_weight_values(sample_weight: ArrayLike) -> NDArray[Any]:
     )
 
 
+def _weight_text(element: str | bytes) -> str | None:
+    """Return the text of a string weight, or ``None`` if it cannot decode."""
+    if isinstance(element, str):
+        return element
+    try:
+        return element.decode()
+    except UnicodeDecodeError:
+        return None
+
+
 def _weight_is_finite(element: Any) -> bool:
     """Return whether the exact value of an accepted weight is finite.
 
     The element has an accepted type. Decimal and string weights can hold
     values beyond ``float64``, so only a floating-point number needs a NumPy
-    test, which handles ``longdouble`` without rounding.
+    test, which handles ``longdouble`` without rounding. A string that
+    ``Decimal`` cannot parse has an exponent too large for it. Such a string is
+    not NaN or infinite, because ``Decimal`` parses those.
     """
     if isinstance(element, Decimal):
         return element.is_finite()
     if isinstance(element, (str, bytes)):
+        text = _weight_text(element)
+        if text is None:
+            return True
         try:
-            text = element.decode() if isinstance(element, bytes) else element
             return Decimal(text).is_finite()
-        except (UnicodeDecodeError, InvalidOperation):
+        except InvalidOperation:
             return True
     if isinstance(element, (float, np.floating)):
         return bool(np.isfinite(element))
@@ -937,12 +952,23 @@ def _weight_is_finite(element: Any) -> bool:
 
 
 def _weight_is_zero(element: Any) -> bool:
-    """Return whether the exact value of an accepted weight is zero."""
+    """Return whether the exact value of an accepted weight is zero.
+
+    ``Decimal`` cannot parse a string with an exponent of very large magnitude,
+    about ``10**18`` or more. Such a string is zero exactly when its mantissa
+    is zero, whatever the exponent.
+    """
     if isinstance(element, (str, bytes)):
+        text = _weight_text(element)
+        if text is None:
+            return False
         try:
-            text = element.decode() if isinstance(element, bytes) else element
             return Decimal(text) == 0
-        except (UnicodeDecodeError, InvalidOperation):
+        except InvalidOperation:
+            pass
+        try:
+            return Decimal(re.split("[eE]", text, maxsplit=1)[0]) == 0
+        except InvalidOperation:
             return False
     return bool(element == 0)
 
