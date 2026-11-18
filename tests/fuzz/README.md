@@ -140,7 +140,12 @@ confidence factor 0.05 and a cost of 5 or 3. The second also winnows. The
 other seeds cover trees and rules, boosting, sampling, subsets, soft
 thresholds, and not-applicable values.
 
-The seeded driver runs outside the default tests. It derives input `i` of
+The seeded driver `c50_training_fuzz_driver` builds on every platform, and
+the `training-fuzz-driver-arguments` test checks its argument handling. The
+driver trains for as long as asked, so only the `training-fuzz-hunt` target,
+which needs a shell, runs a long hunt, and it exists only on Linux and macOS.
+The driver accepts only nonnegative decimal integers and exits with status 2,
+before it creates the input file, on anything else. It derives input `i` of
 seed `s` from `std::mt19937_64`, whose sequence the C++ standard specifies, so
 that two numbers replay any input on any platform. It writes the input to a
 file before it trains, so that a crash leaves the input behind. Build and run
@@ -152,9 +157,17 @@ C50_HUNT_SEED=7 C50_HUNT_COUNT=100000 \
 ```
 
 `C50_HUNT_SEED` defaults to 1, `C50_HUNT_COUNT` to 10,000, and `C50_HUNT_INPUT`
-to `training-hunt-input` in the build directory. A finding prints the seed and
-the index, and the input file holds the input. To replay or keep a finding,
-run the driver directly, then copy the file into `corpus/training`:
+to `training-hunt-input` in the build directory. An exception prints the seed
+and the index, and the input file holds the input. An abrupt stop, such as a
+signal, an abort, or a sanitizer report, prints nothing. The input file then
+holds the bytes of the input being trained, because the driver writes it
+before each training. Replay those bytes directly. Make a directory
+`DIR` with the empty subdirectories `schema`, `implicit`, `tree`, `rules`,
+`cases`, and `costs`, copy the file to `DIR/training/input`, and run
+`build/c50_fuzz_seed_replay DIR`. Alternatively, pass the file as the argument
+of a `c50_fuzz_training` harness build, which runs each file named on its
+command line. To replay or keep a finding by its seed and
+index, run the driver directly, then copy the file into `corpus/training`:
 
 ```sh
 build/c50_training_fuzz_driver SEED 1 input.bin INDEX
