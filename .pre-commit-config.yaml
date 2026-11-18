@@ -50,8 +50,6 @@ repos:
     hooks:
       - id: codespell
         args: [--toml, pyproject.toml]
-        # Before Python 3.11, codespell reads the TOML file through `tomli`.
-        additional_dependencies: [tomli]
   - repo: https://github.com/rvben/rumdl-pre-commit
     rev: v0.3.4
     hooks:
