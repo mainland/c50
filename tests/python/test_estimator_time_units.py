@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Tests that dates and durations are categorical in every unit.
+"""Tests that dates and durations are categorical, unit by unit.
 
 NumPy converts dates and durations in some units to `int` when it converts an
 array to `object`, while the other units become `datetime.date`,
@@ -10,7 +10,8 @@ array to `object`, while the other units become `datetime.date`,
 of the first group as `numpy.datetime64` and `numpy.timedelta64` scalars, so
 that each unit is categorical, and a model fitted on one unit rejects the same
 instants in another unit as unseen. Each case below fits or predicts with the
-same values in one unit, one container, and one role.
+same values in one unit, one container, and one role. The last tests cover the
+values that NumPy converts to `int` whatever their unit, which are continuous.
 """
 
 from __future__ import annotations
@@ -344,6 +345,80 @@ def test_equal_counts_of_different_steps_are_ordered_categories(
     assert without_date(forward.model_.serialized_data) == without_date(
         backward.model_.serialized_data
     )
+
+
+# Values that NumPy converts to `int` for reasons other than their unit, with
+# the units that convert other values to objects. The predicate looks at the
+# unit only, so these stay integers, and the feature trains as continuous.
+VALUE_DEPENDENT = {
+    "date-after-9999": np.datetime64("10000-01-01", "D")
+    + OFFSETS.astype("timedelta64[D]"),
+    "date-before-year-1": np.datetime64("-0001-01-01", "D")
+    + OFFSETS.astype("timedelta64[D]"),
+    "seconds-after-9999": np.datetime64("300000-01-01", "s")
+    + OFFSETS.astype("timedelta64[s]"),
+    "duration-beyond-max": ((OFFSETS + 1) * 10**10).astype("timedelta64[D]"),
+    "generic-duration": OFFSETS.astype("timedelta64"),
+}
+
+
+NUMPY_WRAPS = np.lib.NumpyVersion(np.__version__) < "2.2.0"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        pytest.param(
+            name,
+            marks=pytest.mark.skipif(
+                name == "duration-beyond-max" and NUMPY_WRAPS,
+                reason="NumPy before 2.2 wraps it, which the next test pins",
+            ),
+        )
+        for name in VALUE_DEPENDENT
+    ],
+)
+def test_values_that_numpy_converts_for_other_reasons_stay_integers(
+    name: str,
+) -> None:
+    values = VALUE_DEPENDENT[name]
+    assert all(isinstance(x, int) for x in values.astype(object))
+    assert not is_integer_time_dtype(values.dtype)
+    classifier = _fit(values.reshape(-1, 1))
+    assert len(classifier.categorical_features_) == 0
+
+
+def test_numpy_before_2_2_wraps_some_durations_beyond_the_maximum() -> None:
+    # NumPy releases before 2.2 convert some durations in `W`, `D`, `h`, `m`,
+    # `s`, and `ms` longer than about nine million years, positive or negative,
+    # to a wrong `timedelta` instead of an `int`. The wrong value can equal
+    # another value of the column. The estimator does not repair it, which the
+    # guide states.
+    values = [5, 2**32 + 5, 2**63 - 1, -(2**32 + 5)]
+    durations = np.array(values, dtype="timedelta64[D]")
+    converted = list(durations.astype(object))
+    column = durations[np.arange(len(OFFSETS)) % 4].reshape(-1, 1)
+    categories = _fit(column).categories_[0]
+    days = datetime.timedelta(days=5)
+    if NUMPY_WRAPS:
+        wrong = [days, days, datetime.timedelta(days=-1)]
+        wrong.append(datetime.timedelta(days=-5))
+        assert converted == wrong
+        assert len(categories) == 3
+    else:
+        assert converted[0] == days
+        assert converted[1:] == values[1:]
+        assert all(type(x) is int for x in converted[1:])
+        assert len(categories) == 4
+
+
+def test_integers_among_dates_are_categories_of_their_own() -> None:
+    values = _values("date", "D").astype("datetime64[D]")
+    values[0] = np.datetime64("10000-01-01", "D")
+    classifier = _fit(values.reshape(-1, 1))
+    assert list(classifier.categorical_features_) == [0]
+    kinds = {type(category) for category in classifier.categories_[0]}
+    assert kinds == {int, datetime.date}
 
 
 def _empty_polars() -> Any:
