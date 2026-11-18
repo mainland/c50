@@ -239,7 +239,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 ``fractions.Fraction``, or a string or bytes that parses as a
                 number. Each must be of exactly one of these types, so convert
                 a subclass, such as an ``enum.IntEnum`` member, with ``int``,
-                ``float``, or ``str`` first. Convert any other real number,
+                ``float``, or ``str`` first. NumPy's own scalar types are
+                accepted, including ``numpy.str_`` and ``numpy.bytes_``, which
+                subclass ``str`` and ``bytes``. Convert any other real number,
                 such as one from an arbitrary-precision library, with ``float``
                 first. An array of any other kind, or an object of any other
                 type, is rejected, including ``None``, ``pandas.NA``, dates,
@@ -257,8 +259,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 or contains an object whose type is not exactly ``bool``,
                 ``int``, ``float``, a NumPy boolean, integer, or floating-point
                 number, ``decimal.Decimal``, ``fractions.Fraction``, ``str``,
-                or ``bytes``, including a subclass of one of these, another
-                real number, and the marker.
+                or ``bytes``, including a subclass of one of these other than
+                ``numpy.str_`` and ``numpy.bytes_``, another real number, and
+                the marker.
             ValueError: If the data, schema, options, or cost matrix is
                 invalid, if an array cannot be converted to NumPy, as for a
                 tensor in device memory, or if ``sample_weight`` contains a
