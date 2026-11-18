@@ -239,7 +239,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 such as one from an arbitrary-precision library, with ``float``
                 first. An array of any other kind, or an object of any other
                 type, is rejected, including ``None``, ``pandas.NA``, dates,
-                times, timedeltas, complex numbers, and the marker.
+                times, timedeltas, complex numbers, and the marker. A
+                ``numpy.ma.MaskedArray`` is read without its mask, so set a
+                weight to zero to remove its sample.
 
         Returns:
             This fitted estimator.
