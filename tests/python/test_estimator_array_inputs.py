@@ -573,6 +573,19 @@ def test_any_exception_of_a_conversion_raises_value_error(role: str) -> None:
     assert isinstance(caught.value.__cause__, _LibraryError)
 
 
+@pytest.mark.parametrize("role", ROLES)
+def test_exhausted_memory_propagates_from_a_conversion(role: str) -> None:
+    class OutOfMemory(_TensorLike):
+        def __array__(
+            self, dtype: Any = None, copy: bool | None = None
+        ) -> np.ndarray:
+            raise MemoryError("the array does not fit")
+
+    values = X if _DIMENSIONS.get(role, 2) == 2 else Y.astype(float)
+    with pytest.raises(MemoryError, match="does not fit"):
+        _call(role, OutOfMemory(values))
+
+
 def test_an_exception_that_is_not_an_exception_propagates() -> None:
     class Panic(BaseException):
         pass

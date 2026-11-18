@@ -275,10 +275,11 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 if ``sample_weight`` contains a string that does not parse as a
                 number, a NaN, an infinity, or a negative number. A finite
                 weight also raises it when rounding to ``float64`` makes it
-                infinite, or makes it zero although it is not. An exception of
-                any other kind that the conversion raises, such as the
+                infinite, or makes it zero although it is not. A
+                ``MemoryError`` that the conversion raises propagates, as does
+                an exception that is not an ``Exception``, such as the
                 ``PanicException`` that polars 2.0 raises for a 128-bit integer
-                array, propagates.
+                array.
         """
         self._clear_fitted_state()
         fitted = False
@@ -1293,9 +1294,10 @@ def _host_array(values: Any, name: str) -> Any:
 
     Raises:
         ValueError: If an array's library, or the probe of the input, raises an
-            ``Exception``, whatever its type. A ``BaseException`` that is not
-            an ``Exception``, such as the ``PanicException`` of polars,
-            propagates, because catching it would also catch
+            ``Exception`` other than ``MemoryError``, whatever its type.
+        MemoryError: If the conversion exhausts memory. It propagates, as does
+            a ``BaseException`` that is not an ``Exception``, such as the
+            ``PanicException`` of polars, because catching it would also catch
             ``KeyboardInterrupt``.
     """
     if isinstance(values, _PASSED_UNCHANGED) or _is_pandas_object(values):
@@ -1309,6 +1311,10 @@ def _host_array(values: Any, name: str) -> Any:
         ):
             return values
         return np.asarray(values)
+    except MemoryError:
+        # Exhausted memory is not a problem of the input, as the package
+        # documentation promises.
+        raise
     except Exception as exc:
         raise ValueError(
             f"{name} cannot be converted to a NumPy array: {exc} C5.0 runs on "
