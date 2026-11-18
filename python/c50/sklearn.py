@@ -7,10 +7,13 @@
 from __future__ import annotations
 
 import dataclasses
+import decimal
 import json
+import re
 import sys
 from collections.abc import Iterator, Mapping, Sequence
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+from fractions import Fraction
 from importlib.metadata import PackageNotFoundError, version
 from numbers import Integral, Real
 from typing import Any, Literal, SupportsIndex, TypeAlias, cast
@@ -912,6 +915,124 @@ def _checked_weight_values(sample_weight: ArrayLike) -> NDArray[Any]:
     )
 
 
+def _weight_text(element: str | bytes) -> str | None:
+    """Return the text of a string weight, or ``None`` if it cannot decode.
+
+    NumPy's converter ignores the trailing NULs of a NumPy string or bytes
+    scalar, as it does for the elements of a ``U`` or ``S`` array. The exact
+    checks must read the same text, so they drop them from such a scalar. A
+    Python string keeps them, and ``Decimal`` and ``float`` reject it.
+    """
+    if isinstance(element, np.str_):
+        return str(element).rstrip("\x00")
+    if isinstance(element, np.bytes_):
+        element = bytes(element).rstrip(b"\x00")
+    if isinstance(element, str):
+        return element
+    try:
+        return element.decode()
+    except UnicodeDecodeError:
+        return None
+
+
+# The context under which a string weight is parsed. ``Decimal`` signals an
+# unparsable string through the calling thread's context, so a caller who has
+# untrapped ``InvalidOperation`` would get a NaN instead of the exception that
+# the checks rely on, and every unparsable string would set the caller's flag.
+# Every setting is explicit, so that a change to ``decimal.DefaultContext``
+# does not reach it.
+_PARSE_CONTEXT = decimal.Context(
+    prec=28,
+    rounding=decimal.ROUND_HALF_EVEN,
+    Emin=-999999,
+    Emax=999999,
+    capitals=1,
+    clamp=0,
+    flags=[],
+    traps=[InvalidOperation],
+)
+
+
+def _weight_is_finite(element: Any) -> bool:
+    """Return whether the exact value of an accepted weight is finite.
+
+    A string that ``Decimal`` cannot parse has an exponent too large for it.
+    Such a string is not NaN or infinite, because ``Decimal`` parses those.
+    """
+    if isinstance(element, Decimal):
+        return element.is_finite()
+    if isinstance(element, (str, bytes)):
+        text = _weight_text(element)
+        if text is None:
+            return True
+        with decimal.localcontext(_PARSE_CONTEXT):
+            try:
+                return Decimal(text).is_finite()
+            except InvalidOperation:
+                return True
+    if isinstance(element, (int, Fraction)):
+        return True
+    return bool(np.isfinite(element))
+
+
+def _weight_is_zero(element: object) -> bool:
+    """Return whether the exact value of an accepted weight is zero.
+
+    ``Decimal`` cannot parse a string with an exponent of very large magnitude,
+    about ``10**18`` or more. Such a string is zero exactly when its mantissa
+    is zero, whatever the exponent.
+    """
+    if isinstance(element, (str, bytes)):
+        text = _weight_text(element)
+        if text is None:
+            return False
+        with decimal.localcontext(_PARSE_CONTEXT):
+            try:
+                return Decimal(text) == 0
+            except InvalidOperation:
+                pass
+            try:
+                return Decimal(re.split("[eE]", text, maxsplit=1)[0]) == 0
+            except InvalidOperation:
+                return False
+    return bool(element == 0)
+
+
+def _convert_weights(values: NDArray[Any]) -> NDArray[np.float64]:
+    """Round checked weights to ``float64``, or raise ``ValueError``.
+
+    Each weight is rounded to the nearest ``float64``. A finite weight that
+    rounds to infinity, or a nonzero weight that rounds to zero, makes the
+    ratios between weights unrepresentable, so it raises ``ValueError``. This
+    includes the ``OverflowError`` of a Python integer or a fraction that is
+    too large. Weights that are already ``float64`` or narrower cannot leave
+    the range, and a NaN or infinite weight is left to the caller's check.
+    """
+    message = (
+        "sample_weight must stay finite, and nonzero where it is nonzero, "
+        "when rounded to float64"
+    )
+    try:
+        with np.errstate(over="ignore", under="ignore"):
+            weights = np.asarray(values, dtype=np.float64)
+    except OverflowError as exc:
+        raise ValueError(message) from exc
+    kind = values.dtype.kind
+    if kind in "biu" or (kind == "f" and values.dtype.itemsize <= 8):
+        return weights
+    suspect = np.flatnonzero((weights == 0) | np.isinf(weights))
+    exact = values.ravel()
+    for index in suspect:
+        element = exact[index]
+        if np.isinf(weights.ravel()[index]):
+            lost = _weight_is_finite(element)
+        else:
+            lost = not _weight_is_zero(element)
+        if lost:
+            raise ValueError(message)
+    return weights
+
+
 def _relative_sample_weight(
     sample_weight: ArrayLike | None,
     class_weights: NDArray[np.float64] | None,
@@ -927,9 +1048,7 @@ def _relative_sample_weight(
             return None
         weights = class_weights
     else:
-        weights = np.asarray(
-            _checked_weight_values(sample_weight), dtype=np.float64
-        )
+        weights = _convert_weights(_checked_weight_values(sample_weight))
         if weights.ndim == 0:
             weights = np.full(sample_count, weights)
         if weights.shape != (sample_count,):
