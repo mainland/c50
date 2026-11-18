@@ -94,11 +94,10 @@ jobs:
       fail-fast: false
       matrix:
         # The embeddable packages are pinned by SHA-256. python.org publishes
-        # MD5 digests for 3.10 through 3.12 and Sigstore bundles for 3.13 and
-        # later, and each digest below agrees with them. 3.10 through 3.12
-        # have no later releases with binaries.
+        # MD5 digests for 3.11 and 3.12 and Sigstore bundles for 3.13 and
+        # later, and each digest below agrees with them. 3.11 and 3.12 have no
+        # later releases with binaries.
         include:
-          - {tag: cp310, python: 3.10.11, sha256: 608619f8619075629c9c69f361352a0da6ed7e62f83a0e19c63e0ea32eb7629d}
           - {tag: cp311, python: 3.11.9, sha256: 009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b}
           - {tag: cp312, python: 3.12.10, sha256: 4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3}
           - {tag: cp313, python: 3.13.17, sha256: 9e35319bffedab8b36ad44d8f377cb4f1733bcec257a0b6d04d94f01486ddb38}

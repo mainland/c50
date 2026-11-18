@@ -3,7 +3,7 @@
 ## Support and validation matrix
 
 The native API requires C++17. Installed consumers are compiled as C++17 and
-C++20. The Python package requires Python 3.10 or newer. The estimator's
+C++20. The Python package requires Python 3.11 or newer. The estimator's
 minimum dependencies are joblib 1.3, NumPy 1.26, and scikit-learn 1.6.
 
 The workflows in `.github/workflows` validate each supported target, and the
@@ -23,10 +23,10 @@ their current results.
 | Linux x86-64 | Clang on `ubuntu-24.04` | `validation.yml`, `private-core-clang` | Release build and CTest with `C50_PRIVATE_CORE` and no interprocedural optimization variable, so that the programs link against Clang's LLVM bitcode core |
 | Windows x86-64 | MSVC on `windows-2022`, Python 3.12 | `validation.yml`, `windows` | Native build, CTest, installed consumers, and Python tests |
 | Linux x86-64 | Python 3.12 and the pinned checkers | `validation.yml`, `lint` | The pre-commit hooks: ruff, ruff format, mypy, the license notice check, zizmor on the workflows, codespell, rumdl, and file hygiene checks |
-| Python 3.10 | joblib 1.3.0, NumPy 1.26.4, pandas 2.2.3, scikit-learn 1.6.1 | `validation.yml`, `python-and-docs` | Python tests, mypy, stubtest, and the benchmark smoke test |
-| Python 3.11 through 3.14 | Latest releases | `validation.yml`, `python-and-docs` | As for Python 3.10. Python 3.12 also runs the tutorial test and builds the documentation. |
-| Wheels for CPython 3.10 through 3.14 | Linux x86-64 and ARM64, macOS arm64 and x86-64, Windows AMD64 | `wheels.yml`, `wheels` | Build from the source distribution and test each wheel |
-| Windows AMD64 wheels for CPython 3.10 through 3.14 | `windows-2022` runner, `servercore:ltsc2022` container with process isolation, embeddable CPython | `wheels.yml`, `windows-clean-import` | Import each wheel and train and predict with a tree and a ruleset in a container without the Visual C++ Redistributable |
+| Python 3.11 | joblib 1.3.0, NumPy 1.26.4, pandas 2.2.3, scikit-learn 1.6.1 | `validation.yml`, `python-and-docs` | Python tests, mypy, stubtest, and the benchmark smoke test |
+| Python 3.11 through 3.14 | Latest releases | `validation.yml`, `python-and-docs` | As for the minimum versions. Python 3.12 also runs the tutorial test and builds the documentation. |
+| Wheels for CPython 3.11 through 3.14 | Linux x86-64 and ARM64, macOS arm64 and x86-64, Windows AMD64 | `wheels.yml`, `wheels` | Build from the source distribution and test each wheel |
+| Windows AMD64 wheels for CPython 3.11 through 3.14 | `windows-2022` runner, `servercore:ltsc2022` container with process isolation, embeddable CPython | `wheels.yml`, `windows-clean-import` | Import each wheel and train and predict with a tree and a ruleset in a container without the Visual C++ Redistributable |
 
 Free-threaded Python, GPU arrays, and other compiler or platform combinations
 are not tested. Seven tests run only on Linux. `in-memory-without-files`,
@@ -248,7 +248,7 @@ setarch "$(uname -m)" -R \
 
 ### Installed package
 
-Install the test extra into a Python 3.10-or-newer environment and run pytest:
+Install the test extra into a Python 3.11-or-newer environment and run pytest:
 
 ```sh
 python3 -m venv .venv
@@ -303,7 +303,7 @@ configuration in `pyproject.toml`. Code, comments, and docstrings are limited
 to 79 columns. The pre-commit hooks run ruff and mypy from `.venv`, so install
 the pinned checkers into it with pip 25.1 or newer, then run every hook over
 the tree. The lint environment needs Python 3.11 or newer, because the pinned
-`pre-commit` requires it, although the package supports Python 3.10:
+`pre-commit` requires it, as the package does:
 
 ```sh
 python3 -m venv .venv
@@ -418,7 +418,7 @@ generated `PKG-INFO`, from a checkout of the revision that built it:
 `.github/workflows/wheels.yml` builds the source distribution, checks it, and
 then uses [cibuildwheel](https://cibuildwheel.pypa.io) to build and test wheels
 from it, which verifies that the source distribution is complete. It builds
-CPython 3.10 through 3.14 wheels for manylinux x86-64 and ARM64, macOS arm64
+CPython 3.11 through 3.14 wheels for manylinux x86-64 and ARM64, macOS arm64
 and x86-64, and Windows AMD64. Each wheel is installed in a clean environment
 and must pass the Python test suite. The macOS x86-64 wheels build in their own
 job on an arm64 runner and are tested under Rosetta 2. The workflow runs on
@@ -446,7 +446,7 @@ the Universal C Runtime, which is part of Windows 10 and later.
 GitHub's Windows runners have the Visual C++ Redistributable, so the wheel
 tests cannot detect a missing runtime DLL. The `windows-clean-import` job
 tests each Windows wheel where the redistributable is absent. For each of
-CPython 3.10 through 3.14, it runs `tests/windows_clean_import.ps1` in a
+CPython 3.11 through 3.14, it runs `tests/windows_clean_import.ps1` in a
 `mcr.microsoft.com/windows/servercore:ltsc2022` container started with
 `--isolation=process`, with the wheelhouse, the tests, and an embeddable
 CPython from python.org mounted read-only. The job checks the downloaded

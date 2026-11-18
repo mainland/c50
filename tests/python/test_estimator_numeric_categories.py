@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 from fractions import Fraction
 from itertools import permutations
@@ -350,10 +350,10 @@ def test_model_fitted_on_integers_rejects_equal_decimal() -> None:
 
 
 def test_equal_aware_datetimes_keep_their_first_form() -> None:
-    utc = datetime(2026, 1, 1, 12, tzinfo=timezone.utc)
+    utc = datetime(2026, 1, 1, 12, tzinfo=UTC)
     plus_two = utc.astimezone(timezone(timedelta(hours=2)))
     assert utc == plus_two
-    other = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    other = datetime(2026, 1, 2, tzinfo=UTC)
 
     first = fit_schema(
         object_column(utc, plus_two, other), categorical_features=[0]
