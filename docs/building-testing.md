@@ -613,6 +613,10 @@ python tests/run_built_python.py build/python tests/slow/property_hunt.py \
     --replay build/property-hunt.jsonl
 ```
 
+The script exits with status 2, before it opens a log, when Python runs
+optimized (`-O`, `-OO`, or `PYTHONOPTIMIZE`), because that removes the
+assertions of the checks and a replay would pass on a failing example.
+
 A bounded run establishes only that no failure occurred in those examples.
 
 ## API documentation

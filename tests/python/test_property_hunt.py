@@ -8,12 +8,15 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
 import c50
 import numpy as np
+import pytest
 from test_dense_properties import Dataset
 
 SCRIPT = Path(__file__).resolve().parents[1] / "slow" / "property_hunt.py"
@@ -92,3 +95,34 @@ def test_load_last_reads_null_and_nan_to_the_same_dataset(
             loaded.class_indices, dataset.class_indices
         )
         assert loaded.kind is dataset.kind
+
+
+@pytest.mark.parametrize("flag", ["-O", "-OO"])
+@pytest.mark.parametrize("mode", ["hunt", "replay"])
+def test_optimized_python_is_refused_before_a_log_is_opened(
+    tmp_path: Path, flag: str, mode: str
+) -> None:
+    log = tmp_path / "log.jsonl"
+    if mode == "hunt":
+        arguments = ["--log", str(log), "--examples", "1"]
+    else:
+        log.write_text("")
+        arguments = ["--replay", str(log)]
+    environment = dict(os.environ)
+    package_parent = str(Path(c50.__file__).resolve().parents[1])
+    environment["PYTHONPATH"] = os.pathsep.join(
+        [package_parent, environment.get("PYTHONPATH", "")]
+    )
+    result = subprocess.run(
+        [sys.executable, flag, str(SCRIPT), *arguments],
+        capture_output=True,
+        text=True,
+        env=environment,
+        check=False,
+    )
+    assert result.returncode == 2, result.stderr
+    assert "optimized" in result.stderr
+    if mode == "hunt":
+        assert not log.exists()
+    else:
+        assert log.read_text() == ""

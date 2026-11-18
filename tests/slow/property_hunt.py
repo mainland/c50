@@ -26,6 +26,11 @@ values. `C50_PROPERTY_HUNT_REPLAY` defaults `--replay`, so that the CMake
 target, which sets the environment that a sanitizer build needs, can replay a
 log. The target runs in the build directory, so name the log by an absolute
 path or one relative to that directory.
+
+The script refuses to run under `python -O`, `-OO`, or `PYTHONOPTIMIZE`, and
+exits with status 2 before it opens a log. Optimized execution removes the
+`assert` statements of the checks, so a hunt or a replay would pass on an
+example that the test rejects.
 """
 
 from __future__ import annotations
@@ -149,6 +154,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     Args:
         argv: Command-line arguments, or None for `sys.argv`.
     """
+    if sys.flags.optimize:
+        print(
+            "property_hunt.py: refusing to run with optimized Python "
+            "(-O, -OO, or PYTHONOPTIMIZE), which removes the assertions "
+            "of the checks",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument(
         "--log",
