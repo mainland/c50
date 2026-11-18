@@ -626,6 +626,6 @@ def test_weighted_export_json_lists_only_input_features(
     assert len(exported["feature_names"]) == weighted.n_features_in_
     for group in (*exported["trees"], *exported["rulesets"]):
         assert len(group["feature_use"]) == weighted.n_features_in_
-    assert _condition_features(exported) < {0, 1, 2}
+    assert _condition_features(exported) <= set(range(weighted.n_features_in_))
     assert "case weight" not in weighted.export_json()
     assert "case weight" not in weighted.export_text()
