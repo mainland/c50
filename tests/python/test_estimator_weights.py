@@ -652,6 +652,26 @@ def test_the_element_check_comes_before_the_shape_check(
         )
 
 
+def test_a_masked_weight_array_is_read_without_its_mask() -> None:
+    # scikit-learn reads a masked array through np.asarray, which drops the
+    # mask. A caller who wants a sample removed sets its weight to zero.
+    X, y, weights = weighted_problem()
+    mask = np.arange(len(weights)) < 60
+    masked = np.ma.array(weights, mask=mask)
+    removed = np.where(mask, 0.0, weights)
+
+    fitted = C50Classifier().fit(X, y, sample_weight=masked)
+    unmasked = C50Classifier().fit(X, y, sample_weight=weights)
+    zeroed = C50Classifier().fit(X, y, sample_weight=removed)
+
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        unmasked.model_.serialized_data
+    )
+    assert without_date(fitted.model_.serialized_data) != without_date(
+        zeroed.model_.serialized_data
+    )
+
+
 def test_zero_dimensional_arrays_in_object_arrays_follow_their_dtype() -> None:
     X = [[0], [1], [2], [3]]
     y = [0, 0, 1, 1]
