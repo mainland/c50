@@ -626,6 +626,32 @@ def test_weights_that_are_sequences_raise_type_error(
         )
 
 
+@pytest.mark.parametrize(
+    ("weights", "error", "message"),
+    [
+        ([(1.0,)] * 4, ValueError, "has shape"),
+        ([[1.0, 2.0]] * 4, ValueError, "has shape"),
+        ([[None]] * 4, TypeError, "numbers or strings"),
+        ([[1j]] * 4, TypeError, "numbers or strings"),
+        ([[1.0], [1.0, 2.0], [1.0], [1.0]], TypeError, "numbers or strings"),
+    ],
+    ids=[
+        "equal-length tuples of floats",
+        "equal-length lists of floats",
+        "equal-length lists of None",
+        "equal-length lists of complex",
+        "ragged lists of floats",
+    ],
+)
+def test_the_element_check_comes_before_the_shape_check(
+    weights: list[object], error: type[Exception], message: str
+) -> None:
+    with pytest.raises(error, match=message):
+        C50Classifier().fit(
+            [[0], [1], [2], [3]], [0, 0, 1, 1], sample_weight=weights
+        )
+
+
 def test_zero_dimensional_arrays_in_object_arrays_follow_their_dtype() -> None:
     X = [[0], [1], [2], [3]]
     y = [0, 0, 1, 1]
