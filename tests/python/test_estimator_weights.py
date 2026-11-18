@@ -1200,6 +1200,63 @@ def test_string_weights_ignore_the_callers_decimal_context(
     )
 
 
+def test_each_distinct_zero_is_checked_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A column of strings holds a few spellings of zero, and a Python-level
+    # check of each of a million zeros made conversion several times slower.
+    # Equal objects of different types are still checked separately.
+    calls: list[object] = []
+    exact_check = c50.sklearn._weight_is_zero
+
+    def counting(element: object) -> bool:
+        calls.append(element)
+        return exact_check(element)
+
+    monkeypatch.setattr("c50.sklearn._weight_is_zero", counting)
+    zeros: list[object] = [
+        decimal.Decimal(0),
+        fractions.Fraction(0),
+        0,
+        False,
+        0.0,
+        "0",
+        "0.00",
+        b"0",
+    ]
+    weights = [zero for zero in zeros for _ in range(250)] + [1.0] * 250
+    count = len(weights)
+    X = [[i % 4] for i in range(count)]
+    y = [i % 2 for i in range(count)]
+    arrays = [
+        np.array(["0"] * 250 + ["1"] * 250),
+        np.array([b"0"] * 250 + [b"1"] * 250),
+    ]
+
+    C50Classifier().fit(X, y, sample_weight=weights)
+    assert sorted(map(repr, calls)) == sorted(
+        map(
+            repr,
+            [
+                decimal.Decimal(0),
+                fractions.Fraction(0),
+                "0",
+                "0.00",
+                b"0",
+            ],
+        )
+    )
+
+    for array in arrays:
+        calls.clear()
+        C50Classifier().fit(
+            [[i % 4] for i in range(500)],
+            [i % 2 for i in range(500)],
+            sample_weight=array,
+        )
+        assert len(calls) == 1
+
+
 def test_exact_weight_checks_skip_types_that_float64_holds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
