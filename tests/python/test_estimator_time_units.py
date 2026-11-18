@@ -391,3 +391,33 @@ def test_a_table_of_nanoseconds_without_rows_is_rejected(
     )
     with pytest.raises(ValueError, match=r"0 sample\(s\)"):
         call()
+
+
+class _Frame:
+    """Has `columns`, as a data frame does, and converts to an array."""
+
+    columns = ("t",)
+
+    def __init__(self, values: np.ndarray) -> None:
+        self._values = values
+
+    def __array__(
+        self, dtype: Any = None, copy: bool | None = None
+    ) -> np.ndarray:
+        return np.asarray(self._values, dtype=dtype)
+
+
+@pytest.mark.parametrize("shape", [(), (24,)], ids=["scalar", "vector"])
+def test_a_table_of_nanoseconds_must_be_two_dimensional(
+    shape: tuple[int, ...],
+) -> None:
+    # Only a two-dimensional table of such values takes the path of the tables.
+    # Any other shape goes to scikit-learn, which reports it as it does for
+    # every other container.
+    values = _values("date", "ns")
+    table = _Frame(values.reshape(shape) if shape else values[0])
+    classifier = _fit(values.reshape(-1, 1))
+    with pytest.raises(ValueError, match="Expected 2D array"):
+        C50Classifier(minimum_cases=1).fit(table, LABELS)
+    with pytest.raises(ValueError, match="Expected 2D array"):
+        classifier.predict(table)
