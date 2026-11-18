@@ -239,9 +239,12 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 a constant does not change the classifier, provided that every
                 weight stays within the range of ``float64`` after rounding to
                 it. Samples with zero weight are removed before fitting. A
-                weight is a real number, including a ``bool`` or
-                ``decimal.Decimal``, or a string that parses as one. An array
-                of any other kind, or an object that is neither, is rejected,
+                weight is a ``bool``, ``int``, or ``float``, a NumPy boolean,
+                integer, or floating-point number, a ``decimal.Decimal``, a
+                ``fractions.Fraction``, or a string or bytes that parses as a
+                number. Convert any other real number, such as one from an
+                arbitrary-precision library, with ``float`` first. An array of
+                any other kind, or an object of any other type, is rejected,
                 including ``None``, ``pandas.NA``, dates, times, timedeltas,
                 complex numbers, and the marker.
 
@@ -252,8 +255,10 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             TypeError: If a continuous feature contains a non-numeric value
                 other than :data:`c50.NOT_APPLICABLE`, or if ``sample_weight``
                 is an array of datetime, timedelta, complex, or structured kind
-                or contains an object that is not a real number,
-                ``decimal.Decimal``, or string, including the marker.
+                or contains an object of a type other than ``bool``, ``int``,
+                ``float``, a NumPy boolean, integer, or floating-point number,
+                ``decimal.Decimal``, ``fractions.Fraction``, ``str``, or
+                ``bytes``, including another real number and the marker.
             ValueError: If the data, schema, options, or cost matrix is
                 invalid, if an input conversion to NumPy raises an
                 ``Exception`` other than ``MemoryError``, as for a tensor in
@@ -815,13 +820,30 @@ def _class_sample_weight(
 def _is_weight_type(kind: type) -> bool:
     """Return whether objects of a type are acceptable weights.
 
-    A weight is a real number, a ``decimal.Decimal``, or a string.
-    ``numpy.timedelta64`` subclasses ``numpy.signedinteger``, so it needs an
-    explicit exclusion.
+    The accepted types are a closed list: ``bool``, ``int``, and ``float``,
+    NumPy booleans, integers, and floating-point numbers, ``decimal.Decimal``,
+    ``fractions.Fraction``, ``str``, and ``bytes``. Another real number, even
+    one registered as a ``numbers.Real``, has no finiteness or zero test that
+    the estimator can rely on, so it is not accepted. ``numpy.timedelta64``
+    subclasses ``numpy.signedinteger``, so it needs an explicit exclusion.
     """
     if issubclass(kind, np.timedelta64):
         return False
-    return issubclass(kind, (Real, Decimal, np.bool_, str, bytes))
+    return issubclass(
+        kind,
+        (
+            bool,
+            int,
+            float,
+            np.bool_,
+            np.integer,
+            np.floating,
+            Decimal,
+            Fraction,
+            str,
+            bytes,
+        ),
+    )
 
 
 def _is_weight_number(element: object) -> bool:
@@ -876,10 +898,10 @@ def _checked_weight_values(sample_weight: ArrayLike) -> NDArray[Any]:
     Only a NumPy or pandas object has a ``dtype`` that this function reads. A
     NumPy array keeps its dtype. Arrays of boolean, integer, unsigned, float,
     and string kinds pass. A variable-width string array is read as an object
-    array of its elements. In an object array, each element must be a real
-    number, a ``decimal.Decimal``, or a string. A 0-d array element is replaced
-    by the scalar that it holds, so that its dtype decides. Any other sequence
-    or array element has no accepted type.
+    array of its elements. In an object array, each element must be of an
+    accepted type. A 0-d array element is replaced by the scalar that it holds,
+    so that its dtype decides. Any other sequence or array element has no
+    accepted type.
 
     A pandas object with an extension dtype, such as ``Int64``, converts its
     missing values to NaN under a default ``numpy.asarray``. It is converted to
@@ -961,8 +983,11 @@ _PARSE_CONTEXT = decimal.Context(
 def _weight_is_finite(element: Any) -> bool:
     """Return whether the exact value of an accepted weight is finite.
 
-    A string that ``Decimal`` cannot parse has an exponent too large for it.
-    Such a string is not NaN or infinite, because ``Decimal`` parses those.
+    The element has an accepted type. Decimal and string weights can hold
+    values beyond ``float64``, so only a floating-point number needs a NumPy
+    test, which handles ``longdouble`` without rounding. A string that
+    ``Decimal`` cannot parse has an exponent too large for it. Such a string is
+    not NaN or infinite, because ``Decimal`` parses those.
     """
     if isinstance(element, Decimal):
         return element.is_finite()
@@ -975,12 +1000,12 @@ def _weight_is_finite(element: Any) -> bool:
                 return Decimal(text).is_finite()
             except InvalidOperation:
                 return True
-    if isinstance(element, (int, Fraction)):
-        return True
-    return bool(np.isfinite(element))
+    if isinstance(element, (float, np.floating)):
+        return bool(np.isfinite(element))
+    return True
 
 
-def _weight_is_zero(element: object) -> bool:
+def _weight_is_zero(element: Any) -> bool:
     """Return whether the exact value of an accepted weight is zero.
 
     ``Decimal`` cannot parse a string with an exponent of very large magnitude,
