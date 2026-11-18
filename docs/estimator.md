@@ -198,12 +198,31 @@ pandas is a test dependency, not a runtime requirement. The estimator uses CPU
 NumPy arrays and returns NumPy arrays. It declares `array_api_support=False`.
 It does not promise preservation of another array namespace, device, or dtype.
 
-C5.0 runs on the CPU. Arrays from other Array API libraries, such as PyTorch
-CPU tensors, are converted to NumPy arrays with `numpy.asarray` for `X`, `y`,
-and `sample_weight`, with or without `array_api_dispatch`. Results are NumPy
-arrays. The array's library decides whether it can be converted. An array in
-GPU or other device memory raises `ValueError`, so move it to CPU memory first.
-See the
+C5.0 runs on the CPU. The estimator reads `X`, `y`, and `sample_weight` in
+`fit`, and `X` in `predict`, `predict_proba`, and `score`, in the same order for
+every input:
+
+1. NumPy arrays, including masked arrays, NumPy and Python scalars, strings,
+   bytes, lists, tuples, and `None` are used as they are.
+2. pandas objects (`DataFrame`, `Series`, `Index`, and extension arrays) are
+   used as they are, with the column-wise conversion described above.
+3. Other data frames, such as polars and pyarrow tables, are used as they are,
+   so that scikit-learn reads their feature names.
+4. Arrays from an Array API library are converted with `numpy.asarray`, with or
+   without `array_api_dispatch`.
+5. Any other object that NumPy reads as an array is converted with
+   `numpy.asarray`. That includes PyTorch CPU tensors, polars and pyarrow
+   arrays, and objects that implement `__array__`, `__array_interface__`,
+   `__array_struct__`, or the buffer protocol. A `sample_weight` without a NumPy
+   `dtype` becomes an object array of its elements, so that the checks in
+   [Sample weights](#sample-weights) see each element as it is.
+
+An object that NumPy cannot read as an array, such as a sparse matrix, goes to
+scikit-learn unchanged. Results are NumPy arrays. The array's library decides
+whether it can be converted. An array in GPU or other device memory, a tensor
+that requires gradients, and a `bfloat16` tensor raise `ValueError` that names
+the input and chains the library's exception. Move such an array to CPU memory,
+detach it, or convert its dtype first. See the
 [scikit-learn Array API contract](https://scikit-learn.org/stable/modules/array_api.html).
 
 CI installs pandas and sets `SCIPY_ARRAY_API=1` before importing SciPy or
@@ -331,6 +350,10 @@ estimator checks the type before it converts any weight to `float64`:
   with one or more dimensions as an element also raises `TypeError`, in a
   ragged list or in an object array.
 - A NaN or infinite number, including a `decimal.Decimal`, raises `ValueError`.
+  A missing value in an array from another library raises the error for the
+  value that the conversion produces. A null in a polars or pyarrow numeric
+  array becomes NaN and raises `ValueError`. A null in a string or Boolean
+  array becomes `None` and raises `TypeError`.
 - A negative weight raises `ValueError`.
 - The estimator rounds each weight to the nearest `float64`. A finite weight
   that rounds to infinity, or a nonzero weight that rounds to zero, raises
