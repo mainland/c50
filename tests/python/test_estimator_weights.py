@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 import decimal
+import enum
 import fractions
 import numbers
 import pickle
@@ -922,6 +923,117 @@ def test_real_numbers_outside_the_accepted_types_raise_type_error(
             sample_weight=_foreign_real_weights()[name],
         )
     assert not hasattr(classifier, "model_")
+
+
+class _Count(int):
+    """An int whose float conversion disagrees with its value."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+
+class _Reading(float):
+    """A float whose float conversion disagrees with its value."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+
+class _Amount(decimal.Decimal):
+    """A Decimal that claims to equal zero."""
+
+    def __eq__(self, other: object) -> bool:
+        return True
+
+    __hash__ = decimal.Decimal.__hash__
+
+
+class _Text(str):
+    """A str whose float conversion disagrees with its value."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+
+class _Level(enum.IntEnum):
+    NONE = 0
+    LOW = 1
+    HIGH = 2
+
+
+class _Double(np.float64):
+    """A user subclass of a NumPy scalar type."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+
+_SUBCLASS_ELEMENTS: dict[str, tuple[object, object]] = {
+    "int subclass": (_Count(5), 1),
+    "float subclass": (_Reading(5.0), 1.0),
+    "Decimal subclass": (_Amount(5), decimal.Decimal(1)),
+    "str subclass": (_Text("5"), "1"),
+    "IntEnum": (_Level.HIGH, 1),
+    "numpy float64 subclass": (_Double(5.0), np.float64(1.0)),
+}
+
+
+@pytest.mark.parametrize("name", sorted(_SUBCLASS_ELEMENTS))
+@pytest.mark.parametrize("container", ["list", "object array", "scalar"])
+def test_subclasses_of_accepted_weight_types_raise_type_error(
+    name: str, container: str
+) -> None:
+    # NumPy converts an object through its own __float__, which a subclass can
+    # make disagree with the value that the range checks read.
+    element, one = _SUBCLASS_ELEMENTS[name]
+    X = [[0], [1], [2], [3]] * 2
+    y = [0, 0, 1, 1] * 2
+    weights: object = [element, *[one] * 7]
+    if container == "object array":
+        weights = np.asarray(weights, dtype=object)
+    elif container == "scalar":
+        weights = element
+    classifier = C50Classifier()
+
+    with pytest.raises(TypeError, match="numbers or strings"):
+        classifier.fit(X, y, sample_weight=weights)
+    assert not hasattr(classifier, "model_")
+
+
+@pytest.mark.parametrize(
+    "make",
+    [
+        np.float64,
+        np.longdouble,
+        np.float32,
+        np.int8,
+        np.uint64,
+        np.str_,
+        np.bytes_,
+        np.bool_,
+    ],
+    ids=lambda make: make.__name__,
+)
+def test_numpy_scalar_types_stay_accepted_in_lists(make: type) -> None:
+    X = [[0], [1], [2], [3]] * 2
+    y = [0, 0, 1, 1] * 2
+    ones = [1, 2, 1, 2, 1, 2, 1, 1]
+    if make is np.bool_:
+        ones = [True] * 8
+    reference = C50Classifier().fit(
+        X, y, sample_weight=[float(v) for v in ones]
+    )
+
+    if make is np.bytes_:
+        weights = [np.bytes_(str(v).encode()) for v in ones]
+    else:
+        weights = [make(v) for v in ones]  # type: ignore[call-arg]
+
+    fitted = C50Classifier().fit(X, y, sample_weight=weights)
+
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
 
 
 _LONGDOUBLE = np.longdouble
