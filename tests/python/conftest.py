@@ -21,7 +21,10 @@ settings.register_profile(
     database=None,
     print_blob=True,
 )
-settings.register_profile("explore", print_blob=True)
+# Name the choice, because Hypothesis starts in its `ci` profile under
+# `CI=true`, and a profile that sets only `print_blob` would inherit that
+# profile's `derandomize=True`.
+settings.register_profile("explore", derandomize=False, print_blob=True)
 
 
 def pytest_configure(config: pytest.Config) -> None:
