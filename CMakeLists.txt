@@ -205,7 +205,7 @@ target_compile_features(c50_cpp INTERFACE cxx_std_17)
 target_link_libraries(c50_cpp INTERFACE C50::core)
 
 if(C50_BUILD_PYTHON)
-    find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
+    find_package(Python 3.11 REQUIRED COMPONENTS Interpreter Development.Module)
     find_package(pybind11 3.0 CONFIG REQUIRED)
     # pybind11_add_module adds its own link-time optimization flags unless
     # CMAKE_INTERPROCEDURAL_OPTIMIZATION is defined. Define it only for this
