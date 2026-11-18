@@ -146,13 +146,14 @@ A `VerbOpt` build also checks split-diagnostic order and the resulting
 classifier. The verbose code contains assertions that the build checks only
 when `NDEBUG` is undefined, so configure it with `-DCMAKE_BUILD_TYPE=Debug`. A
 build of another type compiles the assertions out and the test passes without
-checking them. Configure the flag for C++ sources, then run the focused test:
+checking them. Configure the flag for C++ sources, then run the two CLI tests:
 
 ```sh
 cmake -S . -B build/verbose -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_CXX_FLAGS=-DVerbOpt
 cmake --build build/verbose
-ctest --test-dir build/verbose -R cli-verbose-regression --output-on-failure
+ctest --test-dir build/verbose -R '^cli(-verbose)?-regression$' \
+    --output-on-failure
 ```
 
 ## Clang
