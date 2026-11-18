@@ -631,6 +631,8 @@ if(C50_BUILD_FUZZERS)
         VERBATIM
     )
     add_custom_target(fuzz-smoke)
+    # Builds every AFL++ harness without running it.
+    add_custom_target(fuzz-harnesses)
     if(C50_ENABLE_SANITIZERS)
         set(c50_fuzz_memory_limit none)
     else()
@@ -670,6 +672,7 @@ if(C50_BUILD_FUZZERS)
             VERBATIM
         )
         add_dependencies(fuzz-smoke fuzz-smoke-${name})
+        add_dependencies(fuzz-harnesses ${target})
     endfunction()
 
     set(fuzz_kind 0)
