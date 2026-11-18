@@ -530,6 +530,39 @@ def test_dense_class_indices_reject_lossy_conversion(
         factory(NAMES, DENSE_TRAINING, labels)
 
 
+@pytest.mark.parametrize("factory", [c50.train_dense, c50.Model.train_dense])
+@pytest.mark.parametrize("copy", [True, False])
+@pytest.mark.parametrize(
+    "values",
+    [
+        np.full((8, 2), "word"),
+        np.full((8, 2), "word", dtype=object),
+        [[1.0, 2.0]] * 7 + [[1.0]],
+    ],
+    ids=["words", "object-words", "ragged"],
+)
+def test_dense_values_that_cannot_convert_raise_value_error(
+    factory: Callable[..., c50.Model], copy: bool, values: object
+) -> None:
+    with pytest.raises(ValueError, match="values cannot be converted"):
+        factory(NAMES, values, DENSE_CLASSES, copy=copy)
+
+
+def test_dense_values_keep_the_casts_that_the_documentation_names() -> None:
+    expected = c50.train_dense(NAMES, DENSE_TRAINING, DENSE_CLASSES)
+    numeric_text = DENSE_TRAINING.astype(str)
+    for values in (
+        numeric_text,
+        DENSE_TRAINING.astype(np.float32),
+        DENSE_TRAINING.tolist(),
+        np.asfortranarray(DENSE_TRAINING),
+    ):
+        model = c50.train_dense(NAMES, values, DENSE_CLASSES)
+        assert without_date(model.serialized_data) == without_date(
+            expected.serialized_data
+        )
+
+
 @pytest.mark.parametrize("dtype", [np.int8, np.int32, np.uint32, np.uint64])
 def test_dense_class_indices_accept_integer_dtypes(
     dtype: type[np.generic],

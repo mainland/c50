@@ -54,6 +54,26 @@ private:
     std::optional<std::string> copy_;
 };
 
+// The feature matrix of a training call. Its conversion to a C-contiguous
+// float64 array is the one that every dense function performs, but an object
+// that NumPy cannot convert, such as an array of words or a ragged list, raises
+// ValueError that names the argument. pybind11 would raise an unnamed
+// TypeError for it.
+class training_matrix
+{
+public:
+    using array_type =
+        py::array_t<double, py::array::c_style | py::array::forcecast>;
+
+    training_matrix() = default;
+    explicit training_matrix(array_type array) : array_(std::move(array)) {}
+
+    const array_type &array() const noexcept { return array_; }
+
+private:
+    array_type array_;
+};
+
 // The tree depth limit of a load call, where std::nullopt is no limit. The
 // converter accepts None and a count, as the c50 package documents. It rejects
 // anything else with pybind11's TypeError for an unsuitable argument. Zero, a
@@ -279,6 +299,32 @@ struct type_caster<text_argument>
     }
 };
 
+// Accept what a float64 array parameter accepts. When the conversion fails in
+// the converting pass, raise ValueError instead of rejecting the argument.
+template <>
+struct type_caster<training_matrix>
+{
+    PYBIND11_TYPE_CASTER(
+        training_matrix, make_caster<training_matrix::array_type>::name);
+
+    bool load(handle source, bool convert)
+    {
+        make_caster<training_matrix::array_type> array;
+        if ( array.load(source, convert) )
+        {
+            value = training_matrix(
+                cast_op<training_matrix::array_type &&>(std::move(array)));
+            return true;
+        }
+        if ( convert )
+        {
+            throw py::value_error(
+                "values cannot be converted to a float64 array");
+        }
+        return false;
+    }
+};
+
 // Accept None, or a count (see count_index) between 1 and the native size
 // type's maximum.
 template <>
@@ -462,8 +508,9 @@ Returns:
     The trained model.
 
 Raises:
-    ValueError: If an array has the wrong shape or dtype, the row counts
-        differ, a class index or a value is out of range, ``not_applicable``
+    ValueError: If an array has the wrong shape or dtype, ``values`` cannot
+        be converted to a float64 array, the row counts differ, a class
+        index or a value is out of range, ``not_applicable``
         does not have a bool dtype or the shape of ``values``, or an option,
         the schema, or the costs are invalid.
     C50Error: If the schema has an implicit, ignored, label, date, time, or
@@ -845,7 +892,7 @@ public:
     }
 
     static python_model train_dense(const text_argument &names,
-                                    const dense_values<double> &values,
+                                    const training_matrix &matrix,
                                     const py::array &class_indices,
                                     c50::model_kind kind,
                                     c50::options options,
@@ -854,6 +901,7 @@ public:
                                     bool copy,
                                     const std::optional<py::array> &not_applicable)
     {
+        const dense_values<double> &values = matrix.array();
         if ( values.ndim() != 2 )
         {
             throw py::value_error("values must be a two-dimensional array");
