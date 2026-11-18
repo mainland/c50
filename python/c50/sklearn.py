@@ -228,10 +228,15 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
 
         Args:
             X: Dense two-dimensional training data. ``X``, ``y``, and
-                ``sample_weight`` may be NumPy arrays, pandas objects, or any
-                other array that NumPy can read, such as a PyTorch CPU tensor
-                or a polars or pyarrow array. Other arrays are converted with
-                :func:`numpy.asarray`.
+                ``sample_weight`` may be NumPy arrays, lists, pandas objects,
+                objects with ``__dataframe__`` or ``columns``, such as polars
+                and pyarrow tables, or any other object that implements an
+                array protocol (``__array__``, ``__array_interface__``,
+                ``__array_struct__``, or the buffer protocol), such as a
+                PyTorch CPU tensor or a polars or pyarrow array. Array API
+                arrays and the objects of an array protocol are converted with
+                :func:`numpy.asarray`. A ``numpy.ma.MaskedArray`` is read by
+                its data values, without its mask.
             y: One-dimensional class labels.
             sample_weight: Optional weight for each sample, either one finite,
                 nonnegative scalar or one such value per sample. C5.0 uses
@@ -270,16 +275,20 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 ``numpy.str_`` and ``numpy.bytes_``, another real number, and
                 the marker.
             ValueError: If the data, schema, options, or cost matrix is
-                invalid, if an array cannot be converted to NumPy, as for a
-                tensor in device memory or a 128-bit polars integer array, or
-                if ``sample_weight`` contains a string that does not parse as a
-                number, a NaN, an infinity, or a negative number. A finite
-                weight also raises it when rounding to ``float64`` makes it
-                infinite, or makes it zero although it is not. A
-                ``MemoryError`` that the conversion raises propagates, as does
-                an exception that is not an ``Exception``, such as the
-                ``PanicException`` that polars 2.0 raises for a 128-bit integer
-                array.
+                invalid, if an input that implements an array protocol cannot
+                be converted to NumPy, as for a tensor in device memory or a
+                128-bit polars integer array, or if ``sample_weight`` contains
+                a string that does not parse as a number, a NaN, an infinity,
+                or a negative number. A finite weight also raises it when
+                rounding to ``float64`` makes it infinite, or makes it zero
+                although it is not. Any ``Exception`` that the array's library
+                raises during that conversion gives this ``ValueError``,
+                chained to it, except ``MemoryError``.
+            MemoryError: If the conversion of an input exhausts memory. It
+                propagates, as does an exception that is not an ``Exception``,
+                such as the ``PanicException`` that polars 2.0 raises for a
+                128-bit integer array, and an error that scikit-learn raises
+                while it converts a data frame of another library.
         """
         self._clear_fitted_state()
         fitted = False
