@@ -11,6 +11,7 @@ import decimal
 import json
 import re
 import sys
+import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
@@ -133,9 +134,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             ``ValueError`` at ``fit``, and at prediction if ``set_params``
             changes the value after ``fit``.
         cost_matrix: Optional predicted-by-actual misclassification-cost
-            matrix. Its shape must be ``(n_classes, n_classes)``. It must hold
-            real numbers. A complex, datetime, or timedelta matrix raises
-            ``ValueError``.
+            matrix. Its shape must be ``(n_classes, n_classes)``. It is
+            converted like ``X``, and it must hold real numbers: a complex,
+            datetime, or timedelta matrix raises ``ValueError``.
         class_weight: Optional weights for classes, as a mapping from class
             label to weight or ``"balanced"``, which weights each class by
             ``n_samples / (n_classes * n_class_samples)``. Class weights
@@ -227,10 +228,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
 
         Args:
             X: Dense two-dimensional training data. ``X``, ``y``, and
-                ``sample_weight`` may be NumPy arrays, pandas objects, or
-                arrays such as PyTorch CPU tensors that implement
-                ``__array_namespace__`` or ``__array__``. The estimator
-                converts such tensors and Array API arrays with
+                ``sample_weight`` may be NumPy arrays, pandas objects, or any
+                other array that NumPy can read, such as a PyTorch CPU tensor
+                or a polars or pyarrow array. Other arrays are converted with
                 :func:`numpy.asarray`.
             y: One-dimensional class labels.
             sample_weight: Optional weight for each sample, either one finite,
@@ -268,15 +268,16 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 ``numpy.str_`` and ``numpy.bytes_``, another real number, and
                 the marker.
             ValueError: If the data, schema, options, or cost matrix is
-                invalid, if an input conversion to NumPy raises an
-                ``Exception`` other than ``MemoryError``, as for a tensor in
-                device memory, or if ``sample_weight`` contains a string that
-                does not parse as a number, a NaN, an infinity, or a negative
-                number. A finite weight also raises it when rounding to
-                ``float64`` makes it infinite, or makes it zero although it is
-                not.
-            MemoryError: If an input conversion exhausts memory. Other
-                exceptions outside the ``Exception`` hierarchy also propagate.
+                invalid, if an array cannot be converted to NumPy, as for a
+                tensor in device memory or a 128-bit polars integer array, or
+                if ``sample_weight`` contains a string that does not parse as a
+                number, a NaN, an infinity, or a negative number. A finite
+                weight also raises it when rounding to ``float64`` makes it
+                infinite, or makes it zero although it is not. A
+                ``MemoryError`` that the conversion raises propagates, as does
+                an exception that is not an ``Exception``, such as the
+                ``PanicException`` that polars 2.0 raises for a 128-bit integer
+                array.
         """
         self._clear_fitted_state()
         fitted = False
@@ -286,6 +287,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             y = _host_array(y, "y")
             _reject_not_applicable_labels(y)
             sample_weight = _host_array(sample_weight, "sample_weight")
+            cost_matrix = _host_array(self.cost_matrix, "cost_matrix")
             X_checked: NDArray[Any] | Columns
             if _is_column_frame(X):
                 y_checked = validate_data(self, y=y, reset=True)
@@ -339,7 +341,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             names_data = schema.names_data(classes.shape[0])
             training = schema.dense_data(X_checked, "error", weights)
             native_class_indices = np.asarray(class_indices, dtype=np.uintp)
-            costs_data = encode_costs(classes.shape[0], self.cost_matrix)
+            costs_data = encode_costs(classes.shape[0], cost_matrix)
             options = self._native_options()
             model = Model.train_dense(
                 names_data,
@@ -376,8 +378,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             )
             self.cost_matrix_ = (
                 None
-                if self.cost_matrix is None
-                else np.asarray(self.cost_matrix, dtype=float).copy()
+                if cost_matrix is None
+                else np.asarray(cost_matrix, dtype=float).copy()
             )
             self._label_encoder = label_encoder
             self._schema = schema
@@ -902,14 +904,15 @@ def _checked_weight_values(sample_weight: ArrayLike) -> NDArray[Any]:
     never the original object, so that the checked elements are the converted
     ones.
 
-    Only a NumPy or pandas object has a ``dtype`` that this function reads. A
-    NumPy array keeps its dtype. A NumPy scalar of a type outside NumPy's own
-    scalar types, such as a user subclass of ``numpy.float64``, is an object
-    like any other. Arrays of boolean, integer, unsigned, float, and string
-    kinds pass. A variable-width string array is read as an object array of its
-    elements. In an object array, each element must be of an accepted type. A
-    0-d array element is replaced by the scalar that it holds, so that its
-    dtype decides. Any other sequence or array element has no accepted type.
+    The weights have passed ``_host_array``, so only a NumPy array or a pandas
+    object has a ``dtype`` that this function reads. A NumPy array keeps its
+    dtype. A NumPy scalar of a type outside NumPy's own scalar types, such as a
+    user subclass of ``numpy.float64``, is an object like any other. Arrays of
+    boolean, integer, unsigned, float, and string kinds pass. A variable-width
+    string array is read as an object array of its elements. In an object
+    array, each element must be of an accepted type. A 0-d array element is
+    replaced by the scalar that it holds, so that its dtype decides. Any other
+    sequence or array element has no accepted type.
 
     A pandas object with an extension dtype, such as ``Int64``, converts its
     missing values to NaN under a default ``numpy.asarray``. It is converted to
@@ -1182,15 +1185,97 @@ def _relative_sample_weight(
     return relative
 
 
-def _host_array(values: Any, name: str) -> Any:
-    """Convert a CPU array from another library to NumPy.
+# Inputs that need no conversion at the boundary: NumPy arrays and scalars,
+# Python scalars, text, lists, tuples, and ``None``.
+_PASSED_UNCHANGED = (
+    np.ndarray,
+    np.generic,
+    bool,
+    int,
+    float,
+    complex,
+    str,
+    bytes,
+    list,
+    tuple,
+    type(None),
+)
 
-    C5.0 runs on the CPU, so arrays that implement ``__array_namespace__`` or
-    ``__array__`` are converted through NumPy's array protocol. The array's
-    library decides whether conversion is possible, which excludes arrays in
-    device memory, arrays that require gradients, and dtypes that NumPy lacks.
-    NumPy arrays and scalars and pandas objects keep their usual validation.
-    The ``__array__`` path leaves data frames for frame validation.
+# The attributes through which NumPy reads an object as an array. The buffer
+# protocol has no attribute, so ``_exports_buffer`` tests it.
+_ARRAY_PROTOCOLS = (
+    "__array__",
+    "__array_interface__",
+    "__array_struct__",
+    "__array_namespace__",
+)
+
+
+def _is_pandas_object(values: object) -> bool:
+    """Return whether ``values`` is a pandas container.
+
+    pandas is looked up, not imported, so that it stays optional.
+    """
+    pandas = sys.modules.get("pandas")
+    return pandas is not None and isinstance(
+        values,
+        (
+            pandas.DataFrame,
+            pandas.Series,
+            pandas.Index,
+            pandas.api.extensions.ExtensionArray,
+        ),
+    )
+
+
+def _is_data_frame(values: object) -> bool:
+    """Return whether ``values`` has ``__dataframe__`` or ``columns``."""
+    if hasattr(values, "__dataframe__"):
+        return True
+    with warnings.catch_warnings():
+        # A polars LazyFrame warns about its performance when asked for its
+        # columns, and the question here is only whether the attribute exists.
+        warnings.simplefilter("ignore")
+        return hasattr(values, "columns")
+
+
+def _exports_buffer(values: object) -> bool:
+    """Return whether ``values`` supports the buffer protocol."""
+    try:
+        memoryview(values)  # type: ignore[arg-type]
+    except TypeError:
+        return False
+    return True
+
+
+def _host_array(values: Any, name: str) -> Any:
+    """Return ``values`` for validation, converting arrays that NumPy can read.
+
+    Every array-like input of ``fit`` and the prediction methods passes through
+    this function, which sorts it by what it is and never by what its
+    attributes claim. After it, only a NumPy array or a pandas object is asked
+    for its ``dtype``. In this order:
+
+    1. NumPy arrays, including masked arrays, NumPy and Python scalars, text,
+       lists, tuples, and ``None`` are returned unchanged.
+    2. pandas objects are returned unchanged, so that columns, feature names,
+       and ``pandas.NA`` keep their own handling.
+    3. Other data frames are returned unchanged, so that scikit-learn reads
+       their feature names. A data frame implements the interchange protocol
+       ``__dataframe__`` or has ``columns``, as a polars ``DataFrame`` does.
+    4. Arrays from an Array API library are converted with ``numpy.asarray``.
+    5. Any other object that NumPy reads as an array, through ``__array__``,
+       ``__array_interface__``, ``__array_struct__``, or the buffer protocol,
+       is converted with ``numpy.asarray``, which keeps the dtype that the
+       array's library hands over, such as ``datetime64[ns]``. Any other
+       object, such as a sparse matrix, is returned unchanged for
+       scikit-learn to judge.
+
+    C5.0 runs on the CPU, so the array's library decides whether the conversion
+    is possible, which excludes arrays in GPU or other device memory, arrays
+    that require gradients, and dtypes that NumPy lacks. A NumPy scalar is
+    already on the CPU, and converting it would replace a subclass by its base
+    type.
 
     Args:
         values: The input.
@@ -1200,20 +1285,23 @@ def _host_array(values: Any, name: str) -> Any:
         The input, or a NumPy array that holds it.
 
     Raises:
-        ValueError: If conversion raises an ``Exception`` other than
-            ``MemoryError``, whatever its type.
+        ValueError: If an array's library, or the probe of the input, raises an
+            ``Exception`` other than ``MemoryError``, whatever its type.
         MemoryError: If the conversion exhausts memory. It propagates, as does
-            a ``BaseException`` that is not an ``Exception``.
+            a ``BaseException`` that is not an ``Exception``, such as the
+            ``PanicException`` of polars, because catching it would also catch
+            ``KeyboardInterrupt``.
     """
-    if isinstance(values, (np.ndarray, np.generic)) or _is_pandas_object(
-        values
-    ):
-        return values
-    if not hasattr(values, "__array_namespace__") and (
-        not hasattr(values, "__array__") or _is_data_frame(values)
-    ):
+    if isinstance(values, _PASSED_UNCHANGED) or _is_pandas_object(values):
         return values
     try:
+        if _is_data_frame(values):
+            return values
+        if not (
+            any(hasattr(values, protocol) for protocol in _ARRAY_PROTOCOLS)
+            or _exports_buffer(values)
+        ):
+            return values
         return np.asarray(values)
     except MemoryError:
         # Exhausted memory is not a problem of the input, as the package
@@ -1221,6 +1309,15 @@ def _host_array(values: Any, name: str) -> Any:
         raise
     except Exception as exc:
         raise _conversion_error(name, exc) from exc
+
+
+def _conversion_error(name: str, exc: Exception) -> ValueError:
+    """Return the ``ValueError`` for an input that NumPy cannot convert."""
+    return ValueError(
+        f"{name} cannot be converted to a NumPy array: {exc} C5.0 runs on "
+        "the CPU, so the array must be in CPU memory and have a dtype "
+        "that NumPy supports."
+    )
 
 
 def _reject_not_applicable_labels(y: object) -> None:
@@ -1258,37 +1355,6 @@ def _is_column_frame(X: object) -> bool:
         and not any(
             isinstance(dtype, pandas.SparseDtype) for dtype in X.dtypes
         )
-    )
-
-
-def _is_pandas_object(values: object) -> bool:
-    """Return whether ``values`` is a pandas container.
-
-    pandas is looked up, not imported, so that it stays optional.
-    """
-    pandas = sys.modules.get("pandas")
-    return pandas is not None and isinstance(
-        values,
-        (
-            pandas.DataFrame,
-            pandas.Series,
-            pandas.Index,
-            pandas.api.extensions.ExtensionArray,
-        ),
-    )
-
-
-def _is_data_frame(values: object) -> bool:
-    """Return whether ``values`` has ``__dataframe__`` or ``columns``."""
-    return hasattr(values, "__dataframe__") or hasattr(values, "columns")
-
-
-def _conversion_error(name: str, exc: Exception) -> ValueError:
-    """Return the ``ValueError`` for an input that NumPy cannot convert."""
-    return ValueError(
-        f"{name} cannot be converted to a NumPy array: {exc} C5.0 runs on "
-        "the CPU, so the array must be in CPU memory and have a dtype "
-        "that NumPy supports."
     )
 
 
