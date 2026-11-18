@@ -112,8 +112,11 @@ keeps those values as `numpy.datetime64` and `numpy.timedelta64` scalars, so
 they stay categories. The two forms are different types, so they never match. A
 model fitted on `datetime64[ns]` data rejects the same instants in
 `datetime64[us]` as unseen under `unknown_categories="error"`, and the reverse.
-Cast the data to the unit of the training data first. Values of two units in
-the scalar group, such as `ns` and `ps`, have one type and match by value.
+Within the scalar group, a value's unit and step are part of its category, so
+equal values in two units, such as `ns` and `ps`, or `Y` and `M`, are different
+categories on every NumPy release. A model fitted on one rejects the other as
+unseen, and a column that mixes them has one category for each unit. Cast the
+data to the unit of the training data first.
 Arrays, lists or object arrays of scalars, and polars and pyarrow tables whose
 columns are all nanosecond dates or durations give the same classifier and the
 same `categories_`. polars and pyarrow hold no other unit of the scalar group.
@@ -224,9 +227,11 @@ column keeps its dtype's order, without unused categories. Other categorical
 values are grouped by type, with types ordered by module and name, and sorted
 within each type. All real numbers other than `bool` form one group, so `int`
 and `float` values sort together. `categories_` lists each feature's categories
-in this order. Values of a type that cannot be sorted keep their order of first
-occurrence. On the OpenML adult data, four random permutations of the training
-rows each trained the same classifier as the original order.
+in this order. NumPy dates and durations in the scalar group sort by unit, from
+`Y` to `as`, then by step, then by count. Values of any other type that cannot
+be sorted keep their order of first occurrence. On the OpenML adult data, four
+random permutations of the training rows each trained the same classifier as
+the original order.
 
 pandas is a test dependency, not a runtime requirement. The estimator uses CPU
 NumPy arrays and returns NumPy arrays. It declares `array_api_support=False`.
