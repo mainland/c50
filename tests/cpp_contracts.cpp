@@ -1,6 +1,7 @@
 /* Copyright 2026 Geoffrey Mainland. */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
+#include "model_text.hpp"
 #include <c50/c50.hpp>
 
 #include <cmath>
@@ -79,12 +80,6 @@ static void shared_model_concurrency()
     for (auto &worker : workers) worker.get();
 }
 
-static std::string model_body(const c50::model &model)
-{
-    const auto bytes = model.serialized_data();
-    return bytes.substr(bytes.find('\n') + 1); // The first line contains the date.
-}
-
 static void require_predictions_equal(const c50::predictions &actual,
                                       const c50::predictions &expected)
 {
@@ -122,7 +117,8 @@ static void reused_context_matches_fresh()
             auto expected = c50::model::train(fresh, kind, names, data, winnow);
             c50::model::train(reused, kind, names, data, winnow);
             auto model = c50::model::train(reused, kind, names, data, winnow);
-            require(model_body(model) == model_body(expected),
+            require(without_stamp(model.serialized_data()) ==
+                    without_stamp(expected.serialized_data()),
                     "reused context changed a winnowed classifier");
         }
     }
@@ -187,7 +183,8 @@ static void concurrent_parallel_fits()
             ready.wait();
             for (unsigned repeat = 0; repeat < 3; ++repeat) {
                 auto model = c50::model::train(context, kind, schema, data, options);
-                require(model_body(model) == model_body(references[fit]),
+                require(without_stamp(model.serialized_data()) ==
+                        without_stamp(references[fit].serialized_data()),
                         "simultaneous parallel classifier");
                 require_predictions_equal(model.predict(context, cases), expected[fit]);
                 require_predictions_equal(references[0].predict(context, cases), expected[0]);
@@ -240,7 +237,9 @@ static void parallel_schema_equivalence()
             for (unsigned workers : {2u, 4u, 8u}) {
                 context.split_workers(workers);
                 auto model = c50::model::train(context, kind, schema, cases, options, costs);
-                require(model_body(model) == model_body(reference), "mixed-schema classifier");
+                require(without_stamp(model.serialized_data()) ==
+                        without_stamp(reference.serialized_data()),
+                        "mixed-schema classifier");
                 require_predictions_equal(model.predict(context, cases), expected);
                 auto loaded = c50::model::load(context, kind, model.names_data(),
                                                model.serialized_data(), model.costs_data());
@@ -288,7 +287,9 @@ static void parallel_equivalence()
         for (unsigned count : {2u, 4u, 8u}) {
             context.split_workers(count);
             auto model = c50::model::train(context, kind, schema, training, options);
-            require(model_body(model) == model_body(reference), "parallel classifier");
+            require(without_stamp(model.serialized_data()) ==
+                    without_stamp(reference.serialized_data()),
+                    "parallel classifier");
             auto actual = model.predict(context, cases);
             require(actual.size() == rows && actual.class_count() == 3,
                     "parallel result shape");

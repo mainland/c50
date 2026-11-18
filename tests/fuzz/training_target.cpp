@@ -1,6 +1,7 @@
 /* Copyright 2026 Geoffrey Mainland. */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "training_target.hpp"
+#include "../model_text.hpp"
 
 #include <c50/c50.hpp>
 #include <array>
@@ -236,16 +237,6 @@ void same_predictions(const char *what, const c50::predictions &left,
     }
 }
 
-// The first line of a serialized classifier names its creation date.
-std::string stable_content(const c50::model &model)
-{
-    const std::string &text = model.serialized_data();
-    const auto newline = text.find('\n');
-    if (newline == std::string::npos)
-        violation("serialized classifier has no first line");
-    return text.substr(newline + 1);
-}
-
 }
 
 namespace c50::test {
@@ -270,7 +261,8 @@ void exercise_training(const std::uint8_t *bytes, std::size_t size)
         context, input.kind, input.names, training, input.settings,
         input.costs);
 
-    if (stable_content(dense_model) != stable_content(text_model))
+    if (without_stamp(dense_model.serialized_data()) !=
+        without_stamp(text_model.serialized_data()))
         violation("the interfaces trained different classifiers");
     if (dense_model.costs_data() != text_model.costs_data())
         violation("the interfaces kept different costs");
