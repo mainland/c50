@@ -47,6 +47,7 @@ struct problem {
     std::string text_cases;
     std::size_t rows = 0;
     std::size_t features = 0;
+    std::size_t class_count = 0;
     std::vector<double> values;
     std::vector<unsigned char> not_applicable;
     std::vector<std::size_t> classes;
@@ -82,6 +83,7 @@ problem decode(const std::uint8_t *bytes, std::size_t size)
     result.settings.confidence_factor = confidence[in.below(3)];
 
     const unsigned class_count = 2 + in.below(3);
+    result.class_count = class_count;
     const unsigned continuous_count = 1 + in.below(3);
     const unsigned categorical_count = in.below(3);
     const unsigned rows = 1 + in.below(24);
@@ -188,6 +190,21 @@ problem decode(const std::uint8_t *bytes, std::size_t size)
     throw std::runtime_error("property violated: " + message);
 }
 
+// Require one result for each case and one score for each class of the
+// schema. Comparing two results only against each other accepts two empty
+// results for a nonempty dataset.
+void expected_shape(const char *what, const c50::predictions &result,
+                    std::size_t rows, std::size_t classes)
+{
+    const std::string prefix = std::string(what) + ": ";
+    if (result.size() != rows)
+        violation(prefix + "expected " + std::to_string(rows) +
+                  " rows, got " + std::to_string(result.size()));
+    if (result.class_count() != classes)
+        violation(prefix + "expected " + std::to_string(classes) +
+                  " classes, got " + std::to_string(result.class_count()));
+}
+
 // Require identical labels, confidences, and class scores.
 void same_predictions(const char *what, const c50::predictions &left,
                       const c50::predictions &right)
@@ -261,6 +278,10 @@ void exercise_training(const std::uint8_t *bytes, std::size_t size)
     const auto text_predictions =
         text_model.predict(context, input.text_cases);
     const auto dense_predictions = dense_model.predict(context, cases);
+    expected_shape("text predictions", text_predictions, input.rows,
+                   input.class_count);
+    expected_shape("dense predictions", dense_predictions, input.rows,
+                   input.class_count);
     same_predictions("dense and text predictions", dense_predictions,
                      text_predictions);
 
@@ -270,11 +291,18 @@ void exercise_training(const std::uint8_t *bytes, std::size_t size)
     const auto loaded_dense = c50::model::load(
         context, dense_model.kind(), dense_model.names_data(),
         dense_model.serialized_data(), dense_model.costs_data());
-    same_predictions("text model after load",
-                     loaded_text.predict(context, input.text_cases),
+    const auto loaded_text_predictions =
+        loaded_text.predict(context, input.text_cases);
+    const auto loaded_dense_predictions =
+        loaded_dense.predict(context, cases);
+    expected_shape("text model after load", loaded_text_predictions,
+                   input.rows, input.class_count);
+    expected_shape("dense model after load", loaded_dense_predictions,
+                   input.rows, input.class_count);
+    same_predictions("text model after load", loaded_text_predictions,
                      text_predictions);
-    same_predictions("dense model after load",
-                     loaded_dense.predict(context, cases), dense_predictions);
+    same_predictions("dense model after load", loaded_dense_predictions,
+                     dense_predictions);
 }
 
 }
