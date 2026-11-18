@@ -399,6 +399,11 @@ def encode_costs(class_count: int, cost_matrix: object | None) -> str:
     if cost_matrix is None:
         return ""
 
+    if np.asarray(cost_matrix).dtype.kind in "cMm":
+        raise ValueError(
+            "cost_matrix must hold real numbers, not complex, datetime, or "
+            "timedelta values"
+        )
     costs = np.asarray(cost_matrix, dtype=float)
     expected_shape = (class_count, class_count)
     if costs.shape != expected_shape:

@@ -132,7 +132,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             ``ValueError`` at ``fit``, and at prediction if ``set_params``
             changes the value after ``fit``.
         cost_matrix: Optional predicted-by-actual misclassification-cost
-            matrix. Its shape must be ``(n_classes, n_classes)``.
+            matrix. Its shape must be ``(n_classes, n_classes)``. It is
+            converted like ``X``, and it must hold real numbers: a complex,
+            datetime, or timedelta matrix raises ``ValueError``.
         class_weight: Optional weights for classes, as a mapping from class
             label to weight or ``"balanced"``, which weights each class by
             ``n_samples / (n_classes * n_class_samples)``. Class weights
@@ -282,6 +284,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             y = _host_array(y, "y")
             _reject_not_applicable_labels(y)
             sample_weight = _host_array(sample_weight, "sample_weight")
+            cost_matrix = _host_array(self.cost_matrix, "cost_matrix")
             X_checked: NDArray[Any] | Columns
             if _is_column_frame(X):
                 y_checked = validate_data(self, y=y, reset=True)
@@ -336,7 +339,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             names_data = schema.names_data(classes.shape[0])
             training = schema.dense_data(X_checked, "error", weights)
             native_class_indices = np.asarray(class_indices, dtype=np.uintp)
-            costs_data = encode_costs(classes.shape[0], self.cost_matrix)
+            costs_data = encode_costs(classes.shape[0], cost_matrix)
             options = self._native_options()
             model = Model.train_dense(
                 names_data,
@@ -373,8 +376,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             )
             self.cost_matrix_ = (
                 None
-                if self.cost_matrix is None
-                else np.asarray(self.cost_matrix, dtype=float).copy()
+                if cost_matrix is None
+                else np.asarray(cost_matrix, dtype=float).copy()
             )
             self._label_encoder = label_encoder
             self._schema = schema

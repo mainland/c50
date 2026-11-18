@@ -215,9 +215,9 @@ pandas is a test dependency, not a runtime requirement. The estimator uses CPU
 NumPy arrays and returns NumPy arrays. It declares `array_api_support=False`.
 It does not promise preservation of another array namespace, device, or dtype.
 
-C5.0 runs on the CPU. The estimator reads `X`, `y`, and `sample_weight` in
-`fit`, and `X` in `predict`, `predict_proba`, and `score`, in the same order for
-every input:
+C5.0 runs on the CPU. The estimator reads `X`, `y`, `sample_weight`, and
+`cost_matrix` in `fit`, and `X` in `predict`, `predict_proba`, and `score`, in
+the same order for every input:
 
 1. NumPy arrays, including masked arrays, NumPy and Python scalars, strings,
    bytes, lists, tuples, and `None` are used as they are.
@@ -305,12 +305,13 @@ no seed is drawn, and a supplied `RandomState` is not advanced.
 
 `cost_matrix` accepts an optional square array in predicted-by-actual order.
 Entry `[predicted, actual]` is the cost of predicting the row class when the
-column class is correct. Entries must be finite and nonnegative, and diagonal
-entries must be zero. Costs must fit the native single-precision
-representation. Each actual-class column must have a positive, representable
-sum of error costs. Consequently, binary off-diagonal costs must be positive.
-Individual zero costs are supported in multiclass matrices whose columns
-satisfy this requirement.
+column class is correct. The array is converted like `X`, and it must hold real
+numbers: a complex, datetime, or timedelta array raises `ValueError`. Entries
+must be finite and nonnegative, and diagonal entries must be zero. Costs must
+fit the native single-precision representation. Each actual-class column must
+have a positive, representable sum of error costs. Consequently, binary
+off-diagonal costs must be positive. Individual zero costs are supported in
+multiclass matrices whose columns satisfy this requirement.
 
 `ignore_costs=True` ignores costs during both training and prediction. The
 model retains no costs data in this mode.

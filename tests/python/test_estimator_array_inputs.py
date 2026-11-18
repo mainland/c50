@@ -637,3 +637,76 @@ def test_polars_128_bit_integers_are_refused_by_name(name: str) -> None:
             _fit(y=column)
         with pytest.raises(panic):
             _fit(sample_weight=column)
+
+
+COSTS = np.array([[0.0, 2.5], [1.5, 0.0]])
+_two_classes = (X[:, 0] > 0).astype(np.int64)
+
+
+def _fit_costs(cost_matrix: Any) -> C50Classifier:
+    return C50Classifier(minimum_cases=1, cost_matrix=cost_matrix).fit(
+        X, _two_classes
+    )
+
+
+def test_cost_matrix_containers_give_the_numpy_result() -> None:
+    reference = _fit_costs(COSTS)
+    containers: list[Any] = [
+        COSTS.tolist(),
+        _masked(COSTS),
+        _TensorLike(COSTS),
+        _PolarsLike(COSTS),
+        _InterfaceOnly(COSTS),
+        _NamespaceLike(COSTS),
+        memoryview(np.ascontiguousarray(COSTS)),
+        pd.DataFrame(COSTS),
+        COSTS.astype(np.float32),
+    ]
+    for cost_matrix in containers:
+        candidate = _fit_costs(cost_matrix)
+        _same_classifier(candidate, reference)
+        np.testing.assert_array_equal(
+            candidate.cost_matrix_, reference.cost_matrix_
+        )
+    _same_classifier(_fit_costs(_array_api_strict(COSTS)), reference)
+    torch = pytest.importorskip("torch")
+    _same_classifier(_fit_costs(torch.tensor(COSTS)), reference)
+
+
+def test_cost_matrix_that_cannot_convert_raises_value_error() -> None:
+    cases: dict[str, Any] = {"refusing": _Refusing(COSTS)}
+    try:
+        xp = pytest.importorskip("array_api_strict")
+        cases["device"] = xp.asarray(COSTS, device=xp.Device("device1"))
+    except pytest.skip.Exception:
+        pass
+    try:
+        torch = pytest.importorskip("torch")
+        cases["gradient"] = torch.tensor(COSTS, requires_grad=True)
+        cases["bfloat16"] = torch.tensor(COSTS, dtype=torch.bfloat16)
+        cases["meta"] = torch.empty((2, 2), device="meta")
+    except pytest.skip.Exception:
+        pass
+    for case in cases.values():
+        with pytest.raises(ValueError, match="cost_matrix cannot be conv"):
+            _fit_costs(case)
+
+
+@pytest.mark.parametrize(
+    "cost_matrix",
+    [
+        np.array([[0, 2 + 5j], [1, 0]]),
+        [[0, 2 + 5j], [1, 0]],
+        np.array([[0, 2], [1, 0]]).astype("timedelta64[D]"),
+        np.array([[0, 2], [1, 0]]).astype("timedelta64[ns]"),
+        np.array([[0, 2], [1, 0]]).astype("datetime64[D]"),
+    ],
+    ids=["complex-array", "complex-list", "days", "nanoseconds", "dates"],
+)
+def test_cost_matrix_of_another_kind_raises_value_error(
+    cost_matrix: Any,
+) -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(ValueError, match="real numbers"):
+            _fit_costs(cost_matrix)
