@@ -1172,6 +1172,34 @@ def test_nonzero_strings_with_huge_exponents_still_raise(text: str) -> None:
             )
 
 
+@pytest.mark.parametrize("trapped", [True, False])
+def test_string_weights_ignore_the_callers_decimal_context(
+    trapped: bool,
+) -> None:
+    # Decimal reports an unparsable string through the thread's context. With
+    # the trap off it returns NaN, which hid the zero mantissa, and with the
+    # trap on it left the caller's flag set.
+    X = [[0], [1], [2], [3]] * 2
+    y = [0, 0, 1, 1] * 2
+    reference = C50Classifier().fit(X, y, sample_weight=[0.0] + [1.0] * 7)
+    zero = ["0e1000000000000000000"] + ["1"] * 7
+    nonzero = ["1e1000000000000000000"] + ["1"] * 7
+
+    with decimal.localcontext() as context:
+        context.traps[decimal.InvalidOperation] = trapped
+        context.clear_flags()
+        fitted = C50Classifier().fit(X, y, sample_weight=zero)
+        assert not any(context.flags.values())
+        with pytest.raises(ValueError, match="rounded to float64"):
+            C50Classifier().fit(X, y, sample_weight=nonzero)
+        assert not any(context.flags.values())
+        assert context.traps[decimal.InvalidOperation] is trapped
+
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
+
+
 def test_exact_weight_checks_skip_types_that_float64_holds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

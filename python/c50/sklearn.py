@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import dataclasses
+import decimal
 import json
 import re
 import sys
@@ -931,6 +932,24 @@ def _weight_text(element: str | bytes) -> str | None:
         return None
 
 
+# The context under which a string weight is parsed. ``Decimal`` signals an
+# unparsable string through the calling thread's context, so a caller who has
+# untrapped ``InvalidOperation`` would get a NaN instead of the exception that
+# the checks rely on, and every unparsable string would set the caller's flag.
+# Every setting is explicit, so that a change to ``decimal.DefaultContext``
+# does not reach it.
+_PARSE_CONTEXT = decimal.Context(
+    prec=28,
+    rounding=decimal.ROUND_HALF_EVEN,
+    Emin=-999999,
+    Emax=999999,
+    capitals=1,
+    clamp=0,
+    flags=[],
+    traps=[InvalidOperation],
+)
+
+
 def _weight_is_finite(element: Any) -> bool:
     """Return whether the exact value of an accepted weight is finite.
 
@@ -946,10 +965,11 @@ def _weight_is_finite(element: Any) -> bool:
         text = _weight_text(element)
         if text is None:
             return True
-        try:
-            return Decimal(text).is_finite()
-        except InvalidOperation:
-            return True
+        with decimal.localcontext(_PARSE_CONTEXT):
+            try:
+                return Decimal(text).is_finite()
+            except InvalidOperation:
+                return True
     if isinstance(element, (float, np.floating)):
         return bool(np.isfinite(element))
     return True
@@ -966,14 +986,15 @@ def _weight_is_zero(element: Any) -> bool:
         text = _weight_text(element)
         if text is None:
             return False
-        try:
-            return Decimal(text) == 0
-        except InvalidOperation:
-            pass
-        try:
-            return Decimal(re.split("[eE]", text, maxsplit=1)[0]) == 0
-        except InvalidOperation:
-            return False
+        with decimal.localcontext(_PARSE_CONTEXT):
+            try:
+                return Decimal(text) == 0
+            except InvalidOperation:
+                pass
+            try:
+                return Decimal(re.split("[eE]", text, maxsplit=1)[0]) == 0
+            except InvalidOperation:
+                return False
     return bool(element == 0)
 
 
