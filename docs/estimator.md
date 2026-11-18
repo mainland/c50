@@ -312,17 +312,24 @@ estimator checks the type before it converts any weight to `float64`:
   columns.
 - A string that parses as a number is accepted, and one that does not raises
   `ValueError`.
+- The type of each element must be exactly one of those above. A subclass, such
+  as an `enum.IntEnum` member or a user subclass of `int`, `float`, `str`, or
+  `numpy.float64`, raises `TypeError`. Convert it with `int`, `float`, or `str`
+  first. NumPy's own scalar types, such as `numpy.float64`, `numpy.str_`, and
+  `numpy.bool_`, are accepted.
 - Anything else raises `TypeError`: arrays of datetime, timedelta, complex, and
   structured kinds, and in an object array `None`, `pandas.NA`, `pandas.NaT`,
   `c50.NOT_APPLICABLE`, dates, times, timedeltas, complex numbers, and any
   other object. This includes a real number of another type, such as a gmpy2
   `mpfr`, an mpmath `mpf`, or a SymPy `Float`, even when it is registered as a
   `numbers.Real`. Convert it with `float` first.
-- A weight element that is a 0-d array is judged by its dtype. Sequence or
-  array elements of one common length make a weight array with more than one
-  dimension, which raises `ValueError`. Otherwise a list, tuple, range,
-  `pandas.Series`, or array with one or more dimensions as an element raises
-  `TypeError`, in a ragged list or in an object array.
+- A weight element that is a 0-d array is judged by its dtype. The element
+  check comes first, before the shape check. Sequence or array elements of one
+  common length whose items are of accepted types make a weight array with more
+  than one dimension, which raises `ValueError`. Items of any other type, such
+  as `None`, raise `TypeError`. A list, tuple, range, `pandas.Series`, or array
+  with one or more dimensions as an element also raises `TypeError`, in a
+  ragged list or in an object array.
 - A NaN or infinite number, including a `decimal.Decimal`, raises `ValueError`.
 - A negative weight raises `ValueError`.
 - The estimator rounds each weight to the nearest `float64`. A finite weight
@@ -330,7 +337,12 @@ estimator checks the type before it converts any weight to `float64`:
   `ValueError`. This applies to a Python `int`, a `decimal.Decimal`, a
   `fractions.Fraction`, a `numpy.longdouble`, a string, and bytes, which can
   hold values outside the range of `float64`. The other accepted types cannot
-  leave it.
+  leave it. A `numpy.longdouble` can leave the range only where it is wider
+  than `float64`, which excludes Windows and macOS on ARM64.
+
+A `numpy.ma.MaskedArray` of weights is read without its mask, as scikit-learn
+reads it, so a masked weight keeps its data value. Set a weight to zero to
+remove its sample.
 
 The estimator passes the weights to C5.0 as its case-weight attribute. C5.0
 uses case weights when it counts cases but never tests them in a classifier.

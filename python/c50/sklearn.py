@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import dataclasses
+import decimal
 import json
 import re
 import sys
@@ -232,11 +233,15 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 weight is a ``bool``, ``int``, or ``float``, a NumPy boolean,
                 integer, or floating-point number, a ``decimal.Decimal``, a
                 ``fractions.Fraction``, or a string or bytes that parses as a
-                number. Convert any other real number, such as one from an
-                arbitrary-precision library, with ``float`` first. An array of
-                any other kind, or an object of any other type, is rejected,
-                including ``None``, ``pandas.NA``, dates, times, timedeltas,
-                complex numbers, and the marker.
+                number. Each must be of exactly one of these types, so convert
+                a subclass, such as an ``enum.IntEnum`` member, with ``int``,
+                ``float``, or ``str`` first. Convert any other real number,
+                such as one from an arbitrary-precision library, with ``float``
+                first. An array of any other kind, or an object of any other
+                type, is rejected, including ``None``, ``pandas.NA``, dates,
+                times, timedeltas, complex numbers, and the marker. A
+                ``numpy.ma.MaskedArray`` is read without its mask, so set a
+                weight to zero to remove its sample.
 
         Returns:
             This fitted estimator.
@@ -245,10 +250,11 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             TypeError: If a continuous feature contains a non-numeric value
                 other than :data:`c50.NOT_APPLICABLE`, or if ``sample_weight``
                 is an array of datetime, timedelta, complex, or structured kind
-                or contains an object of a type other than ``bool``, ``int``,
-                ``float``, a NumPy boolean, integer, or floating-point number,
-                ``decimal.Decimal``, ``fractions.Fraction``, ``str``, or
-                ``bytes``, including another real number and the marker.
+                or contains an object whose type is not exactly ``bool``,
+                ``int``, ``float``, a NumPy boolean, integer, or floating-point
+                number, ``decimal.Decimal``, ``fractions.Fraction``, ``str``,
+                or ``bytes``, including a subclass of one of these, another
+                real number, and the marker.
             ValueError: If the data, schema, options, or cost matrix is
                 invalid, or if ``sample_weight`` contains a string that does
                 not parse as a number, a NaN, an infinity, or a negative
@@ -792,33 +798,32 @@ def _class_sample_weight(
     return weights
 
 
-def _is_weight_type(kind: type) -> bool:
-    """Return whether objects of a type are acceptable weights.
+_PYTHON_WEIGHT_TYPES: frozenset[type] = frozenset(
+    {bool, int, float, Decimal, Fraction, str, bytes}
+)
+# NumPy's own scalar types: booleans, signed and unsigned integers, and
+# floating-point numbers of every width, and its string and bytes scalars. Some
+# codes name one type on a platform and another elsewhere, so the types come
+# from the dtypes. ``numpy.timedelta64`` is not among them.
+_NUMPY_WEIGHT_TYPES: frozenset[type] = frozenset(
+    {np.dtype(code).type for code in "?" + np.typecodes["AllInteger"] + "efdg"}
+    | {np.str_, np.bytes_}
+)
 
-    The accepted types are a closed list: ``bool``, ``int``, and ``float``,
-    NumPy booleans, integers, and floating-point numbers, ``decimal.Decimal``,
-    ``fractions.Fraction``, ``str``, and ``bytes``. Another real number, even
-    one registered as a ``numbers.Real``, has no finiteness or zero test that
-    the estimator can rely on, so it is not accepted. ``numpy.timedelta64``
-    subclasses ``numpy.signedinteger``, so it needs an explicit exclusion.
+
+def _is_weight_type(kind: type) -> bool:
+    """Return whether objects of exactly one type are acceptable weights.
+
+    The accepted types are a closed list: ``bool``, ``int``, ``float``,
+    ``decimal.Decimal``, ``fractions.Fraction``, ``str``, and ``bytes``, and
+    NumPy's own scalar types for booleans, integers, floating-point numbers,
+    strings, and bytes. A subclass is not accepted, because NumPy converts an
+    object through its own ``__float__``, which can disagree with the value
+    that the exact checks read. Another real number, even one registered as a
+    ``numbers.Real``, has no finiteness or zero test that the estimator can
+    rely on, so it is not accepted either.
     """
-    if issubclass(kind, np.timedelta64):
-        return False
-    return issubclass(
-        kind,
-        (
-            bool,
-            int,
-            float,
-            np.bool_,
-            np.integer,
-            np.floating,
-            Decimal,
-            Fraction,
-            str,
-            bytes,
-        ),
-    )
+    return kind in _PYTHON_WEIGHT_TYPES or kind in _NUMPY_WEIGHT_TYPES
 
 
 def _is_weight_number(element: object) -> bool:
@@ -870,12 +875,14 @@ def _checked_weight_values(sample_weight: ArrayLike) -> NDArray[Any]:
     never the original object, so that the checked elements are the converted
     ones.
 
-    A NumPy array, or an object that NumPy reads as one, keeps its dtype.
-    Arrays of boolean, integer, unsigned, float, and string kinds pass. A
-    variable-width string array is read as an object array of its elements. In
-    an object array, each element must be of an accepted type. A 0-d array
-    element is replaced by the scalar that it holds, so that its dtype decides.
-    Any other sequence or array element has no accepted type.
+    A NumPy array, or an object that NumPy reads as one, keeps its dtype. A
+    NumPy scalar of a type outside NumPy's own scalar types, such as a user
+    subclass of ``numpy.float64``, is an object like any other. Arrays of
+    boolean, integer, unsigned, float, and string kinds pass. A variable-width
+    string array is read as an object array of its elements. In an object
+    array, each element must be of an accepted type. A 0-d array element is
+    replaced by the scalar that it holds, so that its dtype decides. Any other
+    sequence or array element has no accepted type.
 
     A pandas array with an extension dtype, such as ``Int64``, converts its
     missing values to NaN under a default ``numpy.asarray``. It is converted to
@@ -892,6 +899,12 @@ def _checked_weight_values(sample_weight: ArrayLike) -> NDArray[Any]:
         and hasattr(sample_weight, "to_numpy")
     ):
         values = np.asarray(sample_weight.to_numpy(dtype=object))
+    elif isinstance(sample_weight, np.generic) and (
+        type(sample_weight) not in _NUMPY_WEIGHT_TYPES
+    ):
+        # NumPy would replace the scalar by its base type in an object array.
+        values = np.empty((), dtype=object)
+        values[()] = sample_weight
     elif isinstance(dtype, np.dtype):
         values = np.asarray(sample_weight)
     else:
@@ -921,6 +934,24 @@ def _weight_text(element: str | bytes) -> str | None:
         return None
 
 
+# The context under which a string weight is parsed. ``Decimal`` signals an
+# unparsable string through the calling thread's context, so a caller who has
+# untrapped ``InvalidOperation`` would get a NaN instead of the exception that
+# the checks rely on, and every unparsable string would set the caller's flag.
+# Every setting is explicit, so that a change to ``decimal.DefaultContext``
+# does not reach it.
+_PARSE_CONTEXT = decimal.Context(
+    prec=28,
+    rounding=decimal.ROUND_HALF_EVEN,
+    Emin=-999999,
+    Emax=999999,
+    capitals=1,
+    clamp=0,
+    flags=[],
+    traps=[InvalidOperation],
+)
+
+
 def _weight_is_finite(element: Any) -> bool:
     """Return whether the exact value of an accepted weight is finite.
 
@@ -936,10 +967,11 @@ def _weight_is_finite(element: Any) -> bool:
         text = _weight_text(element)
         if text is None:
             return True
-        try:
-            return Decimal(text).is_finite()
-        except InvalidOperation:
-            return True
+        with decimal.localcontext(_PARSE_CONTEXT):
+            try:
+                return Decimal(text).is_finite()
+            except InvalidOperation:
+                return True
     if isinstance(element, (float, np.floating)):
         return bool(np.isfinite(element))
     return True
@@ -956,28 +988,45 @@ def _weight_is_zero(element: Any) -> bool:
         text = _weight_text(element)
         if text is None:
             return False
-        try:
-            return Decimal(text) == 0
-        except InvalidOperation:
-            pass
-        try:
-            return Decimal(re.split("[eE]", text, maxsplit=1)[0]) == 0
-        except InvalidOperation:
-            return False
+        with decimal.localcontext(_PARSE_CONTEXT):
+            try:
+                return Decimal(text) == 0
+            except InvalidOperation:
+                pass
+            try:
+                return Decimal(re.split("[eE]", text, maxsplit=1)[0]) == 0
+            except InvalidOperation:
+                return False
     return bool(element == 0)
 
 
 def _float64_holds(kind: type) -> bool:
-    """Return whether ``float64`` holds every value of an accepted type.
+    """Return whether an accepted type cannot lose a weight to ``float64``.
 
-    Such a weight cannot round to infinity, and it rounds to zero only when it
-    is zero. That includes every integer, because an integer that is too large
-    for ``float64`` raises ``OverflowError`` during conversion. Checking the
-    exact value of these weights one by one is slow for a long list.
+    The type is exactly one of the accepted types. Such a weight cannot round
+    to infinity, and it rounds to zero only when it is zero. That includes
+    every integer, because an integer that is too large for ``float64`` raises
+    ``OverflowError`` during conversion. Checking the exact value of these
+    weights one by one is slow for a long list.
     """
+    if kind in (bool, int, float):
+        return True
     if issubclass(kind, np.floating):
         return np.dtype(kind).itemsize <= 8
-    return issubclass(kind, (bool, int, float, np.bool_, np.integer))
+    return issubclass(kind, (np.bool_, np.integer))
+
+
+def _weight_is_lost(element: Any, overflowed: bool) -> bool:
+    """Return whether rounding an accepted weight to ``float64`` loses it.
+
+    A weight that rounded to infinity is lost if its exact value is finite. One
+    that rounded to zero is lost if its exact value is not zero.
+    """
+    if _float64_holds(type(element)):
+        return False
+    if overflowed:
+        return _weight_is_finite(element)
+    return not _weight_is_zero(element)
 
 
 def _convert_weights(values: NDArray[Any]) -> NDArray[np.float64]:
@@ -1002,19 +1051,27 @@ def _convert_weights(values: NDArray[Any]) -> NDArray[np.float64]:
     kind = values.dtype.kind
     if kind in "biu" or (kind == "f" and values.dtype.itemsize <= 8):
         return weights
-    suspect = np.flatnonzero((weights == 0) | np.isinf(weights))
-    exact = values.ravel()
-    if all(_float64_holds(kind) for kind in set(map(type, exact[suspect]))):
+    flat = weights.ravel()
+    infinite = np.isinf(flat)
+    suspect = np.flatnonzero((flat == 0) | infinite)
+    elements = values.ravel()[suspect]
+    overflows = infinite[suspect]
+    if values.dtype.kind in "US":
+        # Iterating a million NumPy strings is slower than the checks.
+        elements, first = np.unique(elements, return_index=True)
+        overflows = overflows[first]
+    if all(_float64_holds(kind) for kind in set(map(type, elements))):
         return weights
-    for index in suspect:
-        element = exact[index]
-        if _float64_holds(type(element)):
-            continue
-        if np.isinf(weights.ravel()[index]):
-            lost = _weight_is_finite(element)
-        else:
-            lost = not _weight_is_zero(element)
-        if lost:
+    # A weight column holds few distinct zeros and infinities, so decide each
+    # distinct one once. The key holds the type, so that equal objects of
+    # different types, such as ``0`` and ``False`` or ``"0"`` and ``b"0"``,
+    # keep their own answers. Equal objects of one type hold one value.
+    lost: dict[tuple[bool, type, object], bool] = {}
+    for element, overflowed in zip(elements, overflows.tolist(), strict=True):
+        key = (overflowed, type(element), element)
+        if key not in lost:
+            lost[key] = _weight_is_lost(element, overflowed)
+        if lost[key]:
             raise ValueError(message)
     return weights
 
@@ -1088,9 +1145,10 @@ def _host_array(values: Any, name: str) -> Any:
 
     C5.0 runs on the CPU, so such arrays are converted through NumPy's array
     protocol. The array's library decides whether that is possible, which
-    excludes arrays in GPU or other device memory.
+    excludes arrays in GPU or other device memory. A NumPy scalar is already on
+    the CPU, and converting it would replace a subclass by its base type.
     """
-    if isinstance(values, np.ndarray) or not hasattr(
+    if isinstance(values, (np.ndarray, np.generic)) or not hasattr(
         values, "__array_namespace__"
     ):
         return values
