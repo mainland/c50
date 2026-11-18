@@ -38,8 +38,9 @@ the columns returned by `predict_proba`.
 With `categorical_features=None`, numeric columns are continuous, and Boolean
 or non-numeric columns are categorical. Set `categorical_features` to a
 sequence of zero-based indices to override inference. String column names may
-also be used when the input exposes string feature names. When an explicit
-sequence is present, every unlisted column is continuous. Set
+also be used when scikit-learn reads string feature names from the input (see
+[pandas and Array API support](#pandas-and-array-api-support)). When an
+explicit sequence is present, every unlisted column is continuous. Set
 `categorical_features="from_dtype"` to treat exactly the DataFrame columns with
 a pandas `category` dtype as categorical, as `HistGradientBoostingClassifier`
 does. Every other column, and every column of non-DataFrame input, is then
@@ -223,7 +224,12 @@ every input:
 2. pandas objects (`DataFrame`, `Series`, `Index`, and extension arrays) are
    used as they are, with the column-wise conversion described above.
 3. Other data frames, such as polars and pyarrow tables, are used as they are,
-   so that scikit-learn reads their feature names.
+   so that scikit-learn reads their feature names. scikit-learn reads the names
+   of pyarrow tables and polars 1.x frames in every supported version, and
+   those of polars 2 frames from version 1.9.0 on. With polars 2 on an earlier
+   scikit-learn, the estimator has no `feature_names_in_`: prediction does not
+   check the order of the columns, and names in `categorical_features` raise
+   `ValueError`. Pass `X` as a NumPy array, or pass indices, in that case.
 4. Arrays from an Array API library are converted with `numpy.asarray`, with or
    without `array_api_dispatch`.
 5. Any other object that NumPy reads as an array is converted with

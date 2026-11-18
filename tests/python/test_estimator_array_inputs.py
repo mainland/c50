@@ -26,8 +26,6 @@ import sklearn
 from c50.sklearn import C50Classifier, _host_array
 from model_text import without_date
 from scipy import sparse
-from sklearn.base import BaseEstimator
-from sklearn.utils.validation import validate_data
 
 _rng = np.random.default_rng(5)
 X = _rng.normal(size=(60, 3))
@@ -113,10 +111,6 @@ class _MissingNaN(_TensorLike):
         values = np.asarray(self._values, dtype=dtype).copy()
         values[3] = np.nan
         return values
-
-
-class _Probe(BaseEstimator):
-    """An estimator on which scikit-learn records a frame's feature names."""
 
 
 def _array_api_strict(values: np.ndarray) -> Any:
@@ -414,30 +408,54 @@ def test_polars_and_pyarrow_missing_weights_raise_value_error() -> None:
             _fit(sample_weight=weights)
 
 
-def test_data_frames_keep_their_feature_names() -> None:
+def _reads_feature_names(library: str) -> bool:
+    """Return whether the installed scikit-learn reads the library's names.
+
+    scikit-learn reads the names of pyarrow tables and polars 1.x frames
+    through `__dataframe__`, which polars 2 lacks. It reads polars 2 names
+    itself from version 1.9.0 on.
+    """
+    if library == "pyarrow":
+        return True
+    polars = pytest.importorskip("polars")
+    major, minor = (int(part) for part in sklearn.__version__.split(".")[:2])
+    return int(polars.__version__.split(".")[0]) < 2 or (major, minor) >= (
+        1,
+        9,
+    )
+
+
+@pytest.mark.parametrize("library", ["polars", "pyarrow"])
+def test_data_frames_keep_their_feature_names(library: str) -> None:
     names = ["alpha", "beta", "gamma"]
     columns = {name: X[:, i] for i, name in enumerate(names)}
     reference = _fit(X=pd.DataFrame(columns))
-    frames = [
-        pytest.importorskip("polars").DataFrame(columns),
-        pytest.importorskip("pyarrow").table(columns),
-    ]
-    for frame in frames:
-        # scikit-learn decides which libraries' frames have feature names.
-        probe = _Probe()
-        validate_data(probe, frame)
-        classifier = _fit(X=frame)
-        _same_classifier(classifier, reference)
-        assert getattr(classifier, "feature_names_in_", None) is not None or (
-            getattr(probe, "feature_names_in_", None) is None
-        )
-        np.testing.assert_array_equal(
-            getattr(classifier, "feature_names_in_", None),
-            getattr(probe, "feature_names_in_", None),
-        )
-        np.testing.assert_array_equal(
-            classifier.predict(frame), reference.predict(_data_for(reference))
-        )
+    module = pytest.importorskip(library)
+    frame = (module.DataFrame if library == "polars" else module.table)(
+        columns
+    )
+    classifier = _fit(X=frame)
+    _same_classifier(classifier, reference)
+    if _reads_feature_names(library):
+        np.testing.assert_array_equal(classifier.feature_names_in_, names)
+        # The names make the column order part of the contract.
+        with pytest.raises(ValueError, match="feature names"):
+            classifier.predict(frame.select(names[::-1]))
+        named = C50Classifier(
+            minimum_cases=1, categorical_features=["beta"]
+        ).fit(frame, Y)
+        assert list(named.categorical_features_) == [1]
+    else:
+        assert not hasattr(classifier, "feature_names_in_")
+        with pytest.raises(
+            ValueError, match="require input with feature names"
+        ):
+            C50Classifier(minimum_cases=1, categorical_features=["beta"]).fit(
+                frame, Y
+            )
+    np.testing.assert_array_equal(
+        classifier.predict(frame), reference.predict(_data_for(reference))
+    )
 
 
 def test_polars_and_pyarrow_columns_work_as_y_and_weights() -> None:
