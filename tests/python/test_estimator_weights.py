@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 import decimal
+import enum
 import fractions
 import numbers
 import pickle
@@ -651,6 +652,26 @@ def test_the_element_check_comes_before_the_shape_check(
         )
 
 
+def test_a_masked_weight_array_is_read_without_its_mask() -> None:
+    # scikit-learn reads a masked array through np.asarray, which drops the
+    # mask. A caller who wants a sample removed sets its weight to zero.
+    X, y, weights = weighted_problem()
+    mask = np.arange(len(weights)) < 60
+    masked = np.ma.array(weights, mask=mask)
+    removed = np.where(mask, 0.0, weights)
+
+    fitted = C50Classifier().fit(X, y, sample_weight=masked)
+    unmasked = C50Classifier().fit(X, y, sample_weight=weights)
+    zeroed = C50Classifier().fit(X, y, sample_weight=removed)
+
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        unmasked.model_.serialized_data
+    )
+    assert without_date(fitted.model_.serialized_data) != without_date(
+        zeroed.model_.serialized_data
+    )
+
+
 def test_zero_dimensional_arrays_in_object_arrays_follow_their_dtype() -> None:
     X = [[0], [1], [2], [3]]
     y = [0, 0, 1, 1]
@@ -950,6 +971,132 @@ def test_real_numbers_outside_the_accepted_types_raise_type_error(
     assert not hasattr(classifier, "model_")
 
 
+class _Count(int):
+    """An int whose float conversion disagrees with its value."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+
+class _Reading(float):
+    """A float whose float conversion disagrees with its value."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+
+class _Amount(decimal.Decimal):
+    """A Decimal that claims to equal zero."""
+
+    def __eq__(self, other: object) -> bool:
+        return True
+
+    __hash__ = decimal.Decimal.__hash__
+
+
+class _Text(str):
+    """A str whose float conversion disagrees with its value."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+
+class _Level(enum.IntEnum):
+    NONE = 0
+    LOW = 1
+    HIGH = 2
+
+
+class _Double(np.float64):
+    """A user subclass of a NumPy scalar type."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+
+class _Single(np.float32):
+    """A user subclass of a NumPy scalar type that is not a Python float."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+
+_SUBCLASS_ELEMENTS: dict[str, tuple[object, object]] = {
+    "int subclass": (_Count(5), 1),
+    "float subclass": (_Reading(5.0), 1.0),
+    "Decimal subclass": (_Amount(5), decimal.Decimal(1)),
+    "str subclass": (_Text("5"), "1"),
+    "IntEnum": (_Level.HIGH, 1),
+    "numpy float64 subclass": (_Double(5.0), np.float64(1.0)),
+    "numpy float32 subclass": (_Single(5.0), np.float32(1.0)),
+}
+
+
+@pytest.mark.parametrize("name", sorted(_SUBCLASS_ELEMENTS))
+@pytest.mark.parametrize("container", ["list", "object array", "scalar"])
+def test_subclasses_of_accepted_weight_types_raise_type_error(
+    name: str, container: str
+) -> None:
+    # NumPy converts an object through its own __float__, which a subclass can
+    # make disagree with the value that the range checks read.
+    element, one = _SUBCLASS_ELEMENTS[name]
+    X = [[0], [1], [2], [3]] * 2
+    y = [0, 0, 1, 1] * 2
+    weights: object = [element, *[one] * 7]
+    if container == "object array":
+        weights = np.asarray(weights, dtype=object)
+    elif container == "scalar":
+        weights = element
+    classifier = C50Classifier()
+
+    with pytest.raises(TypeError, match="numbers or strings"):
+        classifier.fit(X, y, sample_weight=weights)
+    assert not hasattr(classifier, "model_")
+
+
+# Every scalar type that NumPy names with a dtype code. A sized alias such as
+# `np.int64` names only one of the types that share a width, so a platform that
+# has `np.longlong` beside `np.int_`, or `np.intc` beside `np.int32`, reaches a
+# type that no alias spells.
+_NUMPY_SCALAR_TYPES = sorted(
+    {np.dtype(code).type for code in "?" + np.typecodes["AllInteger"] + "efdg"}
+    | {np.str_, np.bytes_},
+    key=lambda make: (make.__name__, make.__qualname__),
+)
+
+
+def _numpy_scalar(make: type, value: int) -> object:
+    if make is np.bytes_:
+        return np.bytes_(str(value).encode())
+    return make(value)  # type: ignore[call-arg]
+
+
+@pytest.mark.parametrize("container", ["list", "scalar"])
+@pytest.mark.parametrize(
+    "make", _NUMPY_SCALAR_TYPES, ids=lambda make: make.__name__
+)
+def test_numpy_scalar_types_stay_accepted(make: type, container: str) -> None:
+    X = [[0], [1], [2], [3]] * 2
+    y = [0, 0, 1, 1] * 2
+    ones = [1, 2, 1, 2, 1, 2, 1, 1]
+    if make is np.bool_:
+        ones = [1] * 8
+    if container == "scalar":
+        reference = C50Classifier().fit(X, y, sample_weight=float(ones[0]))
+        weights = _numpy_scalar(make, ones[0])
+    else:
+        reference = C50Classifier().fit(
+            X, y, sample_weight=[float(v) for v in ones]
+        )
+        weights = [_numpy_scalar(make, v) for v in ones]
+
+    fitted = C50Classifier().fit(X, y, sample_weight=weights)
+
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
+
+
 def _weight_outcome(weights: object) -> tuple[str, str]:
     """Fit on eight samples and return the model text or the error."""
     X = [[0], [1], [2], [3]] * 2
@@ -1145,6 +1292,63 @@ def test_string_weights_ignore_the_callers_decimal_context(
     assert without_date(fitted.model_.serialized_data) == without_date(
         reference.model_.serialized_data
     )
+
+
+def test_each_distinct_zero_is_checked_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A column of strings holds a few spellings of zero, and a Python-level
+    # check of each of a million zeros made conversion several times slower.
+    # Equal objects of different types are still checked separately.
+    calls: list[object] = []
+    exact_check = c50.sklearn._weight_is_zero
+
+    def counting(element: object) -> bool:
+        calls.append(element)
+        return exact_check(element)
+
+    monkeypatch.setattr("c50.sklearn._weight_is_zero", counting)
+    zeros: list[object] = [
+        decimal.Decimal(0),
+        fractions.Fraction(0),
+        0,
+        False,
+        0.0,
+        "0",
+        "0.00",
+        b"0",
+    ]
+    weights = [zero for zero in zeros for _ in range(250)] + [1.0] * 250
+    count = len(weights)
+    X = [[i % 4] for i in range(count)]
+    y = [i % 2 for i in range(count)]
+    arrays = [
+        np.array(["0"] * 250 + ["1"] * 250),
+        np.array([b"0"] * 250 + [b"1"] * 250),
+    ]
+
+    C50Classifier().fit(X, y, sample_weight=weights)
+    assert sorted(map(repr, calls)) == sorted(
+        map(
+            repr,
+            [
+                decimal.Decimal(0),
+                fractions.Fraction(0),
+                "0",
+                "0.00",
+                b"0",
+            ],
+        )
+    )
+
+    for array in arrays:
+        calls.clear()
+        C50Classifier().fit(
+            [[i % 4] for i in range(500)],
+            [i % 2 for i in range(500)],
+            sample_weight=array,
+        )
+        assert len(calls) == 1
 
 
 def test_exact_weight_checks_skip_types_that_float64_holds(

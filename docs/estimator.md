@@ -352,6 +352,11 @@ estimator checks the type before it converts any weight to `float64`:
   columns.
 - A string that parses as a number is accepted, and one that does not raises
   `ValueError`.
+- The type of each element must be exactly one of those above. A subclass, such
+  as an `enum.IntEnum` member or a user subclass of `int`, `float`, `str`, or
+  `numpy.float64`, raises `TypeError`. Convert it with `int`, `float`, or `str`
+  first. NumPy's own scalar types, such as `numpy.float64`, `numpy.str_`, and
+  `numpy.bool_`, are accepted.
 - Anything else raises `TypeError`: arrays of datetime, timedelta, complex, and
   structured kinds, and in an object array `None`, `pandas.NA`, `pandas.NaT`,
   `c50.NOT_APPLICABLE`, dates, times, timedeltas, complex numbers, and any
@@ -378,6 +383,10 @@ estimator checks the type before it converts any weight to `float64`:
   hold values outside the range of `float64`. The other accepted types cannot
   leave it. A `numpy.longdouble` can leave the range only where it is wider
   than `float64`, which excludes Windows and macOS on ARM64.
+
+A `numpy.ma.MaskedArray` of weights is read without its mask, as scikit-learn
+reads it, so a masked weight keeps its data value. Set a weight to zero to
+remove its sample.
 
 The estimator passes the weights to C5.0 as its case-weight attribute. C5.0
 uses case weights when it counts cases but never tests them in a classifier.
