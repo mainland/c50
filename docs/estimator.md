@@ -352,6 +352,11 @@ estimator checks the type before it converts any weight to `float64`:
   columns.
 - A string that parses as a number is accepted, and one that does not raises
   `ValueError`.
+- The type of each element must be exactly one of those above. A subclass, such
+  as an `enum.IntEnum` member or a user subclass of `int`, `float`, `str`, or
+  `numpy.float64`, raises `TypeError`. Convert it with `int`, `float`, or `str`
+  first. NumPy's own scalar types, such as `numpy.float64`, `numpy.str_`, and
+  `numpy.bool_`, are accepted.
 - Anything else raises `TypeError`: arrays of datetime, timedelta, complex, and
   structured kinds, and in an object array `None`, `pandas.NA`, `pandas.NaT`,
   `c50.NOT_APPLICABLE`, dates, times, timedeltas, complex numbers, and any

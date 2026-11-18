@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 import decimal
+import enum
 import fractions
 import numbers
 import pickle
@@ -948,6 +949,132 @@ def test_real_numbers_outside_the_accepted_types_raise_type_error(
             sample_weight=_foreign_real_weights()[name],
         )
     assert not hasattr(classifier, "model_")
+
+
+class _Count(int):
+    """An int whose float conversion disagrees with its value."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+
+class _Reading(float):
+    """A float whose float conversion disagrees with its value."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+
+class _Amount(decimal.Decimal):
+    """A Decimal that claims to equal zero."""
+
+    def __eq__(self, other: object) -> bool:
+        return True
+
+    __hash__ = decimal.Decimal.__hash__
+
+
+class _Text(str):
+    """A str whose float conversion disagrees with its value."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+
+class _Level(enum.IntEnum):
+    NONE = 0
+    LOW = 1
+    HIGH = 2
+
+
+class _Double(np.float64):
+    """A user subclass of a NumPy scalar type."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+
+class _Single(np.float32):
+    """A user subclass of a NumPy scalar type that is not a Python float."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+
+_SUBCLASS_ELEMENTS: dict[str, tuple[object, object]] = {
+    "int subclass": (_Count(5), 1),
+    "float subclass": (_Reading(5.0), 1.0),
+    "Decimal subclass": (_Amount(5), decimal.Decimal(1)),
+    "str subclass": (_Text("5"), "1"),
+    "IntEnum": (_Level.HIGH, 1),
+    "numpy float64 subclass": (_Double(5.0), np.float64(1.0)),
+    "numpy float32 subclass": (_Single(5.0), np.float32(1.0)),
+}
+
+
+@pytest.mark.parametrize("name", sorted(_SUBCLASS_ELEMENTS))
+@pytest.mark.parametrize("container", ["list", "object array", "scalar"])
+def test_subclasses_of_accepted_weight_types_raise_type_error(
+    name: str, container: str
+) -> None:
+    # NumPy converts an object through its own __float__, which a subclass can
+    # make disagree with the value that the range checks read.
+    element, one = _SUBCLASS_ELEMENTS[name]
+    X = [[0], [1], [2], [3]] * 2
+    y = [0, 0, 1, 1] * 2
+    weights: object = [element, *[one] * 7]
+    if container == "object array":
+        weights = np.asarray(weights, dtype=object)
+    elif container == "scalar":
+        weights = element
+    classifier = C50Classifier()
+
+    with pytest.raises(TypeError, match="numbers or strings"):
+        classifier.fit(X, y, sample_weight=weights)
+    assert not hasattr(classifier, "model_")
+
+
+# Every scalar type that NumPy names with a dtype code. A sized alias such as
+# `np.int64` names only one of the types that share a width, so a platform that
+# has `np.longlong` beside `np.int_`, or `np.intc` beside `np.int32`, reaches a
+# type that no alias spells.
+_NUMPY_SCALAR_TYPES = sorted(
+    {np.dtype(code).type for code in "?" + np.typecodes["AllInteger"] + "efdg"}
+    | {np.str_, np.bytes_},
+    key=lambda make: (make.__name__, make.__qualname__),
+)
+
+
+def _numpy_scalar(make: type, value: int) -> object:
+    if make is np.bytes_:
+        return np.bytes_(str(value).encode())
+    return make(value)  # type: ignore[call-arg]
+
+
+@pytest.mark.parametrize("container", ["list", "scalar"])
+@pytest.mark.parametrize(
+    "make", _NUMPY_SCALAR_TYPES, ids=lambda make: make.__name__
+)
+def test_numpy_scalar_types_stay_accepted(make: type, container: str) -> None:
+    X = [[0], [1], [2], [3]] * 2
+    y = [0, 0, 1, 1] * 2
+    ones = [1, 2, 1, 2, 1, 2, 1, 1]
+    if make is np.bool_:
+        ones = [1] * 8
+    if container == "scalar":
+        reference = C50Classifier().fit(X, y, sample_weight=float(ones[0]))
+        weights = _numpy_scalar(make, ones[0])
+    else:
+        reference = C50Classifier().fit(
+            X, y, sample_weight=[float(v) for v in ones]
+        )
+        weights = [_numpy_scalar(make, v) for v in ones]
+
+    fitted = C50Classifier().fit(X, y, sample_weight=weights)
+
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
 
 
 def _weight_outcome(weights: object) -> tuple[str, str]:
