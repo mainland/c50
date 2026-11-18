@@ -259,12 +259,14 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
 
         Raises:
             TypeError: If a continuous feature contains a non-numeric value
-                other than :data:`c50.NOT_APPLICABLE`, or if ``sample_weight``
-                is an array of datetime, timedelta, complex, or structured kind
-                or contains an object whose type is not exactly ``bool``,
-                ``int``, ``float``, a NumPy boolean, integer, or floating-point
-                number, ``decimal.Decimal``, ``fractions.Fraction``, ``str``,
-                or ``bytes``, including a subclass of one of these other than
+                other than :data:`c50.NOT_APPLICABLE`, if a categorical value
+                cannot be hashed, if ``X`` or ``y`` is a sparse matrix or a
+                ``numpy.matrix``, or if ``sample_weight`` is an array of
+                datetime, timedelta, complex, or structured kind or contains an
+                object whose type is not exactly ``bool``, ``int``, ``float``,
+                a NumPy boolean, integer, or floating-point number,
+                ``decimal.Decimal``, ``fractions.Fraction``, ``str``, or
+                ``bytes``, including a subclass of one of these other than
                 ``numpy.str_`` and ``numpy.bytes_``, another real number, and
                 the marker.
             ValueError: If the data, schema, options, or cost matrix is
@@ -416,7 +418,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
 
         Raises:
             TypeError: If a continuous feature contains a non-numeric value
-                other than :data:`c50.NOT_APPLICABLE`.
+                other than :data:`c50.NOT_APPLICABLE`, if a categorical value
+                cannot be hashed, or if ``X`` is a sparse matrix or a
+                ``numpy.matrix``.
             ValueError: If the input shape or a feature value is invalid, or if
                 an array cannot be converted to NumPy.
         """
@@ -450,7 +454,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
 
         Raises:
             TypeError: If a continuous feature contains a non-numeric value
-                other than :data:`c50.NOT_APPLICABLE`.
+                other than :data:`c50.NOT_APPLICABLE`, if a categorical value
+                cannot be hashed, or if ``X`` is a sparse matrix or a
+                ``numpy.matrix``.
             ValueError: If the input shape or a feature value is invalid, or if
                 an array cannot be converted to NumPy.
         """
@@ -483,7 +489,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
 
         Raises:
             TypeError: If a continuous feature contains a non-numeric value
-                other than :data:`c50.NOT_APPLICABLE`.
+                other than :data:`c50.NOT_APPLICABLE`, if a categorical value
+                cannot be hashed, or if ``X`` is a sparse matrix or a
+                ``numpy.matrix``.
             ValueError: If the input shape or a feature value is invalid, or if
                 an array cannot be converted to NumPy.
         """
@@ -1260,11 +1268,11 @@ def _host_array(values: Any, name: str) -> Any:
        lists, tuples, and ``None`` are returned unchanged.
     2. pandas objects are returned unchanged, so that columns, feature names,
        and ``pandas.NA`` keep their own handling.
-    3. Other data frames are returned unchanged, so that scikit-learn reads
-       their feature names. A data frame implements the interchange protocol
-       ``__dataframe__`` or has ``columns``, as a polars ``DataFrame`` does.
+    3. Objects with ``__dataframe__`` or a ``columns`` attribute, such as
+       polars and pyarrow tables, are returned unchanged, so that scikit-learn
+       reads their feature names.
     4. Arrays from an Array API library are converted with ``numpy.asarray``.
-    5. Any other object that NumPy reads as an array, through ``__array__``,
+    5. Any other object that implements an array protocol, ``__array__``,
        ``__array_interface__``, ``__array_struct__``, or the buffer protocol,
        is converted with ``numpy.asarray``, which keeps the dtype that the
        array's library hands over, such as ``datetime64[ns]``. Any other

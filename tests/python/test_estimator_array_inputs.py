@@ -951,3 +951,168 @@ def test_cost_matrix_that_exhausts_memory_propagates_memory_error() -> None:
     with pytest.raises(ValueError, match="real numbers") as excinfo:
         _fit_costs(matrix)
     assert isinstance(excinfo.value.__cause__, ValueError)
+
+
+@pytest.mark.parametrize("name", ["polars", "pyarrow"])
+def test_score_reads_y_and_weights_of_other_libraries(name: str) -> None:
+    make = {
+        "polars": lambda a: pytest.importorskip("polars").Series(a),
+        "pyarrow": lambda a: pytest.importorskip("pyarrow").array(a),
+    }[name]
+    expected = _reference.score(X, Y, sample_weight=W)
+    assert _reference.score(X, make(Y)) == _reference.score(X, Y)
+    assert _reference.score(X, make(Y), sample_weight=make(W)) == expected
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        name
+        for name, (_, dims) in CONTAINERS.items()
+        # scikit-learn's own parameter check refuses objects that are only
+        # buffers or only expose `__array_interface__`, as the `y` of `score`.
+        if 1 in dims and name not in {"interface-only", "memoryview"}
+    ],
+)
+def test_score_reads_y_and_weights_of_every_container(name: str) -> None:
+    make = CONTAINERS[name][0]
+    expected = _reference.score(X, Y, sample_weight=W)
+    assert _reference.score(X, make(Y)) == _reference.score(X, Y)
+    assert _reference.score(X, make(Y), sample_weight=make(W)) == expected
+
+
+def _mixed_rows() -> tuple[np.ndarray, list[Any], list[str], list[bool]]:
+    rng = np.random.default_rng(3)
+    numbers = [
+        None if i % 7 == 0 else float(v)
+        for i, v in enumerate(rng.normal(size=60))
+    ]
+    colors = rng.choice(["red", "green", "blue"], 60).tolist()
+    flags = (rng.random(60) > 0.5).tolist()
+    rows = np.empty((60, 3), dtype=object)
+    for i in range(60):
+        rows[i] = [numbers[i], colors[i], flags[i]]
+    return rows, numbers, colors, flags
+
+
+def _mixed_frames() -> dict[str, Any]:
+    _, numbers, colors, flags = _mixed_rows()
+    frames: dict[str, Any] = {
+        "pandas-nullable": pd.DataFrame(
+            {
+                "a": pd.array(numbers, dtype="Float64"),
+                "b": pd.array(colors, dtype="string"),
+                "c": pd.array(flags, dtype="boolean"),
+            }
+        )
+    }
+    try:
+        pl = pytest.importorskip("polars")
+        frames["polars"] = pl.DataFrame(
+            {"a": numbers, "b": colors, "c": flags}
+        )
+        frames["polars-categorical"] = pl.DataFrame(
+            {
+                "a": numbers,
+                "b": pl.Series(colors, dtype=pl.Categorical),
+                "c": flags,
+            }
+        )
+        frames["polars-enum"] = pl.DataFrame(
+            {
+                "a": numbers,
+                "b": pl.Series(colors, dtype=pl.Enum(sorted(set(colors)))),
+                "c": flags,
+            }
+        )
+    except pytest.skip.Exception:
+        pass
+    try:
+        pa = pytest.importorskip("pyarrow")
+        frames["pyarrow"] = pa.table({"a": numbers, "b": colors, "c": flags})
+        frames["pyarrow-dictionary"] = pa.table(
+            {
+                "a": numbers,
+                "b": pa.array(colors).dictionary_encode(),
+                "c": flags,
+            }
+        )
+        frames["pandas-arrow"] = pd.DataFrame(
+            {
+                "a": pd.array(numbers, dtype="double[pyarrow]"),
+                "b": pd.array(colors, dtype="string[pyarrow]"),
+                "c": pd.array(flags, dtype="bool[pyarrow]"),
+            }
+        )
+    except pytest.skip.Exception:
+        pass
+    return frames
+
+
+def test_mixed_type_frames_give_the_result_of_an_object_array() -> None:
+    # Columns of strings, Booleans, categories, and nulls in each library make
+    # the classifier that the same values in an object array make.
+    rows, _, _, _ = _mixed_rows()
+    labels = np.arange(60) % 2
+    expected = C50Classifier(minimum_cases=1).fit(rows, labels)
+    assert list(expected.categorical_features_) == [1, 2]
+    for name, frame in _mixed_frames().items():
+        candidate = C50Classifier(minimum_cases=1).fit(frame, labels)
+        assert without_date(candidate.model_.serialized_data) == without_date(
+            expected.model_.serialized_data
+        ), name
+        assert [list(c) for c in candidate.categories_] == [
+            list(c) for c in expected.categories_
+        ], name
+        np.testing.assert_array_equal(
+            candidate.predict(frame), expected.predict(rows), err_msg=name
+        )
+
+
+@pytest.mark.parametrize(
+    "dtype", ["UInt8", "UInt64", "Int32", "int64[pyarrow]", "uint8[pyarrow]"]
+)
+def test_pandas_nullable_and_arrow_integer_columns_work(dtype: str) -> None:
+    if "pyarrow" in dtype:
+        pytest.importorskip("pyarrow")
+    integers = np.arange(60) % 4
+    columns = {"a": integers, "b": (integers * 7) % 5}
+    frame = pd.DataFrame(
+        {k: pd.array(v, dtype=dtype) for k, v in columns.items()}
+    )
+    expected = C50Classifier(minimum_cases=1).fit(pd.DataFrame(columns), Y)
+    candidate = C50Classifier(minimum_cases=1).fit(frame, Y)
+    assert without_date(candidate.model_.serialized_data) == without_date(
+        expected.model_.serialized_data
+    )
+    np.testing.assert_array_equal(
+        candidate.predict(frame), expected.predict(pd.DataFrame(columns))
+    )
+
+
+def test_nested_sequences_of_arrays_work_as_x() -> None:
+    rows = list(X)
+    for nested in (rows, tuple(rows), [row.tolist() for row in X]):
+        _same_classifier(_fit(X=nested), _reference)
+        np.testing.assert_array_equal(
+            _reference.predict(nested), _reference.predict(X)
+        )
+    torch = pytest.importorskip("torch")
+    tensors = [torch.tensor(row) for row in X]
+    _same_classifier(_fit(X=tensors), _reference)
+    np.testing.assert_array_equal(
+        _reference.predict(tensors), _reference.predict(X)
+    )
+
+
+def test_masked_x_is_read_without_its_mask_and_checked_for_infinity() -> None:
+    masked = _masked(X)
+    masked.mask[2, 1] = True
+    _same_classifier(_fit(X=masked), _reference)
+    infinite = _masked(X)
+    infinite[2, 1] = np.inf
+    infinite.mask[2, 1] = True
+    for value in (infinite, _masked(np.where(X > 5, np.inf, X))):
+        value[2, 1] = np.inf
+        with pytest.raises(ValueError, match="non-finite"):
+            _fit(X=value)
