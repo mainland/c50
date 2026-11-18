@@ -1056,6 +1056,19 @@ def _float64_holds(kind: type) -> bool:
     return issubclass(kind, (np.bool_, np.integer))
 
 
+def _weight_is_lost(element: Any, overflowed: bool) -> bool:
+    """Return whether rounding an accepted weight to ``float64`` loses it.
+
+    A weight that rounded to infinity is lost if its exact value is finite. One
+    that rounded to zero is lost if its exact value is not zero.
+    """
+    if _float64_holds(type(element)):
+        return False
+    if overflowed:
+        return _weight_is_finite(element)
+    return not _weight_is_zero(element)
+
+
 def _convert_weights(values: NDArray[Any]) -> NDArray[np.float64]:
     """Round checked weights to ``float64``, or raise ``ValueError``.
 
@@ -1078,19 +1091,27 @@ def _convert_weights(values: NDArray[Any]) -> NDArray[np.float64]:
     kind = values.dtype.kind
     if kind in "biu" or (kind == "f" and values.dtype.itemsize <= 8):
         return weights
-    suspect = np.flatnonzero((weights == 0) | np.isinf(weights))
-    exact = values.ravel()
-    if all(_float64_holds(kind) for kind in set(map(type, exact[suspect]))):
+    flat = weights.ravel()
+    infinite = np.isinf(flat)
+    suspect = np.flatnonzero((flat == 0) | infinite)
+    elements = values.ravel()[suspect]
+    overflows = infinite[suspect]
+    if values.dtype.kind in "US":
+        # Iterating a million NumPy strings is slower than the checks.
+        elements, first = np.unique(elements, return_index=True)
+        overflows = overflows[first]
+    if all(_float64_holds(kind) for kind in set(map(type, elements))):
         return weights
-    for index in suspect:
-        element = exact[index]
-        if _float64_holds(type(element)):
-            continue
-        if np.isinf(weights.ravel()[index]):
-            lost = _weight_is_finite(element)
-        else:
-            lost = not _weight_is_zero(element)
-        if lost:
+    # A weight column holds few distinct zeros and infinities, so decide each
+    # distinct one once. The key holds the type, so that equal objects of
+    # different types, such as ``0`` and ``False`` or ``"0"`` and ``b"0"``,
+    # keep their own answers. Equal objects of one type hold one value.
+    lost: dict[tuple[bool, type, object], bool] = {}
+    for element, overflowed in zip(elements, overflows.tolist(), strict=True):
+        key = (overflowed, type(element), element)
+        if key not in lost:
+            lost[key] = _weight_is_lost(element, overflowed)
+        if lost[key]:
             raise ValueError(message)
     return weights
 
