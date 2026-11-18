@@ -1145,3 +1145,28 @@ def test_string_weights_ignore_the_callers_decimal_context(
     assert without_date(fitted.model_.serialized_data) == without_date(
         reference.model_.serialized_data
     )
+
+
+def test_exact_weight_checks_skip_types_that_float64_holds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A zero of a type that float64 holds exactly is not a lost weight, and a
+    # Python-level call for each of a million zeros made conversion ten times
+    # slower.
+    def fail(element: object) -> bool:
+        raise AssertionError(f"exact check of {element!r}")
+
+    monkeypatch.setattr("c50.sklearn._weight_is_zero", fail)
+    monkeypatch.setattr("c50.sklearn._weight_is_finite", fail)
+    X = [[0], [1], [2], [3]]
+    y = [0, 0, 1, 1]
+
+    for weights in (
+        [0.0, 1.0, 2.0, 1.0],
+        [0, 1, 2, 1],
+        [False, True, True, True],
+        [np.float32(0), 1.0, np.float16(2), np.bool_(True)],
+        [np.int64(0), np.uint8(1), 2, 1.0],
+        pd.Series([0.0, 1.0, 2.0, 1.0], dtype="Float64"),
+    ):
+        C50Classifier().fit(X, y, sample_weight=weights)
