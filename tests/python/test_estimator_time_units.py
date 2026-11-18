@@ -205,8 +205,8 @@ def test_scalar_units_and_other_units_never_match(
 ) -> None:
     # The categories match by type. A NumPy scalar never equals a `datetime`
     # object, so the first value, which has the same instant in every unit, is
-    # unseen in a model of the other form. Units within the NumPy group share a
-    # type, so they are not part of this rule.
+    # unseen in a model of the other form. Units within the NumPy group are
+    # separate categories, which the tests below pin.
     scalars = _values(kind, unit).reshape(-1, 1)
     for other_unit in ("us", "D"):
         others = _values(kind, other_unit).reshape(-1, 1)
@@ -216,3 +216,101 @@ def test_scalar_units_and_other_units_never_match(
                 classifier.predict(other)
             lenient = _fit(fitted, unknown_categories="missing")
             assert lenient.predict(other).shape == (len(other),)
+
+
+# Pairs of units of the scalar group and the factor from the first unit to the
+# second, so that the pair holds equal instants or durations.
+UNIT_PAIRS = [
+    pytest.param("date", "ns", "ps", 1000, id="date-ns-ps"),
+    pytest.param("duration", "ns", "ps", 1000, id="duration-ns-ps"),
+    pytest.param("duration", "Y", "M", 12, id="duration-Y-M"),
+]
+
+
+def _scaled(kind: str, unit: str, factor: int) -> np.ndarray:
+    """Return the values of ``_values(kind, ...)``, equal in a finer unit."""
+    steps = (OFFSETS * factor).astype(f"timedelta64[{unit}]")
+    if kind == "duration":
+        return steps
+    return np.datetime64("1970-01-01", unit) + steps
+
+
+@pytest.mark.parametrize(("kind", "coarse", "fine", "factor"), UNIT_PAIRS)
+def test_equal_values_in_two_scalar_units_are_not_matched(
+    kind: str, coarse: str, fine: str, factor: int
+) -> None:
+    # NumPy 2.2 and later hash equal values of two units alike, and earlier
+    # releases do not, so the estimator keys a scalar by its unit.
+    first = _values(kind, coarse).reshape(-1, 1)
+    second = _scaled(kind, fine, factor).reshape(-1, 1)
+    assert np.all(first == second)
+    for fitted, other in ((first, second), (second, first)):
+        classifier = _fit(fitted)
+        with pytest.raises(ValueError, match="unseen category"):
+            classifier.predict(other)
+        lenient = _fit(fitted, unknown_categories="missing")
+        assert lenient.predict(other).shape == (len(other),)
+
+
+def _mixed_rows(
+    kind: str, coarse: str, fine: str, factor: int, order: str
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return one column that holds every value in two units, and its labels.
+
+    Each unit holds the same four instants or durations.
+    """
+    rows = [
+        (value, LABELS[i])
+        for unit, scale in ((coarse, 1), (fine, factor))
+        for i, value in enumerate(_scaled(kind, unit, scale))
+    ]
+    if order == "reversed":
+        rows.reverse()
+    elif order == "interleaved":
+        rows = rows[::2] + rows[1::2]
+    return (
+        _object_array([value for value, _ in rows]),
+        np.asarray([label for _, label in rows]),
+    )
+
+
+@pytest.mark.parametrize(("kind", "coarse", "fine", "factor"), UNIT_PAIRS)
+def test_mixed_unit_columns_do_not_depend_on_row_order(
+    kind: str, coarse: str, fine: str, factor: int
+) -> None:
+    # Equal values of two units are two categories, so the four values of each
+    # unit give eight. They are listed by unit, and then by count.
+    expected = [
+        *((coarse, count) for count in range(4)),
+        *((fine, count * factor) for count in range(4)),
+    ]
+    reference = None
+    for order in ("given", "reversed", "interleaved"):
+        X, y = _mixed_rows(kind, coarse, fine, factor, order)
+        classifier = C50Classifier(minimum_cases=1).fit(X, y)
+        assert [
+            (np.datetime_data(value.dtype)[0], int(value.view("i8")))
+            for value in classifier.categories_[0]
+        ] == expected
+        text = without_date(classifier.model_.serialized_data)
+        reference = text if reference is None else reference
+        assert text == reference
+
+
+@pytest.mark.parametrize("calendar", ["Y", "M"])
+def test_calendar_and_linear_durations_train_in_one_column(
+    calendar: str,
+) -> None:
+    # NumPy refuses to compare a calendar duration with a linear one, so the
+    # estimator must not ask it to, whatever the NumPy release.
+    units = (calendar, "ns")
+    values = [
+        np.timedelta64(int(count), units[(i // 4) % 2])
+        for i, count in enumerate(OFFSETS)
+    ]
+    X = _object_array(values)
+    classifier = _fit(X)
+    assert len(classifier.categories_[0]) == 8
+    assert classifier.predict(X).shape == (len(X),)
+    lenient = _fit(X, unknown_categories="missing")
+    assert lenient.predict(X).shape == (len(X),)

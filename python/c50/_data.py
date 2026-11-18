@@ -692,8 +692,10 @@ def _canonical_order(categories: list[object]) -> list[object]:
     and qualified name, and sorted within each type. Real numbers other than
     `bool` form one group, ordered as `float`, because they match by value.
     Every other type is its own group, so `Decimal(1)` and `1` sort in
-    different groups. Values of a type that cannot be sorted, because comparing
-    them raises an exception, keep their order of first occurrence.
+    different groups. The scalars of ``numpy.datetime64`` and
+    ``numpy.timedelta64`` are sorted by unit, step, and count, which never
+    compares two units. Values of any other type that cannot be sorted, because
+    comparing them raises an exception, keep their order of first occurrence.
     """
     groups: dict[type[object], list[object]] = {}
     for value in categories:
@@ -703,6 +705,9 @@ def _canonical_order(categories: list[object]) -> list[object]:
         groups, key=lambda kind: (kind.__module__, kind.__qualname__)
     ):
         group = groups[kind]
+        if issubclass(kind, (np.datetime64, np.timedelta64)):
+            ordered.extend(sorted(group, key=_time_order))
+            continue
         # Sorting is a best-effort normalization, and a type's comparison may
         # raise any exception: TypeError, ArithmeticError as
         # decimal.InvalidOperation does, or ValueError as pandas 2.2 does for
@@ -812,7 +817,38 @@ def _category_key(value: object, feature_index: int) -> CategoryKey:
             f"categorical feature {feature_index} contains unhashable "
             f"value {value!r}"
         ) from exc
+    if isinstance(value, (np.datetime64, np.timedelta64)):
+        return _category_group(value), _time_identity(value)
     return _category_group(value), value
+
+
+# NumPy's order of the units of dates and durations, from the coarsest to the
+# finest.
+_TIME_UNIT_ORDER = {
+    unit: rank
+    for rank, unit in enumerate(
+        ("Y", "M", "W", "D", "h", "m", "s", "ms", "us", "ns", "ps", "fs", "as")
+    )
+}
+
+
+def _time_identity(
+    value: np.datetime64 | np.timedelta64,
+) -> tuple[str, int, int]:
+    """Return the unit, the step, and the count of a NumPy time scalar.
+
+    The category of a scalar is its unit and step together with its count in
+    them. NumPy compares and hashes equal values of different units differently
+    across the releases that the package supports, so the estimator never asks
+    it to. Equal values of two units are two categories.
+    """
+    unit, step = np.datetime_data(value.dtype)
+    return unit, step, int(value.view("i8"))
+
+
+def _time_order(value: Any) -> tuple[int, int, int]:
+    unit, step, count = _time_identity(value)
+    return _TIME_UNIT_ORDER[unit], step, count
 
 
 def _category_group(value: object) -> type[object]:

@@ -300,7 +300,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 check_consistent_length(X, y_checked)
                 X_checked = stamps
             else:
-                X_array, y_checked = validate_data(
+                X_checked, y_checked = validate_data(
                     self,
                     X,
                     y,
@@ -308,7 +308,6 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                     dtype=_validation_dtype(X),
                     ensure_all_finite=False,
                 )
-                X_checked = _time_scalars(X_array)
             check_classification_targets(y_checked)
 
             weights = _relative_sample_weight(
@@ -640,17 +639,15 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         if (stamps := _time_frame(X)) is not None:
             validate_data(self, X, reset=False, skip_check_array=True)
             return stamps
-        return _time_scalars(
-            cast(
-                NDArray[Any],
-                validate_data(
-                    self,
-                    X,
-                    reset=False,
-                    dtype=_validation_dtype(X),
-                    ensure_all_finite=False,
-                ),
-            )
+        return cast(
+            NDArray[Any],
+            validate_data(
+                self,
+                X,
+                reset=False,
+                dtype=_validation_dtype(X),
+                ensure_all_finite=False,
+            ),
         )
 
     def _attribute_usage(
@@ -1362,8 +1359,9 @@ def _validation_dtype(X: ArrayLike) -> type[object] | None:
 
     An array of dates or durations whose values NumPy converts to ``int``
     objects also keeps its dtype, because scikit-learn's conversion to
-    ``object`` would make the feature continuous. ``_time_scalars`` converts it
-    afterwards.
+    ``object`` would turn the values into integers and make the feature
+    continuous. Iterating the array yields ``numpy.datetime64`` and
+    ``numpy.timedelta64`` scalars, which the encoder keeps.
     """
     if isinstance(X, np.ndarray) or _is_pandas_object(X):
         dtype = getattr(X, "dtype", None)
@@ -1374,23 +1372,8 @@ def _validation_dtype(X: ArrayLike) -> type[object] | None:
     return object
 
 
-def _time_scalars(X: NDArray[Any]) -> NDArray[Any]:
-    """Return an array of integer-converted dates or durations as scalars.
-
-    The scalars stay ``numpy.datetime64`` and ``numpy.timedelta64`` values.
-    NumPy converts the units of ``is_integer_time_dtype`` to ``int`` when it
-    converts an array to ``object``, which would make the feature continuous.
-    Any other array is returned unchanged.
-    """
-    if not is_integer_time_dtype(X.dtype):
-        return X
-    result = np.empty(X.shape, dtype=object)
-    result.flat[:] = list(X.flat)
-    return result
-
-
 def _time_frame(X: object) -> NDArray[Any] | None:
-    """Return the cells of a data frame of such dates or durations as scalars.
+    """Return a table of integer-converted dates or durations as an array.
 
     Only a data frame that is not a pandas object and whose conversion to a
     NumPy array holds dates or durations of the units of
@@ -1412,7 +1395,7 @@ def _time_frame(X: object) -> NDArray[Any] | None:
         return None
     if array.ndim != 2 or not is_integer_time_dtype(array.dtype):
         return None
-    return _time_scalars(array)
+    return array
 
 
 __all__ = ["NOT_APPLICABLE", "C50Classifier"]
