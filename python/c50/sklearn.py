@@ -28,6 +28,7 @@ from sklearn.utils import Tags, check_random_state
 from sklearn.utils.class_weight import compute_sample_weight
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import (
+    check_array,
     check_consistent_length,
     check_is_fitted,
     validate_data,
@@ -297,8 +298,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             elif (stamps := _time_frame(X)) is not None:
                 y_checked = validate_data(self, y=y, reset=True)
                 validate_data(self, X, reset=True, skip_check_array=True)
+                X_checked = _check_time_frame(self, stamps)
                 check_consistent_length(X, y_checked)
-                X_checked = stamps
             else:
                 X_checked, y_checked = validate_data(
                     self,
@@ -638,7 +639,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             return dataframe_columns(X)
         if (stamps := _time_frame(X)) is not None:
             validate_data(self, X, reset=False, skip_check_array=True)
-            return stamps
+            return _check_time_frame(self, stamps)
         return cast(
             NDArray[Any],
             validate_data(
@@ -1370,6 +1371,24 @@ def _validation_dtype(X: ArrayLike) -> type[object] | None:
     if isinstance(X, np.ndarray) and is_integer_time_dtype(X.dtype):
         return None
     return object
+
+
+def _check_time_frame(
+    estimator: C50Classifier, stamps: NDArray[Any]
+) -> NDArray[Any]:
+    """Check the sample and feature counts of a table of dates or durations.
+
+    ``validate_data`` skips its array check for such a table, so that it can
+    read the feature names of the table, and this check restores the rest of
+    it. A table without rows or columns raises ``ValueError``, as it does in
+    any other container.
+    """
+    return cast(
+        NDArray[Any],
+        check_array(
+            stamps, dtype=None, ensure_all_finite=False, estimator=estimator
+        ),
+    )
 
 
 def _time_frame(X: object) -> NDArray[Any] | None:

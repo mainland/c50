@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 import numpy as np
@@ -361,3 +362,32 @@ def test_integers_among_dates_are_categories_of_their_own() -> None:
     assert list(classifier.categorical_features_) == [0]
     kinds = {type(category) for category in classifier.categories_[0]}
     assert kinds == {int, datetime.date}
+
+
+def _empty_polars() -> Any:
+    pl = pytest.importorskip("polars")
+    return pl.DataFrame({"t": pl.Series([], dtype=pl.Datetime("ns"))})
+
+
+def _empty_pyarrow() -> Any:
+    pa = pytest.importorskip("pyarrow")
+    return pa.table({"t": pa.array([], pa.timestamp("ns"))})
+
+
+@pytest.mark.parametrize(
+    ("make", "empty"), [(_polars, _empty_polars), (_pyarrow, _empty_pyarrow)]
+)
+@pytest.mark.parametrize("role", ["fit", "predict", "predict_proba"])
+def test_a_table_of_nanoseconds_without_rows_is_rejected(
+    make: _Make, empty: Callable[[], Any], role: str
+) -> None:
+    # The sample-count check of scikit-learn applies in every container.
+    table = empty()
+    classifier = _fit(make(_values("date", "ns")))
+    call = (
+        partial(C50Classifier(minimum_cases=1).fit, table, LABELS[:0])
+        if role == "fit"
+        else partial(getattr(classifier, role), table)
+    )
+    with pytest.raises(ValueError, match=r"0 sample\(s\)"):
+        call()
