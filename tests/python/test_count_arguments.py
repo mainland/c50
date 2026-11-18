@@ -22,6 +22,7 @@ import c50
 import numpy as np
 import pytest
 from c50.sklearn import C50Classifier
+from model_text import without_date
 
 NAMES = "low, high.\n\nsignal: continuous.\n"
 TRAINING = "0, low\n1, low\n2, low\n3, high\n4, high\n5, high\n"
@@ -58,7 +59,8 @@ def train_with_options(**fields: Any) -> object:
     options = c50.Options()
     for name, value in fields.items():
         setattr(options, name, value)
-    return c50.train(NAMES, TRAINING, options=options).serialized_data
+    model = c50.train(NAMES, TRAINING, options=options)
+    return without_date(model.serialized_data)
 
 
 def fit_with(**parameters: Any) -> object:
@@ -72,7 +74,7 @@ def fit_with(**parameters: Any) -> object:
 LOW_LEVEL = [
     CountArgument(
         "split_workers",
-        lambda value: (
+        lambda value: without_date(
             c50.train(NAMES, TRAINING, split_workers=value).serialized_data
         ),
         invalid=(0, -1, 9, 2**32, 2**70),

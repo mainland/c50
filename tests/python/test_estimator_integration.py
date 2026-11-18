@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 import sklearn
 from c50.sklearn import C50Classifier
+from model_text import without_date
 from scipy import sparse
 from sklearn.base import clone
 from sklearn.feature_selection import SelectFromModel
@@ -184,7 +185,9 @@ def test_sampling_is_reproducible_for_a_fixed_seed() -> None:
     first = C50Classifier(**parameters).fit(X, Y)
     second = C50Classifier(**parameters).fit(X, Y)
 
-    assert first.model_.serialized_data == second.model_.serialized_data
+    assert without_date(first.model_.serialized_data) == without_date(
+        second.model_.serialized_data
+    )
     assert np.array_equal(first.predict(X), second.predict(X))
 
 
@@ -285,8 +288,8 @@ def test_dataframe_columns_match_object_array_conversion() -> None:
     from_frame = C50Classifier(minimum_cases=1).fit(frame, labels)
     from_values = C50Classifier(minimum_cases=1).fit(values, labels)
 
-    assert (
-        from_frame.model_.serialized_data == from_values.model_.serialized_data
+    assert without_date(from_frame.model_.serialized_data) == without_date(
+        from_values.model_.serialized_data
     )
     assert from_frame.categorical_features_.tolist() == [3, 4, 5]
     for frame_categories, value_categories in zip(
@@ -352,9 +355,8 @@ def test_coded_and_nullable_columns_match_object_conversion() -> None:
             categorical_features=indices if options else None,
         ).fit(values, labels, sample_weight=weights)
 
-        assert (
-            from_frame.model_.serialized_data
-            == from_values.model_.serialized_data
+        assert without_date(from_frame.model_.serialized_data) == without_date(
+            from_values.model_.serialized_data
         )
         for frame_categories, value_categories in zip(
             from_frame.categories_, from_values.categories_, strict=True
@@ -457,7 +459,9 @@ def test_array_api_cpu_arrays_are_converted_to_numpy(dispatch: bool) -> None:
         )
         probabilities = classifier.predict_proba(xp.asarray(X))
 
-    assert classifier.model_.serialized_data == expected.model_.serialized_data
+    assert without_date(classifier.model_.serialized_data) == without_date(
+        expected.model_.serialized_data
+    )
     assert isinstance(probabilities, np.ndarray)
     np.testing.assert_array_equal(probabilities, expected.predict_proba(X))
     other_device = xp.asarray(X, device=xp.Device("device1"))

@@ -14,6 +14,7 @@ import c50
 import numpy as np
 import pytest
 from c50.sklearn import C50Classifier
+from model_text import without_date
 from sklearn.base import clone
 from sklearn.exceptions import NotFittedError
 
@@ -71,7 +72,9 @@ def test_worker_count_preserves_estimator_model() -> None:
 
     for n_jobs in (1, 2, 64, -1, -2):
         parallel = C50Classifier(n_jobs=n_jobs).fit(X_BINARY, Y_BINARY)
-        assert parallel.model_.serialized_data == serial.model_.serialized_data
+        assert without_date(parallel.model_.serialized_data) == without_date(
+            serial.model_.serialized_data
+        )
         assert (
             parallel.predict(X_BINARY).tolist()
             == serial.predict(X_BINARY).tolist()
@@ -121,9 +124,8 @@ def test_default_tie_order_is_stable_for_the_estimator_only() -> None:
     default = C50Classifier().fit(X_BINARY, Y_BINARY)
     stable = C50Classifier(ties="stable").fit(X_BINARY, Y_BINARY)
     assert default.ties == "stable"
-    assert (
-        default.model_.serialized_data.split("\n")[1:]
-        == (stable.model_.serialized_data.split("\n")[1:])
+    assert without_date(default.model_.serialized_data) == without_date(
+        stable.model_.serialized_data
     )
 
     restored = pickle.loads(pickle.dumps(classifier))
@@ -142,7 +144,9 @@ def test_low_level_train_keeps_the_reference_order() -> None:
     default = c50.train(names, data)
     explicit = c50.train(names, data, options=c50.Options())
 
-    assert default.serialized_data == explicit.serialized_data
+    assert without_date(default.serialized_data) == without_date(
+        explicit.serialized_data
+    )
     assert c50.Options().ties == c50.TieOrder.REFERENCE
 
 
@@ -186,7 +190,9 @@ def test_numpy_scalar_parameters_match_python_scalars() -> None:
         random_state=np.int64(2),
     ).fit(X, y)
 
-    assert numpy.model_.serialized_data == python.model_.serialized_data
+    assert without_date(numpy.model_.serialized_data) == without_date(
+        python.model_.serialized_data
+    )
 
 
 @pytest.mark.parametrize("n_jobs", [0, 1.5, True, "2"])
@@ -202,7 +208,7 @@ def test_random_state_controls_only_sampling() -> None:
     y[::7] = "high"
 
     def model(**parameters: object) -> str:
-        return str(
+        return without_date(
             C50Classifier(minimum_cases=1, **parameters)
             .fit(X, y)
             .model_.serialized_data
@@ -479,7 +485,9 @@ def test_ignore_costs_discards_training_and_prediction_costs() -> None:
     ignored = C50Classifier(
         ignore_costs=True, cost_matrix=[[0, 0], [0, 0]]
     ).fit(X, [0, 0, 1, 1])
-    assert ignored.model_.serialized_data == ordinary.model_.serialized_data
+    assert without_date(ignored.model_.serialized_data) == without_date(
+        ordinary.model_.serialized_data
+    )
     assert ignored.model_.costs_data == ""
     np.testing.assert_array_equal(
         ignored.predict_proba(X), ordinary.predict_proba(X)

@@ -17,6 +17,7 @@ import pandas as pd
 import pytest
 from c50._data import fit_schema
 from c50.sklearn import C50Classifier
+from model_text import without_date
 
 Policy = Literal["error", "missing"]
 POLICIES: list[Policy] = ["error", "missing"]
@@ -199,7 +200,9 @@ def test_negative_zero_does_not_depend_on_row_order() -> None:
     for fitted in (forward, backward):
         assert [str(v) for v in fitted.categories_[0]] == ["0.0", "1.0", "2.0"]
     assert forward.model_.names_data == backward.model_.names_data
-    assert forward.model_.serialized_data == backward.model_.serialized_data
+    assert without_date(forward.model_.serialized_data) == without_date(
+        backward.model_.serialized_data
+    )
 
 
 @pytest.mark.parametrize(

@@ -12,6 +12,7 @@ from collections.abc import Iterator
 
 import pytest
 from c50 import Model, ModelKind, Options
+from model_text import without_date
 
 NAMES = "low, high.\n\nsignal: continuous.\nweight: continuous.\n"
 DATA = (
@@ -79,7 +80,9 @@ def test_operations_ignore_the_process_locale(
 
     locale.setlocale(locale.LC_ALL, decimal_comma)
     trained = Model.train(NAMES, DATA, kind, options, split_workers=4)
-    assert trained.serialized_data == expected.serialized_data
+    assert without_date(trained.serialized_data) == without_date(
+        expected.serialized_data
+    )
     if kind is ModelKind.TREE:
         cuts = _cuts(trained.serialized_data)
         assert cuts

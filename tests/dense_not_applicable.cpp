@@ -6,6 +6,7 @@
 // input with "N/A" gives.
 
 #include <c50/c50.hpp>
+#include "model_text.hpp"
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -140,16 +141,6 @@ c50::dense_dataset dense_of(const table &data, bool use_mask, bool labels)
         data.values.empty() ? nullptr : data.values.data(), data.rows,
         features, labels ? data.classes.data() : nullptr, 0,
         use_mask ? data.not_applicable.data() : nullptr);
-}
-
-/* Drop the line that carries the time stamp. */
-std::string without_stamp(const std::string &text)
-{
-    std::istringstream in(text);
-    std::string line, result;
-    while (std::getline(in, line))
-        if (line.rfind("id=", 0) != 0) result += line + "\n";
-    return result;
 }
 
 void same_predictions(const c50::predictions &a, const c50::predictions &b,

@@ -11,6 +11,7 @@ from typing import Any
 import c50
 import numpy as np
 import pytest
+from model_text import without_date
 from numpy.typing import NDArray
 
 NAMES = """lo, mid, hi.
@@ -100,13 +101,9 @@ def text_of(
     )
 
 
-def body(model: c50.Model) -> list[str]:
-    """Return the serialized model without the line that has the time stamp."""
-    return [
-        line
-        for line in model.serialized_data.splitlines()
-        if not line.startswith("id=")
-    ]
+def body(model: c50.Model) -> str:
+    """Return the serialized model without the date in its id line."""
+    return without_date(model.serialized_data)
 
 
 def same_details(a: c50.Predictions, b: c50.Predictions) -> None:

@@ -15,6 +15,7 @@ from typing import Any
 import c50
 import numpy as np
 import pytest
+from model_text import without_date
 
 NAMES = """low, high.
 
@@ -99,8 +100,12 @@ def test_stable_ties_are_deterministic() -> None:
         names, values, classes, options=options, split_workers=4
     )
 
-    assert repeated.serialized_data == first.serialized_data
-    assert parallel.serialized_data == first.serialized_data
+    assert without_date(repeated.serialized_data) == without_date(
+        first.serialized_data
+    )
+    assert without_date(parallel.serialized_data) == without_date(
+        first.serialized_data
+    )
     assert len(first.predict_details_dense(values)) == len(values)
 
 
@@ -112,7 +117,9 @@ def test_stable_ties_agree_across_text_and_dense_training() -> None:
         NAMES, DENSE_TRAINING, DENSE_CLASSES, options=options
     )
 
-    assert text_model.serialized_data == dense_model.serialized_data
+    assert without_date(text_model.serialized_data) == without_date(
+        dense_model.serialized_data
+    )
     assert dense_model.predict(CASES) == ["low", "high"]
 
 
@@ -175,7 +182,9 @@ def test_dense_training_matches_text_training(
     text_model = c50.train(NAMES, TRAINING)
     dense_model = factory(NAMES, DENSE_TRAINING, DENSE_CLASSES)
 
-    assert dense_model.serialized_data == text_model.serialized_data
+    assert without_date(dense_model.serialized_data) == without_date(
+        text_model.serialized_data
+    )
     details = dense_model.predict_details_dense(DENSE_CASES)
     assert details.class_indices == [0, 1]
     assert details.scores == [[1.0, 0.0], [0.0, 1.0]]
@@ -191,13 +200,14 @@ def test_dense_training_without_copy_matches_copy() -> None:
         np.repeat(DENSE_TRAINING, 2, axis=1)[:, ::2],
     ):
         model = c50.Model.train_dense(NAMES, values, DENSE_CLASSES, copy=False)
-        assert model.serialized_data == expected.serialized_data
-    assert (
+        assert without_date(model.serialized_data) == without_date(
+            expected.serialized_data
+        )
+    assert without_date(
         c50.train_dense(
             NAMES, DENSE_TRAINING, DENSE_CLASSES, copy=False
         ).serialized_data
-        == expected.serialized_data
-    )
+    ) == without_date(expected.serialized_data)
 
 
 @pytest.mark.parametrize("workers", [1, 2, 4])
@@ -207,7 +217,9 @@ def test_training_worker_count_preserves_model(workers: int) -> None:
         NAMES, DENSE_TRAINING, DENSE_CLASSES, split_workers=workers
     )
 
-    assert text_model.serialized_data == dense_model.serialized_data
+    assert without_date(text_model.serialized_data) == without_date(
+        dense_model.serialized_data
+    )
     assert dense_model.predict(CASES) == ["low", "high"]
 
 
@@ -301,7 +313,9 @@ def test_bytes_like_text_matches_str(
     model = c50.train(text(NAMES), text(TRAINING), costs=text(""))
     loaded = c50.load(text(NAMES), text(expected.serialized_data))
 
-    assert model.serialized_data == expected.serialized_data
+    assert without_date(model.serialized_data) == without_date(
+        expected.serialized_data
+    )
     assert loaded.serialized_data == expected.serialized_data
     assert model.predict(text(CASES)) == ["low", "high"]
     assert model.predict_scores(text(CASES)) == expected.predict_scores(CASES)
@@ -450,9 +464,9 @@ def test_options_counts_reject_bool_and_non_index_numbers(
 
 @pytest.mark.parametrize("call", sorted(_TRAIN_CALLS))
 def test_split_workers_accepts_numpy_integers(call: str) -> None:
-    assert _TRAIN_CALLS[call](np.int64(2)).serialized_data == (
-        _TRAIN_CALLS[call](2).serialized_data
-    )
+    assert without_date(
+        _TRAIN_CALLS[call](np.int64(2)).serialized_data
+    ) == without_date(_TRAIN_CALLS[call](2).serialized_data)
 
 
 @pytest.mark.parametrize("field", ["trials", "random_seed"])
@@ -493,7 +507,9 @@ def test_bytearray_text_is_copied_before_later_arguments() -> None:
     model = c50.train(NAMES, data, split_workers=ReplacesData())  # type: ignore[arg-type]
 
     assert data == bytearray()
-    assert model.serialized_data == c50.train(NAMES, TRAINING).serialized_data
+    assert without_date(model.serialized_data) == without_date(
+        c50.train(NAMES, TRAINING).serialized_data
+    )
 
 
 @pytest.mark.parametrize("factory", [c50.train_dense, c50.Model.train_dense])
