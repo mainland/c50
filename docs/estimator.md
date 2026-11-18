@@ -330,7 +330,8 @@ estimator checks the type before it converts any weight to `float64`:
   `ValueError`. This applies to a Python `int`, a `decimal.Decimal`, a
   `fractions.Fraction`, a `numpy.longdouble`, a string, and bytes, which can
   hold values outside the range of `float64`. The other accepted types cannot
-  leave it.
+  leave it. A `numpy.longdouble` can leave the range only where it is wider
+  than `float64`, which excludes Windows and macOS on ARM64.
 
 The estimator passes the weights to C5.0 as its case-weight attribute. C5.0
 uses case weights when it counts cases but never tests them in a classifier.

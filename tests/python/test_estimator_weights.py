@@ -736,8 +736,50 @@ def test_scaled_weights_within_float64_keep_every_class(scale: object) -> None:
     )
 
 
+# NumPy's longdouble is as narrow as float64 on Windows and on Apple ARM64, and
+# a double-double on PowerPC has float64's exponent range, so the itemsize does
+# not tell. Compare the ranges, overflow and underflow separately.
+_LONGDOUBLE_OVERFLOWS_LATER = (
+    np.finfo(np.longdouble).maxexp > np.finfo(np.float64).maxexp
+)
+_LONGDOUBLE_UNDERFLOWS_LATER = (
+    np.finfo(np.longdouble).smallest_subnormal
+    < np.finfo(np.float64).smallest_subnormal
+)
+
+
+def _longdouble_above_float64() -> np.longdouble:
+    """Return a longdouble that float64 cannot hold, or infinity."""
+    if _LONGDOUBLE_OVERFLOWS_LATER:
+        return np.longdouble("1e4000")
+    return np.longdouble(np.inf)
+
+
+def _longdouble_below_float64() -> np.longdouble:
+    """Return a longdouble that float64 rounds to zero, or zero."""
+    if _LONGDOUBLE_UNDERFLOWS_LATER:
+        return np.longdouble("1e-4000")
+    return np.longdouble(0)
+
+
+def _out_of_range_message(weights: object) -> str:
+    """Return the message that a weight outside float64 raises.
+
+    A longdouble as narrow as float64 holds infinity and zero themselves, so
+    the first is an infinite weight and the second an all-zero array.
+    """
+    if isinstance(weights, np.floating) and np.isinf(weights):
+        return "must contain only finite values"
+    if (
+        isinstance(weights, np.ndarray)
+        and weights.dtype.kind == "f"
+        and not weights.any()
+    ):
+        return "cannot be zero for every sample"
+    return "rounded to float64"
+
+
 def _out_of_range_weights() -> dict[str, object]:
-    longdouble = np.longdouble
     return {
         "Decimal 1e-324 scale": [decimal.Decimal("1e-324")] * 8
         + [decimal.Decimal("5e-324")] * 16,
@@ -749,8 +791,8 @@ def _out_of_range_weights() -> dict[str, object]:
         "string 1e400": "1e400",
         "string 1e-400": ["1e-400"] * 24,
         "bytes array 1e-400": np.array([b"1e-400"] * 24),
-        "longdouble 1e4000": longdouble("1e4000"),
-        "longdouble 1e-4000 array": np.full(24, longdouble("1e-4000")),
+        "longdouble 1e4000": _longdouble_above_float64(),
+        "longdouble 1e-4000 array": np.full(24, _longdouble_below_float64()),
         "object array with one underflow": np.asarray(
             [1.0] * 23 + [decimal.Decimal("1e-400")], dtype=object
         ),
@@ -765,7 +807,7 @@ def test_weights_outside_float64_raise_value_error(name: str) -> None:
     weights = _out_of_range_weights()[name]
     classifier = C50Classifier()
 
-    with pytest.raises(ValueError, match="rounded to float64"):
+    with pytest.raises(ValueError, match=_out_of_range_message(weights)):
         classifier.fit(X, y, sample_weight=weights)
     assert not hasattr(classifier, "model_")
 
@@ -905,8 +947,8 @@ _WEIGHT_TYPES: dict[str, tuple[object, object, object, object, object]] = {
         _LONGDOUBLE(0),
         _LONGDOUBLE(1),
         _LONGDOUBLE(2),
-        _LONGDOUBLE("1e4000"),
-        _LONGDOUBLE("1e-4000"),
+        _longdouble_above_float64(),
+        _longdouble_below_float64() if _LONGDOUBLE_UNDERFLOWS_LATER else None,
     ),
     "Decimal": (
         decimal.Decimal(0),
@@ -950,7 +992,9 @@ def test_each_accepted_weight_type_follows_the_range_rule(name: str) -> None:
         if outside is None:
             continue
         for held in ([one] * 7 + [outside], outside):
-            with pytest.raises(ValueError, match="rounded to float64"):
+            with pytest.raises(
+                ValueError, match=_out_of_range_message(outside)
+            ):
                 C50Classifier().fit(X, y, sample_weight=held)
 
 
