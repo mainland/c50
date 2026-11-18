@@ -1028,6 +1028,19 @@ def _weight_is_zero(element: Any) -> bool:
     return bool(element == 0)
 
 
+def _float64_holds(kind: type) -> bool:
+    """Return whether ``float64`` holds every value of an accepted type.
+
+    Such a weight cannot round to infinity, and it rounds to zero only when it
+    is zero. That includes every integer, because an integer that is too large
+    for ``float64`` raises ``OverflowError`` during conversion. Checking the
+    exact value of these weights one by one is slow for a long list.
+    """
+    if issubclass(kind, np.floating):
+        return np.dtype(kind).itemsize <= 8
+    return issubclass(kind, (bool, int, float, np.bool_, np.integer))
+
+
 def _convert_weights(values: NDArray[Any]) -> NDArray[np.float64]:
     """Round checked weights to ``float64``, or raise ``ValueError``.
 
@@ -1052,8 +1065,12 @@ def _convert_weights(values: NDArray[Any]) -> NDArray[np.float64]:
         return weights
     suspect = np.flatnonzero((weights == 0) | np.isinf(weights))
     exact = values.ravel()
+    if all(_float64_holds(kind) for kind in set(map(type, exact[suspect]))):
+        return weights
     for index in suspect:
         element = exact[index]
+        if _float64_holds(type(element)):
+            continue
         if np.isinf(weights.ravel()[index]):
             lost = _weight_is_finite(element)
         else:
