@@ -263,8 +263,10 @@ The property test draws its examples with Hypothesis. Every pytest run, also
 under CTest and in CI, uses the `reproducible` profile that
 `tests/python/conftest.py` defines. The profile derandomizes the examples and
 ignores the example database, so the same tree draws the same examples on every
-host, and a failure can be reproduced and bisected. To draw new examples, name
-the `explore` profile:
+host with the same Hypothesis version. Different versions can draw different
+examples from the same source, so record the Hypothesis version with each
+reproduction. A failure can then be reproduced and bisected. To draw new
+examples, name the `explore` profile:
 
 ```sh
 .venv/bin/python -m pytest --hypothesis-profile=explore \
@@ -275,7 +277,9 @@ A failing example from either profile prints a `@reproduce_failure` line with a
 blob. Add that decorator to the failing test, above `@given`, to replay the
 example, then remove it after the fix. The blob is valid only for the printed
 Hypothesis version. The default profile need not draw an example that
-`explore` found, so add a regression test for it.
+`explore` found, so add a regression test for it. A concrete example survives
+Hypothesis upgrades, unlike a draw sequence. Keep a failing example as an
+`@example` of the test or as a record of the property-hunt log.
 
 The tutorial test runs the code in {doc}`tutorial` and checks the results that
 its text reports. It downloads two datasets from OpenML on first use, so it is
