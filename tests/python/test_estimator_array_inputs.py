@@ -15,7 +15,10 @@ libraries themselves use `pytest.importorskip`.
 from __future__ import annotations
 
 import array
+import mmap
 import os
+import sys
+import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -26,8 +29,6 @@ import sklearn
 from c50.sklearn import C50Classifier, _host_array
 from model_text import without_date
 from scipy import sparse
-from sklearn.base import BaseEstimator
-from sklearn.utils.validation import validate_data
 
 _rng = np.random.default_rng(5)
 X = _rng.normal(size=(60, 3))
@@ -115,8 +116,23 @@ class _MissingNaN(_TensorLike):
         return values
 
 
-class _Probe(BaseEstimator):
-    """An estimator on which scikit-learn records a frame's feature names."""
+class _ColumnFrame(_TensorLike):
+    """Has `columns`, as a data frame of another library does."""
+
+    columns = ("a", "b", "c")
+
+
+def _xarray(values: np.ndarray) -> Any:
+    return pytest.importorskip("xarray").DataArray(values)
+
+
+def _polars_frame(values: np.ndarray) -> Any:
+    return pytest.importorskip("polars").DataFrame(values)
+
+
+def _pyarrow_table(values: np.ndarray) -> Any:
+    pa = pytest.importorskip("pyarrow")
+    return pa.table({str(i): values[:, i] for i in range(values.shape[1])})
 
 
 def _array_api_strict(values: np.ndarray) -> Any:
@@ -165,6 +181,10 @@ CONTAINERS: dict[str, tuple[_Make, frozenset[int]]] = {
         lambda a: memoryview(np.ascontiguousarray(a)),
         frozenset({1, 2}),
     ),
+    "column-frame": (_ColumnFrame, frozenset({2})),
+    "xarray": (_xarray, frozenset({1, 2})),
+    "polars-frame": (_polars_frame, frozenset({2})),
+    "pyarrow-table": (_pyarrow_table, frozenset({2})),
     "array.array": (
         lambda a: array.array("q" if a.dtype.kind == "i" else "d", a),
         frozenset({1}),
@@ -177,6 +197,7 @@ ROLES = (
     "sample_weight",
     "predict_X",
     "predict_proba_X",
+    "predict_log_proba_X",
     "score_X",
 )
 _DIMENSIONS = {"y": 1, "sample_weight": 1}
@@ -217,6 +238,7 @@ def _same_classifier(a: C50Classifier, b: C50Classifier) -> None:
     )
 
 
+@pytest.mark.filterwarnings("ignore:X has feature names")
 @pytest.mark.parametrize(("role", "name"), CASES)
 def test_container_gives_the_numpy_result(role: str, name: str) -> None:
     make = CONTAINERS[name][0]
@@ -236,6 +258,12 @@ def test_container_gives_the_numpy_result(role: str, name: str) -> None:
         np.testing.assert_array_equal(
             probabilities, _reference.predict_proba(X)
         )
+    elif role == "predict_log_proba_X":
+        logarithms = _reference.predict_log_proba(make(X))
+        assert isinstance(logarithms, np.ndarray)
+        np.testing.assert_array_equal(
+            logarithms, _reference.predict_log_proba(X)
+        )
     else:
         assert _reference.score(make(X), Y) == _reference.score(X, Y)
 
@@ -251,6 +279,8 @@ def _call(role: str, value: Any) -> object:
         return _reference.predict(value)
     if role == "predict_proba_X":
         return _reference.predict_proba(value)
+    if role == "predict_log_proba_X":
+        return _reference.predict_log_proba(value)
     return _reference.score(value, Y)
 
 
@@ -260,6 +290,7 @@ _NAMES = {
     "sample_weight": "sample_weight",
     "predict_X": "X",
     "predict_proba_X": "X",
+    "predict_log_proba_X": "X",
     "score_X": "X",
 }
 
@@ -278,8 +309,9 @@ def test_other_array_inputs_keep_a_clear_error_when_unreadable() -> None:
         def __array_namespace__(self, api_version: str | None = None) -> Any:
             return np
 
-    for role in ("fit_X", "y"):
-        with pytest.raises(ValueError, match=r"array|shape|1d|2D"):
+    messages = {"fit_X": "Expected 2D array", "y": "y should be a 1d array"}
+    for role, message in messages.items():
+        with pytest.raises(ValueError, match=message):
             _call(role, OnlyNamespace())
 
 
@@ -315,15 +347,12 @@ def test_frames_and_unreadable_objects_pass_the_boundary_unchanged() -> None:
         def __dataframe__(self) -> None:
             return None
 
-    class ColumnFrame(_TensorLike):
-        columns = ("a", "b", "c")
-
     class Plain:
         dtype = np.dtype(float)
 
     kept = [
         InterchangeFrame(X),
-        ColumnFrame(X),
+        _ColumnFrame(X),
         pd.DataFrame(X),
         pd.Series(W),
         pd.Index(W),
@@ -414,30 +443,54 @@ def test_polars_and_pyarrow_missing_weights_raise_value_error() -> None:
             _fit(sample_weight=weights)
 
 
-def test_data_frames_keep_their_feature_names() -> None:
+def _reads_feature_names(library: str) -> bool:
+    """Return whether the installed scikit-learn reads the library's names.
+
+    scikit-learn reads the names of pyarrow tables and polars 1.x frames
+    through `__dataframe__`, which polars 2 lacks. It reads polars 2 names
+    itself from version 1.9.0 on.
+    """
+    if library == "pyarrow":
+        return True
+    polars = pytest.importorskip("polars")
+    major, minor = (int(part) for part in sklearn.__version__.split(".")[:2])
+    return int(polars.__version__.split(".")[0]) < 2 or (major, minor) >= (
+        1,
+        9,
+    )
+
+
+@pytest.mark.parametrize("library", ["polars", "pyarrow"])
+def test_data_frames_keep_their_feature_names(library: str) -> None:
     names = ["alpha", "beta", "gamma"]
     columns = {name: X[:, i] for i, name in enumerate(names)}
     reference = _fit(X=pd.DataFrame(columns))
-    frames = [
-        pytest.importorskip("polars").DataFrame(columns),
-        pytest.importorskip("pyarrow").table(columns),
-    ]
-    for frame in frames:
-        # scikit-learn decides which libraries' frames have feature names.
-        probe = _Probe()
-        validate_data(probe, frame)
-        classifier = _fit(X=frame)
-        _same_classifier(classifier, reference)
-        assert getattr(classifier, "feature_names_in_", None) is not None or (
-            getattr(probe, "feature_names_in_", None) is None
-        )
-        np.testing.assert_array_equal(
-            getattr(classifier, "feature_names_in_", None),
-            getattr(probe, "feature_names_in_", None),
-        )
-        np.testing.assert_array_equal(
-            classifier.predict(frame), reference.predict(_data_for(reference))
-        )
+    module = pytest.importorskip(library)
+    frame = (module.DataFrame if library == "polars" else module.table)(
+        columns
+    )
+    classifier = _fit(X=frame)
+    _same_classifier(classifier, reference)
+    if _reads_feature_names(library):
+        np.testing.assert_array_equal(classifier.feature_names_in_, names)
+        # The names make the column order part of the contract.
+        with pytest.raises(ValueError, match="feature names"):
+            classifier.predict(frame.select(names[::-1]))
+        named = C50Classifier(
+            minimum_cases=1, categorical_features=["beta"]
+        ).fit(frame, Y)
+        assert list(named.categorical_features_) == [1]
+    else:
+        assert not hasattr(classifier, "feature_names_in_")
+        with pytest.raises(
+            ValueError, match="require input with feature names"
+        ):
+            C50Classifier(minimum_cases=1, categorical_features=["beta"]).fit(
+                frame, Y
+            )
+    np.testing.assert_array_equal(
+        classifier.predict(frame), reference.predict(_data_for(reference))
+    )
 
 
 def test_polars_and_pyarrow_columns_work_as_y_and_weights() -> None:
@@ -449,3 +502,408 @@ def test_polars_and_pyarrow_columns_work_as_y_and_weights() -> None:
         (pa.chunked_array([Y]), pa.chunked_array([W])),
     ):
         _same_classifier(_fit(y=y, sample_weight=weights), _reference)
+
+
+_STAMPS = np.datetime64("2020-01-01", "ns") + np.arange(60).astype(
+    "timedelta64[ns]"
+)
+
+
+@pytest.mark.parametrize("kind", ["datetime64[ns]", "timedelta64[ns]"])
+def test_interface_only_nanosecond_weights_raise_type_error(kind: str) -> None:
+    # The stub has no `dtype` attribute, so the conversion alone decides what
+    # the weight check sees.
+    weights = _STAMPS.astype(kind)
+    with pytest.raises(TypeError, match="numbers or strings"):
+        _fit(sample_weight=_InterfaceOnly(weights))
+    with pytest.raises(TypeError, match="numbers or strings"):
+        _fit(sample_weight=weights)
+
+
+def test_polars_nanosecond_weights_raise_type_error() -> None:
+    pl = pytest.importorskip("polars")
+    stamps = pl.Series(_STAMPS)
+    weights = [
+        stamps,
+        stamps.dt.replace_time_zone("UTC"),
+        pl.Series(_STAMPS - _STAMPS[0]),
+        pl.Series(_STAMPS - _STAMPS[0], dtype=pl.Duration("ns")),
+    ]
+    for value in weights:
+        with pytest.raises(TypeError, match="numbers or strings"):
+            _fit(sample_weight=value)
+
+
+def test_pyarrow_nanosecond_weights_raise_type_error() -> None:
+    pa = pytest.importorskip("pyarrow")
+    stamps = pa.array(_STAMPS)
+    durations = pa.array(_STAMPS - _STAMPS[0])
+    weights = [
+        stamps,
+        pa.chunked_array([stamps]),
+        pa.array(_STAMPS, pa.timestamp("ns", tz="UTC")),
+        durations,
+        pa.chunked_array([durations, durations]),
+    ]
+    for value in weights:
+        with pytest.raises(TypeError, match="numbers or strings"):
+            _fit(sample_weight=value)
+
+
+class _LibraryError(Exception):
+    """An exception type of a library, as polars raises its own."""
+
+
+class _RaisesOwnError(_TensorLike):
+    """Refuses its conversion with an exception of its own kind."""
+
+    def __array__(
+        self, dtype: Any = None, copy: bool | None = None
+    ) -> np.ndarray:
+        raise _LibraryError("the library cannot convert this array")
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_any_exception_of_a_conversion_raises_value_error(role: str) -> None:
+    values = X if _DIMENSIONS.get(role, 2) == 2 else Y.astype(float)
+    with pytest.raises(ValueError, match=_NAMES[role]) as caught:
+        _call(role, _RaisesOwnError(values))
+    assert "cannot be converted to a NumPy array" in str(caught.value)
+    assert isinstance(caught.value.__cause__, _LibraryError)
+
+
+def test_an_exception_that_is_not_an_exception_propagates() -> None:
+    class Panic(BaseException):
+        pass
+
+    class Panicking(_TensorLike):
+        def __array__(
+            self, dtype: Any = None, copy: bool | None = None
+        ) -> np.ndarray:
+            raise Panic
+
+    with pytest.raises(Panic):
+        _fit(X=Panicking(X))
+
+
+def _raising_probes() -> dict[str, Any]:
+    class ColumnsRaise(_TensorLike):
+        @property
+        def columns(self) -> list[str]:
+            raise RuntimeError("columns not available")
+
+    closed = mmap.mmap(-1, 64)
+    closed.close()
+    released = memoryview(np.ones(60))
+    released.release()
+    cases: dict[str, Any] = {
+        "columns": ColumnsRaise(X),
+        "closed-mmap": closed,
+        "released-memoryview": released,
+    }
+    if sys.version_info >= (3, 12):
+
+        class Locked:
+            def __buffer__(self, flags: int) -> memoryview:
+                raise BufferError("buffer is locked")
+
+        cases["buffer"] = Locked()
+    return cases
+
+
+@pytest.mark.parametrize("role", ["fit_X", "y", "sample_weight", "predict_X"])
+def test_failing_probes_of_an_input_raise_value_error(role: str) -> None:
+    for value in _raising_probes().values():
+        with pytest.raises(ValueError, match=_NAMES[role]) as caught:
+            _call(role, value)
+        assert "cannot be converted to a NumPy array" in str(caught.value)
+        assert caught.value.__cause__ is not None
+
+
+def test_polars_lazy_frames_fail_without_a_column_warning() -> None:
+    # scikit-learn warns about the data types of a lazy frame in some versions.
+    # Only the question of whether the frame has columns is the estimator's.
+    pl = pytest.importorskip("polars")
+    lazy = pl.LazyFrame({"a": X[:, 0]})
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with pytest.raises(ValueError, match="2D array"):
+            _fit(X=lazy)
+    assert not [w for w in caught if "column names" in str(w.message)]
+
+
+def test_buffer_objects_keep_their_results() -> None:
+    weights = np.arange(60) % 3 + 1
+    expected = _fit(sample_weight=weights.astype(np.uint8))
+    for buffer in (
+        bytearray(weights.astype(np.uint8).tobytes()),
+        memoryview(weights.astype(np.uint8)),
+        array.array("B", weights.astype(np.uint8).tobytes()),
+    ):
+        _same_classifier(_fit(sample_weight=buffer), expected)
+
+
+@pytest.mark.parametrize("name", ["Int128", "UInt128"])
+def test_polars_128_bit_integers_are_refused_by_name(name: str) -> None:
+    pl = pytest.importorskip("polars")
+    dtype = getattr(pl, name, None)
+    if dtype is None:
+        pytest.skip(f"this polars has no {name}")
+    column = pl.Series(np.arange(60) % 3, dtype=dtype)
+    try:
+        np.asarray(column)
+    except Exception:
+        panic = None
+    except BaseException as exc:
+        # polars 2.0 panics, and a panic is not an Exception.
+        panic = type(exc)
+    else:
+        pytest.skip(f"this polars converts {name}")
+    if panic is None:
+        with pytest.raises(ValueError, match="y cannot be converted"):
+            _fit(y=column)
+        with pytest.raises(ValueError, match="sample_weight cannot be conv"):
+            _fit(sample_weight=column)
+    else:
+        with pytest.raises(panic):
+            _fit(y=column)
+        with pytest.raises(panic):
+            _fit(sample_weight=column)
+
+
+COSTS = np.array([[0.0, 2.5], [1.5, 0.0]])
+_two_classes = (X[:, 0] > 0).astype(np.int64)
+
+
+def _fit_costs(cost_matrix: Any) -> C50Classifier:
+    return C50Classifier(minimum_cases=1, cost_matrix=cost_matrix).fit(
+        X, _two_classes
+    )
+
+
+def test_cost_matrix_containers_give_the_numpy_result() -> None:
+    reference = _fit_costs(COSTS)
+    containers: list[Any] = [
+        COSTS.tolist(),
+        _masked(COSTS),
+        _TensorLike(COSTS),
+        _PolarsLike(COSTS),
+        _InterfaceOnly(COSTS),
+        _NamespaceLike(COSTS),
+        memoryview(np.ascontiguousarray(COSTS)),
+        pd.DataFrame(COSTS),
+        COSTS.astype(np.float32),
+    ]
+    for cost_matrix in containers:
+        candidate = _fit_costs(cost_matrix)
+        _same_classifier(candidate, reference)
+        np.testing.assert_array_equal(
+            candidate.cost_matrix_, reference.cost_matrix_
+        )
+    _same_classifier(_fit_costs(_array_api_strict(COSTS)), reference)
+    torch = pytest.importorskip("torch")
+    _same_classifier(_fit_costs(torch.tensor(COSTS)), reference)
+
+
+def test_cost_matrix_that_cannot_convert_raises_value_error() -> None:
+    cases: dict[str, Any] = {"refusing": _Refusing(COSTS)}
+    try:
+        xp = pytest.importorskip("array_api_strict")
+        cases["device"] = xp.asarray(COSTS, device=xp.Device("device1"))
+    except pytest.skip.Exception:
+        pass
+    try:
+        torch = pytest.importorskip("torch")
+        cases["gradient"] = torch.tensor(COSTS, requires_grad=True)
+        cases["bfloat16"] = torch.tensor(COSTS, dtype=torch.bfloat16)
+        cases["meta"] = torch.empty((2, 2), device="meta")
+    except pytest.skip.Exception:
+        pass
+    for case in cases.values():
+        with pytest.raises(ValueError, match="cost_matrix cannot be conv"):
+            _fit_costs(case)
+
+
+@pytest.mark.parametrize(
+    "cost_matrix",
+    [
+        np.array([[0, 2 + 5j], [1, 0]]),
+        [[0, 2 + 5j], [1, 0]],
+        np.array([[0, 2], [1, 0]]).astype("timedelta64[D]"),
+        np.array([[0, 2], [1, 0]]).astype("timedelta64[ns]"),
+        np.array([[0, 2], [1, 0]]).astype("datetime64[D]"),
+    ],
+    ids=["complex-array", "complex-list", "days", "nanoseconds", "dates"],
+)
+def test_cost_matrix_of_another_kind_raises_value_error(
+    cost_matrix: Any,
+) -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(ValueError, match="real numbers"):
+            _fit_costs(cost_matrix)
+
+
+@pytest.mark.parametrize("name", ["polars", "pyarrow"])
+def test_score_reads_y_and_weights_of_other_libraries(name: str) -> None:
+    make = {
+        "polars": lambda a: pytest.importorskip("polars").Series(a),
+        "pyarrow": lambda a: pytest.importorskip("pyarrow").array(a),
+    }[name]
+    expected = _reference.score(X, Y, sample_weight=W)
+    assert _reference.score(X, make(Y)) == _reference.score(X, Y)
+    assert _reference.score(X, make(Y), sample_weight=make(W)) == expected
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        name
+        for name, (_, dims) in CONTAINERS.items()
+        # scikit-learn's own parameter check refuses objects that are only
+        # buffers or only expose `__array_interface__`, as the `y` of `score`.
+        if 1 in dims and name not in {"interface-only", "memoryview"}
+    ],
+)
+def test_score_reads_y_and_weights_of_every_container(name: str) -> None:
+    make = CONTAINERS[name][0]
+    expected = _reference.score(X, Y, sample_weight=W)
+    assert _reference.score(X, make(Y)) == _reference.score(X, Y)
+    assert _reference.score(X, make(Y), sample_weight=make(W)) == expected
+
+
+def _mixed_rows() -> tuple[np.ndarray, list[Any], list[str], list[bool]]:
+    rng = np.random.default_rng(3)
+    numbers = [
+        None if i % 7 == 0 else float(v)
+        for i, v in enumerate(rng.normal(size=60))
+    ]
+    colors = rng.choice(["red", "green", "blue"], 60).tolist()
+    flags = (rng.random(60) > 0.5).tolist()
+    rows = np.empty((60, 3), dtype=object)
+    for i in range(60):
+        rows[i] = [numbers[i], colors[i], flags[i]]
+    return rows, numbers, colors, flags
+
+
+def _mixed_frames() -> dict[str, Any]:
+    _, numbers, colors, flags = _mixed_rows()
+    frames: dict[str, Any] = {
+        "pandas-nullable": pd.DataFrame(
+            {
+                "a": pd.array(numbers, dtype="Float64"),
+                "b": pd.array(colors, dtype="string"),
+                "c": pd.array(flags, dtype="boolean"),
+            }
+        )
+    }
+    try:
+        pl = pytest.importorskip("polars")
+        frames["polars"] = pl.DataFrame(
+            {"a": numbers, "b": colors, "c": flags}
+        )
+        frames["polars-categorical"] = pl.DataFrame(
+            {
+                "a": numbers,
+                "b": pl.Series(colors, dtype=pl.Categorical),
+                "c": flags,
+            }
+        )
+        frames["polars-enum"] = pl.DataFrame(
+            {
+                "a": numbers,
+                "b": pl.Series(colors, dtype=pl.Enum(sorted(set(colors)))),
+                "c": flags,
+            }
+        )
+    except pytest.skip.Exception:
+        pass
+    try:
+        pa = pytest.importorskip("pyarrow")
+        frames["pyarrow"] = pa.table({"a": numbers, "b": colors, "c": flags})
+        frames["pyarrow-dictionary"] = pa.table(
+            {
+                "a": numbers,
+                "b": pa.array(colors).dictionary_encode(),
+                "c": flags,
+            }
+        )
+        frames["pandas-arrow"] = pd.DataFrame(
+            {
+                "a": pd.array(numbers, dtype="double[pyarrow]"),
+                "b": pd.array(colors, dtype="string[pyarrow]"),
+                "c": pd.array(flags, dtype="bool[pyarrow]"),
+            }
+        )
+    except pytest.skip.Exception:
+        pass
+    return frames
+
+
+def test_mixed_type_frames_give_the_result_of_an_object_array() -> None:
+    # Columns of strings, Booleans, categories, and nulls in each library make
+    # the classifier that the same values in an object array make.
+    rows, _, _, _ = _mixed_rows()
+    labels = np.arange(60) % 2
+    expected = C50Classifier(minimum_cases=1).fit(rows, labels)
+    assert list(expected.categorical_features_) == [1, 2]
+    for name, frame in _mixed_frames().items():
+        candidate = C50Classifier(minimum_cases=1).fit(frame, labels)
+        assert without_date(candidate.model_.serialized_data) == without_date(
+            expected.model_.serialized_data
+        ), name
+        assert [list(c) for c in candidate.categories_] == [
+            list(c) for c in expected.categories_
+        ], name
+        np.testing.assert_array_equal(
+            candidate.predict(frame), expected.predict(rows), err_msg=name
+        )
+
+
+@pytest.mark.parametrize(
+    "dtype", ["UInt8", "UInt64", "Int32", "int64[pyarrow]", "uint8[pyarrow]"]
+)
+def test_pandas_nullable_and_arrow_integer_columns_work(dtype: str) -> None:
+    if "pyarrow" in dtype:
+        pytest.importorskip("pyarrow")
+    integers = np.arange(60) % 4
+    columns = {"a": integers, "b": (integers * 7) % 5}
+    frame = pd.DataFrame(
+        {k: pd.array(v, dtype=dtype) for k, v in columns.items()}
+    )
+    expected = C50Classifier(minimum_cases=1).fit(pd.DataFrame(columns), Y)
+    candidate = C50Classifier(minimum_cases=1).fit(frame, Y)
+    assert without_date(candidate.model_.serialized_data) == without_date(
+        expected.model_.serialized_data
+    )
+    np.testing.assert_array_equal(
+        candidate.predict(frame), expected.predict(pd.DataFrame(columns))
+    )
+
+
+def test_nested_sequences_of_arrays_work_as_x() -> None:
+    rows = list(X)
+    for nested in (rows, tuple(rows), [row.tolist() for row in X]):
+        _same_classifier(_fit(X=nested), _reference)
+        np.testing.assert_array_equal(
+            _reference.predict(nested), _reference.predict(X)
+        )
+    torch = pytest.importorskip("torch")
+    tensors = [torch.tensor(row) for row in X]
+    _same_classifier(_fit(X=tensors), _reference)
+    np.testing.assert_array_equal(
+        _reference.predict(tensors), _reference.predict(X)
+    )
+
+
+def test_masked_x_is_read_without_its_mask_and_checked_for_infinity() -> None:
+    masked = _masked(X)
+    masked.mask[2, 1] = True
+    _same_classifier(_fit(X=masked), _reference)
+    infinite = _masked(X)
+    infinite[2, 1] = np.inf
+    infinite.mask[2, 1] = True
+    for value in (infinite, _masked(np.where(X > 5, np.inf, X))):
+        value[2, 1] = np.inf
+        with pytest.raises(ValueError, match="non-finite"):
+            _fit(X=value)

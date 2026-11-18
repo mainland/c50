@@ -31,15 +31,24 @@ and pickling.
 ## Input contract
 
 `X` must be a dense, two-dimensional array-like object. Sparse matrices are not
-supported. `y` must be a one-dimensional classification target containing at
-least two classes. `classes_` records the original labels in the same order as
-the columns returned by `predict_proba`.
+supported: a SciPy sparse matrix or array as `X` or `y`, and a `numpy.matrix`,
+raise `TypeError`, as does a categorical value that cannot be hashed, such as a
+list, a dict, or a set. `y` must be a one-dimensional classification target
+containing at least two classes. `classes_` lists the labels in the same order
+as the columns returned by `predict_proba`. It holds the labels as
+scikit-learn's input check returns them. NumPy, polars, pyarrow, and PyTorch
+labels keep their type, while scikit-learn converts the labels of a pandas
+nullable or Arrow-backed dtype, such as `boolean`, `Int64`, `UInt8`,
+`bool[pyarrow]`, or `int64[pyarrow]`, to `float64`. Then `classes_` and the
+result of `predict` hold floats that compare equal to the original labels, as
+they do for `DecisionTreeClassifier`.
 
 With `categorical_features=None`, numeric columns are continuous, and Boolean
 or non-numeric columns are categorical. Set `categorical_features` to a
 sequence of zero-based indices to override inference. String column names may
-also be used when the input exposes string feature names. When an explicit
-sequence is present, every unlisted column is continuous. Set
+also be used when scikit-learn reads string feature names from the input (see
+[pandas and Array API support](#pandas-and-array-api-support)). When an
+explicit sequence is present, every unlisted column is continuous. Set
 `categorical_features="from_dtype"` to treat exactly the DataFrame columns with
 a pandas `category` dtype as categorical, as `HistGradientBoostingClassifier`
 does. Every other column, and every column of non-DataFrame input, is then
@@ -91,6 +100,27 @@ Values of any other type keep the form of their first occurrence in
 names in `export_text` show the form that occurs first in the training rows.
 The same holds for the tuples `(1,)` and `(1.0,)`. The classifier and its
 predictions do not depend on the form.
+
+Dates and durations are categorical in every unit. NumPy converts most units
+to Python objects when it converts an array to `object`, and the categories are
+those objects: `datetime.date` for `datetime64` in `Y`, `M`, `W`, and `D`,
+`datetime.datetime` for `datetime64` in `h`, `m`, `s`, `ms`, and `us`, and
+`datetime.timedelta` for `timedelta64` in `W`, `D`, `h`, `m`, `s`, `ms`, and
+`us`. NumPy converts `datetime64` in `ns`, `ps`, `fs`, and `as`, and
+`timedelta64` in `Y`, `M`, `ns`, `ps`, `fs`, and `as`, to `int`. The estimator
+keeps those values as `numpy.datetime64` and `numpy.timedelta64` scalars, so
+they stay categories. The two forms are different types, so they never match. A
+model fitted on `datetime64[ns]` data rejects the same instants in
+`datetime64[us]` as unseen under `unknown_categories="error"`, and the reverse.
+Cast the data to the unit of the training data first. Values of two units in
+the scalar group, such as `ns` and `ps`, have one type and match by value.
+Arrays, lists or object arrays of scalars, and polars and pyarrow tables whose
+columns are all nanosecond dates or durations give the same classifier and the
+same `categories_`. polars and pyarrow hold no other unit of the scalar group.
+A polars or pyarrow table that mixes a nanosecond column with columns of
+another type reaches C5.0 as the library's own conversion of the whole table
+makes it, and polars converts a nanosecond date in a table with float columns
+to floats, so cast those columns to `us` first. `NaT` is missing in every unit.
 
 ## Not-applicable values
 
@@ -198,32 +228,55 @@ pandas is a test dependency, not a runtime requirement. The estimator uses CPU
 NumPy arrays and returns NumPy arrays. It declares `array_api_support=False`.
 It does not promise preservation of another array namespace, device, or dtype.
 
-C5.0 runs on the CPU. The estimator reads `X`, `y`, and `sample_weight` in
-`fit`, and `X` in `predict`, `predict_proba`, and `score`, in the same order for
-every input:
+C5.0 runs on the CPU. The estimator reads `X`, `y`, `sample_weight`, and
+`cost_matrix` in `fit`, and `X` in `predict`, `predict_proba`, and `score`, in
+the same order for every input:
 
 1. NumPy arrays, including masked arrays, NumPy and Python scalars, strings,
    bytes, lists, tuples, and `None` are used as they are.
 2. pandas objects (`DataFrame`, `Series`, `Index`, and extension arrays) are
    used as they are, with the column-wise conversion described above.
-3. Other data frames, such as polars and pyarrow tables, are used as they are,
-   so that scikit-learn reads their feature names.
+3. Objects with `__dataframe__` or a `columns` attribute, such as polars and
+   pyarrow tables, are used as they are, so that scikit-learn reads their
+   feature names. scikit-learn reads the names
+   of pyarrow tables and polars 1.x frames in every supported version, and
+   those of polars 2 frames from version 1.9.0 on. With polars 2 on an earlier
+   scikit-learn, the estimator has no `feature_names_in_`: prediction does not
+   check the order of the columns, and names in `categorical_features` raise
+   `ValueError`. Pass `X` as a NumPy array, or pass indices, in that case.
 4. Arrays from an Array API library are converted with `numpy.asarray`, with or
    without `array_api_dispatch`.
-5. Any other object that NumPy reads as an array is converted with
+5. Any other object that implements an array protocol is converted with
    `numpy.asarray`. That includes PyTorch CPU tensors, polars and pyarrow
    arrays, and objects that implement `__array__`, `__array_interface__`,
-   `__array_struct__`, or the buffer protocol. A `sample_weight` without a NumPy
-   `dtype` becomes an object array of its elements, so that the checks in
-   [Sample weights](#sample-weights) see each element as it is.
+   `__array_struct__`, or the buffer protocol. The result has the dtype that
+   the array's library hands to NumPy, which the checks in
+   [Sample weights](#sample-weights) judge as they judge a NumPy array. A
+   polars or pyarrow array of nanosecond dates or durations raises `TypeError`
+   as a weight, as a NumPy array does.
 
-An object that NumPy cannot read as an array, such as a sparse matrix, goes to
-scikit-learn unchanged. Results are NumPy arrays. The array's library decides
+An object that implements none of these protocols, such as a sparse matrix,
+goes to scikit-learn unchanged. Results are NumPy arrays. The array's library decides
 whether it can be converted. An array in GPU or other device memory, a tensor
-that requires gradients, and a `bfloat16` tensor raise `ValueError` that names
-the input and chains the library's exception. Move such an array to CPU memory,
+that requires gradients, a `bfloat16` tensor, and a polars array of 128-bit
+integers raise `ValueError` that names the input and chains the library's
+exception, whatever the exception's type, as do an object whose protocol probe
+raises. A `BaseException` that is not an `Exception`, such as the
+`PanicException` of polars 2.0, propagates. So does an error that a data frame
+of step 3 raises in scikit-learn's own conversion. Move an array to CPU memory,
 detach it, or convert its dtype first. See the
 [scikit-learn Array API contract](https://scikit-learn.org/stable/modules/array_api.html).
+
+With `array_api_dispatch=True`, scikit-learn checks that its inputs belong to
+one supported namespace, and that check applies to what step 4 does not
+convert: inputs that reach scikit-learn unchanged, and the `y` and
+`sample_weight` of `score`, which scikit-learn reads itself. It raises
+`TypeError` for them, as it does for `DecisionTreeClassifier`. scikit-learn
+1.6 raises it for lists, pandas `Series`, `Index`, and extension arrays, and
+polars and pyarrow tables, and for an Array API `y` or `sample_weight` in
+`score`. scikit-learn 1.9 raises it for a pandas extension array or `Index` as
+`y` and for an xarray `DataArray` as the `y` of `score`. Leave the setting off
+for such inputs, or convert them to NumPy arrays first.
 
 CI installs pandas and sets `SCIPY_ARRAY_API=1` before importing SciPy or
 scikit-learn so the available NumPy Array API estimator checks run as well.
@@ -277,12 +330,13 @@ no seed is drawn, and a supplied `RandomState` is not advanced.
 
 `cost_matrix` accepts an optional square array in predicted-by-actual order.
 Entry `[predicted, actual]` is the cost of predicting the row class when the
-column class is correct. Entries must be finite and nonnegative, and diagonal
-entries must be zero. Costs must fit the native single-precision
-representation. Each actual-class column must have a positive, representable
-sum of error costs. Consequently, binary off-diagonal costs must be positive.
-Individual zero costs are supported in multiclass matrices whose columns
-satisfy this requirement.
+column class is correct. The array is converted like `X`, and it must hold real
+numbers: a complex, datetime, or timedelta array raises `ValueError`. Entries
+must be finite and nonnegative, and diagonal entries must be zero. Costs must
+fit the native single-precision representation. Each actual-class column must
+have a positive, representable sum of error costs. Consequently, binary
+off-diagonal costs must be positive. Individual zero costs are supported in
+multiclass matrices whose columns satisfy this requirement.
 
 `ignore_costs=True` ignores costs during both training and prediction. The
 model retains no costs data in this mode.
@@ -351,9 +405,10 @@ estimator checks the type before it converts any weight to `float64`:
   ragged list or in an object array.
 - A NaN or infinite number, including a `decimal.Decimal`, raises `ValueError`.
   A missing value in an array from another library raises the error for the
-  value that the conversion produces. A null in a polars or pyarrow numeric
-  array becomes NaN and raises `ValueError`. A null in a string or Boolean
-  array becomes `None` and raises `TypeError`.
+  value that the conversion produces. A null in a polars or pyarrow integer or
+  floating-point array becomes NaN and raises `ValueError`. A null in a string,
+  Boolean, or decimal array, such as a polars `Decimal` or a pyarrow
+  `decimal128` array, becomes `None` and raises `TypeError`.
 - A negative weight raises `ValueError`.
 - The estimator rounds each weight to the nearest `float64`. A finite weight
   that rounds to infinity, or a nonzero weight that rounds to zero, raises

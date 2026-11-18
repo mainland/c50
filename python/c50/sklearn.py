@@ -11,6 +11,7 @@ import decimal
 import json
 import re
 import sys
+import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
@@ -40,6 +41,7 @@ from ._data import (
     dataframe_columns,
     encode_costs,
     fit_schema,
+    is_integer_time_dtype,
 )
 from ._sentinel import NOT_APPLICABLE
 from .inspection import export_json as _export_json
@@ -131,7 +133,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             ``ValueError`` at ``fit``, and at prediction if ``set_params``
             changes the value after ``fit``.
         cost_matrix: Optional predicted-by-actual misclassification-cost
-            matrix. Its shape must be ``(n_classes, n_classes)``.
+            matrix. Its shape must be ``(n_classes, n_classes)``. It is
+            converted like ``X``, and it must hold real numbers: a complex,
+            datetime, or timedelta matrix raises ``ValueError``.
         class_weight: Optional weights for classes, as a mapping from class
             label to weight or ``"balanced"``, which weights each class by
             ``n_samples / (n_classes * n_class_samples)``. Class weights
@@ -254,21 +258,26 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
 
         Raises:
             TypeError: If a continuous feature contains a non-numeric value
-                other than :data:`c50.NOT_APPLICABLE`, or if ``sample_weight``
-                is an array of datetime, timedelta, complex, or structured kind
-                or contains an object whose type is not exactly ``bool``,
-                ``int``, ``float``, a NumPy boolean, integer, or floating-point
-                number, ``decimal.Decimal``, ``fractions.Fraction``, ``str``,
-                or ``bytes``, including a subclass of one of these other than
+                other than :data:`c50.NOT_APPLICABLE`, if a categorical value
+                cannot be hashed, if ``X`` or ``y`` is a sparse matrix or a
+                ``numpy.matrix``, or if ``sample_weight`` is an array of
+                datetime, timedelta, complex, or structured kind or contains an
+                object whose type is not exactly ``bool``, ``int``, ``float``,
+                a NumPy boolean, integer, or floating-point number,
+                ``decimal.Decimal``, ``fractions.Fraction``, ``str``, or
+                ``bytes``, including a subclass of one of these other than
                 ``numpy.str_`` and ``numpy.bytes_``, another real number, and
                 the marker.
             ValueError: If the data, schema, options, or cost matrix is
                 invalid, if an array cannot be converted to NumPy, as for a
-                tensor in device memory, or if ``sample_weight`` contains a
-                string that does not parse as a number, a NaN, an infinity, or
-                a negative number. A finite weight also raises it when rounding
-                to ``float64`` makes it infinite, or makes it zero although it
-                is not.
+                tensor in device memory or a 128-bit polars integer array, or
+                if ``sample_weight`` contains a string that does not parse as a
+                number, a NaN, an infinity, or a negative number. A finite
+                weight also raises it when rounding to ``float64`` makes it
+                infinite, or makes it zero although it is not. An exception of
+                any other kind that the conversion raises, such as the
+                ``PanicException`` that polars 2.0 raises for a 128-bit integer
+                array, propagates.
         """
         self._clear_fitted_state()
         fitted = False
@@ -277,17 +286,21 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             X = _host_array(X, "X")
             y = _host_array(y, "y")
             _reject_not_applicable_labels(y)
-            sample_weight = _host_array(
-                sample_weight, "sample_weight", weights=True
-            )
+            sample_weight = _host_array(sample_weight, "sample_weight")
+            cost_matrix = _host_array(self.cost_matrix, "cost_matrix")
             X_checked: NDArray[Any] | Columns
             if _is_column_frame(X):
                 y_checked = validate_data(self, y=y, reset=True)
                 validate_data(self, X, reset=True, skip_check_array=True)
                 check_consistent_length(X, y_checked)
                 X_checked = dataframe_columns(X)
+            elif (stamps := _time_frame(X)) is not None:
+                y_checked = validate_data(self, y=y, reset=True)
+                validate_data(self, X, reset=True, skip_check_array=True)
+                check_consistent_length(X, y_checked)
+                X_checked = stamps
             else:
-                X_checked, y_checked = validate_data(
+                X_array, y_checked = validate_data(
                     self,
                     X,
                     y,
@@ -295,6 +308,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                     dtype=_validation_dtype(X),
                     ensure_all_finite=False,
                 )
+                X_checked = _time_scalars(X_array)
             check_classification_targets(y_checked)
 
             weights = _relative_sample_weight(
@@ -328,7 +342,7 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             names_data = schema.names_data(classes.shape[0])
             training = schema.dense_data(X_checked, "error", weights)
             native_class_indices = np.asarray(class_indices, dtype=np.uintp)
-            costs_data = encode_costs(classes.shape[0], self.cost_matrix)
+            costs_data = encode_costs(classes.shape[0], cost_matrix)
             options = self._native_options()
             model = Model.train_dense(
                 names_data,
@@ -365,8 +379,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             )
             self.cost_matrix_ = (
                 None
-                if self.cost_matrix is None
-                else np.asarray(self.cost_matrix, dtype=float).copy()
+                if cost_matrix is None
+                else np.asarray(cost_matrix, dtype=float).copy()
             )
             self._label_encoder = label_encoder
             self._schema = schema
@@ -403,7 +417,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
 
         Raises:
             TypeError: If a continuous feature contains a non-numeric value
-                other than :data:`c50.NOT_APPLICABLE`.
+                other than :data:`c50.NOT_APPLICABLE`, if a categorical value
+                cannot be hashed, or if ``X`` is a sparse matrix or a
+                ``numpy.matrix``.
             ValueError: If the input shape or a feature value is invalid, or if
                 an array cannot be converted to NumPy.
         """
@@ -437,7 +453,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
 
         Raises:
             TypeError: If a continuous feature contains a non-numeric value
-                other than :data:`c50.NOT_APPLICABLE`.
+                other than :data:`c50.NOT_APPLICABLE`, if a categorical value
+                cannot be hashed, or if ``X`` is a sparse matrix or a
+                ``numpy.matrix``.
             ValueError: If the input shape or a feature value is invalid, or if
                 an array cannot be converted to NumPy.
         """
@@ -470,7 +488,9 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
 
         Raises:
             TypeError: If a continuous feature contains a non-numeric value
-                other than :data:`c50.NOT_APPLICABLE`.
+                other than :data:`c50.NOT_APPLICABLE`, if a categorical value
+                cannot be hashed, or if ``X`` is a sparse matrix or a
+                ``numpy.matrix``.
             ValueError: If the input shape or a feature value is invalid, or if
                 an array cannot be converted to NumPy.
         """
@@ -617,15 +637,20 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
         if _is_column_frame(X):
             validate_data(self, X, reset=False, skip_check_array=True)
             return dataframe_columns(X)
-        return cast(
-            NDArray[Any],
-            validate_data(
-                self,
-                X,
-                reset=False,
-                dtype=_validation_dtype(X),
-                ensure_all_finite=False,
-            ),
+        if (stamps := _time_frame(X)) is not None:
+            validate_data(self, X, reset=False, skip_check_array=True)
+            return stamps
+        return _time_scalars(
+            cast(
+                NDArray[Any],
+                validate_data(
+                    self,
+                    X,
+                    reset=False,
+                    dtype=_validation_dtype(X),
+                    ensure_all_finite=False,
+                ),
+            )
         )
 
     def _attribute_usage(
@@ -1212,6 +1237,17 @@ def _is_pandas_object(values: object) -> bool:
     )
 
 
+def _is_data_frame(values: object) -> bool:
+    """Return whether ``values`` has ``__dataframe__`` or ``columns``."""
+    if hasattr(values, "__dataframe__"):
+        return True
+    with warnings.catch_warnings():
+        # A polars LazyFrame warns about its performance when asked for its
+        # columns, and the question here is only whether the attribute exists.
+        warnings.simplefilter("ignore")
+        return hasattr(values, "columns")
+
+
 def _exports_buffer(values: object) -> bool:
     """Return whether ``values`` supports the buffer protocol."""
     try:
@@ -1221,7 +1257,7 @@ def _exports_buffer(values: object) -> bool:
     return True
 
 
-def _host_array(values: Any, name: str, *, weights: bool = False) -> Any:
+def _host_array(values: Any, name: str) -> Any:
     """Return ``values`` for validation, converting arrays that NumPy can read.
 
     Every array-like input of ``fit`` and the prediction methods passes through
@@ -1233,16 +1269,16 @@ def _host_array(values: Any, name: str, *, weights: bool = False) -> Any:
        lists, tuples, and ``None`` are returned unchanged.
     2. pandas objects are returned unchanged, so that columns, feature names,
        and ``pandas.NA`` keep their own handling.
-    3. Other data frames are returned unchanged, so that scikit-learn reads
-       their feature names. A data frame implements the interchange protocol
-       ``__dataframe__`` or has ``columns``, as a polars ``DataFrame`` does.
+    3. Objects with ``__dataframe__`` or a ``columns`` attribute, such as
+       polars and pyarrow tables, are returned unchanged, so that scikit-learn
+       reads their feature names.
     4. Arrays from an Array API library are converted with ``numpy.asarray``.
-    5. Any other object that NumPy reads as an array, through ``__array__``,
+    5. Any other object that implements an array protocol, ``__array__``,
        ``__array_interface__``, ``__array_struct__``, or the buffer protocol,
-       is converted with ``numpy.asarray``. For ``weights``, an object without
-       a NumPy ``dtype`` becomes an object array of its own elements, so that
-       the element check sees a missing value as it is. Any other object, such
-       as a sparse matrix, is returned unchanged for scikit-learn to judge.
+       is converted with ``numpy.asarray``, which keeps the dtype that the
+       array's library hands over, such as ``datetime64[ns]``. Any other
+       object, such as a sparse matrix, is returned unchanged for
+       scikit-learn to judge.
 
     C5.0 runs on the CPU, so the array's library decides whether the conversion
     is possible, which excludes arrays in GPU or other device memory, arrays
@@ -1253,36 +1289,29 @@ def _host_array(values: Any, name: str, *, weights: bool = False) -> Any:
     Args:
         values: The input.
         name: The name of the parameter, for error messages.
-        weights: Whether the input holds sample weights.
 
     Returns:
         The input, or a NumPy array that holds it.
 
     Raises:
-        ValueError: If the array's library refuses the conversion.
+        ValueError: If an array's library, or the probe of the input, raises an
+            ``Exception``, whatever its type. A ``BaseException`` that is not
+            an ``Exception``, such as the ``PanicException`` of polars,
+            propagates, because catching it would also catch
+            ``KeyboardInterrupt``.
     """
-    if (
-        isinstance(values, _PASSED_UNCHANGED)
-        or _is_pandas_object(values)
-        or hasattr(values, "__dataframe__")
-        or hasattr(values, "columns")
-    ):
+    if isinstance(values, _PASSED_UNCHANGED) or _is_pandas_object(values):
         return values
-    if not (
-        any(hasattr(values, protocol) for protocol in _ARRAY_PROTOCOLS)
-        or _exports_buffer(values)
-    ):
-        return values
-    as_objects = (
-        weights
-        and not hasattr(values, "__array_namespace__")
-        and not isinstance(getattr(values, "dtype", None), np.dtype)
-    )
     try:
-        if as_objects:
-            return np.asarray(values, dtype=object)
+        if _is_data_frame(values):
+            return values
+        if not (
+            any(hasattr(values, protocol) for protocol in _ARRAY_PROTOCOLS)
+            or _exports_buffer(values)
+        ):
+            return values
         return np.asarray(values)
-    except (BufferError, RuntimeError, TypeError, ValueError) as exc:
+    except Exception as exc:
         raise ValueError(
             f"{name} cannot be converted to a NumPy array: {exc} C5.0 runs on "
             "the CPU, so the array must be in CPU memory and have a dtype "
@@ -1329,12 +1358,61 @@ def _is_column_frame(X: object) -> bool:
 
 
 def _validation_dtype(X: ArrayLike) -> type[object] | None:
-    """Preserve numeric arrays while retaining mixed Python scalar types."""
+    """Preserve numeric arrays while retaining mixed Python scalar types.
+
+    An array of dates or durations whose values NumPy converts to ``int``
+    objects also keeps its dtype, because scikit-learn's conversion to
+    ``object`` would make the feature continuous. ``_time_scalars`` converts it
+    afterwards.
+    """
     if isinstance(X, np.ndarray) or _is_pandas_object(X):
         dtype = getattr(X, "dtype", None)
         if dtype is not None and np.dtype(dtype).kind in "iufb":
             return None
+    if isinstance(X, np.ndarray) and is_integer_time_dtype(X.dtype):
+        return None
     return object
+
+
+def _time_scalars(X: NDArray[Any]) -> NDArray[Any]:
+    """Return an array of integer-converted dates or durations as scalars.
+
+    The scalars stay ``numpy.datetime64`` and ``numpy.timedelta64`` values.
+    NumPy converts the units of ``is_integer_time_dtype`` to ``int`` when it
+    converts an array to ``object``, which would make the feature continuous.
+    Any other array is returned unchanged.
+    """
+    if not is_integer_time_dtype(X.dtype):
+        return X
+    result = np.empty(X.shape, dtype=object)
+    result.flat[:] = list(X.flat)
+    return result
+
+
+def _time_frame(X: object) -> NDArray[Any] | None:
+    """Return the cells of a data frame of such dates or durations as scalars.
+
+    Only a data frame that is not a pandas object and whose conversion to a
+    NumPy array holds dates or durations of the units of
+    ``is_integer_time_dtype`` qualifies, as a polars table or a pyarrow table
+    of nanosecond columns does. scikit-learn converts such a frame through
+    ``object``, which turns the values into integers. For any other input the
+    result is ``None``.
+    """
+    if (
+        isinstance(X, np.ndarray)
+        or _is_pandas_object(X)
+        or not _is_data_frame(X)
+    ):
+        return None
+    try:
+        array = np.asarray(X)
+    except Exception:
+        # The conversion that scikit-learn performs reports the error.
+        return None
+    if array.ndim != 2 or not is_integer_time_dtype(array.dtype):
+        return None
+    return _time_scalars(array)
 
 
 __all__ = ["NOT_APPLICABLE", "C50Classifier"]

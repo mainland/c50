@@ -49,7 +49,7 @@ int main()
 
 ## Install the Python package
 
-Python 3.10 or later is required. The package build compiles the pybind11
+Python 3.11 or later is required. The package build compiles the pybind11
 extension and links it to the same core through the C++ API:
 
 ```sh

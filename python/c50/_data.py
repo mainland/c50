@@ -399,6 +399,11 @@ def encode_costs(class_count: int, cost_matrix: object | None) -> str:
     if cost_matrix is None:
         return ""
 
+    if np.asarray(cost_matrix).dtype.kind in "cMm":
+        raise ValueError(
+            "cost_matrix must hold real numbers, not complex, datetime, or "
+            "timedelta values"
+        )
     costs = np.asarray(cost_matrix, dtype=float)
     expected_shape = (class_count, class_count)
     if costs.shape != expected_shape:
@@ -432,10 +437,7 @@ def _infer_coded_categorical(column: CodedColumn) -> bool:
         for value in (column.value(code) for code in column.present_codes())
         if value is not NOT_APPLICABLE
     ]
-    return bool(values) and not all(
-        isinstance(value, Real) and not isinstance(value, bool)
-        for value in values
-    )
+    return bool(values) and not all(_is_number(value) for value in values)
 
 
 def _fit_coded(column: CodedColumn, feature_index: int) -> FeatureSchema:
@@ -595,10 +597,7 @@ def _infer_categorical(column: Array) -> bool:
         for value in column
         if value is not NOT_APPLICABLE and not _is_missing(value)
     ]
-    return bool(values) and not all(
-        isinstance(value, Real) and not isinstance(value, bool)
-        for value in values
-    )
+    return bool(values) and not all(_is_number(value) for value in values)
 
 
 def _fit_categories(
@@ -780,12 +779,12 @@ def _encode_dense_value(
 
 def _continuous_value(value: object, feature_index: int) -> float:
     value = _normalize_scalar(value)
-    if isinstance(value, bool) or not isinstance(value, Real):
+    if not _is_number(value):
         raise TypeError(
             f"feature {feature_index} is continuous but contains {value!r}"
         )
     try:
-        result = float(value)
+        result = float(cast(Real, value))
     except OverflowError:
         raise ValueError(
             f"feature {feature_index} contains a value outside the "
@@ -820,12 +819,51 @@ def _category_group(value: object) -> type[object]:
     # Real numbers other than bool match by value, whatever their type, so that
     # 1 and 1.0 are one category as they are for scikit-learn. A float32 value
     # equals only the double with the same value.
-    if not isinstance(value, bool) and isinstance(value, Real):
+    if _is_number(value):
         return float
     return type(value)
 
 
+def _is_number(value: object) -> bool:
+    """Return whether ``value`` is a real number that is not a duration.
+
+    ``numpy.timedelta64`` is registered as an integer, but it is a duration, so
+    it is categorical like ``datetime.timedelta``.
+    """
+    return isinstance(value, Real) and not isinstance(
+        value, (bool, np.timedelta64)
+    )
+
+
+# The units in which NumPy converts a date or duration to ``int`` when it
+# converts to ``object``, so that ``item()`` and ``astype(object)`` lose the
+# type. The other units become ``datetime.date``, ``datetime.datetime``, and
+# ``datetime.timedelta``. A duration in years or months has no
+# ``datetime.timedelta``, so it becomes an ``int`` too.
+_INTEGER_TIME_UNITS: dict[str, frozenset[str]] = {
+    "M": frozenset({"ns", "ps", "fs", "as"}),
+    "m": frozenset({"Y", "M", "ns", "ps", "fs", "as"}),
+}
+
+
+def is_integer_time_dtype(dtype: np.dtype[Any]) -> bool:
+    """Return whether NumPy converts ``dtype`` to ``int`` objects.
+
+    This holds for ``datetime64`` in nanoseconds and finer, and for
+    ``timedelta64`` in nanoseconds and finer, years, and months. The estimator
+    keeps such values as ``numpy.datetime64`` and ``numpy.timedelta64``
+    scalars, so that the feature stays categorical.
+    """
+    units = _INTEGER_TIME_UNITS.get(dtype.kind)
+    return units is not None and np.datetime_data(dtype)[0] in units
+
+
 def _normalize_scalar(value: object) -> object:
+    if isinstance(value, (np.datetime64, np.timedelta64)) and (
+        is_integer_time_dtype(value.dtype)
+    ):
+        # item() would return an int, which makes the value continuous.
+        return value
     return value.item() if isinstance(value, np.generic) else value
 
 
