@@ -1046,34 +1046,41 @@ def test_subclasses_of_accepted_weight_types_raise_type_error(
     assert not hasattr(classifier, "model_")
 
 
-@pytest.mark.parametrize(
-    "make",
-    [
-        np.float64,
-        np.longdouble,
-        np.float32,
-        np.int8,
-        np.uint64,
-        np.str_,
-        np.bytes_,
-        np.bool_,
-    ],
-    ids=lambda make: make.__name__,
+# Every scalar type that NumPy names with a dtype code. A sized alias such as
+# `np.int64` names only one of the types that share a width, so a platform that
+# has `np.longlong` beside `np.int_`, or `np.intc` beside `np.int32`, reaches a
+# type that no alias spells.
+_NUMPY_SCALAR_TYPES = sorted(
+    {np.dtype(code).type for code in "?" + np.typecodes["AllInteger"] + "efdg"}
+    | {np.str_, np.bytes_},
+    key=lambda make: (make.__name__, make.__qualname__),
 )
-def test_numpy_scalar_types_stay_accepted_in_lists(make: type) -> None:
+
+
+def _numpy_scalar(make: type, value: int) -> object:
+    if make is np.bytes_:
+        return np.bytes_(str(value).encode())
+    return make(value)  # type: ignore[call-arg]
+
+
+@pytest.mark.parametrize("container", ["list", "scalar"])
+@pytest.mark.parametrize(
+    "make", _NUMPY_SCALAR_TYPES, ids=lambda make: make.__name__
+)
+def test_numpy_scalar_types_stay_accepted(make: type, container: str) -> None:
     X = [[0], [1], [2], [3]] * 2
     y = [0, 0, 1, 1] * 2
     ones = [1, 2, 1, 2, 1, 2, 1, 1]
     if make is np.bool_:
-        ones = [True] * 8
-    reference = C50Classifier().fit(
-        X, y, sample_weight=[float(v) for v in ones]
-    )
-
-    if make is np.bytes_:
-        weights = [np.bytes_(str(v).encode()) for v in ones]
+        ones = [1] * 8
+    if container == "scalar":
+        reference = C50Classifier().fit(X, y, sample_weight=float(ones[0]))
+        weights = _numpy_scalar(make, ones[0])
     else:
-        weights = [make(v) for v in ones]  # type: ignore[call-arg]
+        reference = C50Classifier().fit(
+            X, y, sample_weight=[float(v) for v in ones]
+        )
+        weights = [_numpy_scalar(make, v) for v in ones]
 
     fitted = C50Classifier().fit(X, y, sample_weight=weights)
 
