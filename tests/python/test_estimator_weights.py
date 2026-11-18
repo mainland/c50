@@ -576,13 +576,70 @@ def test_lists_of_zero_dimensional_arrays_train_the_float64_classifier() -> (
 
 
 @pytest.mark.parametrize(
-    "weights", [[[1.0, 2.0], [3.0, 4.0]], [[1.0], [2.0, 3.0]], [[1.0]] * 4]
+    "weights",
+    [
+        [[1.0, 2.0], [3.0, 4.0]],
+        [[1.0]] * 4,
+        [(1.0,)] * 4,
+        [np.array([1.0])] * 4,
+        np.ones((4, 1)),
+    ],
 )
-def test_nested_sequences_still_fail_the_shape_check(weights: object) -> None:
+def test_weights_with_two_dimensions_fail_the_shape_check(
+    weights: object,
+) -> None:
     with pytest.raises(ValueError, match=r"one-dimensional|shape"):
         C50Classifier().fit(
             [[0], [1], [2], [3]], [0, 0, 1, 1], sample_weight=weights
         )
+
+
+def _sequence_elements() -> dict[str, object]:
+    return {
+        "list": [2.0],
+        "tuple": (2.0,),
+        "range": range(1),
+        "Series": pd.Series([2.0]),
+        "one-element array": np.array([2.0]),
+        "empty array": np.array([]),
+    }
+
+
+@pytest.mark.parametrize("name", sorted(_sequence_elements()))
+@pytest.mark.parametrize("container", ["list", "object array"])
+def test_weights_that_are_sequences_raise_type_error(
+    name: str, container: str
+) -> None:
+    # A sequence or an array that is not 0-d is not a weight, whatever holds
+    # it, so it raises like any other object that is not a number.
+    elements: list[object] = [_sequence_elements()[name], 1.0, 1.0, 1.0]
+    weights: object = elements
+    if container == "object array":
+        weights = np.empty(4, dtype=object)
+        for index, element in enumerate(elements):
+            weights[index] = element  # type: ignore[index]
+
+    with pytest.raises(TypeError, match="numbers or strings"):
+        C50Classifier().fit(
+            [[0], [1], [2], [3]], [0, 0, 1, 1], sample_weight=weights
+        )
+
+
+def test_zero_dimensional_arrays_in_object_arrays_follow_their_dtype() -> None:
+    X = [[0], [1], [2], [3]]
+    y = [0, 0, 1, 1]
+    expected = C50Classifier().fit(X, y, sample_weight=[2.0, 1.0, 1.0, 1.0])
+
+    held = np.empty(4, dtype=object)
+    held[:] = [np.array(2.0), 1.0, 1.0, 1.0]
+    fitted = C50Classifier().fit(X, y, sample_weight=held)
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        expected.model_.serialized_data
+    )
+
+    held[0] = np.array(1j)
+    with pytest.raises(TypeError, match="numbers or strings"):
+        C50Classifier().fit(X, y, sample_weight=held)
 
 
 STRING_DTYPE = getattr(getattr(np, "dtypes", None), "StringDType", None)

@@ -318,6 +318,11 @@ estimator checks the type before it converts any weight to `float64`:
   other object. This includes a real number of another type, such as a gmpy2
   `mpfr`, an mpmath `mpf`, or a SymPy `Float`, even when it is registered as a
   `numbers.Real`. Convert it with `float` first.
+- A weight element that is a 0-d array is judged by its dtype. Sequence or
+  array elements of one common length make a weight array with more than one
+  dimension, which raises `ValueError`. Otherwise a list, tuple, range,
+  `pandas.Series`, or array with one or more dimensions as an element raises
+  `TypeError`, in a ragged list or in an object array.
 - A NaN or infinite number, including a `decimal.Decimal`, raises `ValueError`.
 - A negative weight raises `ValueError`.
 - The estimator rounds each weight to the nearest `float64`. A finite weight
