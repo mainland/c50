@@ -1046,40 +1046,80 @@ def test_subclasses_of_accepted_weight_types_raise_type_error(
     assert not hasattr(classifier, "model_")
 
 
-@pytest.mark.parametrize(
-    "make",
-    [
-        np.float64,
-        np.longdouble,
-        np.float32,
-        np.int8,
-        np.uint64,
-        np.str_,
-        np.bytes_,
-        np.bool_,
-    ],
-    ids=lambda make: make.__name__,
+# Every scalar type that NumPy names with a dtype code. A sized alias such as
+# `np.int64` names only one of the types that share a width, so a platform that
+# has `np.longlong` beside `np.int_`, or `np.intc` beside `np.int32`, reaches a
+# type that no alias spells.
+_NUMPY_SCALAR_TYPES = sorted(
+    {np.dtype(code).type for code in "?" + np.typecodes["AllInteger"] + "efdg"}
+    | {np.str_, np.bytes_},
+    key=lambda make: (make.__name__, make.__qualname__),
 )
-def test_numpy_scalar_types_stay_accepted_in_lists(make: type) -> None:
+
+
+def _numpy_scalar(make: type, value: int) -> object:
+    if make is np.bytes_:
+        return np.bytes_(str(value).encode())
+    return make(value)  # type: ignore[call-arg]
+
+
+@pytest.mark.parametrize("container", ["list", "scalar"])
+@pytest.mark.parametrize(
+    "make", _NUMPY_SCALAR_TYPES, ids=lambda make: make.__name__
+)
+def test_numpy_scalar_types_stay_accepted(make: type, container: str) -> None:
     X = [[0], [1], [2], [3]] * 2
     y = [0, 0, 1, 1] * 2
     ones = [1, 2, 1, 2, 1, 2, 1, 1]
     if make is np.bool_:
-        ones = [True] * 8
-    reference = C50Classifier().fit(
-        X, y, sample_weight=[float(v) for v in ones]
-    )
-
-    if make is np.bytes_:
-        weights = [np.bytes_(str(v).encode()) for v in ones]
+        ones = [1] * 8
+    if container == "scalar":
+        reference = C50Classifier().fit(X, y, sample_weight=float(ones[0]))
+        weights = _numpy_scalar(make, ones[0])
     else:
-        weights = [make(v) for v in ones]  # type: ignore[call-arg]
+        reference = C50Classifier().fit(
+            X, y, sample_weight=[float(v) for v in ones]
+        )
+        weights = [_numpy_scalar(make, v) for v in ones]
 
     fitted = C50Classifier().fit(X, y, sample_weight=weights)
 
     assert without_date(fitted.model_.serialized_data) == without_date(
         reference.model_.serialized_data
     )
+
+
+def _weight_outcome(weights: object) -> tuple[str, str]:
+    """Fit on eight samples and return the model text or the error."""
+    X = [[0], [1], [2], [3]] * 2
+    y = [0, 0, 1, 1] * 2
+    try:
+        fitted = C50Classifier().fit(X, y, sample_weight=weights)
+    except (TypeError, ValueError) as exc:
+        return type(exc).__name__, str(exc)
+    return "trained", without_date(fitted.model_.serialized_data)
+
+
+@pytest.mark.parametrize("text", ["0\x00", "inf\x00", "1e-400\x00", "0.5\x00"])
+@pytest.mark.parametrize("make", [np.str_, np.bytes_])
+def test_numpy_string_scalars_read_trailing_nuls_as_numpy_does(
+    make: type, text: str
+) -> None:
+    value = make(text if make is np.str_ else text.encode())
+    array = np.array([value] + [make("1" if make is np.str_ else b"1")] * 7)
+    assert array.dtype.kind in "US"
+
+    assert _weight_outcome([value, *[1.0] * 7]) == _weight_outcome(array)
+
+
+def test_python_string_with_a_nul_stays_rejected() -> None:
+    for text in ("0.5\x00", "0\x00"):
+        with pytest.raises(ValueError, match="could not convert"):
+            C50Classifier().fit(
+                [[0], [1], [2], [3]],
+                [0, 0, 1, 1],
+                sample_weight=[text, 1.0, 1.0, 1.0],
+            )
 
 
 _LONGDOUBLE = np.longdouble
