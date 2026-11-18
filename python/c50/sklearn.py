@@ -10,7 +10,8 @@ import dataclasses
 import json
 import sys
 from collections.abc import Iterator, Mapping, Sequence
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+from fractions import Fraction
 from importlib.metadata import PackageNotFoundError, version
 from numbers import Integral, Real
 from typing import Any, Literal, SupportsIndex, TypeAlias, cast
@@ -889,6 +890,67 @@ def _checked_weight_values(sample_weight: ArrayLike) -> NDArray[Any]:
     )
 
 
+def _weight_is_finite(element: Any) -> bool:
+    """Return whether the exact value of an accepted weight is finite."""
+    if isinstance(element, Decimal):
+        return element.is_finite()
+    if isinstance(element, (str, bytes)):
+        try:
+            text = element.decode() if isinstance(element, bytes) else element
+            return Decimal(text).is_finite()
+        except (UnicodeDecodeError, InvalidOperation):
+            return True
+    if isinstance(element, (int, Fraction)):
+        return True
+    return bool(np.isfinite(element))
+
+
+def _weight_is_zero(element: object) -> bool:
+    """Return whether the exact value of an accepted weight is zero."""
+    if isinstance(element, (str, bytes)):
+        try:
+            text = element.decode() if isinstance(element, bytes) else element
+            return Decimal(text) == 0
+        except (UnicodeDecodeError, InvalidOperation):
+            return False
+    return bool(element == 0)
+
+
+def _convert_weights(values: NDArray[Any]) -> NDArray[np.float64]:
+    """Round checked weights to ``float64``, or raise ``ValueError``.
+
+    Each weight is rounded to the nearest ``float64``. A finite weight that
+    rounds to infinity, or a nonzero weight that rounds to zero, makes the
+    ratios between weights unrepresentable, so it raises ``ValueError``. This
+    includes the ``OverflowError`` of a Python integer or a fraction that is
+    too large. Weights that are already ``float64`` or narrower cannot leave
+    the range, and a NaN or infinite weight is left to the caller's check.
+    """
+    message = (
+        "sample_weight must stay finite, and nonzero where it is nonzero, "
+        "when rounded to float64"
+    )
+    try:
+        with np.errstate(over="ignore", under="ignore"):
+            weights = np.asarray(values, dtype=np.float64)
+    except OverflowError as exc:
+        raise ValueError(message) from exc
+    kind = values.dtype.kind
+    if kind in "biu" or (kind == "f" and values.dtype.itemsize <= 8):
+        return weights
+    suspect = np.flatnonzero((weights == 0) | np.isinf(weights))
+    exact = values.ravel()
+    for index in suspect:
+        element = exact[index]
+        if np.isinf(weights.ravel()[index]):
+            lost = _weight_is_finite(element)
+        else:
+            lost = not _weight_is_zero(element)
+        if lost:
+            raise ValueError(message)
+    return weights
+
+
 def _relative_sample_weight(
     sample_weight: ArrayLike | None,
     class_weights: NDArray[np.float64] | None,
@@ -904,9 +966,7 @@ def _relative_sample_weight(
             return None
         weights = class_weights
     else:
-        weights = np.asarray(
-            _checked_weight_values(sample_weight), dtype=np.float64
-        )
+        weights = _convert_weights(_checked_weight_values(sample_weight))
         if weights.ndim == 0:
             weights = np.full(sample_count, weights)
         if weights.shape != (sample_count,):

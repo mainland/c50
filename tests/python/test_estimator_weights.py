@@ -626,3 +626,80 @@ def test_variable_width_string_missing_sentinels_follow_the_element_rule(
     else:
         with pytest.raises(error):
             C50Classifier().fit(X, y, sample_weight=weights)
+
+
+def _three_class_problem() -> tuple[list[list[int]], list[int]]:
+    return [[0]] * 8 + [[1]] * 8 + [[2]] * 8, [0] * 8 + [1] * 8 + [2] * 8
+
+
+@pytest.mark.parametrize(
+    "scale",
+    [
+        decimal.Decimal(1),
+        decimal.Decimal("1e-300"),
+        decimal.Decimal("1e300"),
+        decimal.Decimal("5e-324"),
+        fractions.Fraction(1, 10**300),
+        10**300,
+    ],
+    ids=["1", "1e-300", "1e300", "5e-324", "Fraction 1e-300", "int 1e300"],
+)
+def test_scaled_weights_within_float64_keep_every_class(scale: object) -> None:
+    X, y = _three_class_problem()
+    weights = [scale] * 8 + [5 * scale] * 16  # type: ignore[operator]
+    reference = C50Classifier().fit(
+        X, y, sample_weight=[1.0] * 8 + [5.0] * 16
+    )
+
+    fitted = C50Classifier().fit(X, y, sample_weight=weights)
+
+    assert fitted.classes_.tolist() == [0, 1, 2]
+    np.testing.assert_array_equal(
+        fitted.predict([[0], [1], [2]]), reference.predict([[0], [1], [2]])
+    )
+
+
+def _out_of_range_weights() -> dict[str, object]:
+    longdouble = np.longdouble
+    return {
+        "Decimal 1e-324 scale": [decimal.Decimal("1e-324")] * 8
+        + [decimal.Decimal("5e-324")] * 16,
+        "Decimal 1e400": decimal.Decimal("1e400"),
+        "int 10**400": 10**400,
+        "int 10**400 list": [10**400] * 24,
+        "Fraction 10**400": fractions.Fraction(10**400),
+        "Fraction 1 / 10**400": fractions.Fraction(1, 10**400),
+        "string 1e400": "1e400",
+        "string 1e-400": ["1e-400"] * 24,
+        "bytes array 1e-400": np.array([b"1e-400"] * 24),
+        "longdouble 1e4000": longdouble("1e4000"),
+        "longdouble 1e-4000 array": np.full(24, longdouble("1e-4000")),
+        "object array with one underflow": np.asarray(
+            [1.0] * 23 + [decimal.Decimal("1e-400")], dtype=object
+        ),
+    }
+
+
+@pytest.mark.parametrize("name", sorted(_out_of_range_weights()))
+def test_weights_outside_float64_raise_value_error(name: str) -> None:
+    # A weight that rounds to infinity or to zero would change the ratios
+    # between weights, so scale invariance cannot hold for it.
+    X, y = _three_class_problem()
+    weights = _out_of_range_weights()[name]
+    classifier = C50Classifier()
+
+    with pytest.raises(ValueError, match="rounded to float64"):
+        classifier.fit(X, y, sample_weight=weights)
+    assert not hasattr(classifier, "model_")
+
+
+def test_subnormal_float64_weights_keep_their_rescaling() -> None:
+    X, y = _three_class_problem()
+    weights = np.array([5e-324] * 8 + [2.5e-323] * 16)
+    reference = C50Classifier().fit(X, y, sample_weight=[1.0] * 8 + [5.0] * 16)
+
+    fitted = C50Classifier().fit(X, y, sample_weight=weights)
+
+    assert _body(fitted.model_.serialized_data) == _body(
+        reference.model_.serialized_data
+    )
