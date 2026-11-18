@@ -675,3 +675,97 @@ def test_supported_dense_schema_rejects_a_mismatched_width(
         c50.Model.train_dense(
             names, values, np.zeros(2, dtype=np.intp), copy=copy
         )
+
+
+def _polars_frame(values: np.ndarray) -> object:
+    return pytest.importorskip("polars").DataFrame(values)
+
+
+def _pyarrow_table(values: np.ndarray) -> object:
+    pa = pytest.importorskip("pyarrow")
+    return pa.table({str(i): values[:, i] for i in range(values.shape[1])})
+
+
+DENSE_CONTAINERS: dict[str, Callable[[np.ndarray], object]] = {
+    "list": lambda a: a.tolist(),
+    "tuple": lambda a: tuple(map(tuple, a.tolist())),
+    "torch": lambda a: pytest.importorskip("torch").tensor(a),
+    "polars": _polars_frame,
+    "xarray": lambda a: pytest.importorskip("xarray").DataArray(a),
+    "pyarrow-tensor": lambda a: pytest.importorskip(
+        "pyarrow"
+    ).Tensor.from_numpy(a),
+    "pyarrow-table": _pyarrow_table,
+}
+
+
+@pytest.mark.parametrize("name", sorted(DENSE_CONTAINERS))
+def test_dense_functions_read_values_of_other_containers(name: str) -> None:
+    make = DENSE_CONTAINERS[name]
+    mask = np.zeros(DENSE_TRAINING.shape, dtype=bool)
+    mask[0, 1] = True
+    expected = c50.train_dense(NAMES, DENSE_TRAINING, DENSE_CLASSES)
+    masked = c50.train_dense(
+        NAMES, DENSE_TRAINING, DENSE_CLASSES, not_applicable=mask
+    )
+    for factory in (c50.train_dense, c50.Model.train_dense):
+        model = factory(NAMES, make(DENSE_TRAINING), DENSE_CLASSES)
+        assert without_date(model.serialized_data) == without_date(
+            expected.serialized_data
+        )
+        model = factory(
+            NAMES, make(DENSE_TRAINING), DENSE_CLASSES, not_applicable=mask
+        )
+        assert without_date(model.serialized_data) == without_date(
+            masked.serialized_data
+        )
+
+    cases = make(DENSE_CASES)
+    reference = expected.predict_details_dense(DENSE_CASES)
+    predictor = expected.prepare_predictor()
+    for details in (
+        expected.predict_details_dense(cases),
+        predictor.predict_details_dense(cases),
+    ):
+        assert details.class_indices == reference.class_indices
+        assert details.scores == reference.scores
+    assert list(expected.attribute_usage_dense(cases)) == list(
+        expected.attribute_usage_dense(DENSE_CASES)
+    )
+
+
+def test_dense_functions_read_arrays_of_any_layout_and_byte_order() -> None:
+    expected = c50.train_dense(NAMES, DENSE_TRAINING, DENSE_CLASSES)
+    mask = np.zeros(DENSE_TRAINING.shape, dtype=bool)
+    mask[0, 1] = True
+    masked = c50.train_dense(
+        NAMES, DENSE_TRAINING, DENSE_CLASSES, not_applicable=mask
+    )
+    wide = np.repeat(DENSE_TRAINING, 2, axis=1)
+    variants = (
+        DENSE_TRAINING.astype(">f8"),
+        np.asfortranarray(DENSE_TRAINING),
+        wide[:, ::2],
+    )
+    for values in variants:
+        model = c50.train_dense(NAMES, values, DENSE_CLASSES)
+        assert without_date(model.serialized_data) == without_date(
+            expected.serialized_data
+        )
+    classes = (
+        DENSE_CLASSES.astype(">i8"),
+        np.repeat(DENSE_CLASSES, 2)[::2],
+    )
+    for indices in classes:
+        model = c50.train_dense(NAMES, DENSE_TRAINING, indices)
+        assert without_date(model.serialized_data) == without_date(
+            expected.serialized_data
+        )
+    layouts = (np.asfortranarray(mask), np.repeat(mask, 2, axis=1)[:, ::2])
+    for not_applicable in layouts:
+        model = c50.train_dense(
+            NAMES, DENSE_TRAINING, DENSE_CLASSES, not_applicable=not_applicable
+        )
+        assert without_date(model.serialized_data) == without_date(
+            masked.serialized_data
+        )

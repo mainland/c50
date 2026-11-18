@@ -1014,6 +1014,13 @@ class _Double(np.float64):
         return 0.0
 
 
+class _Single(np.float32):
+    """A user subclass of a NumPy scalar type that is not a Python float."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+
 _SUBCLASS_ELEMENTS: dict[str, tuple[object, object]] = {
     "int subclass": (_Count(5), 1),
     "float subclass": (_Reading(5.0), 1.0),
@@ -1021,6 +1028,7 @@ _SUBCLASS_ELEMENTS: dict[str, tuple[object, object]] = {
     "str subclass": (_Text("5"), "1"),
     "IntEnum": (_Level.HIGH, 1),
     "numpy float64 subclass": (_Double(5.0), np.float64(1.0)),
+    "numpy float32 subclass": (_Single(5.0), np.float32(1.0)),
 }
 
 
