@@ -9,6 +9,7 @@ from __future__ import annotations
 import datetime as dt
 import decimal
 import fractions
+import numbers
 import pickle
 import warnings
 
@@ -891,6 +892,64 @@ def test_zero_weights_outside_the_float64_path_remove_samples(
     np.testing.assert_array_equal(fitted.predict(X), reference.predict(X))
 
 
+class _ForeignReal:
+    """A registered real number that is not in the closed list of types.
+
+    Its zero does not equal 0, and NumPy cannot pass it to ``isfinite``, like
+    the real numbers of arbitrary-precision libraries.
+    """
+
+    def __init__(self, value: float) -> None:
+        self.value = value
+
+    def __eq__(self, other: object) -> bool:
+        return False
+
+    __hash__ = object.__hash__
+
+    def __float__(self) -> float:
+        return self.value
+
+
+numbers.Real.register(_ForeignReal)
+
+
+def _foreign_real_weights() -> dict[str, object]:
+    def array(values: list[object]) -> np.ndarray:
+        result = np.empty(len(values), dtype=object)
+        for index, value in enumerate(values):
+            result[index] = value
+        return result
+
+    result: dict[str, object] = {}
+    for label, value in (
+        ("zero", 0.0),
+        ("in range", 2.0),
+        ("beyond float64", float("inf")),
+    ):
+        foreign = _ForeignReal(value)
+        elements = [foreign, *[1.0] * 7]
+        result[f"{label} in a list"] = elements
+        result[f"{label} in an object array"] = array(elements)
+        result[f"{label} as a scalar"] = foreign
+    return result
+
+
+@pytest.mark.parametrize("name", sorted(_foreign_real_weights()))
+def test_real_numbers_outside_the_accepted_types_raise_type_error(
+    name: str,
+) -> None:
+    classifier = C50Classifier()
+
+    with pytest.raises(TypeError, match="numbers or strings"):
+        classifier.fit(
+            [[0], [1], [2], [3]] * 2,
+            [0, 0, 1, 1] * 2,
+            sample_weight=_foreign_real_weights()[name],
+        )
+    assert not hasattr(classifier, "model_")
+
+
 def _weight_outcome(weights: object) -> tuple[str, str]:
     """Fit on eight samples and return the model text or the error."""
     X = [[0], [1], [2], [3]] * 2
@@ -922,6 +981,80 @@ def test_python_string_with_a_nul_stays_rejected() -> None:
                 [0, 0, 1, 1],
                 sample_weight=[text, 1.0, 1.0, 1.0],
             )
+
+
+_LONGDOUBLE = np.longdouble
+
+# Each type maps to the values that represent 0, 1, and 2, and to the values
+# that round to infinity and to zero, where the type can leave the range.
+_WEIGHT_TYPES: dict[str, tuple[object, object, object, object, object]] = {
+    "bool": (False, True, True, None, None),
+    "int": (0, 1, 2, 10**400, None),
+    "float": (0.0, 1.0, 2.0, None, None),
+    "numpy bool": (
+        np.bool_(False),
+        np.bool_(True),
+        np.bool_(True),
+        None,
+        None,
+    ),
+    "numpy int64": (np.int64(0), np.int64(1), np.int64(2), None, None),
+    "numpy float16": (np.float16(0), np.float16(1), np.float16(2), None, None),
+    "numpy float32": (np.float32(0), np.float32(1), np.float32(2), None, None),
+    "numpy float64": (np.float64(0), np.float64(1), np.float64(2), None, None),
+    "numpy longdouble": (
+        _LONGDOUBLE(0),
+        _LONGDOUBLE(1),
+        _LONGDOUBLE(2),
+        _longdouble_above_float64(),
+        _longdouble_below_float64() if _LONGDOUBLE_UNDERFLOWS_LATER else None,
+    ),
+    "Decimal": (
+        decimal.Decimal(0),
+        decimal.Decimal(1),
+        decimal.Decimal(2),
+        decimal.Decimal("1e400"),
+        decimal.Decimal("1e-400"),
+    ),
+    "Fraction": (
+        fractions.Fraction(0),
+        fractions.Fraction(1),
+        fractions.Fraction(2),
+        fractions.Fraction(10**400),
+        fractions.Fraction(1, 10**400),
+    ),
+    "str": ("0", "1", "2", "1e400", "1e-400"),
+    "bytes": (b"0", b"1", b"2", b"1e400", b"1e-400"),
+}
+
+
+@pytest.mark.parametrize("name", sorted(_WEIGHT_TYPES))
+def test_each_accepted_weight_type_follows_the_range_rule(name: str) -> None:
+    zero, one, two, over, under = _WEIGHT_TYPES[name]
+    X = [[0], [1], [2], [3]] * 2
+    y = [0, 0, 1, 1] * 2
+    weights = [zero, one, two, one, two, one, two, zero]
+    reference = C50Classifier().fit(
+        X,
+        y,
+        sample_weight=[float(w) for w in weights],  # type: ignore[arg-type]
+    )
+
+    # At zero and in range, the weights train the float64 classifier.
+    fitted = C50Classifier().fit(X, y, sample_weight=weights)
+    assert without_date(fitted.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
+
+    # On either side of the range, a weight that float64 cannot hold raises.
+    for outside in (over, under):
+        if outside is None:
+            continue
+        for held in ([one] * 7 + [outside], outside):
+            with pytest.raises(
+                ValueError, match=_out_of_range_message(outside)
+            ):
+                C50Classifier().fit(X, y, sample_weight=held)
 
 
 ZERO_STRINGS = [
@@ -1012,3 +1145,28 @@ def test_string_weights_ignore_the_callers_decimal_context(
     assert without_date(fitted.model_.serialized_data) == without_date(
         reference.model_.serialized_data
     )
+
+
+def test_exact_weight_checks_skip_types_that_float64_holds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A zero of a type that float64 holds exactly is not a lost weight, and a
+    # Python-level call for each of a million zeros made conversion ten times
+    # slower.
+    def fail(element: object) -> bool:
+        raise AssertionError(f"exact check of {element!r}")
+
+    monkeypatch.setattr("c50.sklearn._weight_is_zero", fail)
+    monkeypatch.setattr("c50.sklearn._weight_is_finite", fail)
+    X = [[0], [1], [2], [3]]
+    y = [0, 0, 1, 1]
+
+    for weights in (
+        [0.0, 1.0, 2.0, 1.0],
+        [0, 1, 2, 1],
+        [False, True, True, True],
+        [np.float32(0), 1.0, np.float16(2), np.bool_(True)],
+        [np.int64(0), np.uint8(1), 2, 1.0],
+        pd.Series([0.0, 1.0, 2.0, 1.0], dtype="Float64"),
+    ):
+        C50Classifier().fit(X, y, sample_weight=weights)
