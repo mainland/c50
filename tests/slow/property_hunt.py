@@ -22,7 +22,10 @@ failed check.
 
 The options default to the environment variables `C50_PROPERTY_HUNT_LOG`,
 `C50_PROPERTY_HUNT_EXAMPLES`, and `C50_PROPERTY_HUNT_SEED`, and then to fixed
-values.
+values. `C50_PROPERTY_HUNT_REPLAY` defaults `--replay`, so that the CMake
+target, which sets the environment that a sanitizer build needs, can replay a
+log. The target runs in the build directory, so name the log by an absolute
+path or one relative to that directory.
 """
 
 from __future__ import annotations
@@ -171,6 +174,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         "--replay",
         type=Path,
         metavar="LOG",
+        default=(
+            Path(os.environ["C50_PROPERTY_HUNT_REPLAY"])
+            if os.environ.get("C50_PROPERTY_HUNT_REPLAY")
+            else None
+        ),
         help="train the last example of LOG and exit",
     )
     args = parser.parse_args(argv)

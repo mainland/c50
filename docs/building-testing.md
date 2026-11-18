@@ -598,6 +598,16 @@ The same seed draws the same examples. After a crash or a failed check, train
 the last logged example again, under a debugger if needed:
 
 ```sh
+C50_PROPERTY_HUNT_REPLAY="$PWD/build/property-hunt.jsonl" \
+    cmake --build build --target property-hunt
+```
+
+The target gives the replay the environment of a hunt, including the sanitizer
+runtime that a sanitizer build needs before it can import the extension. To
+replay outside CMake with a build that has no sanitizers, run the script
+directly:
+
+```sh
 python tests/run_built_python.py build/python tests/slow/property_hunt.py \
     --replay build/property-hunt.jsonl
 ```

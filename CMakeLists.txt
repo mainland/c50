@@ -805,7 +805,8 @@ endif()
 # `cmake --build build --target property-hunt`. C50_PROPERTY_HUNT_SEED,
 # C50_PROPERTY_HUNT_EXAMPLES, and C50_PROPERTY_HUNT_LOG override its defaults,
 # which tests/slow/property_hunt.py documents. The log defaults to a file in
-# the build directory.
+# the build directory. C50_PROPERTY_HUNT_REPLAY names a log, and the target
+# then trains its last example, with the same environment as a hunt.
 if(C50_BUILD_PYTHON AND UNIX)
     add_custom_target(
         property-hunt
