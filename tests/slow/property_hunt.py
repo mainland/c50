@@ -62,10 +62,18 @@ def record(log: IO[str], dataset: Dataset) -> None:
         value = getattr(dataset, field.name)
         if isinstance(value, np.ndarray):
             value = value.tolist()
+            if value and field.name.startswith("dense_"):
+                value = [
+                    [
+                        None if element != element else element
+                        for element in row
+                    ]
+                    for row in value
+                ]
         elif isinstance(value, c50.ModelKind):
             value = value.name
         fields[field.name] = value
-    log.write(json.dumps(fields, allow_nan=True) + "\n")
+    log.write(json.dumps(fields, allow_nan=False) + "\n")
     log.flush()
     os.fsync(log.fileno())
 
@@ -77,14 +85,21 @@ def load_last(path: Path) -> Dataset:
         path: Log written by `record`.
 
     Returns:
-        The last example, with the types that `datasets` draws.
+        The last example, with the types that `datasets` draws. A JSON `null`
+        in a dense array reads as NaN, as does the `NaN` token of older logs.
     """
     lines = path.read_text().splitlines()
     if not lines:
         raise SystemExit(f"{path} holds no example")
     fields = json.loads(lines[-1])
     for name in ("dense_training", "dense_cases"):
-        fields[name] = np.asarray(fields[name], dtype=np.float64)
+        fields[name] = np.asarray(
+            [
+                [np.nan if element is None else element for element in row]
+                for row in fields[name]
+            ],
+            dtype=np.float64,
+        )
     fields["class_indices"] = np.asarray(
         fields["class_indices"], dtype=np.uintp
     )
