@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from c50.sklearn import C50Classifier
+from test_legacy_models import _body
 
 
 def weighted_problem() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -454,7 +455,10 @@ def test_numeric_and_string_weights_train_the_float64_classifier(
     fitted = C50Classifier().fit(X, y, sample_weight=weights)
     reference = C50Classifier().fit(X, y, sample_weight=expected)
 
-    assert fitted.model_.serialized_data == reference.model_.serialized_data
+    # The id line holds the local date of each fit.
+    assert _body(fitted.model_.serialized_data) == _body(
+        reference.model_.serialized_data
+    )
 
 
 @pytest.mark.parametrize(
