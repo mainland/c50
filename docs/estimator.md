@@ -302,26 +302,35 @@ computed after training on the training rows, in batches of
 ## Sample weights
 
 `fit` accepts `sample_weight`, either one finite, nonnegative weight per sample
-or a scalar. A weight is a real number, including `bool` and `decimal.Decimal`,
-or a string. The estimator checks the type before it converts any weight to
-`float64`:
+or a scalar. A weight is a `bool`, `int`, or `float`, a NumPy boolean, integer,
+or floating-point number (including `numpy.longdouble`), a `decimal.Decimal`,
+a `fractions.Fraction`, or a string or bytes that parses as a number. The
+estimator checks the type before it converts any weight to `float64`:
 
 - Arrays of boolean, integer, unsigned, and floating-point kinds are accepted,
-  as are Python and NumPy real numbers and `decimal.Decimal` in lists, object
-  arrays, and pandas columns.
+  as are objects of the types above in lists, object arrays, and pandas
+  columns.
 - A string that parses as a number is accepted, and one that does not raises
   `ValueError`.
 - Anything else raises `TypeError`: arrays of datetime, timedelta, complex, and
   structured kinds, and in an object array `None`, `pandas.NA`, `pandas.NaT`,
   `c50.NOT_APPLICABLE`, dates, times, timedeltas, complex numbers, and any
-  other object.
+  other object. This includes a real number of another type, such as a gmpy2
+  `mpfr`, an mpmath `mpf`, or a SymPy `Float`, even when it is registered as a
+  `numbers.Real`. Convert it with `float` first.
+- A weight element that is a 0-d array is judged by its dtype. Sequence or
+  array elements of one common length make a weight array with more than one
+  dimension, which raises `ValueError`. Otherwise a list, tuple, range,
+  `pandas.Series`, or array with one or more dimensions as an element raises
+  `TypeError`, in a ragged list or in an object array.
 - A NaN or infinite number, including a `decimal.Decimal`, raises `ValueError`.
 - A negative weight raises `ValueError`.
 - The estimator rounds each weight to the nearest `float64`. A finite weight
   that rounds to infinity, or a nonzero weight that rounds to zero, raises
   `ValueError`. This applies to a Python `int`, a `decimal.Decimal`, a
-  `fractions.Fraction`, a `numpy.longdouble`, and a string, which can hold
-  values outside the range of `float64`.
+  `fractions.Fraction`, a `numpy.longdouble`, a string, and bytes, which can
+  hold values outside the range of `float64`. The other accepted types cannot
+  leave it.
 
 The estimator passes the weights to C5.0 as its case-weight attribute. C5.0
 uses case weights when it counts cases but never tests them in a classifier.
