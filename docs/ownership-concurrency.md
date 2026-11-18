@@ -87,6 +87,12 @@ with no padding, whatever the row stride, and the caller keeps it alive and
 unchanged for the call, like `values`. A nonzero byte makes the value not
 applicable and hides the matching element of `values`; the library never
 writes the mask. Concurrent operations may share one mask if none writes it.
+Each dense operation checks the schema before the dataset. A schema that the
+dense interface does not support raises `error_code::unsupported` whatever the
+rows, width, stride, or buffers. A dataset that fails a later check raises
+`error_code::invalid_argument`. A buffer is required only when the operation
+can address one of its elements, so `values` may be null when `row_count` or
+`feature_count` is zero.
 Use text input for schemas unsupported by the dense interface.
 
 ## Stack use

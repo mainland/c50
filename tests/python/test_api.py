@@ -576,15 +576,18 @@ UNSUPPORTED_DENSE_SCHEMAS = {
 
 
 @pytest.mark.parametrize("kind", sorted(UNSUPPORTED_DENSE_SCHEMAS))
-@pytest.mark.parametrize("delta", [-1, 0, 1])
-def test_unsupported_dense_schema_raises_c50_error_at_any_width(
-    kind: str, delta: int
+@pytest.mark.parametrize("extra", [None, 0, 1])
+@pytest.mark.parametrize("rows", [0, 2])
+@pytest.mark.parametrize("copy", [True, False])
+def test_unsupported_dense_schema_raises_c50_error_at_any_shape(
+    kind: str, extra: int | None, rows: int, copy: bool
 ) -> None:
-    # The support checks need only the schema, so the array width must not
-    # decide which exception the caller sees.
+    # The support checks need only the schema, so neither the rows nor the
+    # width of the array, which is zero for extra=None, may decide which
+    # exception the caller sees.
     names, training, width = UNSUPPORTED_DENSE_SCHEMAS[kind]
     model = c50.train(names, training)
-    values = np.zeros((2, max(width + delta, 1)))
+    values = np.zeros((rows, 0 if extra is None else width + extra))
 
     with pytest.raises(c50.C50Error):
         model.predict_details_dense(values)
@@ -593,11 +596,20 @@ def test_unsupported_dense_schema_raises_c50_error_at_any_width(
     with pytest.raises(c50.C50Error):
         model.prepare_predictor().predict_details_dense(values)
     with pytest.raises(c50.C50Error):
-        c50.train_dense(names, values, np.zeros(2, dtype=np.intp))
+        c50.train_dense(
+            names, values, np.zeros(rows, dtype=np.intp), copy=copy
+        )
+    with pytest.raises(c50.C50Error):
+        c50.Model.train_dense(
+            names, values, np.zeros(rows, dtype=np.intp), copy=copy
+        )
 
 
-@pytest.mark.parametrize("width", [1, 3])
-def test_supported_dense_schema_rejects_a_mismatched_width(width: int) -> None:
+@pytest.mark.parametrize("width", [0, 1, 3])
+@pytest.mark.parametrize("copy", [True, False])
+def test_supported_dense_schema_rejects_a_mismatched_width(
+    width: int, copy: bool
+) -> None:
     names = "a, b.\nx: continuous.\ny: continuous.\n"
     model = c50.train(names, "0,1,a\n1,2,b\n")
     values = np.zeros((2, width))
@@ -607,4 +619,10 @@ def test_supported_dense_schema_rejects_a_mismatched_width(width: int) -> None:
     with pytest.raises(ValueError, match="feature count"):
         model.attribute_usage_dense(values)
     with pytest.raises(ValueError, match="feature count"):
-        c50.train_dense(names, values, np.zeros(2, dtype=np.intp))
+        model.prepare_predictor().predict_details_dense(values)
+    with pytest.raises(ValueError, match="feature count"):
+        c50.train_dense(names, values, np.zeros(2, dtype=np.intp), copy=copy)
+    with pytest.raises(ValueError, match="feature count"):
+        c50.Model.train_dense(
+            names, values, np.zeros(2, dtype=np.intp), copy=copy
+        )
