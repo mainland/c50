@@ -155,6 +155,7 @@ files = [
     "tests/check_license_notices.py",
     "tests/check_sdist.py",
     "tests/run_built_python.py",
+    "tests/built_python_site",
     "tests/slow/property_hunt.py",
     "tests/reference",
 ]

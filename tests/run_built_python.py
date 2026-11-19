@@ -6,32 +6,41 @@
 
 from __future__ import annotations
 
-import importlib.machinery
+import importlib.util
+import os
 import runpy
 import sys
 from pathlib import Path
-from typing import Any
+from types import ModuleType
+
+SITE_DIRECTORY = Path(__file__).resolve().parent / "built_python_site"
+
+
+def load_isolation() -> ModuleType:
+    """Run the startup module that the interpreters of a test also run."""
+    spec = importlib.util.spec_from_file_location(
+        "c50_built_python_isolation", SITE_DIRECTORY / "sitecustomize.py"
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {SITE_DIRECTORY}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def main() -> None:
     root = Path(sys.argv[1]).resolve()
     target = sys.argv[2]
     sys.path.insert(0, str(root))
-
-    def redirects_package(finder: Any) -> bool:
-        if finder is importlib.machinery.PathFinder:
-            return False
-        try:
-            spec = finder.find_spec("c50", None)
-        except (AttributeError, ImportError, TypeError, ValueError):
-            return False
-        return (
-            spec is not None
-            and spec.origin is not None
-            and not Path(spec.origin).resolve().is_relative_to(root)
-        )
-
-    sys.meta_path[:] = [f for f in sys.meta_path if not redirects_package(f)]
+    # Descendant interpreters read the environment. Each puts the build first
+    # on its path and removes the editable-install finders that its startup
+    # files install. Loading the startup module does the same here.
+    os.environ["C50_BUILT_PYTHON_ROOT"] = str(root)
+    inherited = os.environ.get("PYTHONPATH")
+    os.environ["PYTHONPATH"] = os.pathsep.join(
+        [str(SITE_DIRECTORY), str(root), *([inherited] if inherited else [])]
+    )
+    load_isolation()
     import c50
     import c50._c50
 
