@@ -231,15 +231,15 @@ if(C50_BUILD_PYTHON)
     # Multi-configuration generators append a configuration directory to an
     # output directory unless it contains a generator expression. The
     # expression below keeps the extension next to the package files that the
-    # build tree copies, for every generator. The runtime property places the
-    # module itself on platforms that treat it as a runtime artifact.
+    # build tree copies, for every generator. CMake treats a MODULE library as
+    # a library artifact on every platform, so only the library property
+    # places it.
     set(c50_python_package_dir "$<1:${CMAKE_CURRENT_BINARY_DIR}/python/c50>")
     set_target_properties(
         c50_python
         PROPERTIES
             OUTPUT_NAME _c50
             LIBRARY_OUTPUT_DIRECTORY "${c50_python_package_dir}"
-            RUNTIME_OUTPUT_DIRECTORY "${c50_python_package_dir}"
     )
     file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/python/c50)
     configure_file(
