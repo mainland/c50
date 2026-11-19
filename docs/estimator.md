@@ -50,7 +50,7 @@ or non-numeric columns are categorical. For a data frame other than a pandas
 `categorical_features` to a sequence of zero-based indices to override
 inference. String column names may also be used when scikit-learn reads string
 feature names from the input (see
-[pandas and Array API support](#pandas-and-array-api-support)). When an
+{ref}`pandas and Array API support <pandas-and-array-api-support>`). When an
 explicit sequence is present, every unlisted column is continuous. Set
 `categorical_features="from_dtype"` to treat exactly the DataFrame columns with
 a pandas `category` dtype as categorical, as `HistGradientBoostingClassifier`
@@ -66,9 +66,10 @@ categories in the training data as unordered.
 
 `None`, numeric NaN, `pd.NA`, and `pd.NaT` represent missing feature values.
 `pd.NA` means missing, not not applicable. To mark a value as not applicable,
-use `c50.NOT_APPLICABLE` (see [Not-applicable values](#not-applicable-values)).
-A `Decimal` NaN, quiet or signaling, is missing like any other numeric NaN.
-Infinite continuous values, and finite values beyond the single-precision
+use `c50.NOT_APPLICABLE` (see
+{ref}`Not-applicable values <not-applicable-values>`). A `Decimal` NaN, quiet
+or signaling, is missing like any other numeric NaN. Infinite continuous
+values, and finite values beyond the single-precision
 range of about 3.4e38, are rejected with a `ValueError` that names the feature
 and, for numeric columns, the first row. C5.0 stores continuous values as
 single-precision floats. An unseen prediction-time category raises
@@ -152,6 +153,8 @@ numbers, which train as continuous, or raise. To control the type of each
 column, pass a pandas `DataFrame`, for example through `X.to_pandas()`.
 Converting a polars table with `to_pandas()` needs pyarrow.
 
+(not-applicable-values)=
+
 ## Not-applicable values
 
 C5.0 distinguishes a missing value, which exists but is unknown, from a
@@ -195,7 +198,7 @@ private module, so unpickling returns the same object.
   accepts the marker. Any other non-number still raises `TypeError`.
 - `y` cannot hold the marker: `fit` raises `ValueError`. `sample_weight` has no
   N/A value: a weight that is the marker raises `TypeError`, as any other
-  non-numeric weight does (see [Sample weights](#sample-weights)).
+  non-numeric weight does (see {ref}`Sample weights <sample-weights>`).
 - `unknown_categories`, and categories that a dtype declared but training did
   not use, behave as before. A category named `"N/A"` is an ordinary level.
 - `export_text` and `export_json` show N/A branches, such as `'x' is N/A`.
@@ -219,6 +222,8 @@ input. Set `prediction_batch_size` to a different positive integer, or to
 `None` for one batch. Training remains in-memory and retains both the encoded
 float64 matrix and native case data while the classifier is built. See
 {doc}`large-datasets` for the scale target, limitations, and benchmark.
+
+(pandas-and-array-api-support)=
 
 ## pandas and Array API support
 
@@ -285,7 +290,7 @@ the same order for every input:
    arrays, and objects that implement `__array__`, `__array_interface__`,
    `__array_struct__`, or the buffer protocol. The result has the dtype that
    the array's library hands to NumPy, which the checks in
-   [Sample weights](#sample-weights) judge as they judge a NumPy array. A
+   {ref}`Sample weights <sample-weights>` judge as they judge a NumPy array. A
    polars or pyarrow array of nanosecond dates or durations raises `TypeError`
    as a weight, as a NumPy array does.
 
@@ -411,6 +416,8 @@ it is not comparable with the impurity-based importances of scikit-learn
 trees. Tools such as `SelectFromModel` use it for relative ranking. Usage is
 computed after training on the training rows, in batches of
 `prediction_batch_size`.
+
+(sample-weights)=
 
 ## Sample weights
 
