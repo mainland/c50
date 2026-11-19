@@ -389,9 +389,9 @@ def test_values_that_numpy_converts_for_other_reasons_stay_integers(
 
 
 def test_numpy_before_2_2_wraps_some_durations_beyond_the_maximum() -> None:
-    # NumPy releases before 2.2 convert durations in `W`, `D`, `h`, `m`, `s`,
-    # and `ms` of more than about nine million years, positive or negative, to
-    # a wrong `timedelta` instead of an `int`. The wrong value can equal
+    # NumPy releases before 2.2 convert some durations in `W`, `D`, `h`, `m`,
+    # `s`, and `ms` longer than about nine million years, positive or negative,
+    # to a wrong `timedelta` instead of an `int`. The wrong value can equal
     # another value of the column. The estimator does not repair it, which the
     # guide states.
     values = [5, 2**32 + 5, 2**63 - 1, -(2**32 + 5)]
