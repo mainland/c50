@@ -460,21 +460,43 @@ instead prints `cannot cross-validate with no cases` for no case and
 exits with status 1. Runs with two or more remaining cases are unchanged. This
 difference is deliberate.
 
-## Cross-validation summaries of large costs
+## Cross-validation summaries
 
-Release 2.07 sums the fold results of a cross-validation and their squares in
-`float`, in `c5.0 -X` and in `report`, and takes the standard error from the
-difference. A cost above about 1.8e19 makes the sum of squares infinite, so
-two equal folds print a standard error of `-nan` instead of 0. Folds whose sum
-exceeds the largest `float` print a mean of `inf` and a standard error of
-`-nan`. The cost file accepts these costs.
+Release 2.07 forms the summary of a cross-validation in `c5.0 -X` and in
+`report` from `float` sums. It adds the fold values and their squares and takes
+the standard error from the difference of the sum of squares and the square of
+the sum. Three effects follow, each of which prints `inf` or `-nan` in Release
+2.07:
 
-This project keeps the `float` arithmetic for every column whose mean and
-standard error are finite, so the printed text of those summaries is the same
-as in Release 2.07. For a column in which either value is not finite, it
-recomputes both in `double`, from the deviations about the mean, so the mean is
-the correct finite value and the standard error of equal folds is 0. This
-difference is deliberate.
+- A fold value above about 1.8e19 makes the sum of squares infinite. The cost
+  file accepts such costs.
+- Fold values whose sum exceeds the largest `float` make the mean infinite.
+- The difference of two nearly equal sums can be negative. Equal fold values
+  trigger this in ordinary runs, for example three folds of the same error rate
+  with no costs, and about a quarter of such columns print `SE -nan%`.
+
+The fold cost is also a `float` sum, divided by the fold size. Error costs that
+sum past the largest `float` print a fold cost of `inf` although the cost per
+case is finite.
+
+This project applies one rule to each printed number. A number that Release
+2.07 prints as finite keeps its text. A number that Release 2.07 prints as
+`inf` or `-nan` is computed in `double`:
+
+- A fold cost is the `float` sum divided by the fold size when that sum is
+  finite. Otherwise it is the `double` sum of the same costs divided by the
+  fold size.
+- A mean is the `float` mean when that mean is finite. Otherwise it is the
+  mean in `double`.
+- A standard error is the `float` value when that value is finite. Otherwise it
+  is computed in `double` from the deviations about the mean. The standard
+  error of equal folds is 0.
+
+The rule applies to each number separately. A finite mean keeps its text next
+to a standard error that Release 2.07 prints as `-nan`, even where the mean in
+`double` would differ in the last printed digits. Computing every summary in
+`double` was rejected, because it changes the text of finite standard errors in
+ordinary runs. This difference is deliberate.
 
 ## Pruning with two-class costs
 

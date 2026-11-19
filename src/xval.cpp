@@ -310,14 +310,14 @@ void Shuffle(c50_context *Context, int *Vec)
 
 
 /*  The mean and standard error of one column of fold results.  Release
-    2.07 sums the values and their squares in float.  That arithmetic is kept
-    for every column whose mean and standard error are finite, so the printed
-    text of those summaries does not change.  The squares overflow float for
-    a value above about 1.8e19, the sum overflows near the limit of float,
-    and the difference of two nearly equal sums can be negative.  Release
-    2.07 prints each of those as infinity or nan.  A column that float cannot
-    summarize is summarized in double from its deviations about the mean,
-    which neither overflows nor cancels.  */
+    2.07 sums the values and their squares in float.  Each of the two numbers
+    keeps that arithmetic, and so its printed text, whenever it is finite.
+    The squares overflow float for a value above about 1.8e19, the sum
+    overflows near the limit of float, and the difference of two nearly equal
+    sums can be negative.  Release 2.07 prints each of those as infinity or
+    nan.  Only a number that is not finite is recomputed in double, from the
+    deviations about the mean, which neither overflow nor cancel.  The other
+    number of the column is not affected.  */
 
 struct FoldSummary
 {
@@ -337,20 +337,30 @@ static FoldSummary Summarise(const std::vector<float> &Values)
 	SumSq += V * V;
     }
 
-    const FoldSummary Float = { Sum / No, SE(Sum, SumSq, No) };
+    FoldSummary Result = { Sum / No, SE(Sum, SumSq, No) };
 
-    if ( No < 2 || (std::isfinite(Float.mean) && std::isfinite(Float.se)) )
+    if ( No < 2 || (std::isfinite(Result.mean) && std::isfinite(Result.se)) )
     {
-	return Float;
+	return Result;
     }
 
     double Mean = 0, Deviations = 0;
 
     for ( float V : Values ) Mean += V;
     Mean /= No;
-    for ( float V : Values ) Deviations += (V - Mean) * (V - Mean);
 
-    return { Mean, sqrt(Deviations / (No - 1) / No) };
+    if ( ! std::isfinite(Result.mean) )
+    {
+	Result.mean = Mean;
+    }
+
+    if ( ! std::isfinite(Result.se) )
+    {
+	for ( float V : Values ) Deviations += (V - Mean) * (V - Mean);
+	Result.se = sqrt(Deviations / (No - 1) / No);
+    }
+
+    return Result;
 }
 
 
