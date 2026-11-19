@@ -225,9 +225,11 @@ run_unwritable_classifier()
 # not. Release 2.07 sends the report to standard output when `-o` cannot be
 # opened, and exits 0 when a write to the `-o` file or to standard output
 # fails. This project reports each failure on standard error and exits 1. The
-# cases need a full device or a file-size limit, so they run on Linux and the
-# BSDs, and the limit cases also need a shell that accepts `ulimit -f 0`.
-# Standard error goes to a pipe, because the limit applies to a file there too.
+# failed open runs everywhere. The other cases need a full device or a
+# file-size limit, so they run on Linux and the BSDs, and the limit cases also
+# need a shell that accepts `ulimit -f 0`. Each case that cannot run prints a
+# skip message. Standard error goes to a pipe, because the limit applies to a
+# file there too.
 expect_report_failure()
 {
     failure_name=$1
@@ -255,13 +257,6 @@ expect_report_failure()
 
 run_report_failures()
 {
-    case $(uname -s) in
-        Linux|*BSD) ;;
-        *) return 0 ;;
-    esac
-    if test ! -c /dev/full; then
-        return 0
-    fi
     report_dir="$test_dir/report-failures"
     mkdir "$report_dir"
     cp "$script_dir/fixtures/basic/basic.names" "$report_dir/"
@@ -282,6 +277,20 @@ run_report_failures()
     if test -n "$open_stdout"; then
         printf 'open failure wrote a report to standard output\n' >&2
         return 1
+    fi
+
+    case $(uname -s) in
+        Linux|*BSD) ;;
+        *)
+            printf 'skipping the full-device and file-size report failures:' >&2
+            printf ' they need Linux or a BSD\n' >&2
+            return 0
+            ;;
+    esac
+    if test ! -c /dev/full; then
+        printf 'skipping the full-device and file-size report failures:' >&2
+        printf ' /dev/full is missing\n' >&2
+        return 0
     fi
 
     expect_report_failure full-device \
@@ -310,6 +319,8 @@ run_report_failures()
     # An ordinary file under a zero-byte limit fails on write, not on open.
     # Ignoring SIGXFSZ turns the signal into an error from the write.
     if ! (ulimit -f 0) > /dev/null 2>&1; then
+        printf 'skipping the file-size report failure:' >&2
+        printf ' the shell rejects ulimit -f 0\n' >&2
         return 0
     fi
     limit_path="$report_dir/limited.txt"
