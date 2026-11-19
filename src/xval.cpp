@@ -65,11 +65,17 @@ void CrossVal(c50_context *Context)
 	Free(Context->cross_validation.confusion_matrix);
     }
 
-    /*  Folds are sized by dividing by the number of cases  */
+    /*  Folds are sized by dividing by the number of cases, and at least two
+	folds each need a case to hold out and a case to train on  */
 
     if ( Context->cases.max_case < 0 )
     {
 	Error(Context, NOXVALCASES, "", "");
+    }
+
+    if ( Context->cases.max_case < 1 )
+    {
+	Error(Context, ONEXVALCASE, "", "");
     }
 
     if ( Context->options.folds > Context->cases.max_case+1 )

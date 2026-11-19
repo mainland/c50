@@ -432,10 +432,9 @@ When the training data holds no cases, `c5.0` trains a classifier that has a
 single leaf of the first class, as Release 2.07 does, and evaluates the test
 cases with it. Release 2.07 crashes with a segmentation fault when a tree
 classifier, trained on no cases, classifies a case. It dereferences the parent
-of the root leaf, which is a null pointer. The same crash occurs in a
-cross-validation fold whose training cases are empty, such as `-X 2` on one
-case, and with boosting, winnowing, and subset tests. Rules classifiers and
-runs without test cases do not crash.
+of the root leaf, which is a null pointer. The same crash occurs with
+boosting, winnowing, and subset tests. Rules classifiers and runs without test
+cases do not crash.
 
 This project returns no class distribution for that leaf, so every case is
 classified as the first class, as the rule classifier does, and the program
@@ -448,12 +447,18 @@ entry points still reject zero training cases with `ValueError`. Release 2.07
 also copies zero bytes through null pointers in this case, which is undefined
 behavior but has no visible effect. This project skips those copies.
 
-Cross-validation (`-X`) is different when no case remains to validate: the
-data file is empty, every case has an unknown class, or `-S` selects no case.
-The attributes do not matter. Release 2.07 divides by zero while it sizes the
-folds and dies from `SIGFPE` (status 136) in each of these cases. `c5.0`
-instead prints `cannot cross-validate with no cases` and exits with status 1.
-Runs with one or more remaining cases are unchanged.
+Cross-validation (`-X`) is different when fewer than two cases remain to
+validate: the data file holds none or one case, every case but one has an
+unknown class, or `-S` selects none or one case. The attributes do not matter.
+The option accepts at least two folds, and each fold needs a case to hold out
+and a case to train on. Release 2.07 divides by zero while it sizes the folds
+for no case and dies from `SIGFPE` (status 136). For one case, it reduces the
+folds to one, trains on no case, prints a standard error of `-nan`, and exits
+with status 0, or crashes when the tree classifies the held-out case. `c5.0`
+instead prints `cannot cross-validate with no cases` for no case and
+`cannot cross-validate with one case` for one, before any fold trains, and
+exits with status 1. Runs with two or more remaining cases are unchanged. This
+difference is deliberate.
 
 ## Cross-validation summaries of large costs
 
