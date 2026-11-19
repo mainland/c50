@@ -789,6 +789,11 @@ def _not_real_costs() -> dict[str, Any]:
         "pandas-timedelta": _cost_matrix_with(pd.Timedelta(days=2)),
         "complex128": _cost_matrix_with(np.complex128(2)),
         "complex": _cost_matrix_with(2 + 0j),
+        "0d-timedelta64-array": _cost_matrix_with(np.array(two)),
+        "0d-datetime64-array": _cost_matrix_with(
+            np.array(np.datetime64(2, "ns"))
+        ),
+        "0d-complex128-array": _cost_matrix_with(np.array(2 + 0j)),
     }
 
 
@@ -803,6 +808,30 @@ def test_cost_matrix_with_time_or_complex_objects_raises_value_error(
         warnings.simplefilter("ignore")
         with pytest.raises(ValueError, match="real numbers"):
             _fit_costs(_not_real_costs()[name])
+
+
+def test_cost_matrix_with_a_0d_xarray_element_raises_value_error() -> None:
+    xarray = pytest.importorskip("xarray")
+    two = np.timedelta64(2, "ns")
+    for element in (
+        xarray.DataArray(two),
+        xarray.DataArray(np.datetime64(2, "ns")),
+    ):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with pytest.raises(ValueError, match="not complex, datetime"):
+                _fit_costs(_cost_matrix_with(element))
+
+
+@pytest.mark.parametrize(
+    "element",
+    [np.array(2), np.array(2.5), np.float32(2), np.True_],
+    ids=["0d-int", "0d-float", "float32", "bool"],
+)
+def test_cost_matrix_with_a_real_numpy_element_still_trains(
+    element: object,
+) -> None:
+    assert _fit_costs(_cost_matrix_with(element)) is not None
 
 
 def _cost_objects() -> dict[str, Any]:

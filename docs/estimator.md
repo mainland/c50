@@ -362,9 +362,10 @@ Entry `[predicted, actual]` is the cost of predicting the row class when the
 column class is correct. The array is converted like `X`, and it must hold real
 numbers. A data frame other than a pandas `DataFrame` is converted by its own
 library, as `X` is, so its date or duration columns may become counts. An array
-of complex, datetime, or timedelta values, and any object that does not convert
-to `float`, such as a `dict`, a generator, `pandas.NA`, or a complex number in
-an object array, raises `ValueError`. Entries must be finite and nonnegative,
+of complex, date, or duration dtype raises `ValueError`. So does an object
+element that is a NumPy or Python complex, date, or duration value, or an array
+of such a dtype, and any object that does not convert to `float`, such as a
+`dict`, a generator, or `pandas.NA`. Entries must be finite and nonnegative,
 and diagonal entries must be zero. Costs must fit the native single-precision
 representation. Each actual-class column must have a positive, representable
 sum of error costs. Consequently, binary off-diagonal costs must be positive.
