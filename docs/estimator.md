@@ -133,17 +133,18 @@ NumPy releases before 2.2 convert durations in `W`, `D`, `h`, `m`, `s`, and
 `ms` of more than about 9 million years (more than 3,294,967,297 days),
 positive or negative, to a wrong `datetime.timedelta` instead of an `int`. Such
 a value can equal another value of the column and share its category, as the
-`int64` maximum in days becomes `timedelta(days=-1)`. Polars and pyarrow
-columns in those units are affected. Keep durations within the range of
-`datetime.timedelta`.
+`int64` maximum in days becomes `timedelta(days=-1)`. Keep durations within the
+range of `datetime.timedelta`.
 
 Arrays, lists or object arrays of scalars, and polars and pyarrow tables whose
 columns are all nanosecond dates or durations give the same classifier and the
-same `categories_`. polars and pyarrow hold no other unit of the scalar group.
-A polars or pyarrow table that mixes a nanosecond column with columns of
-another type reaches C5.0 as the library's own conversion of the whole table
-makes it, and polars converts a nanosecond date in a table with float columns
-to floats, so cast those columns to `us` first. `NaT` is missing in every unit.
+same `categories_`. `NaT` is missing in every unit.
+
+Otherwise, a data frame other than a pandas `DataFrame` reaches the estimator
+as its own library converts the whole table. That conversion may turn date and
+duration columns into numbers, which train as continuous, or raise. To control
+the type of each column, pass a pandas `DataFrame`, for example through
+`X.to_pandas()`. Converting a polars table with `to_pandas()` needs pyarrow.
 
 ## Not-applicable values
 
@@ -359,14 +360,16 @@ no seed is drawn, and a supplied `RandomState` is not advanced.
 `cost_matrix` accepts an optional square array in predicted-by-actual order.
 Entry `[predicted, actual]` is the cost of predicting the row class when the
 column class is correct. The array is converted like `X`, and it must hold real
-numbers. An array of complex, datetime, or timedelta values, and any object
-that does not convert to `float`, such as a `dict`, a generator, `pandas.NA`,
-or a complex number in an object array, raises `ValueError`. Entries must be
-finite and nonnegative, and diagonal entries must be zero. Costs must fit the
-native single-precision representation. Each actual-class column must have a
-positive, representable sum of error costs. Consequently, binary off-diagonal
-costs must be positive. Individual zero costs are supported in multiclass
-matrices whose columns satisfy this requirement.
+numbers. A data frame other than a pandas `DataFrame` is converted by its own
+library, as `X` is, so its date or duration columns may become counts. An array
+of complex, datetime, or timedelta values, and any object that does not convert
+to `float`, such as a `dict`, a generator, `pandas.NA`, or a complex number in
+an object array, raises `ValueError`. Entries must be finite and nonnegative,
+and diagonal entries must be zero. Costs must fit the native single-precision
+representation. Each actual-class column must have a positive, representable
+sum of error costs. Consequently, binary off-diagonal costs must be positive.
+Individual zero costs are supported in multiclass matrices whose columns
+satisfy this requirement.
 
 `ignore_costs=True` ignores costs during both training and prediction. The
 model retains no costs data in this mode.
