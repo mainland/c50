@@ -501,3 +501,22 @@ def test_polars_table_through_to_pandas_keeps_the_date_categorical() -> None:
     assert without_date(classifier.model_.serialized_data) == without_date(
         reference.model_.serialized_data
     )
+
+
+def test_polars_boolean_through_to_pandas_stays_categorical() -> None:
+    # The rule for a data frame other than pandas covers every column type,
+    # and its remedy is the same `to_pandas()`. The table mixes a Boolean
+    # column with a float column.
+    pl = pytest.importorskip("polars")
+    pytest.importorskip("pyarrow")
+    pd = pytest.importorskip("pandas")
+    flags = np.arange(len(LABELS)) % 3 == 0
+    floats = np.linspace(0.5, 2.5, len(LABELS))
+    table = pl.DataFrame({"b": flags, "x": floats})
+    classifier = _fit(table.to_pandas())
+    reference = _fit(pd.DataFrame({"b": flags, "x": floats}))
+    assert list(classifier.categorical_features_) == [0]
+    assert classifier.categories_[0].tolist() == [False, True]
+    assert without_date(classifier.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )

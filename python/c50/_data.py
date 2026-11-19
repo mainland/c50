@@ -413,6 +413,18 @@ _NOT_REAL = (
 )
 
 
+def _cost_conversion_error(exc: Exception) -> ValueError:
+    """Return the error that a cost matrix element failing to convert raises.
+
+    The caller chains it to ``exc``. Reading an element's ``dtype`` and
+    converting the matrix to float share this policy, because either can run
+    code of an arbitrary object.
+    """
+    return ValueError(
+        f"cost_matrix must hold real numbers that convert to float: {exc}"
+    )
+
+
 def _is_not_real(element: object) -> bool:
     """Whether a cost matrix element is a date, a duration, or complex.
 
@@ -422,10 +434,21 @@ def _is_not_real(element: object) -> bool:
     Returns:
         True when the element has a type in ``_NOT_REAL`` or a NumPy complex,
         date, or duration dtype, as a 0-d array or an xarray ``DataArray`` has.
+
+    Raises:
+        ValueError: Reading the ``dtype`` of the element raised an exception
+            other than ``AttributeError`` or ``MemoryError``.
     """
     if isinstance(element, _NOT_REAL):
         return True
-    dtype = getattr(element, "dtype", None)
+    try:
+        dtype = getattr(element, "dtype", None)
+    except MemoryError:
+        raise
+    except Exception as exc:
+        # `getattr` turns an `AttributeError` into no dtype. A property or a
+        # `__getattr__` can raise anything else, as the conversion below can.
+        raise _cost_conversion_error(exc) from exc
     return isinstance(dtype, np.dtype) and dtype.kind in "cmM"
 
 
@@ -444,9 +467,7 @@ def encode_costs(class_count: int, cost_matrix: object | None) -> str:
         # NumPy raises TypeError, ValueError, or another exception, depending
         # on the object that fails to convert, such as a complex number in an
         # object array, a missing pandas value, or a dict.
-        raise ValueError(
-            f"cost_matrix must hold real numbers that convert to float: {exc}"
-        ) from exc
+        raise _cost_conversion_error(exc) from exc
     # An object array holds elements that the conversion above accepts but that
     # are not costs: a time scalar of NumPy becomes a count of units, a complex
     # scalar of NumPy becomes its real part, and an array of such a dtype, as

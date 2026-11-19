@@ -44,9 +44,12 @@ result of `predict` hold floats that compare equal to the original labels, as
 they do for `DecisionTreeClassifier`.
 
 With `categorical_features=None`, numeric columns are continuous, and Boolean
-or non-numeric columns are categorical. Set `categorical_features` to a
-sequence of zero-based indices to override inference. String column names may
-also be used when scikit-learn reads string feature names from the input (see
+or non-numeric columns are categorical. For a data frame other than a pandas
+`DataFrame`, the library's conversion decides the column types first (see
+{ref}`data frames other than pandas <data-frames-other-than-pandas>`). Set
+`categorical_features` to a sequence of zero-based indices to override
+inference. String column names may also be used when scikit-learn reads string
+feature names from the input (see
 [pandas and Array API support](#pandas-and-array-api-support)). When an
 explicit sequence is present, every unlisted column is continuous. Set
 `categorical_features="from_dtype"` to treat exactly the DataFrame columns with
@@ -139,11 +142,15 @@ Arrays, lists or object arrays of scalars, and polars and pyarrow tables whose
 columns are all nanosecond dates or durations give the same classifier and the
 same `categories_`. `NaT` is missing in every unit.
 
-Otherwise, a data frame other than a pandas `DataFrame` reaches the estimator
-as its own library converts the whole table. That conversion may turn date and
-duration columns into numbers, which train as continuous, or raise. To control
-the type of each column, pass a pandas `DataFrame`, for example through
-`X.to_pandas()`. Converting a polars table with `to_pandas()` needs pyarrow.
+(data-frames-other-than-pandas)=
+
+Except for the tables whose columns are all nanosecond dates or durations, a
+data frame other than a pandas `DataFrame` reaches the estimator as its own
+library converts the whole table. That conversion may change the type of any
+column, for example by turning dates, durations, or Boolean values into
+numbers, which train as continuous, or raise. To control the type of each
+column, pass a pandas `DataFrame`, for example through `X.to_pandas()`.
+Converting a polars table with `to_pandas()` needs pyarrow.
 
 ## Not-applicable values
 
