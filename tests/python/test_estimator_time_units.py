@@ -520,3 +520,43 @@ def test_polars_boolean_through_to_pandas_stays_categorical() -> None:
     assert without_date(classifier.model_.serialized_data) == without_date(
         reference.model_.serialized_data
     )
+
+
+def _mixed_pyarrow_table(kind: str) -> Any:
+    pa = pytest.importorskip("pyarrow")
+    days = [datetime.date(2020, 1, 1 + int(i)) for i in OFFSETS]
+    numbers = np.arange(len(OFFSETS)) % 7
+    if kind == "date32-int64":
+        return pa.table(
+            {"t": pa.array(days, pa.date32()), "n": pa.array(numbers)}
+        )
+    stamps = [
+        datetime.datetime.combine(day, datetime.time(12)) for day in days
+    ]
+    return pa.table(
+        {
+            "t": pa.array(stamps, pa.timestamp("us")),
+            "x": pa.array(numbers / 7.0),
+        }
+    )
+
+
+@pytest.mark.parametrize("kind", ["date32-int64", "timestamp-float64"])
+def test_a_pyarrow_table_of_a_date_and_a_number_trains_and_predicts(
+    kind: str,
+) -> None:
+    # NumPy cannot convert such a table without a dtype, while scikit-learn
+    # converts it through `object`, so the estimator leaves it to scikit-learn.
+    # The table gives the classifier that its `to_pandas()` frame gives.
+    table = _mixed_pyarrow_table(kind)
+    frame = table.to_pandas()
+    classifier = _fit(table)
+    reference = _fit(frame)
+    assert list(classifier.categorical_features_) == [0]
+    assert without_date(classifier.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
+    assert classifier.predict(table).tolist() == LABELS.tolist()
+    np.testing.assert_array_equal(
+        classifier.predict_proba(table), reference.predict_proba(frame)
+    )

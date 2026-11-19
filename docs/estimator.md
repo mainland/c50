@@ -303,11 +303,11 @@ library's exception, as does an object whose protocol probe raises. Any
 `MemoryError`, and a `BaseException` that is not an `Exception`, such as the
 `PanicException` of polars 2.0, propagate. So does an error that scikit-learn's
 own conversion of a data frame of step 3 raises. The estimator first converts
-such a data frame, other than a pandas one, once with `numpy.asarray` to find
-out whether it holds dates or durations. An `Exception` from that conversion
-gives the `ValueError` too, and a `MemoryError` propagates, even when a second
-conversion would succeed. Move an array to CPU memory, detach it, or convert
-its dtype first. See the
+such a data frame, other than a pandas one, with `numpy.asarray` to find out
+whether it holds dates or durations. A `MemoryError` from that conversion
+propagates. After any other exception, scikit-learn's conversion decides the
+result. Move an array to CPU memory, detach it, or convert its dtype first.
+See the
 [scikit-learn Array API contract](https://scikit-learn.org/stable/modules/array_api.html).
 
 With `array_api_dispatch=True`, scikit-learn checks that its inputs belong to
