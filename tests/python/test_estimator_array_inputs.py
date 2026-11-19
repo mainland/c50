@@ -695,6 +695,13 @@ def _fit_costs(cost_matrix: Any) -> C50Classifier:
     )
 
 
+def _same_costs(candidate: C50Classifier, reference: C50Classifier) -> None:
+    _same_classifier(candidate, reference)
+    np.testing.assert_array_equal(
+        candidate.cost_matrix_, reference.cost_matrix_
+    )
+
+
 def test_a_masked_x_is_read_by_its_data_values() -> None:
     # The mask does not make a cell missing, as the guide states.
     masked = _masked(X)
@@ -892,6 +899,104 @@ def test_cost_matrix_with_a_0d_xarray_element_raises_value_error() -> None:
             warnings.simplefilter("ignore")
             with pytest.raises(ValueError, match=_SCAN_MESSAGE):
                 _fit_costs(_cost_matrix_with(element))
+
+
+class _RaisingDtype:
+    """Converts to float, and raises `error` when `dtype` is read."""
+
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    def __float__(self) -> float:
+        return 2.0
+
+    @property
+    def dtype(self) -> np.dtype:
+        raise self._error
+
+
+class _GetattrKeyError:
+    """Converts to float, and raises `KeyError` for every other attribute."""
+
+    def __float__(self) -> float:
+        return 2.0
+
+    def __getattr__(self, name: str) -> object:
+        raise KeyError(name)
+
+
+class _RecursiveDtype:
+    """Converts to float, and reads its own `dtype` without end."""
+
+    def __float__(self) -> float:
+        return 2.0
+
+    @property
+    def dtype(self) -> np.dtype:
+        return self.dtype
+
+
+class _WarningDtype:
+    """Converts to float, and warns when `dtype` is read."""
+
+    def __float__(self) -> float:
+        return 2.0
+
+    @property
+    def dtype(self) -> np.dtype:
+        warnings.warn("dtype is deprecated", DeprecationWarning, stacklevel=2)
+        return np.dtype(np.float64)
+
+
+def _dtype_read_failures() -> dict[str, tuple[Any, type[BaseException]]]:
+    return {
+        "runtime-error": (
+            _RaisingDtype(RuntimeError("no dtype here")),
+            RuntimeError,
+        ),
+        "type-error": (_RaisingDtype(TypeError("no dtype here")), TypeError),
+        "not-implemented": (
+            _RaisingDtype(NotImplementedError("no dtype here")),
+            NotImplementedError,
+        ),
+        "getattr-key-error": (_GetattrKeyError(), KeyError),
+        "recursion": (_RecursiveDtype(), RecursionError),
+        "warning-as-error": (_WarningDtype(), DeprecationWarning),
+    }
+
+
+@pytest.mark.parametrize("name", list(_dtype_read_failures()))
+def test_cost_element_whose_dtype_read_raises_value_error(name: str) -> None:
+    # Reading `dtype` follows the policy of the conversion to float: any
+    # exception but `AttributeError` and `MemoryError` becomes the documented
+    # `ValueError`, chained to the original.
+    element, cause = _dtype_read_failures()[name]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(ValueError, match=_CONVERSION_MESSAGE) as caught:
+            _fit_costs(_cost_matrix_with(element))
+    assert isinstance(caught.value.__cause__, cause)
+    assert str(caught.value.__cause__) in str(caught.value)
+
+
+def test_cost_element_without_a_readable_dtype_trains() -> None:
+    # `AttributeError` means that the element has no dtype.
+    element = _RaisingDtype(AttributeError("no dtype here"))
+    _same_costs(
+        _fit_costs(_cost_matrix_with(element)),
+        _fit_costs(_cost_matrix_with(2.0)),
+    )
+
+
+def test_memory_error_reading_a_cost_element_dtype_propagates() -> None:
+    with pytest.raises(MemoryError):
+        _fit_costs(_cost_matrix_with(_RaisingDtype(MemoryError())))
+
+
+def test_cost_element_whose_dtype_read_warns_trains_without_a_filter() -> None:
+    with pytest.warns(DeprecationWarning, match="dtype is deprecated"):
+        candidate = _fit_costs(_cost_matrix_with(_WarningDtype()))
+    _same_costs(candidate, _fit_costs(_cost_matrix_with(2.0)))
 
 
 @pytest.mark.parametrize(
