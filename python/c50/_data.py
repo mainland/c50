@@ -399,10 +399,10 @@ def fit_schema(
 # `numpy.datetime64` or `numpy.timedelta64` to a float without complaint, as a
 # count of units, and a `numpy.complexfloating` to its real part with a
 # warning. A `datetime.date`, a `datetime.timedelta`, and a Python `complex`
-# fail the conversion, but a subclass or an object that defines `__float__`
-# would not, so the scan lists them too. `datetime.date` covers
-# `datetime.datetime` and `pandas.Timestamp`, and `datetime.timedelta` covers
-# `pandas.Timedelta`.
+# fail the conversion, but a subclass that defines `__float__` would not, so
+# the scan lists them too. `datetime.date` covers `datetime.datetime` and
+# `pandas.Timestamp`, and `datetime.timedelta` covers `pandas.Timedelta`.
+# `_is_not_real` adds the elements with such a NumPy dtype.
 _NOT_REAL = (
     np.datetime64,
     np.timedelta64,
@@ -411,6 +411,45 @@ _NOT_REAL = (
     complex,
     np.complexfloating,
 )
+
+
+def _cost_conversion_error(exc: Exception) -> ValueError:
+    """Return the error that a cost matrix element failing to convert raises.
+
+    The caller chains it to ``exc``. Reading an element's ``dtype`` and
+    converting the matrix to float share this policy, because either can run
+    code of an arbitrary object.
+    """
+    return ValueError(
+        f"cost_matrix must hold real numbers that convert to float: {exc}"
+    )
+
+
+def _is_not_real(element: object) -> bool:
+    """Whether a cost matrix element is a date, a duration, or complex.
+
+    Args:
+        element: An element of an object array.
+
+    Returns:
+        True when the element has a type in ``_NOT_REAL`` or a NumPy complex,
+        date, or duration dtype, as a 0-d array or an xarray ``DataArray`` has.
+
+    Raises:
+        ValueError: Reading the ``dtype`` of the element raised an exception
+            other than ``AttributeError`` or ``MemoryError``.
+    """
+    if isinstance(element, _NOT_REAL):
+        return True
+    try:
+        dtype = getattr(element, "dtype", None)
+    except MemoryError:
+        raise
+    except Exception as exc:
+        # `getattr` turns an `AttributeError` into no dtype. A property or a
+        # `__getattr__` can raise anything else, as the conversion below can.
+        raise _cost_conversion_error(exc) from exc
+    return isinstance(dtype, np.dtype) and dtype.kind in "cmM"
 
 
 def encode_costs(class_count: int, cost_matrix: object | None) -> str:
@@ -428,17 +467,17 @@ def encode_costs(class_count: int, cost_matrix: object | None) -> str:
         # NumPy raises TypeError, ValueError, or another exception, depending
         # on the object that fails to convert, such as a complex number in an
         # object array, a missing pandas value, or a dict.
-        raise ValueError(
-            f"cost_matrix must hold real numbers that convert to float: {exc}"
-        ) from exc
+        raise _cost_conversion_error(exc) from exc
     # An object array holds elements that the conversion above accepts but that
-    # are not costs: a time scalar becomes a count of units, and a complex
-    # scalar of NumPy becomes its real part. Refuse them as the arrays of those
-    # dtypes are refused. Other elements of the types in `_NOT_REAL` already
-    # failed to convert. The matrix holds at most the number of classes squared
-    # elements.
+    # are not costs: a time scalar of NumPy becomes a count of units, a complex
+    # scalar of NumPy becomes its real part, and an array of such a dtype, as
+    # a 0-d array is, converts the same way. So does a subclass of `date`,
+    # `timedelta`, or `complex` that defines `__float__`. Refuse them as the
+    # arrays of those dtypes are refused. The builtin `date`, `timedelta`, and
+    # `complex` values fail the conversion first. The matrix holds at most the
+    # number of classes squared elements.
     if costs is None or (
-        kind == "O" and any(isinstance(x, _NOT_REAL) for x in array.flat)
+        kind == "O" and any(_is_not_real(x) for x in array.flat)
     ):
         raise ValueError(
             "cost_matrix must hold real numbers, not complex, datetime, or "
