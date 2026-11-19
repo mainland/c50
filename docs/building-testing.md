@@ -21,7 +21,7 @@ their current results.
 | macOS ARM64 | AppleClang on `macos-15` | `validation.yml`, `native` | Native build, CTest, and installed consumers |
 | Linux x86-64 and ARM64, macOS ARM64 | GCC on Linux, AppleClang on macOS | `validation.yml`, `private-core` | Release build and CTest with `C50_PRIVATE_CORE`, the Python packages' core configuration |
 | Linux x86-64 | Clang on `ubuntu-24.04` | `validation.yml`, `private-core-clang` | Release build and CTest with `C50_PRIVATE_CORE` and no interprocedural optimization variable, so that the programs link against Clang's LLVM bitcode core |
-| Windows x86-64 | MSVC on `windows-2022`, Python 3.12 | `validation.yml`, `windows` | Native build, CTest, installed consumers, and Python tests |
+| Windows x86-64 | MSVC on `windows-2022`, Python 3.12 | `validation.yml`, `windows` | Native build with the Python extension, CTest, installed consumers, and Python tests |
 | Linux x86-64 | Python 3.12 and the pinned checkers | `validation.yml`, `lint` | The pre-commit hooks: ruff, ruff format, mypy, the license notice check, zizmor on the workflows, codespell, rumdl, and file hygiene checks |
 | Python 3.11 | joblib 1.3.0, NumPy 1.26.4, pandas 2.2.3, scikit-learn 1.6.1 | `validation.yml`, `python-and-docs` | Python tests, mypy, stubtest, and the benchmark smoke test |
 | Python 3.11 through 3.14 | Latest releases | `validation.yml`, `python-and-docs` | As for the minimum versions. Python 3.12 also runs the tutorial test and builds the documentation. |
@@ -61,6 +61,9 @@ configures both kinds of build to check which one registers it. The portable
 contract and installed-consumer tests still run. The Windows job treats level-4
 warnings as errors, except C4244, C4267, and C4305, which report the implicit
 narrowing conversions that the imported sources use to store values as float.
+It also builds the Python extension with Visual Studio, a multi-configuration
+generator, so its CTest run checks that the build tree places the extension
+next to its package.
 
 The `license-notices` pre-commit hook and the `python-license-notices` test run
 `tests/check_license_notices.py`. It fails when a tracked source file that can
