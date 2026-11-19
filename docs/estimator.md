@@ -101,19 +101,42 @@ names in `export_text` show the form that occurs first in the training rows.
 The same holds for the tuples `(1,)` and `(1.0,)`. The classifier and its
 predictions do not depend on the form.
 
-Dates and durations are categorical in every unit. NumPy converts most units
-to Python objects when it converts an array to `object`, and the categories are
+Dates and durations are categorical when NumPy converts them to
+`datetime.date`, `datetime.datetime`, or `datetime.timedelta`, or when their
+unit is in the scalar group described below. NumPy converts most units to
+Python objects when it converts an array to `object`, and the categories are
 those objects: `datetime.date` for `datetime64` in `Y`, `M`, `W`, and `D`,
 `datetime.datetime` for `datetime64` in `h`, `m`, `s`, `ms`, and `us`, and
 `datetime.timedelta` for `timedelta64` in `W`, `D`, `h`, `m`, `s`, `ms`, and
 `us`. NumPy converts `datetime64` in `ns`, `ps`, `fs`, and `as`, and
 `timedelta64` in `Y`, `M`, `ns`, `ps`, `fs`, and `as`, to `int`. The estimator
-keeps those values as `numpy.datetime64` and `numpy.timedelta64` scalars, so
-they stay categories. The two forms are different types, so they never match. A
-model fitted on `datetime64[ns]` data rejects the same instants in
-`datetime64[us]` as unseen under `unknown_categories="error"`, and the reverse.
-Cast the data to the unit of the training data first. Values of two units in
-the scalar group, such as `ns` and `ps`, have one type and match by value.
+keeps those values, which form the scalar group, as `numpy.datetime64` and
+`numpy.timedelta64` scalars, so they stay categories. The two forms are
+different types, so they never match. A model fitted on `datetime64[ns]` data
+rejects the same instants in `datetime64[us]` as unseen under
+`unknown_categories="error"`, and the reverse.
+
+Within the scalar group, a value's unit and step are part of its category, so
+equal values in two units, such as `ns` and `ps`, or `Y` and `M`, are different
+categories on every NumPy release. A model fitted on one rejects the other as
+unseen, and a column that mixes them has one category for each unit. Cast the
+data to the unit of the training data first.
+
+NumPy also converts some values to `int` in the other units, for reasons that
+depend on the value: dates outside the years 1 to 9999, durations outside the
+range of `datetime.timedelta`, and generic `timedelta64` values, which carry no
+unit. Those values stay integers. A column in which every value converts to
+`int` trains as continuous, and a column that mixes such values with dates or
+durations is categorical, with the integers as categories of their own. Cast
+the data to a unit and a range that avoid them to keep the feature categorical.
+NumPy releases before 2.2 convert some durations in `W`, `D`, `h`, `m`, `s`,
+and `ms` longer than about 9 million years, positive or negative, to a wrong
+`datetime.timedelta` instead of an `int`. Such a value can equal another value
+of the column and share its category, as the `int64` maximum in days becomes
+`timedelta(days=-1)`. Polars and pyarrow
+columns in those units are affected. Keep durations within the range of
+`datetime.timedelta`.
+
 Arrays, lists or object arrays of scalars, and polars and pyarrow tables whose
 columns are all nanosecond dates or durations give the same classifier and the
 same `categories_`. polars and pyarrow hold no other unit of the scalar group.
@@ -224,9 +247,11 @@ column keeps its dtype's order, without unused categories. Other categorical
 values are grouped by type, with types ordered by module and name, and sorted
 within each type. All real numbers other than `bool` form one group, so `int`
 and `float` values sort together. `categories_` lists each feature's categories
-in this order. Values of a type that cannot be sorted keep their order of first
-occurrence. On the OpenML adult data, four random permutations of the training
-rows each trained the same classifier as the original order.
+in this order. NumPy dates and durations in the scalar group sort by unit, from
+`Y` to `as`, then by step, then by count. Values of any other type that cannot
+be sorted keep their order of first occurrence. On the OpenML adult data, four
+random permutations of the training rows each trained the same classifier as
+the original order.
 
 pandas is a test dependency, not a runtime requirement. The estimator uses CPU
 NumPy arrays and returns NumPy arrays. It declares `array_api_support=False`.
@@ -237,7 +262,8 @@ C5.0 runs on the CPU. The estimator reads `X`, `y`, `sample_weight`, and
 the same order for every input:
 
 1. NumPy arrays, including masked arrays, NumPy and Python scalars, strings,
-   bytes, lists, tuples, and `None` are used as they are.
+   bytes, lists, tuples, and `None` are used as they are. A masked array keeps
+   its data values, and its mask is ignored.
 2. pandas objects (`DataFrame`, `Series`, `Index`, and extension arrays) are
    used as they are, with the column-wise conversion described above.
 3. Objects with `__dataframe__` or a `columns` attribute, such as polars and
@@ -433,7 +459,9 @@ estimator checks the type before it converts any weight to `float64`:
 
 A `numpy.ma.MaskedArray` of weights is read without its mask, as scikit-learn
 reads it, so a masked weight keeps its data value. Set a weight to zero to
-remove its sample.
+remove its sample. A masked `X` is read the same way, by its data values and
+without its mask, so a masked cell is not a missing value. Set a missing cell
+to `NaN` or `None` instead.
 
 The estimator passes the weights to C5.0 as its case-weight attribute. C5.0
 uses case weights when it counts cases but never tests them in a classifier.
