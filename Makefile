@@ -15,15 +15,19 @@
 
 
 CC	= gcc
-#	-ffloat-store affects only x87 arithmetic. 64-bit targets evaluate at
-#	the declared precision, so only 32-bit builds keep it.
-POINTER_SIZE := $(shell echo __SIZEOF_POINTER__ | g++ -E -P -x c++ - 2>/dev/null)
-CXX	= g++ $(if $(filter 8,$(POINTER_SIZE)),,-ffloat-store)
+CXX	= g++
 CXXSTD = -std=c++17
 CXXTHREAD = -pthread
 CXXFLAGS = $(CXXSTD) $(CXXTHREAD) -g -Wall -DVerbOpt -O0
 CPPFLAGS = -Iinclude
 LFLAGS = $(S)
+#	-ffloat-store affects only x87 arithmetic. 64-bit targets evaluate at
+#	the declared precision, so only 32-bit builds keep it. The probe asks the
+#	selected compiler with its flags, because options such as -m32 in either
+#	variable change the pointer size. A compiler that fails the probe keeps
+#	the flag.
+POINTER_SIZE := $(shell echo __SIZEOF_POINTER__ | $(CXX) $(CXXFLAGS) -E -P -x c++ - 2>/dev/null)
+CXXFLOAT = $(if $(filter 8,$(POINTER_SIZE)),,-ffloat-store)
 
 .PHONY: all test reference-comparison
 
@@ -104,14 +108,14 @@ reference-comparison: c5.0
 
 
 report: $(SRC_DIR)/report.cpp Makefile
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(LFLAGS) -o $@ $(SRC_DIR)/report.cpp -lm
+	$(CXX) $(CXXFLAGS) $(CXXFLOAT) $(CPPFLAGS) $(LFLAGS) -o $@ $(SRC_DIR)/report.cpp -lm
 
 
 prediction-probe:\
 	$(prediction_sources) $(headers) Makefile
 	cat $(SRC_DIR)/defns.i $(prediction_sources)\
 		| egrep -v 'defns.i|extern.i' >$(SRC_DIR)/predictiongt.cpp
-	$(CXX) $(CXXSTD) $(CXXTHREAD) $(CPPFLAGS) $(LFLAGS) -O3 -o $@ $(SRC_DIR)/predictiongt.cpp -lm
+	$(CXX) $(CXXSTD) $(CXXTHREAD) $(CXXFLOAT) $(CPPFLAGS) $(LFLAGS) -O3 -o $@ $(SRC_DIR)/predictiongt.cpp -lm
 	rm $(SRC_DIR)/predictiongt.cpp
 
 
@@ -119,7 +123,7 @@ prediction-probe:\
 
 c5.0dbg:\
 	$(objects) $(headers) Makefile
-	$(CXX) $(CXXSTD) $(CXXTHREAD) $(CPPFLAGS) -g -o c5.0dbg $(objects) -lm
+	$(CXX) $(CXXSTD) $(CXXTHREAD) $(CXXFLOAT) $(CPPFLAGS) -g -o c5.0dbg $(objects) -lm
 
 
 # production version
@@ -128,7 +132,7 @@ c5.0:\
 	$(sources) $(headers) Makefile
 	cat $(SRC_DIR)/defns.i $(sources)\
 		| egrep -v 'defns.i|extern.i' >$(SRC_DIR)/c50gt.cpp
-	$(CXX) $(CXXSTD) $(CXXTHREAD) $(CPPFLAGS) $(LFLAGS) -O3 -o c5.0 $(SRC_DIR)/c50gt.cpp -lm
+	$(CXX) $(CXXSTD) $(CXXTHREAD) $(CXXFLOAT) $(CPPFLAGS) $(LFLAGS) -O3 -o c5.0 $(SRC_DIR)/c50gt.cpp -lm
 	strip c5.0
 	rm $(SRC_DIR)/c50gt.cpp
 
@@ -137,4 +141,4 @@ $(objects):	Makefile $(headers)
 
 
 $(SRC_DIR)/%.o: $(SRC_DIR)/%.cpp
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CXXFLOAT) -c -o $@ $<

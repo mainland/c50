@@ -228,11 +228,18 @@ if(C50_BUILD_PYTHON)
     endif()
     target_compile_features(c50_python PRIVATE cxx_std_17)
     target_link_libraries(c50_python PRIVATE C50::cpp)
+    # Multi-configuration generators append a configuration directory to an
+    # output directory unless it contains a generator expression. The
+    # expression below keeps the extension next to the package files that the
+    # build tree copies, for every generator. The runtime property places the
+    # module itself on platforms that treat it as a runtime artifact.
+    set(c50_python_package_dir "$<1:${CMAKE_CURRENT_BINARY_DIR}/python/c50>")
     set_target_properties(
         c50_python
         PROPERTIES
             OUTPUT_NAME _c50
-            LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/python/c50
+            LIBRARY_OUTPUT_DIRECTORY "${c50_python_package_dir}"
+            RUNTIME_OUTPUT_DIRECTORY "${c50_python_package_dir}"
     )
     file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/python/c50)
     configure_file(
@@ -1045,6 +1052,13 @@ if(BUILD_TESTING)
             ${C50_TEST_SHELL_COMMAND}
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_makefile_headers.sh"
     )
+    add_test(
+        NAME makefile-float-store
+        COMMAND
+            ${C50_TEST_SHELL_COMMAND}
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_makefile_float_store.sh"
+    )
+    set_tests_properties(makefile-float-store PROPERTIES SKIP_RETURN_CODE 77)
     add_test(
         NAME cli-regression
         COMMAND

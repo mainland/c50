@@ -1326,11 +1326,16 @@ def _host_array(values: Any, name: str) -> Any:
         # documentation promises.
         raise
     except Exception as exc:
-        raise ValueError(
-            f"{name} cannot be converted to a NumPy array: {exc} C5.0 runs on "
-            "the CPU, so the array must be in CPU memory and have a dtype "
-            "that NumPy supports."
-        ) from exc
+        raise _conversion_error(name, exc) from exc
+
+
+def _conversion_error(name: str, exc: Exception) -> ValueError:
+    """Return the ``ValueError`` for an input that NumPy cannot convert."""
+    return ValueError(
+        f"{name} cannot be converted to a NumPy array: {exc} C5.0 runs on "
+        "the CPU, so the array must be in CPU memory and have a dtype "
+        "that NumPy supports."
+    )
 
 
 def _reject_not_applicable_labels(y: object) -> None:
@@ -1416,6 +1421,14 @@ def _time_frame(X: object) -> NDArray[Any] | None:
     of nanosecond columns does. scikit-learn converts such a frame through
     ``object``, which turns the values into integers. For any other input the
     result is ``None``.
+
+    Raises:
+        ValueError: If the conversion raises an ``Exception`` other than
+            ``MemoryError``, as ``_host_array`` does. A conversion that fails
+            once is not retried, because a retry that succeeds would discard
+            the error.
+        MemoryError: If the conversion exhausts memory. It propagates, as does
+            a ``BaseException`` that is not an ``Exception``.
     """
     if (
         isinstance(X, np.ndarray)
@@ -1425,9 +1438,10 @@ def _time_frame(X: object) -> NDArray[Any] | None:
         return None
     try:
         array = np.asarray(X)
-    except Exception:
-        # The conversion that scikit-learn performs reports the error.
-        return None
+    except MemoryError:
+        raise
+    except Exception as exc:
+        raise _conversion_error("X", exc) from exc
     if array.ndim != 2 or not is_integer_time_dtype(array.dtype):
         return None
     return array
