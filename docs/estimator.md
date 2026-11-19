@@ -123,14 +123,19 @@ unseen, and a column that mixes them has one category for each unit. Cast the
 data to the unit of the training data first.
 
 NumPy also converts some values to `int` in the other units, for reasons that
-depend on the value: dates outside the years 1 to 9999, durations longer than
-`datetime.timedelta.max`, and `timedelta64` in the generic unit, which has no
+depend on the value: dates outside the years 1 to 9999, durations outside the
+range of `datetime.timedelta`, and generic `timedelta64` values, which carry no
 unit. Those values stay integers. A column in which every value converts to
 `int` trains as continuous, and a column that mixes such values with dates or
 durations is categorical, with the integers as categories of their own. Cast
 the data to a unit and a range that avoid them to keep the feature categorical.
-NumPy 1.26 converts some durations longer than the maximum to a wrong
-`datetime.timedelta` instead, so keep durations within it.
+NumPy releases before 2.2 convert durations in `W`, `D`, `h`, `m`, `s`, and
+`ms` of more than about 9 million years (more than 3,294,967,297 days),
+positive or negative, to a wrong `datetime.timedelta` instead of an `int`. Such
+a value can equal another value of the column and share its category, as the
+`int64` maximum in days becomes `timedelta(days=-1)`. Polars and pyarrow
+columns in those units are affected. Keep durations within the range of
+`datetime.timedelta`.
 
 Arrays, lists or object arrays of scalars, and polars and pyarrow tables whose
 columns are all nanosecond dates or durations give the same classifier and the

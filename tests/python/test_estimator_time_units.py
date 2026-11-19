@@ -333,26 +333,54 @@ VALUE_DEPENDENT = {
 }
 
 
-def _skip_if_numpy_wraps(name: str) -> None:
-    # NumPy 1.26 converts some durations beyond `timedelta.max` to a wrong
-    # `timedelta` instead of an `int`, so only NumPy 2 gives a fixed result.
-    if (
-        name == "duration-beyond-max"
-        and np.lib.NumpyVersion(np.__version__) < "2.0.0"
-    ):
-        pytest.skip("NumPy 1.26 wraps durations beyond timedelta.max")
+NUMPY_WRAPS = np.lib.NumpyVersion(np.__version__) < "2.2.0"
 
 
-@pytest.mark.parametrize("name", VALUE_DEPENDENT)
+@pytest.mark.parametrize(
+    "name",
+    [
+        pytest.param(
+            name,
+            marks=pytest.mark.skipif(
+                name == "duration-beyond-max" and NUMPY_WRAPS,
+                reason="NumPy before 2.2 wraps it, which the next test pins",
+            ),
+        )
+        for name in VALUE_DEPENDENT
+    ],
+)
 def test_values_that_numpy_converts_for_other_reasons_stay_integers(
     name: str,
 ) -> None:
-    _skip_if_numpy_wraps(name)
     values = VALUE_DEPENDENT[name]
     assert all(isinstance(x, int) for x in values.astype(object))
     assert not is_integer_time_dtype(values.dtype)
     classifier = _fit(values.reshape(-1, 1))
     assert len(classifier.categorical_features_) == 0
+
+
+def test_numpy_before_2_2_wraps_some_durations_beyond_the_maximum() -> None:
+    # NumPy releases before 2.2 convert durations in `W`, `D`, `h`, `m`, `s`,
+    # and `ms` of more than about nine million years, positive or negative, to
+    # a wrong `timedelta` instead of an `int`. The wrong value can equal
+    # another value of the column. The estimator does not repair it, which the
+    # guide states.
+    values = [5, 2**32 + 5, 2**63 - 1, -(2**32 + 5)]
+    durations = np.array(values, dtype="timedelta64[D]")
+    converted = list(durations.astype(object))
+    column = durations[np.arange(len(OFFSETS)) % 4].reshape(-1, 1)
+    categories = _fit(column).categories_[0]
+    days = datetime.timedelta(days=5)
+    if NUMPY_WRAPS:
+        wrong = [days, days, datetime.timedelta(days=-1)]
+        wrong.append(datetime.timedelta(days=-5))
+        assert converted == wrong
+        assert len(categories) == 3
+    else:
+        assert converted[0] == days
+        assert converted[1:] == values[1:]
+        assert all(type(x) is int for x in converted[1:])
+        assert len(categories) == 4
 
 
 def test_integers_among_dates_are_categories_of_their_own() -> None:
