@@ -75,7 +75,8 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
     Numeric features are continuous by default. Non-numeric and Boolean
     features are categorical by default. Set ``categorical_features`` to a
     sequence of column indices or names to override inference. When it is set,
-    every unlisted feature is continuous.
+    every unlisted feature is continuous. See ``docs/estimator.md`` for data
+    frames other than pandas, whose own conversion decides the column types.
 
     A cell that holds :data:`c50.NOT_APPLICABLE` reaches C5.0 as ``N/A``. Type
     inference ignores such cells, so a column of numbers and markers is
