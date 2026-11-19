@@ -645,6 +645,20 @@ def test_exhausted_memory_propagates_from_a_table_conversion(
     assert table.calls == 1
 
 
+@pytest.mark.parametrize("role", ["fit_X", "predict_X"])
+@pytest.mark.parametrize("error", [KeyboardInterrupt, SystemExit])
+def test_a_base_exception_propagates_from_a_table_conversion(
+    role: str, error: type[BaseException]
+) -> None:
+    # The time probe converts a table before scikit-learn does. An interrupt
+    # during that conversion is not an `Exception`, so the estimator neither
+    # translates nor ignores it.
+    table = _FailsOnce(error())
+    with pytest.raises(error):
+        _call(role, table)
+    assert table.calls == 1
+
+
 def test_an_exception_that_is_not_an_exception_propagates() -> None:
     class Panic(BaseException):
         pass
