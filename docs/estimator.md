@@ -69,17 +69,16 @@ categories in the training data as unordered.
 use `c50.NOT_APPLICABLE` (see
 {ref}`Not-applicable values <not-applicable-values>`). A `Decimal` NaN, quiet
 or signaling, is missing like any other numeric NaN. Infinite continuous
-values, and finite values beyond the single-precision
-range of about 3.4e38, are rejected with a `ValueError` that names the feature
-and, for numeric columns, the first row. C5.0 stores continuous values as
-single-precision floats. An unseen prediction-time category raises
-`ValueError` by default. Set `unknown_categories="missing"` to pass
-unseen categories to C5.0 as missing values. A category that a pandas
-`category` dtype declared during fitting, but that no training row used, is
-always passed as a missing value, as in `HistGradientBoostingClassifier`.
-Such categories are not in `categories_` and do not change the classifier, so
-a filtered DataFrame that keeps unused categories trains the same classifier
-as one without them.
+values, and finite values beyond the single-precision range of about 3.4e38,
+are rejected with a `ValueError` that names the feature and, for numeric
+columns, the first row. C5.0 stores continuous values as single-precision
+floats. An unseen prediction-time category raises `ValueError` by default. Set
+`unknown_categories="missing"` to pass unseen categories to C5.0 as missing
+values. A category that a pandas `category` dtype declared during fitting, but
+that no training row used, is always passed as a missing value, as in
+`HistGradientBoostingClassifier`. Such categories are not in `categories_` and
+do not change the classifier, so a filtered DataFrame that keeps unused
+categories trains the same classifier as one without them.
 
 Real numbers match by value, and other values match only equal values of
 their own type. An integer category matches an equal float, so a model fitted
