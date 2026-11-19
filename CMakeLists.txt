@@ -900,18 +900,21 @@ if(BUILD_TESTING)
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         )
         set_tests_properties(python-license-notices PROPERTIES SKIP_RETURN_CODE 77)
-        add_test(
-            NAME benchmark-smoke
-            COMMAND ${Python_EXECUTABLE}
-                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_built_python.py"
-                    "${CMAKE_CURRENT_BINARY_DIR}/python"
-                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmark_smoke.py"
-        )
-        set_tests_properties(
-            benchmark-smoke
-            PROPERTIES
-                ENVIRONMENT "${c50_benchmark_environment}"
-        )
+        # The benchmark suite requires Linux or macOS, as property-hunt does.
+        if(UNIX)
+            add_test(
+                NAME benchmark-smoke
+                COMMAND ${Python_EXECUTABLE}
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_built_python.py"
+                        "${CMAKE_CURRENT_BINARY_DIR}/python"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmark_smoke.py"
+            )
+            set_tests_properties(
+                benchmark-smoke
+                PROPERTIES
+                    ENVIRONMENT "${c50_benchmark_environment}"
+            )
+        endif()
         if(NOT C50_ENABLE_SANITIZERS AND NOT C50_ENABLE_THREAD_SANITIZER)
             add_test(
                 NAME python-typecheck
