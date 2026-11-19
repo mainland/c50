@@ -113,6 +113,11 @@ void CrossVal(c50_context *Context)
 	    Start = (Start + 1) % (SaveMaxCase + 1);
 	}
 
+	/*  A fold's cost is summed in float, as in Release 2.07, and again in
+	    double for the case in which the float sum is not finite.  */
+
+	double FoldCost = 0;
+
 	ConstructClassifiers(Context);
 
 	/*  Check size (if appropriate) and errors  */
@@ -133,6 +138,7 @@ void CrossVal(c50_context *Context)
 		    if ( Context->costs.matrix )
 		    {
 			Context->cross_validation.results[f][2] += Context->costs.matrix[c][Class(Context->cross_validation.blocked_cases[Next])];
+			FoldCost += Context->costs.matrix[c][Class(Context->cross_validation.blocked_cases[Next])];
 		    }
 		}
 
@@ -159,6 +165,7 @@ void CrossVal(c50_context *Context)
 		    if ( Context->costs.matrix )
 		    {
 			Context->cross_validation.results[f][2] += Context->costs.matrix[c][Class(Context->cross_validation.blocked_cases[Next])];
+			FoldCost += Context->costs.matrix[c][Class(Context->cross_validation.blocked_cases[Next])];
 		    }
 		}
 
@@ -171,7 +178,10 @@ void CrossVal(c50_context *Context)
 	}
 
 	Context->cross_validation.results[f][1] = (100.0 * Context->cross_validation.results[f][1]) / Size;
-	Context->cross_validation.results[f][2] /= Size;
+	if ( std::isfinite(Context->cross_validation.results[f][2]) )
+	    Context->cross_validation.results[f][2] /= Size;
+	else
+	    Context->cross_validation.results[f][2] = static_cast<float>(FoldCost / Size);
 
 	c50_diagnostic_printf(Context->io.output, T_EvalHoldOut, Size);
 	Context->cases.max_case = Size-1;

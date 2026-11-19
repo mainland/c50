@@ -614,6 +614,44 @@ run_two_case_cross_validation()
     fi
 }
 
+# A fold whose error costs sum past the largest float. Release 2.07 sums the
+# costs of a fold in float, so the fold prints a cost of infinity although the
+# average cost per case is finite. The fold cost is then the double sum divided
+# by the fold size. Two of the four cases of each fold are classified wrongly
+# at 3e38 each.
+run_fold_cost_overflow()
+{
+    fold_dir="$test_dir/fold-cost-overflow"
+    mkdir "$fold_dir"
+    printf 'c.\nx: continuous.\nc: a, b.\n' > "$fold_dir/fold.names"
+    printf '1,a\n2,b\n3,a\n4,b\n5,a\n6,b\n7,a\n8,b\n' \
+        > "$fold_dir/fold.data"
+    printf 'a, b: 3e38\nb, a: 3e38\n' > "$fold_dir/fold.costs"
+
+    (
+        cd "$fold_dir"
+        "$binary" -f fold -X 2 -I 1 > output.raw 2>&1
+    )
+    normalize_output "$fold_dir/output.raw" > "$fold_dir/output.actual"
+
+    fold_tab=$(printf '\t')
+    fold_cost=150000000274887787888901997140572635136.00
+    for fold_expected in \
+        "   1${fold_tab}     1       50.0%${fold_cost}" \
+        "   2${fold_tab}     1       50.0%${fold_cost}" \
+        "  Mean${fold_tab}   1.0       50.0%${fold_cost}" \
+        "  SE${fold_tab}   0.0        0.0%   0.00"
+    do
+        if ! grep -F -x -e "$fold_expected" \
+            "$fold_dir/output.actual" > /dev/null; then
+            printf 'overflowing fold cost did not print: %s\n' \
+                "$fold_expected" >&2
+            cat "$fold_dir/output.actual" >&2
+            return 1
+        fi
+    done
+}
+
 # Rules with a costs file on data with no cases or with one class among three.
 # The average cost of the rule normalization is then 0/0. Release 2.07 forms no
 # rules, writes the first class or the only class as the default, and exits 0.
@@ -898,6 +936,7 @@ one_class_data='1, circle, red.
 run_large_cost_summary squares 1e20 2 '      50.0' 50000001002043867136.00
 run_large_cost_summary sum 3e38 4 '     100.0' \
     300000000549775575777803994281145270272.00
+run_fold_cost_overflow
 run_rule_costs_degenerate zero-cases ''
 run_rule_costs_degenerate zero-cases-bagged '' -b
 run_rule_costs_degenerate zero-cases-utility '' -u 2
