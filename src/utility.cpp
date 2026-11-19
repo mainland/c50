@@ -440,7 +440,7 @@ void ErrorContext(c50_context *Context, int ErrNo, const char *S1,
     if ( Context->io.output ) c50_diagnostic_printf(Context->io.output, "\n");
 
     if ( ErrNo == NOFILE || ErrNo == NOMEM || ErrNo == MODELFILE ||
-	 ErrNo == NOXVALCASES )
+	 ErrNo == NOXVALCASES || ErrNo == ONEXVALCASE )
     {
 	AppendFormatted(Buffer, "*** ");
     }
@@ -587,6 +587,11 @@ void ErrorContext(c50_context *Context, int ErrNo, const char *S1,
 
 	case NOXVALCASES:
 	    AppendFormatted(Buffer, "cannot cross-validate with no cases\n");
+	    Quit = true;
+	    break;
+
+	case ONEXVALCASE:
+	    AppendFormatted(Buffer, "cannot cross-validate with one case\n");
 	    Quit = true;
 	    break;
 

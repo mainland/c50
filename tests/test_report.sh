@@ -88,6 +88,49 @@ run_cross_validation basic rules 1 -r
 run_cross_validation boost boost 0 -t 5
 run_cross_validation basic costs 0
 
+# Finite costs near the limit of float. Release 2.07 sums the squares of the
+# costs in float, so a cost above about 1.8e19 makes the sum of squares
+# infinite and the standard error nan, and a sum above the limit of float makes
+# the mean infinite. The standard error of equal folds is 0.
+run_large_costs()
+{
+    large_name=$1
+    large_folds=$2
+    large_line=$3
+    large_mean=$4
+
+    large_input="$test_dir/large-$large_name.input"
+    : > "$large_input"
+    large_fold=0
+    while test "$large_fold" -lt "$large_folds"; do
+        printf '%s\n' "$large_line" >> "$large_input"
+        large_fold=$((large_fold + 1))
+    done
+    "$binary" 4 "$large_folds" 1 0 < "$large_input" \
+        > "$test_dir/large-$large_name.raw"
+    sed -e 's/[[:space:]]*$//' "$test_dir/large-$large_name.raw" \
+        > "$test_dir/large-$large_name.actual"
+
+    for large_expected in \
+        "	Mean       2.0     ${large_mean%% *}%  ${large_mean#* }" \
+        '	SE         0.0      0.0%   0.00'
+    do
+        if ! grep -F -x -e "$large_expected" \
+            "$test_dir/large-$large_name.actual" > /dev/null; then
+            printf 'large costs (%s) did not print: %s\n' \
+                "$large_name" "$large_expected" >&2
+            cat "$test_dir/large-$large_name.actual" >&2
+            return 1
+        fi
+    done
+}
+
+run_large_costs squares 2 '2 1 (50.0%) 100000000000000000000' \
+    '50.0 100000002004087734272.00'
+run_large_costs sum 4 \
+    '2 1 (50.0%) 300000000000000000000000000000000000000' \
+    '100.0 300000000549775575777803994281145270272.00'
+
 run_failure()
 {
     case_name=$1
