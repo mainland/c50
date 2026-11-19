@@ -212,6 +212,7 @@ using c50_context = c50::detail::context_state;
 #define	 MODELFILE	30
 #define	 CWTATTERR	31
 #define	 NOXVALCASES	32
+#define	 ONEXVALCASE	33
 
 #define	 READDATA	 1
 #define	 WINNOWATTS	 2
