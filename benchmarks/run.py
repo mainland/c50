@@ -413,6 +413,19 @@ def build_launcher(work: Path) -> Path:
     return launcher
 
 
+def load_average() -> float:
+    """Return the one-minute load average of the host.
+
+    Raises:
+        RuntimeError: On Windows, which has no load average. The suite requires
+            Linux or macOS.
+    """
+    if sys.platform == "win32":
+        raise RuntimeError("the benchmark suite requires Linux or macOS")
+    else:
+        return os.getloadavg()[0]
+
+
 def measured(
     command: Sequence[str | Path], cwd: Path, env: dict[str, str] | None = None
 ) -> dict[str, Any]:
@@ -423,7 +436,7 @@ def measured(
     """
     if LAUNCHER is None:
         raise RuntimeError("the measurement launcher has not been built")
-    load = os.getloadavg()[0]
+    load = load_average()
     usage_path = cwd / "usage.json"
     with (cwd / "stdout.txt").open("w") as stdout:
         start = time.perf_counter()
