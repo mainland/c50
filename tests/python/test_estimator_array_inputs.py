@@ -15,6 +15,7 @@ libraries themselves use `pytest.importorskip`.
 from __future__ import annotations
 
 import array
+import datetime
 import mmap
 import os
 import sys
@@ -572,6 +573,19 @@ def test_any_exception_of_a_conversion_raises_value_error(role: str) -> None:
     assert isinstance(caught.value.__cause__, _LibraryError)
 
 
+@pytest.mark.parametrize("role", ROLES)
+def test_exhausted_memory_propagates_from_a_conversion(role: str) -> None:
+    class OutOfMemory(_TensorLike):
+        def __array__(
+            self, dtype: Any = None, copy: bool | None = None
+        ) -> np.ndarray:
+            raise MemoryError("the array does not fit")
+
+    values = X if _DIMENSIONS.get(role, 2) == 2 else Y.astype(float)
+    with pytest.raises(MemoryError, match="does not fit"):
+        _call(role, OutOfMemory(values))
+
+
 def test_an_exception_that_is_not_an_exception_propagates() -> None:
     class Panic(BaseException):
         pass
@@ -681,6 +695,18 @@ def _fit_costs(cost_matrix: Any) -> C50Classifier:
     )
 
 
+def test_a_masked_x_is_read_by_its_data_values() -> None:
+    # The mask does not make a cell missing, as the guide states.
+    masked = _masked(X)
+    masked[:20, 0] = np.ma.masked
+    reference = _fit()
+    candidate = _fit(X=masked)
+    _same_classifier(candidate, reference)
+    np.testing.assert_array_equal(
+        candidate.predict_proba(masked), reference.predict_proba(X)
+    )
+
+
 def test_cost_matrix_containers_give_the_numpy_result() -> None:
     reference = _fit_costs(COSTS)
     containers: list[Any] = [
@@ -742,6 +768,26 @@ def test_cost_matrix_of_another_kind_raises_value_error(
         warnings.simplefilter("error")
         with pytest.raises(ValueError, match="real numbers"):
             _fit_costs(cost_matrix)
+
+
+def _cost_objects() -> dict[str, Any]:
+    return {
+        "complex-objects": np.array([[0, 2 + 5j], [1, 0]], dtype=object),
+        "timedelta-objects": [[0, datetime.timedelta(days=2)], [1, 0]],
+        "pandas-na": pd.DataFrame([[0, pd.NA], [1, 0]], dtype="Int64"),
+        "dict": {0: 1.0, 1: 2.0},
+        "generator": (row for row in [[0, 2], [1, 0]]),
+        "text": [["a", "b"], ["c", "d"]],
+    }
+
+
+@pytest.mark.parametrize("name", list(_cost_objects()))
+def test_cost_matrix_that_does_not_convert_to_float_raises_value_error(
+    name: str,
+) -> None:
+    with pytest.raises(ValueError, match="real numbers") as excinfo:
+        _fit_costs(_cost_objects()[name])
+    assert excinfo.value.__cause__ is not None
 
 
 @pytest.mark.parametrize("name", ["polars", "pyarrow"])

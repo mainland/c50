@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Tests that dates and durations are categorical in every unit.
+"""Tests that dates and durations are categorical, unit by unit.
 
 NumPy converts dates and durations in some units to `int` when it converts an
 array to `object`, while the other units become `datetime.date`,
@@ -10,13 +10,15 @@ array to `object`, while the other units become `datetime.date`,
 of the first group as `numpy.datetime64` and `numpy.timedelta64` scalars, so
 that each unit is categorical, and a model fitted on one unit rejects the same
 instants in another unit as unseen. Each case below fits or predicts with the
-same values in one unit, one container, and one role.
+same values in one unit, one container, and one role. The last tests cover the
+values that NumPy converts to `int` whatever their unit, which are continuous.
 """
 
 from __future__ import annotations
 
 import datetime
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 import numpy as np
@@ -205,8 +207,8 @@ def test_scalar_units_and_other_units_never_match(
 ) -> None:
     # The categories match by type. A NumPy scalar never equals a `datetime`
     # object, so the first value, which has the same instant in every unit, is
-    # unseen in a model of the other form. Units within the NumPy group share a
-    # type, so they are not part of this rule.
+    # unseen in a model of the other form. Units within the NumPy group are
+    # separate categories, which the tests below pin.
     scalars = _values(kind, unit).reshape(-1, 1)
     for other_unit in ("us", "D"):
         others = _values(kind, other_unit).reshape(-1, 1)
@@ -216,3 +218,206 @@ def test_scalar_units_and_other_units_never_match(
                 classifier.predict(other)
             lenient = _fit(fitted, unknown_categories="missing")
             assert lenient.predict(other).shape == (len(other),)
+
+
+# Pairs of units of the scalar group and the factor from the first unit to the
+# second, so that the pair holds equal instants or durations.
+UNIT_PAIRS = [
+    pytest.param("date", "ns", "ps", 1000, id="date-ns-ps"),
+    pytest.param("duration", "ns", "ps", 1000, id="duration-ns-ps"),
+    pytest.param("duration", "Y", "M", 12, id="duration-Y-M"),
+]
+
+
+def _scaled(kind: str, unit: str, factor: int) -> np.ndarray:
+    """Return the values of ``_values(kind, ...)``, equal in a finer unit."""
+    steps = (OFFSETS * factor).astype(f"timedelta64[{unit}]")
+    if kind == "duration":
+        return steps
+    return np.datetime64("1970-01-01", unit) + steps
+
+
+@pytest.mark.parametrize(("kind", "coarse", "fine", "factor"), UNIT_PAIRS)
+def test_equal_values_in_two_scalar_units_are_not_matched(
+    kind: str, coarse: str, fine: str, factor: int
+) -> None:
+    # NumPy 2.2 and later hash equal values of two units alike, and earlier
+    # releases do not, so the estimator keys a scalar by its unit.
+    first = _values(kind, coarse).reshape(-1, 1)
+    second = _scaled(kind, fine, factor).reshape(-1, 1)
+    assert np.all(first == second)
+    for fitted, other in ((first, second), (second, first)):
+        classifier = _fit(fitted)
+        with pytest.raises(ValueError, match="unseen category"):
+            classifier.predict(other)
+        lenient = _fit(fitted, unknown_categories="missing")
+        assert lenient.predict(other).shape == (len(other),)
+
+
+def _mixed_rows(
+    kind: str, coarse: str, fine: str, factor: int, order: str
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return one column that holds every value in two units, and its labels.
+
+    Each unit holds the same four instants or durations.
+    """
+    rows = [
+        (value, LABELS[i])
+        for unit, scale in ((coarse, 1), (fine, factor))
+        for i, value in enumerate(_scaled(kind, unit, scale))
+    ]
+    if order == "reversed":
+        rows.reverse()
+    elif order == "interleaved":
+        rows = rows[::2] + rows[1::2]
+    return (
+        _object_array([value for value, _ in rows]),
+        np.asarray([label for _, label in rows]),
+    )
+
+
+@pytest.mark.parametrize(("kind", "coarse", "fine", "factor"), UNIT_PAIRS)
+def test_mixed_unit_columns_do_not_depend_on_row_order(
+    kind: str, coarse: str, fine: str, factor: int
+) -> None:
+    # Equal values of two units are two categories, so the four values of each
+    # unit give eight. They are listed by unit, and then by count.
+    expected = [
+        *((coarse, count) for count in range(4)),
+        *((fine, count * factor) for count in range(4)),
+    ]
+    reference = None
+    for order in ("given", "reversed", "interleaved"):
+        X, y = _mixed_rows(kind, coarse, fine, factor, order)
+        classifier = C50Classifier(minimum_cases=1).fit(X, y)
+        assert [
+            (np.datetime_data(value.dtype)[0], int(value.view("i8")))
+            for value in classifier.categories_[0]
+        ] == expected
+        text = without_date(classifier.model_.serialized_data)
+        reference = text if reference is None else reference
+        assert text == reference
+
+
+@pytest.mark.parametrize("calendar", ["Y", "M"])
+def test_calendar_and_linear_durations_train_in_one_column(
+    calendar: str,
+) -> None:
+    # NumPy refuses to compare a calendar duration with a linear one, so the
+    # estimator must not ask it to, whatever the NumPy release.
+    units = (calendar, "ns")
+    values = [
+        np.timedelta64(int(count), units[(i // 4) % 2])
+        for i, count in enumerate(OFFSETS)
+    ]
+    X = _object_array(values)
+    classifier = _fit(X)
+    assert len(classifier.categories_[0]) == 8
+    assert classifier.predict(X).shape == (len(X),)
+    lenient = _fit(X, unknown_categories="missing")
+    assert lenient.predict(X).shape == (len(X),)
+
+
+# Values that NumPy converts to `int` for reasons other than their unit, with
+# the units that convert other values to objects. The predicate looks at the
+# unit only, so these stay integers, and the feature trains as continuous.
+VALUE_DEPENDENT = {
+    "date-after-9999": np.datetime64("10000-01-01", "D")
+    + OFFSETS.astype("timedelta64[D]"),
+    "date-before-year-1": np.datetime64("-0001-01-01", "D")
+    + OFFSETS.astype("timedelta64[D]"),
+    "seconds-after-9999": np.datetime64("300000-01-01", "s")
+    + OFFSETS.astype("timedelta64[s]"),
+    "duration-beyond-max": ((OFFSETS + 1) * 10**10).astype("timedelta64[D]"),
+    "generic-duration": OFFSETS.astype("timedelta64"),
+}
+
+
+def _skip_if_numpy_wraps(name: str) -> None:
+    # NumPy 1.26 converts some durations beyond `timedelta.max` to a wrong
+    # `timedelta` instead of an `int`, so only NumPy 2 gives a fixed result.
+    if (
+        name == "duration-beyond-max"
+        and np.lib.NumpyVersion(np.__version__) < "2.0.0"
+    ):
+        pytest.skip("NumPy 1.26 wraps durations beyond timedelta.max")
+
+
+@pytest.mark.parametrize("name", VALUE_DEPENDENT)
+def test_values_that_numpy_converts_for_other_reasons_stay_integers(
+    name: str,
+) -> None:
+    _skip_if_numpy_wraps(name)
+    values = VALUE_DEPENDENT[name]
+    assert all(isinstance(x, int) for x in values.astype(object))
+    assert not is_integer_time_dtype(values.dtype)
+    classifier = _fit(values.reshape(-1, 1))
+    assert len(classifier.categorical_features_) == 0
+
+
+def test_integers_among_dates_are_categories_of_their_own() -> None:
+    values = _values("date", "D").astype("datetime64[D]")
+    values[0] = np.datetime64("10000-01-01", "D")
+    classifier = _fit(values.reshape(-1, 1))
+    assert list(classifier.categorical_features_) == [0]
+    kinds = {type(category) for category in classifier.categories_[0]}
+    assert kinds == {int, datetime.date}
+
+
+def _empty_polars() -> Any:
+    pl = pytest.importorskip("polars")
+    return pl.DataFrame({"t": pl.Series([], dtype=pl.Datetime("ns"))})
+
+
+def _empty_pyarrow() -> Any:
+    pa = pytest.importorskip("pyarrow")
+    return pa.table({"t": pa.array([], pa.timestamp("ns"))})
+
+
+@pytest.mark.parametrize(
+    ("make", "empty"), [(_polars, _empty_polars), (_pyarrow, _empty_pyarrow)]
+)
+@pytest.mark.parametrize("role", ["fit", "predict", "predict_proba"])
+def test_a_table_of_nanoseconds_without_rows_is_rejected(
+    make: _Make, empty: Callable[[], Any], role: str
+) -> None:
+    # The sample-count check of scikit-learn applies in every container.
+    table = empty()
+    classifier = _fit(make(_values("date", "ns")))
+    call = (
+        partial(C50Classifier(minimum_cases=1).fit, table, LABELS[:0])
+        if role == "fit"
+        else partial(getattr(classifier, role), table)
+    )
+    with pytest.raises(ValueError, match=r"0 sample\(s\)"):
+        call()
+
+
+class _Frame:
+    """Has `columns`, as a data frame does, and converts to an array."""
+
+    columns = ("t",)
+
+    def __init__(self, values: np.ndarray) -> None:
+        self._values = values
+
+    def __array__(
+        self, dtype: Any = None, copy: bool | None = None
+    ) -> np.ndarray:
+        return np.asarray(self._values, dtype=dtype)
+
+
+@pytest.mark.parametrize("shape", [(), (24,)], ids=["scalar", "vector"])
+def test_a_table_of_nanoseconds_must_be_two_dimensional(
+    shape: tuple[int, ...],
+) -> None:
+    # Only a two-dimensional table of such values takes the path of the tables.
+    # Any other shape goes to scikit-learn, which reports it as it does for
+    # every other container.
+    values = _values("date", "ns")
+    table = _Frame(values.reshape(shape) if shape else values[0])
+    classifier = _fit(values.reshape(-1, 1))
+    with pytest.raises(ValueError, match="Expected 2D array"):
+        C50Classifier(minimum_cases=1).fit(table, LABELS)
+    with pytest.raises(ValueError, match="Expected 2D array"):
+        classifier.predict(table)

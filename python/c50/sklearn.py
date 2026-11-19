@@ -28,6 +28,7 @@ from sklearn.utils import Tags, check_random_state
 from sklearn.utils.class_weight import compute_sample_weight
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import (
+    check_array,
     check_consistent_length,
     check_is_fitted,
     validate_data,
@@ -227,10 +228,15 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
 
         Args:
             X: Dense two-dimensional training data. ``X``, ``y``, and
-                ``sample_weight`` may be NumPy arrays, pandas objects, or any
-                other array that NumPy can read, such as a PyTorch CPU tensor
-                or a polars or pyarrow array. Other arrays are converted with
-                :func:`numpy.asarray`.
+                ``sample_weight`` may be NumPy arrays, lists, pandas objects,
+                objects with ``__dataframe__`` or ``columns``, such as polars
+                and pyarrow tables, or any other object that implements an
+                array protocol (``__array__``, ``__array_interface__``,
+                ``__array_struct__``, or the buffer protocol), such as a
+                PyTorch CPU tensor or a polars or pyarrow array. Array API
+                arrays and the objects of an array protocol are converted with
+                :func:`numpy.asarray`. A ``numpy.ma.MaskedArray`` is read by
+                its data values, without its mask.
             y: One-dimensional class labels.
             sample_weight: Optional weight for each sample, either one finite,
                 nonnegative scalar or one such value per sample. C5.0 uses
@@ -269,15 +275,20 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                 ``numpy.str_`` and ``numpy.bytes_``, another real number, and
                 the marker.
             ValueError: If the data, schema, options, or cost matrix is
-                invalid, if an array cannot be converted to NumPy, as for a
-                tensor in device memory or a 128-bit polars integer array, or
-                if ``sample_weight`` contains a string that does not parse as a
-                number, a NaN, an infinity, or a negative number. A finite
-                weight also raises it when rounding to ``float64`` makes it
-                infinite, or makes it zero although it is not. An exception of
-                any other kind that the conversion raises, such as the
-                ``PanicException`` that polars 2.0 raises for a 128-bit integer
-                array, propagates.
+                invalid, if an input that implements an array protocol cannot
+                be converted to NumPy, as for a tensor in device memory or a
+                128-bit polars integer array, or if ``sample_weight`` contains
+                a string that does not parse as a number, a NaN, an infinity,
+                or a negative number. A finite weight also raises it when
+                rounding to ``float64`` makes it infinite, or makes it zero
+                although it is not. Any ``Exception`` that the array's library
+                raises during that conversion gives this ``ValueError``,
+                chained to it, except ``MemoryError``.
+            MemoryError: If the conversion of an input exhausts memory. It
+                propagates, as does an exception that is not an ``Exception``,
+                such as the ``PanicException`` that polars 2.0 raises for a
+                128-bit integer array, and an error that scikit-learn raises
+                while it converts a data frame of another library.
         """
         self._clear_fitted_state()
         fitted = False
@@ -297,10 +308,10 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             elif (stamps := _time_frame(X)) is not None:
                 y_checked = validate_data(self, y=y, reset=True)
                 validate_data(self, X, reset=True, skip_check_array=True)
+                X_checked = _check_time_frame(self, stamps)
                 check_consistent_length(X, y_checked)
-                X_checked = stamps
             else:
-                X_array, y_checked = validate_data(
+                X_checked, y_checked = validate_data(
                     self,
                     X,
                     y,
@@ -308,7 +319,6 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
                     dtype=_validation_dtype(X),
                     ensure_all_finite=False,
                 )
-                X_checked = _time_scalars(X_array)
             check_classification_targets(y_checked)
 
             weights = _relative_sample_weight(
@@ -639,18 +649,16 @@ class C50Classifier(ClassifierMixin, BaseEstimator):  # type: ignore[misc]
             return dataframe_columns(X)
         if (stamps := _time_frame(X)) is not None:
             validate_data(self, X, reset=False, skip_check_array=True)
-            return stamps
-        return _time_scalars(
-            cast(
-                NDArray[Any],
-                validate_data(
-                    self,
-                    X,
-                    reset=False,
-                    dtype=_validation_dtype(X),
-                    ensure_all_finite=False,
-                ),
-            )
+            return _check_time_frame(self, stamps)
+        return cast(
+            NDArray[Any],
+            validate_data(
+                self,
+                X,
+                reset=False,
+                dtype=_validation_dtype(X),
+                ensure_all_finite=False,
+            ),
         )
 
     def _attribute_usage(
@@ -1295,9 +1303,10 @@ def _host_array(values: Any, name: str) -> Any:
 
     Raises:
         ValueError: If an array's library, or the probe of the input, raises an
-            ``Exception``, whatever its type. A ``BaseException`` that is not
-            an ``Exception``, such as the ``PanicException`` of polars,
-            propagates, because catching it would also catch
+            ``Exception`` other than ``MemoryError``, whatever its type.
+        MemoryError: If the conversion exhausts memory. It propagates, as does
+            a ``BaseException`` that is not an ``Exception``, such as the
+            ``PanicException`` of polars, because catching it would also catch
             ``KeyboardInterrupt``.
     """
     if isinstance(values, _PASSED_UNCHANGED) or _is_pandas_object(values):
@@ -1311,6 +1320,10 @@ def _host_array(values: Any, name: str) -> Any:
         ):
             return values
         return np.asarray(values)
+    except MemoryError:
+        # Exhausted memory is not a problem of the input, as the package
+        # documentation promises.
+        raise
     except Exception as exc:
         raise ValueError(
             f"{name} cannot be converted to a NumPy array: {exc} C5.0 runs on "
@@ -1362,8 +1375,9 @@ def _validation_dtype(X: ArrayLike) -> type[object] | None:
 
     An array of dates or durations whose values NumPy converts to ``int``
     objects also keeps its dtype, because scikit-learn's conversion to
-    ``object`` would make the feature continuous. ``_time_scalars`` converts it
-    afterwards.
+    ``object`` would turn the values into integers and make the feature
+    continuous. Iterating the array yields ``numpy.datetime64`` and
+    ``numpy.timedelta64`` scalars, which the encoder keeps.
     """
     if isinstance(X, np.ndarray) or _is_pandas_object(X):
         dtype = getattr(X, "dtype", None)
@@ -1374,23 +1388,26 @@ def _validation_dtype(X: ArrayLike) -> type[object] | None:
     return object
 
 
-def _time_scalars(X: NDArray[Any]) -> NDArray[Any]:
-    """Return an array of integer-converted dates or durations as scalars.
+def _check_time_frame(
+    estimator: C50Classifier, stamps: NDArray[Any]
+) -> NDArray[Any]:
+    """Check the sample and feature counts of a table of dates or durations.
 
-    The scalars stay ``numpy.datetime64`` and ``numpy.timedelta64`` values.
-    NumPy converts the units of ``is_integer_time_dtype`` to ``int`` when it
-    converts an array to ``object``, which would make the feature continuous.
-    Any other array is returned unchanged.
+    ``validate_data`` skips its array check for such a table, so that it can
+    read the feature names of the table, and this check restores the rest of
+    it. A table without rows or columns raises ``ValueError``, as it does in
+    any other container.
     """
-    if not is_integer_time_dtype(X.dtype):
-        return X
-    result = np.empty(X.shape, dtype=object)
-    result.flat[:] = list(X.flat)
-    return result
+    return cast(
+        NDArray[Any],
+        check_array(
+            stamps, dtype=None, ensure_all_finite=False, estimator=estimator
+        ),
+    )
 
 
 def _time_frame(X: object) -> NDArray[Any] | None:
-    """Return the cells of a data frame of such dates or durations as scalars.
+    """Return a table of integer-converted dates or durations as an array.
 
     Only a data frame that is not a pandas object and whose conversion to a
     NumPy array holds dates or durations of the units of
@@ -1412,7 +1429,7 @@ def _time_frame(X: object) -> NDArray[Any] | None:
         return None
     if array.ndim != 2 or not is_integer_time_dtype(array.dtype):
         return None
-    return _time_scalars(array)
+    return array
 
 
 __all__ = ["NOT_APPLICABLE", "C50Classifier"]

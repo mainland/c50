@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import pickle
+import warnings
 from collections.abc import Callable
 from decimal import Decimal
 from fractions import Fraction
@@ -548,6 +549,66 @@ def test_dense_values_that_cannot_convert_raise_value_error(
         factory(NAMES, values, DENSE_CLASSES, copy=copy)
 
 
+class _FailingValues:
+    """Values whose conversion to an array raises an exception."""
+
+    def __init__(self, error: BaseException) -> None:
+        self._error = error
+
+    def __array__(
+        self, dtype: object = None, copy: object = None
+    ) -> np.ndarray:
+        raise self._error
+
+
+@pytest.mark.parametrize("factory", [c50.train_dense, c50.Model.train_dense])
+@pytest.mark.parametrize("copy", [True, False])
+@pytest.mark.parametrize("error", [MemoryError, KeyboardInterrupt])
+def test_dense_values_conversion_lets_memory_and_interrupts_propagate(
+    factory: Callable[..., c50.Model],
+    copy: bool,
+    error: type[BaseException],
+) -> None:
+    with pytest.raises(error, match="raised by the conversion"):
+        factory(
+            NAMES,
+            _FailingValues(error("raised by the conversion")),
+            DENSE_CLASSES,
+            copy=copy,
+        )
+
+
+@pytest.mark.parametrize("factory", [c50.train_dense, c50.Model.train_dense])
+@pytest.mark.parametrize("error", [RuntimeError, TypeError, OSError])
+def test_dense_values_conversion_chains_its_failure(
+    factory: Callable[..., c50.Model], error: type[Exception]
+) -> None:
+    with pytest.raises(ValueError, match="values cannot be converted") as info:
+        factory(
+            NAMES,
+            _FailingValues(error("the library cannot convert")),
+            DENSE_CLASSES,
+        )
+    assert isinstance(info.value.__cause__, error)
+
+
+@pytest.mark.parametrize("factory", [c50.train_dense, c50.Model.train_dense])
+def test_dense_values_that_numpy_rejects_keep_the_cause(
+    factory: Callable[..., c50.Model],
+) -> None:
+    with pytest.raises(ValueError, match="values cannot be converted") as info:
+        factory(NAMES, np.full((8, 2), "word"), DENSE_CLASSES)
+    assert isinstance(info.value.__cause__, ValueError)
+
+
+def test_dense_values_conversion_reports_a_warning_as_an_error() -> None:
+    complex_values = DENSE_TRAINING.astype(complex) + 1j
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(ValueError, match="values cannot be converted"):
+            c50.train_dense(NAMES, complex_values, DENSE_CLASSES)
+
+
 def test_dense_values_keep_the_casts_that_the_documentation_names() -> None:
     expected = c50.train_dense(NAMES, DENSE_TRAINING, DENSE_CLASSES)
     numeric_text = DENSE_TRAINING.astype(str)
@@ -561,6 +622,65 @@ def test_dense_values_keep_the_casts_that_the_documentation_names() -> None:
         assert without_date(model.serialized_data) == without_date(
             expected.serialized_data
         )
+
+
+def _read_only(values: np.ndarray) -> np.ndarray:
+    copy = values.copy()
+    copy.setflags(write=False)
+    return copy
+
+
+@pytest.mark.filterwarnings("ignore:Casting complex values")
+@pytest.mark.parametrize("copy", [True, False])
+@pytest.mark.parametrize(
+    "convert",
+    [
+        lambda v: v.astype(np.float16),
+        lambda v: v.astype(np.float32),
+        lambda v: v.astype(np.int8),
+        lambda v: v.astype(np.int64),
+        lambda v: v.astype(np.uint8),
+        lambda v: v.astype(np.longdouble),
+        lambda v: v.astype(object),
+        lambda v: v.astype(complex),
+        lambda v: np.ma.masked_array(v),
+        lambda v: memoryview(np.ascontiguousarray(v)),
+        lambda v: v.T.copy().T,
+        lambda v: np.repeat(v, 2, axis=0)[::2],
+        lambda v: tuple(map(tuple, v.tolist())),
+        _read_only,
+    ],
+    ids=[
+        "float16",
+        "float32",
+        "int8",
+        "int64",
+        "uint8",
+        "longdouble",
+        "object",
+        "complex",
+        "masked",
+        "memoryview",
+        "fortran",
+        "strided",
+        "tuples",
+        "read-only",
+    ],
+)
+def test_dense_values_accept_the_dtypes_that_convert_to_float64(
+    convert: Callable[[np.ndarray], object], copy: bool
+) -> None:
+    # NumPy's own conversion gives the float64 matrix, which the native call
+    # reads directly. The converting pass must give the same classifier.
+    values = convert(DENSE_TRAINING)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        floats = np.asarray(values, dtype=np.float64)
+    expected = c50.train_dense(NAMES, floats, DENSE_CLASSES, copy=copy)
+    model = c50.train_dense(NAMES, values, DENSE_CLASSES, copy=copy)
+    assert without_date(model.serialized_data) == without_date(
+        expected.serialized_data
+    )
 
 
 @pytest.mark.parametrize("dtype", [np.int8, np.int32, np.uint32, np.uint64])
