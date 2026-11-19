@@ -531,6 +531,48 @@ run_empty_cross_validation()
     fi
 }
 
+# Finite costs near the limit of float. Release 2.07 sums the squares of the
+# fold costs in float, so a cost above about 1.8e19 makes the sum of squares
+# infinite and the standard error nan, and a sum above the limit of float makes
+# the mean infinite. The standard error of equal folds is 0. The summaries of
+# smaller costs keep the float arithmetic of Release 2.07, which the other
+# cross-validation cases pin.
+run_large_cost_summary()
+{
+    large_name=$1
+    large_cost=$2
+    large_folds=$3
+    large_errors=$4
+    large_mean=$5
+
+    large_dir="$test_dir/large-cost-$large_name"
+    mkdir "$large_dir"
+    printf 'c.\nx: continuous.\nc: a, b.\n' > "$large_dir/large.names"
+    printf '1,a\n2,b\n3,a\n4,b\n' > "$large_dir/large.data"
+    printf 'a, b: %s\nb, a: %s\n' "$large_cost" "$large_cost" \
+        > "$large_dir/large.costs"
+
+    (
+        cd "$large_dir"
+        "$binary" -f large -X "$large_folds" -I 1 > output.raw 2>&1
+    )
+    normalize_output "$large_dir/output.raw" > "$large_dir/output.actual"
+
+    large_tab=$(printf '\t')
+    for large_expected in \
+        "  Mean${large_tab}   1.0 ${large_errors}%${large_mean}" \
+        "  SE${large_tab}   0.0        0.0%   0.00"
+    do
+        if ! grep -F -x -e "$large_expected" \
+            "$large_dir/output.actual" > /dev/null; then
+            printf 'large costs (%s) did not print: %s\n' \
+                "$large_name" "$large_expected" >&2
+            cat "$large_dir/output.actual" >&2
+            return 1
+        fi
+    done
+}
+
 # Rules with a costs file on data with no cases or with one class among three.
 # The average cost of the rule normalization is then 0/0. Release 2.07 forms no
 # rules, writes the first class or the only class as the default, and exits 0.
@@ -798,6 +840,9 @@ one_class_data='1, circle, red.
 8, triangle, red.
 9, triangle, red.
 '
+run_large_cost_summary squares 1e20 2 '      50.0' 50000001002043867136.00
+run_large_cost_summary sum 3e38 4 '     100.0' \
+    300000000549775575777803994281145270272.00
 run_rule_costs_degenerate zero-cases ''
 run_rule_costs_degenerate zero-cases-bagged '' -b
 run_rule_costs_degenerate zero-cases-utility '' -u 2

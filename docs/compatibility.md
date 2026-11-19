@@ -455,6 +455,22 @@ folds and dies from `SIGFPE` (status 136) in each of these cases. `c5.0`
 instead prints `cannot cross-validate with no cases` and exits with status 1.
 Runs with one or more remaining cases are unchanged.
 
+## Cross-validation summaries of large costs
+
+Release 2.07 sums the fold results of a cross-validation and their squares in
+`float`, in `c5.0 -X` and in `report`, and takes the standard error from the
+difference. A cost above about 1.8e19 makes the sum of squares infinite, so
+two equal folds print a standard error of `-nan` instead of 0. Folds whose sum
+exceeds the largest `float` print a mean of `inf` and a standard error of
+`-nan`. The cost file accepts these costs.
+
+This project keeps the `float` arithmetic for every column whose mean and
+standard error are finite, so the printed text of those summaries is the same
+as in Release 2.07. For a column in which either value is not finite, it
+recomputes both in `double`, from the deviations about the mean, so the mean is
+the correct finite value and the standard error of equal folds is 0. This
+difference is deliberate.
+
 ## Pruning with two-class costs
 
 With two classes and a costs file, C5.0 weights each training case by a
