@@ -389,9 +389,9 @@ def test_values_that_numpy_converts_for_other_reasons_stay_integers(
 
 
 def test_numpy_before_2_2_wraps_some_durations_beyond_the_maximum() -> None:
-    # NumPy releases before 2.2 convert durations in `W`, `D`, `h`, `m`, `s`,
-    # and `ms` of more than about nine million years, positive or negative, to
-    # a wrong `timedelta` instead of an `int`. The wrong value can equal
+    # NumPy releases before 2.2 convert some durations in `W`, `D`, `h`, `m`,
+    # `s`, and `ms` longer than about nine million years, positive or negative,
+    # to a wrong `timedelta` instead of an `int`. The wrong value can equal
     # another value of the column. The estimator does not repair it, which the
     # guide states.
     values = [5, 2**32 + 5, 2**63 - 1, -(2**32 + 5)]
@@ -478,3 +478,26 @@ def test_a_table_of_nanoseconds_must_be_two_dimensional(
         C50Classifier(minimum_cases=1).fit(table, LABELS)
     with pytest.raises(ValueError, match="Expected 2D array"):
         classifier.predict(table)
+
+
+def test_polars_table_through_to_pandas_keeps_the_date_categorical() -> None:
+    # The guide tells users to pass a pandas `DataFrame` to control the type of
+    # each column, and names `to_pandas()` as the way to get one from another
+    # data frame. The table mixes a date with a float column.
+    pl = pytest.importorskip("polars")
+    pytest.importorskip("pyarrow")
+    pd = pytest.importorskip("pandas")
+    dates = _values("date", "us")
+    floats = np.linspace(0.5, 2.5, len(dates))
+    table = pl.DataFrame({"t": pl.Series(dates), "x": floats})
+    expected = pd.DataFrame({"t": dates, "x": floats})
+    classifier = _fit(table.to_pandas())
+    reference = _fit(expected)
+    assert list(classifier.categorical_features_) == [0]
+    assert len(classifier.categories_[0]) == 4
+    assert classifier.categories_[0].tolist() == (
+        reference.categories_[0].tolist()
+    )
+    assert without_date(classifier.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )

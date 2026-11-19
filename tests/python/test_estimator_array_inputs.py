@@ -776,19 +776,91 @@ def _cost_matrix_with(element: object) -> np.ndarray:
     return matrix
 
 
-def _not_real_costs() -> dict[str, Any]:
+class _FloatDate(datetime.date):
+    def __float__(self) -> float:
+        return 2.0
+
+
+class _FloatDateTime(datetime.datetime):
+    def __float__(self) -> float:
+        return 2.0
+
+
+class _FloatTimedelta(datetime.timedelta):
+    def __float__(self) -> float:
+        return 2.0
+
+
+class _FloatComplex(complex):
+    def __float__(self) -> float:
+        return 2.0
+
+
+_SCAN_MESSAGE = "not complex, datetime, or timedelta"
+_CONVERSION_MESSAGE = "convert to float"
+
+
+def _not_real_costs() -> dict[str, tuple[Any, str]]:
+    """Cost matrices with a refused element, and the message of the refusal.
+
+    The scan of `encode_costs` refuses an element that converts to `float`. The
+    builtin date, duration, and complex values fail the conversion first.
+    """
     two = np.timedelta64(2, "ns")
+    scan, conversion = _SCAN_MESSAGE, _CONVERSION_MESSAGE
     return {
-        "timedelta64-object-array": np.array([[0, two], [two, 0]], object),
-        "int-and-timedelta64-list": [[0, two], [np.timedelta64(1, "ns"), 0]],
-        "datetime64-object-array": _cost_matrix_with(np.datetime64(2, "ns")),
-        "datetime": _cost_matrix_with(datetime.datetime(2000, 1, 2)),
-        "date": _cost_matrix_with(datetime.date(2000, 1, 2)),
-        "timedelta": _cost_matrix_with(datetime.timedelta(days=2)),
-        "pandas-timestamp": _cost_matrix_with(pd.Timestamp("2000-01-02")),
-        "pandas-timedelta": _cost_matrix_with(pd.Timedelta(days=2)),
-        "complex128": _cost_matrix_with(np.complex128(2)),
-        "complex": _cost_matrix_with(2 + 0j),
+        "timedelta64-object-array": (
+            np.array([[0, two], [two, 0]], object),
+            scan,
+        ),
+        "int-and-timedelta64-list": (
+            [[0, two], [np.timedelta64(1, "ns"), 0]],
+            scan,
+        ),
+        "datetime64-object-array": (
+            _cost_matrix_with(np.datetime64(2, "ns")),
+            scan,
+        ),
+        "complex128": (_cost_matrix_with(np.complex128(2)), scan),
+        "complex64": (_cost_matrix_with(np.complex64(2)), scan),
+        "clongdouble": (_cost_matrix_with(np.clongdouble(2)), scan),
+        "date-subclass": (_cost_matrix_with(_FloatDate(2000, 1, 2)), scan),
+        "datetime-subclass": (
+            _cost_matrix_with(_FloatDateTime(2000, 1, 2)),
+            scan,
+        ),
+        "timedelta-subclass": (
+            _cost_matrix_with(_FloatTimedelta(days=2)),
+            scan,
+        ),
+        "complex-subclass": (_cost_matrix_with(_FloatComplex(2)), scan),
+        "0d-timedelta64-array": (_cost_matrix_with(np.array(two)), scan),
+        "0d-datetime64-array": (
+            _cost_matrix_with(np.array(np.datetime64(2, "ns"))),
+            scan,
+        ),
+        "0d-complex128-array": (
+            _cost_matrix_with(np.array(2 + 0j)),
+            scan,
+        ),
+        "datetime": (
+            _cost_matrix_with(datetime.datetime(2000, 1, 2)),
+            conversion,
+        ),
+        "date": (_cost_matrix_with(datetime.date(2000, 1, 2)), conversion),
+        "timedelta": (
+            _cost_matrix_with(datetime.timedelta(days=2)),
+            conversion,
+        ),
+        "pandas-timestamp": (
+            _cost_matrix_with(pd.Timestamp("2000-01-02")),
+            conversion,
+        ),
+        "pandas-timedelta": (
+            _cost_matrix_with(pd.Timedelta(days=2)),
+            conversion,
+        ),
+        "complex": (_cost_matrix_with(2 + 0j), conversion),
     }
 
 
@@ -796,13 +868,41 @@ def _not_real_costs() -> dict[str, Any]:
 def test_cost_matrix_with_time_or_complex_objects_raises_value_error(
     name: str,
 ) -> None:
-    # NumPy converts a time scalar in an object array to a count of units,
-    # and a `numpy.complex128` to its real part. Neither is a cost. The other
-    # elements fail to convert, and the error is the same.
+    # NumPy converts a time scalar in an object array to a count of units, and
+    # a complex scalar to its real part. Neither is a cost. The scan refuses
+    # them by their type or dtype kind. Each type that only `_NOT_REAL` covers,
+    # and each dtype kind that `_is_not_real` checks, has a case here. The
+    # builtin values fail to convert, and the message says which refusal
+    # raised.
+    matrix, message = _not_real_costs()[name]
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        with pytest.raises(ValueError, match="real numbers"):
-            _fit_costs(_not_real_costs()[name])
+        with pytest.raises(ValueError, match=message):
+            _fit_costs(matrix)
+
+
+def test_cost_matrix_with_a_0d_xarray_element_raises_value_error() -> None:
+    xarray = pytest.importorskip("xarray")
+    two = np.timedelta64(2, "ns")
+    for element in (
+        xarray.DataArray(two),
+        xarray.DataArray(np.datetime64(2, "ns")),
+    ):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with pytest.raises(ValueError, match=_SCAN_MESSAGE):
+                _fit_costs(_cost_matrix_with(element))
+
+
+@pytest.mark.parametrize(
+    "element",
+    [np.array(2), np.array(2.5), np.float32(2), np.True_],
+    ids=["0d-int", "0d-float", "float32", "bool"],
+)
+def test_cost_matrix_with_a_real_numpy_element_still_trains(
+    element: object,
+) -> None:
+    assert _fit_costs(_cost_matrix_with(element)) is not None
 
 
 def _cost_objects() -> dict[str, Any]:
