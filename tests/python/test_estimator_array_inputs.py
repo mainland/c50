@@ -810,8 +810,9 @@ _CONVERSION_MESSAGE = "convert to float"
 def _not_real_costs() -> dict[str, tuple[Any, str]]:
     """Cost matrices with a refused element, and the message of the refusal.
 
-    The scan of `encode_costs` refuses an element that converts to `float`. The
-    builtin date, duration, and complex values fail the conversion first.
+    The scan of `encode_costs` reaches only the elements that convert to
+    `float`, and refuses those that have a refused type or dtype. The builtin
+    date, duration, and complex values fail the conversion first.
     """
     two = np.timedelta64(2, "ns")
     scan, conversion = _SCAN_MESSAGE, _CONVERSION_MESSAGE
@@ -1000,14 +1001,65 @@ def test_cost_element_whose_dtype_read_warns_trains_without_a_filter() -> None:
 
 
 @pytest.mark.parametrize(
-    "element",
-    [np.array(2), np.array(2.5), np.float32(2), np.True_],
+    ("element", "value"),
+    [
+        (np.array(2), 2.0),
+        (np.array(2.5), 2.5),
+        (np.float32(2), 2.0),
+        (np.True_, 1.0),
+    ],
     ids=["0d-int", "0d-float", "float32", "bool"],
 )
 def test_cost_matrix_with_a_real_numpy_element_still_trains(
+    element: object, value: float
+) -> None:
+    reference = _fit_costs(np.array([[0.0, value], [1.0, 0.0]]))
+    _same_costs(_fit_costs(_cost_matrix_with(element)), reference)
+
+
+class _RealWithDtypeAttribute:
+    """Converts to float, and has a `dtype` attribute of any kind."""
+
+    def __init__(self, dtype: object) -> None:
+        self.dtype = dtype
+
+    def __float__(self) -> float:
+        return 2.0
+
+
+class _RealWithComplexArray:
+    """Converts to float, and to a complex array through `__array__`."""
+
+    def __float__(self) -> float:
+        return 2.0
+
+    def __array__(
+        self, dtype: Any = None, copy: bool | None = None
+    ) -> np.ndarray:
+        return np.asarray(2 + 0j, dtype=dtype)
+
+
+@pytest.mark.parametrize(
+    "element",
+    [
+        _RealWithDtypeAttribute("complex128"),
+        _RealWithDtypeAttribute(np.complex128),
+        _RealWithDtypeAttribute(None),
+        _RealWithComplexArray(),
+    ],
+    ids=["dtype-string", "dtype-type", "dtype-none", "complex-array"],
+)
+def test_cost_element_converting_to_float_trains_with_that_value(
     element: object,
 ) -> None:
-    assert _fit_costs(_cost_matrix_with(element)) is not None
+    # The scan refuses an element by its type, or by a NumPy dtype that it
+    # carries as `dtype`. It converts no element to an array, and it reads no
+    # other `dtype` as a NumPy dtype, so an object that converts to float is a
+    # real cost.
+    _same_costs(
+        _fit_costs(_cost_matrix_with(element)),
+        _fit_costs(_cost_matrix_with(2.0)),
+    )
 
 
 def _cost_objects() -> dict[str, Any]:
