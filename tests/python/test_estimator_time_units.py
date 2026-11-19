@@ -318,6 +318,35 @@ def test_calendar_and_linear_durations_train_in_one_column(
     assert lenient.predict(X).shape == (len(X),)
 
 
+@pytest.mark.parametrize("kind", KINDS)
+def test_equal_counts_of_different_steps_are_ordered_categories(
+    kind: str,
+) -> None:
+    # `2ns` and `ns` are the same unit with different steps. Values of equal
+    # count in them are different instants, so they are different categories,
+    # ordered by step and then by count, whatever the order of the rows.
+    make = np.datetime64 if kind == "date" else np.timedelta64
+    pairs = [(count, step) for count in (1, 2) for step in (2, 1)] * 4
+    values = [make(count, f"{step}ns") for count, step in pairs]
+    labels = np.asarray(
+        ["yes" if step * count == 2 else "no" for count, step in pairs]
+    )
+    forward = C50Classifier(minimum_cases=1).fit(_object_array(values), labels)
+    backward = C50Classifier(minimum_cases=1).fit(
+        _object_array(values[::-1]), labels[::-1]
+    )
+    expected = [(1, 1), (1, 2), (2, 1), (2, 2)]
+    for classifier in (forward, backward):
+        categories = [
+            (np.datetime_data(c.dtype)[1], int(c.view("i8")))
+            for c in classifier.categories_[0]
+        ]
+        assert categories == expected
+    assert without_date(forward.model_.serialized_data) == without_date(
+        backward.model_.serialized_data
+    )
+
+
 # Values that NumPy converts to `int` for reasons other than their unit, with
 # the units that convert other values to objects. The predicate looks at the
 # unit only, so these stay integers, and the feature trains as continuous.
@@ -333,26 +362,54 @@ VALUE_DEPENDENT = {
 }
 
 
-def _skip_if_numpy_wraps(name: str) -> None:
-    # NumPy 1.26 converts some durations beyond `timedelta.max` to a wrong
-    # `timedelta` instead of an `int`, so only NumPy 2 gives a fixed result.
-    if (
-        name == "duration-beyond-max"
-        and np.lib.NumpyVersion(np.__version__) < "2.0.0"
-    ):
-        pytest.skip("NumPy 1.26 wraps durations beyond timedelta.max")
+NUMPY_WRAPS = np.lib.NumpyVersion(np.__version__) < "2.2.0"
 
 
-@pytest.mark.parametrize("name", VALUE_DEPENDENT)
+@pytest.mark.parametrize(
+    "name",
+    [
+        pytest.param(
+            name,
+            marks=pytest.mark.skipif(
+                name == "duration-beyond-max" and NUMPY_WRAPS,
+                reason="NumPy before 2.2 wraps it, which the next test pins",
+            ),
+        )
+        for name in VALUE_DEPENDENT
+    ],
+)
 def test_values_that_numpy_converts_for_other_reasons_stay_integers(
     name: str,
 ) -> None:
-    _skip_if_numpy_wraps(name)
     values = VALUE_DEPENDENT[name]
     assert all(isinstance(x, int) for x in values.astype(object))
     assert not is_integer_time_dtype(values.dtype)
     classifier = _fit(values.reshape(-1, 1))
     assert len(classifier.categorical_features_) == 0
+
+
+def test_numpy_before_2_2_wraps_some_durations_beyond_the_maximum() -> None:
+    # NumPy releases before 2.2 convert durations in `W`, `D`, `h`, `m`, `s`,
+    # and `ms` of more than about nine million years, positive or negative, to
+    # a wrong `timedelta` instead of an `int`. The wrong value can equal
+    # another value of the column. The estimator does not repair it, which the
+    # guide states.
+    values = [5, 2**32 + 5, 2**63 - 1, -(2**32 + 5)]
+    durations = np.array(values, dtype="timedelta64[D]")
+    converted = list(durations.astype(object))
+    column = durations[np.arange(len(OFFSETS)) % 4].reshape(-1, 1)
+    categories = _fit(column).categories_[0]
+    days = datetime.timedelta(days=5)
+    if NUMPY_WRAPS:
+        wrong = [days, days, datetime.timedelta(days=-1)]
+        wrong.append(datetime.timedelta(days=-5))
+        assert converted == wrong
+        assert len(categories) == 3
+    else:
+        assert converted[0] == days
+        assert converted[1:] == values[1:]
+        assert all(type(x) is int for x in converted[1:])
+        assert len(categories) == 4
 
 
 def test_integers_among_dates_are_categories_of_their_own() -> None:
