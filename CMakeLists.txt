@@ -1053,6 +1053,13 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_makefile_headers.sh"
     )
     add_test(
+        NAME makefile-float-store
+        COMMAND
+            ${C50_TEST_SHELL_COMMAND}
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_makefile_float_store.sh"
+    )
+    set_tests_properties(makefile-float-store PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(
         NAME cli-regression
         COMMAND
             ${CMAKE_COMMAND} -E env
