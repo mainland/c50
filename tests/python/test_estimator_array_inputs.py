@@ -749,6 +749,13 @@ def _fit_costs(cost_matrix: Any) -> C50Classifier:
     )
 
 
+def _same_costs(candidate: C50Classifier, reference: C50Classifier) -> None:
+    _same_classifier(candidate, reference)
+    np.testing.assert_array_equal(
+        candidate.cost_matrix_, reference.cost_matrix_
+    )
+
+
 def test_a_masked_x_is_read_by_its_data_values() -> None:
     # The mask does not make a cell missing, as the guide states.
     masked = _masked(X)
@@ -858,8 +865,8 @@ def _not_real_costs() -> dict[str, tuple[Any, str]]:
     """Cost matrices with a refused element, and the message of the refusal.
 
     The scan of `encode_costs` reaches only the elements that convert to
-    `float`, and refuses those that have a refused type. The builtin date,
-    duration, and complex values fail the conversion first.
+    `float`, and refuses those that have a refused type or dtype. The builtin
+    date, duration, and complex values fail the conversion first.
     """
     two = np.timedelta64(2, "ns")
     scan, conversion = _SCAN_MESSAGE, _CONVERSION_MESSAGE
@@ -889,6 +896,15 @@ def _not_real_costs() -> dict[str, tuple[Any, str]]:
             scan,
         ),
         "complex-subclass": (_cost_matrix_with(_FloatComplex(2)), scan),
+        "0d-timedelta64-array": (_cost_matrix_with(np.array(two)), scan),
+        "0d-datetime64-array": (
+            _cost_matrix_with(np.array(np.datetime64(2, "ns"))),
+            scan,
+        ),
+        "0d-complex128-array": (
+            _cost_matrix_with(np.array(2 + 0j)),
+            scan,
+        ),
         "datetime": (
             _cost_matrix_with(datetime.datetime(2000, 1, 2)),
             conversion,
@@ -916,13 +932,188 @@ def test_cost_matrix_with_time_or_complex_objects_raises_value_error(
 ) -> None:
     # NumPy converts a time scalar in an object array to a count of units, and
     # a complex scalar to its real part. Neither is a cost. The scan refuses
-    # them by their type. Each type in `_NOT_REAL` has a case here. The builtin
-    # values fail to convert, and the message says which refusal raised.
+    # them by their type or dtype kind. Each type that only `_NOT_REAL` covers,
+    # and each dtype kind that `_is_not_real` checks, has a case here. The
+    # builtin values fail to convert, and the message says which refusal
+    # raised.
     matrix, message = _not_real_costs()[name]
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         with pytest.raises(ValueError, match=message):
             _fit_costs(matrix)
+
+
+def test_cost_matrix_with_a_0d_xarray_element_raises_value_error() -> None:
+    xarray = pytest.importorskip("xarray")
+    two = np.timedelta64(2, "ns")
+    for element in (
+        xarray.DataArray(two),
+        xarray.DataArray(np.datetime64(2, "ns")),
+    ):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with pytest.raises(ValueError, match=_SCAN_MESSAGE):
+                _fit_costs(_cost_matrix_with(element))
+
+
+class _RaisingDtype:
+    """Converts to float, and raises `error` when `dtype` is read."""
+
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    def __float__(self) -> float:
+        return 2.0
+
+    @property
+    def dtype(self) -> np.dtype:
+        raise self._error
+
+
+class _GetattrKeyError:
+    """Converts to float, and raises `KeyError` for every other attribute."""
+
+    def __float__(self) -> float:
+        return 2.0
+
+    def __getattr__(self, name: str) -> object:
+        raise KeyError(name)
+
+
+class _RecursiveDtype:
+    """Converts to float, and reads its own `dtype` without end."""
+
+    def __float__(self) -> float:
+        return 2.0
+
+    @property
+    def dtype(self) -> np.dtype:
+        return self.dtype
+
+
+class _WarningDtype:
+    """Converts to float, and warns when `dtype` is read."""
+
+    def __float__(self) -> float:
+        return 2.0
+
+    @property
+    def dtype(self) -> np.dtype:
+        warnings.warn("dtype is deprecated", DeprecationWarning, stacklevel=2)
+        return np.dtype(np.float64)
+
+
+def _dtype_read_failures() -> dict[str, tuple[Any, type[BaseException]]]:
+    return {
+        "runtime-error": (
+            _RaisingDtype(RuntimeError("no dtype here")),
+            RuntimeError,
+        ),
+        "type-error": (_RaisingDtype(TypeError("no dtype here")), TypeError),
+        "not-implemented": (
+            _RaisingDtype(NotImplementedError("no dtype here")),
+            NotImplementedError,
+        ),
+        "getattr-key-error": (_GetattrKeyError(), KeyError),
+        "recursion": (_RecursiveDtype(), RecursionError),
+        "warning-as-error": (_WarningDtype(), DeprecationWarning),
+    }
+
+
+@pytest.mark.parametrize("name", list(_dtype_read_failures()))
+def test_cost_element_whose_dtype_read_raises_value_error(name: str) -> None:
+    # Reading `dtype` follows the policy of the conversion to float: any
+    # exception but `AttributeError` and `MemoryError` becomes the documented
+    # `ValueError`, chained to the original.
+    element, cause = _dtype_read_failures()[name]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(ValueError, match=_CONVERSION_MESSAGE) as caught:
+            _fit_costs(_cost_matrix_with(element))
+    assert isinstance(caught.value.__cause__, cause)
+    assert str(caught.value.__cause__) in str(caught.value)
+
+
+def test_cost_element_without_a_readable_dtype_trains() -> None:
+    # `AttributeError` means that the element has no dtype.
+    element = _RaisingDtype(AttributeError("no dtype here"))
+    _same_costs(
+        _fit_costs(_cost_matrix_with(element)),
+        _fit_costs(_cost_matrix_with(2.0)),
+    )
+
+
+def test_memory_error_reading_a_cost_element_dtype_propagates() -> None:
+    with pytest.raises(MemoryError):
+        _fit_costs(_cost_matrix_with(_RaisingDtype(MemoryError())))
+
+
+def test_cost_element_whose_dtype_read_warns_trains_without_a_filter() -> None:
+    with pytest.warns(DeprecationWarning, match="dtype is deprecated"):
+        candidate = _fit_costs(_cost_matrix_with(_WarningDtype()))
+    _same_costs(candidate, _fit_costs(_cost_matrix_with(2.0)))
+
+
+@pytest.mark.parametrize(
+    ("element", "value"),
+    [
+        (np.array(2), 2.0),
+        (np.array(2.5), 2.5),
+        (np.float32(2), 2.0),
+        (np.True_, 1.0),
+    ],
+    ids=["0d-int", "0d-float", "float32", "bool"],
+)
+def test_cost_matrix_with_a_real_numpy_element_still_trains(
+    element: object, value: float
+) -> None:
+    reference = _fit_costs(np.array([[0.0, value], [1.0, 0.0]]))
+    _same_costs(_fit_costs(_cost_matrix_with(element)), reference)
+
+
+class _RealWithDtypeAttribute:
+    """Converts to float, and has a `dtype` attribute of any kind."""
+
+    def __init__(self, dtype: object) -> None:
+        self.dtype = dtype
+
+    def __float__(self) -> float:
+        return 2.0
+
+
+class _RealWithComplexArray:
+    """Converts to float, and to a complex array through `__array__`."""
+
+    def __float__(self) -> float:
+        return 2.0
+
+    def __array__(
+        self, dtype: Any = None, copy: bool | None = None
+    ) -> np.ndarray:
+        return np.asarray(2 + 0j, dtype=dtype)
+
+
+@pytest.mark.parametrize(
+    "element",
+    [
+        _RealWithDtypeAttribute("complex128"),
+        _RealWithDtypeAttribute(np.complex128),
+        _RealWithDtypeAttribute(None),
+        _RealWithComplexArray(),
+    ],
+    ids=["dtype-string", "dtype-type", "dtype-none", "complex-array"],
+)
+def test_cost_element_converting_to_float_trains_with_that_value(
+    element: object,
+) -> None:
+    # The scan refuses an element by its type, or by a NumPy dtype that it
+    # carries as `dtype`. It converts no element to an array, and it reads no
+    # other `dtype` as a NumPy dtype, so an object that converts to float is a
+    # real cost.
+    _same_costs(
+        _fit_costs(_cost_matrix_with(element)),
+        _fit_costs(_cost_matrix_with(2.0)),
+    )
 
 
 def _cost_objects() -> dict[str, Any]:

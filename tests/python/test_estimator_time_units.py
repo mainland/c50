@@ -478,3 +478,45 @@ def test_a_table_of_nanoseconds_must_be_two_dimensional(
         C50Classifier(minimum_cases=1).fit(table, LABELS)
     with pytest.raises(ValueError, match="Expected 2D array"):
         classifier.predict(table)
+
+
+def test_polars_table_through_to_pandas_keeps_the_date_categorical() -> None:
+    # The guide tells users to pass a pandas `DataFrame` to control the type of
+    # each column, and names `to_pandas()` as the way to get one from another
+    # data frame. The table mixes a date with a float column.
+    pl = pytest.importorskip("polars")
+    pytest.importorskip("pyarrow")
+    pd = pytest.importorskip("pandas")
+    dates = _values("date", "us")
+    floats = np.linspace(0.5, 2.5, len(dates))
+    table = pl.DataFrame({"t": pl.Series(dates), "x": floats})
+    expected = pd.DataFrame({"t": dates, "x": floats})
+    classifier = _fit(table.to_pandas())
+    reference = _fit(expected)
+    assert list(classifier.categorical_features_) == [0]
+    assert len(classifier.categories_[0]) == 4
+    assert classifier.categories_[0].tolist() == (
+        reference.categories_[0].tolist()
+    )
+    assert without_date(classifier.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
+
+
+def test_polars_boolean_through_to_pandas_stays_categorical() -> None:
+    # The rule for a data frame other than pandas covers every column type,
+    # and its remedy is the same `to_pandas()`. The table mixes a Boolean
+    # column with a float column.
+    pl = pytest.importorskip("polars")
+    pytest.importorskip("pyarrow")
+    pd = pytest.importorskip("pandas")
+    flags = np.arange(len(LABELS)) % 3 == 0
+    floats = np.linspace(0.5, 2.5, len(LABELS))
+    table = pl.DataFrame({"b": flags, "x": floats})
+    classifier = _fit(table.to_pandas())
+    reference = _fit(pd.DataFrame({"b": flags, "x": floats}))
+    assert list(classifier.categorical_features_) == [0]
+    assert classifier.categories_[0].tolist() == [False, True]
+    assert without_date(classifier.model_.serialized_data) == without_date(
+        reference.model_.serialized_data
+    )
