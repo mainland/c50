@@ -541,12 +541,11 @@ Returns:
     The trained model.
 
 Raises:
-    ValueError: If an array has the wrong shape or dtype, ``values`` cannot
-        be converted to a float64 array (the error chains the cause), the
-        row counts differ, a class
-        index or a value is out of range, ``not_applicable``
-        does not have a bool dtype or the shape of ``values``, or an option,
-        the schema, or the costs are invalid.
+    ValueError: If an array has the wrong shape or dtype, ``values`` cannot be
+        converted to a float64 array (the error chains the cause), the row
+        counts differ, a class index or a value is out of range,
+        ``not_applicable`` does not have a bool dtype or the shape of
+        ``values``, or an option, the schema, or the costs are invalid.
     C50Error: If the schema has an implicit, ignored, label, date, time, or
         timestamp attribute, a class attribute, or a discrete attribute
         without explicit values, which dense data does not support. The

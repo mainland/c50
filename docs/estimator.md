@@ -159,8 +159,8 @@ Mark an N/A cell of `X` with the object `c50.NOT_APPLICABLE`, also importable
 as `c50.sklearn.NOT_APPLICABLE`. `fit`, `predict`, `predict_proba`, and
 `predict_log_proba` pass the cell to C5.0 as `N/A`, for continuous and
 categorical features alike, and the estimator trains the classifier that
-`c50.train` trains from text input with `N/A` in those places. A classifier fitted
-without N/A values may still predict for cases that have them.
+`c50.train` trains from text input with `N/A` in those places. A classifier
+fitted without N/A values may still predict for cases that have them.
 
 ```python
 import numpy as np
@@ -195,11 +195,12 @@ private module, so unpickling returns the same object.
   not use, behave as before. A category named `"N/A"` is an ordinary level.
 - `export_text` and `export_json` show N/A branches, such as `'x' is N/A`.
 
-A column that holds the marker has object dtype, which the estimator encodes one
-value at a time, more slowly than a `float64` column. Input without the marker
-takes the same path and costs as before. A transformer that converts object
-columns to numbers, such as `SimpleImputer`, rejects or drops the marker as it
-does any other non-number, so apply it only to columns without the marker.
+A column that holds the marker has object dtype, which the estimator encodes
+one value at a time, more slowly than a `float64` column. Input without the
+marker takes the same path and costs as before. A transformer that converts
+object columns to numbers, such as `SimpleImputer`, rejects or drops the marker
+as it does any other non-number, so apply it only to columns without the
+marker.
 
 The adapter maps class labels and categorical values to internal tokens before
 constructing the C5.0 names buffer and dense feature matrix. Delimiters and
@@ -337,17 +338,17 @@ than one. The worker count does not change the classifier.
 `numbers.Integral`, which include Python and NumPy integers, except `bool`,
 `np.bool_`, and `np.timedelta64`. `n_jobs` and `prediction_batch_size` also
 accept `None`. `fit` raises `ValueError` for every other value, whatever its
-type: `True`, `np.True_`, `np.timedelta64`, a float, a 0-d integer array, and an
-object that defines only `__index__`, as well as an out-of-range integer. This
-follows scikit-learn's parameter validation, where an invalid parameter raises
-at `fit` and not at construction. A parameter that `set_params` changes after
-`fit` is validated again where the estimator uses it, so an invalid
-`prediction_batch_size` also raises `ValueError` at `predict`,
-`predict_proba`, and the other prediction methods. The estimator converts each
-accepted value to a Python `int` where it uses it, and leaves the parameter
-unchanged. The estimator's annotations for these parameters remain `int`. The
-low-level count arguments and the `max_depth` of `export_text` follow a
-different rule, which the {doc}`Python API reference <api/python>` states.
+type: `True`, `np.True_`, `np.timedelta64`, a float, a 0-d integer array, and
+an object that defines only `__index__`, as well as an out-of-range integer.
+This follows scikit-learn's parameter validation, where an invalid parameter
+raises at `fit` and not at construction. A parameter that `set_params` changes
+after `fit` is validated again where the estimator uses it, so an invalid
+`prediction_batch_size` also raises `ValueError` at `predict`, `predict_proba`,
+and the other prediction methods. The estimator converts each accepted value to
+a Python `int` where it uses it, and leaves the parameter unchanged. The
+estimator's annotations for these parameters remain `int`. The low-level count
+arguments and the `max_depth` of `export_text` follow a different rule, which
+the {doc}`Python API reference <api/python>` states.
 
 `ties` selects the order of equal continuous values when the learner evaluates
 splits. The estimator's default, `"stable"`, is faster than `"reference"` and
