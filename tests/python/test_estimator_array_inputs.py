@@ -770,6 +770,41 @@ def test_cost_matrix_of_another_kind_raises_value_error(
             _fit_costs(cost_matrix)
 
 
+def _cost_matrix_with(element: object) -> np.ndarray:
+    matrix = np.array([[0, 0], [1, 0]], dtype=object)
+    matrix[0, 1] = element
+    return matrix
+
+
+def _not_real_costs() -> dict[str, Any]:
+    two = np.timedelta64(2, "ns")
+    return {
+        "timedelta64-object-array": np.array([[0, two], [two, 0]], object),
+        "int-and-timedelta64-list": [[0, two], [np.timedelta64(1, "ns"), 0]],
+        "datetime64-object-array": _cost_matrix_with(np.datetime64(2, "ns")),
+        "datetime": _cost_matrix_with(datetime.datetime(2000, 1, 2)),
+        "date": _cost_matrix_with(datetime.date(2000, 1, 2)),
+        "timedelta": _cost_matrix_with(datetime.timedelta(days=2)),
+        "pandas-timestamp": _cost_matrix_with(pd.Timestamp("2000-01-02")),
+        "pandas-timedelta": _cost_matrix_with(pd.Timedelta(days=2)),
+        "complex128": _cost_matrix_with(np.complex128(2)),
+        "complex": _cost_matrix_with(2 + 0j),
+    }
+
+
+@pytest.mark.parametrize("name", list(_not_real_costs()))
+def test_cost_matrix_with_time_or_complex_objects_raises_value_error(
+    name: str,
+) -> None:
+    # NumPy converts a time scalar in an object array to a count of units,
+    # and a `numpy.complex128` to its real part. Neither is a cost. The other
+    # elements fail to convert, and the error is the same.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(ValueError, match="real numbers"):
+            _fit_costs(_not_real_costs()[name])
+
+
 def _cost_objects() -> dict[str, Any]:
     return {
         "complex-objects": np.array([[0, 2 + 5j], [1, 0]], dtype=object),

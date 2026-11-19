@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import contextlib
+import datetime
 import math
 import sys
 from collections.abc import Sequence
@@ -394,13 +395,32 @@ def fit_schema(
     return Schema(tuple(features))
 
 
+# The types of object elements that a cost matrix refuses. NumPy converts a
+# `numpy.datetime64` or `numpy.timedelta64` to a float without complaint, as a
+# count of units, and a `numpy.complexfloating` to its real part with a
+# warning. A `datetime.date`, a `datetime.timedelta`, and a Python `complex`
+# fail the conversion, but a subclass or an object that defines `__float__`
+# would not, so the scan lists them too. `datetime.date` covers
+# `datetime.datetime` and `pandas.Timestamp`, and `datetime.timedelta` covers
+# `pandas.Timedelta`.
+_NOT_REAL = (
+    np.datetime64,
+    np.timedelta64,
+    datetime.date,
+    datetime.timedelta,
+    complex,
+    np.complexfloating,
+)
+
+
 def encode_costs(class_count: int, cost_matrix: object | None) -> str:
     """Convert a predicted-by-actual cost matrix to C5.0 costs data."""
     if cost_matrix is None:
         return ""
 
     try:
-        kind = np.asarray(cost_matrix).dtype.kind
+        array = np.asarray(cost_matrix)
+        kind = array.dtype.kind
         costs = None if kind in "cMm" else np.asarray(cost_matrix, dtype=float)
     except MemoryError:
         raise
@@ -411,7 +431,15 @@ def encode_costs(class_count: int, cost_matrix: object | None) -> str:
         raise ValueError(
             f"cost_matrix must hold real numbers that convert to float: {exc}"
         ) from exc
-    if costs is None:
+    # An object array holds elements that the conversion above accepts but that
+    # are not costs: a time scalar becomes a count of units, and a complex
+    # scalar of NumPy becomes its real part. Refuse them as the arrays of those
+    # dtypes are refused. Other elements of the types in `_NOT_REAL` already
+    # failed to convert. The matrix holds at most the number of classes squared
+    # elements.
+    if costs is None or (
+        kind == "O" and any(isinstance(x, _NOT_REAL) for x in array.flat)
+    ):
         raise ValueError(
             "cost_matrix must hold real numbers, not complex, datetime, or "
             "timedelta values"
