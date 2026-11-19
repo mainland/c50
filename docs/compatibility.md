@@ -403,12 +403,15 @@ status 1:
 *** could not write standard output: <reason>
 ```
 
-`<reason>` is the operating system's description of the error. The program
-opens the `-o` file before it prints anything, so a failed open prints no
-report. It checks the final flush and close of the `-o` file and the final
-flush and error state of standard output, and it does not close standard
-output. Runs that succeed print the same output and exit with the same status
-as before. This difference is deliberate.
+`<reason>` is the operating system's description of the error that the final
+flush or close reports. When an earlier write failed and the final flush
+succeeds, the C library keeps the error state of the stream but not the error
+number, so `<reason>` is `write error`. The program opens the `-o` file before
+it prints anything, so a failed open prints no report. It checks the final
+flush and close of the `-o` file and the final flush and error state of
+standard output, and it does not close standard output. Runs that succeed print
+the same output and exit with the same status as before. This difference is
+deliberate.
 
 ## Read errors
 
