@@ -221,6 +221,119 @@ run_unwritable_classifier()
     fi
 }
 
+# The report must reach its destination or the program must say that it did
+# not. Release 2.07 sends the report to standard output when `-o` cannot be
+# opened, and exits 0 when a write to the `-o` file or to standard output
+# fails. This project reports each failure on standard error and exits 1. The
+# cases need a full device or a file-size limit, so they run on Linux and the
+# BSDs, and the limit cases also need a shell that accepts `ulimit -f 0`.
+# Standard error goes to a pipe, because the limit applies to a file there too.
+expect_report_failure()
+{
+    failure_name=$1
+    failure_message=$2
+    shift 2
+
+    set +e
+    failure_stderr=$("$@" 2>&1 >/dev/null)
+    failure_code=$?
+    set -e
+    if test "$failure_code" -ne 1; then
+        printf 'report failure %s returned %d, expected 1\n' \
+            "$failure_name" "$failure_code" >&2
+        return 1
+    fi
+    case $failure_stderr in
+        "$failure_message"*) ;;
+        *)
+            printf 'report failure %s printed unexpected text:\n%s\n' \
+                "$failure_name" "$failure_stderr" >&2
+            return 1
+            ;;
+    esac
+}
+
+run_report_failures()
+{
+    case $(uname -s) in
+        Linux|*BSD) ;;
+        *) return 0 ;;
+    esac
+    if test ! -c /dev/full; then
+        return 0
+    fi
+    report_dir="$test_dir/report-failures"
+    mkdir "$report_dir"
+    cp "$script_dir/fixtures/basic/basic.names" "$report_dir/"
+    cp "$script_dir/fixtures/basic/basic.data" "$report_dir/"
+
+    set -- "$binary" -f "$report_dir/basic" -X 2 -I 17
+    missing_path="$report_dir/missing/report.txt"
+    expect_report_failure open-failure \
+        "*** could not open $missing_path: " "$@" -o "$missing_path"
+    if test -e "$missing_path"; then
+        printf 'open failure created %s\n' "$missing_path" >&2
+        return 1
+    fi
+    # The failed open must not send the report to standard output.
+    set +e
+    open_stdout=$("$@" -o "$missing_path" 2>/dev/null)
+    set -e
+    if test -n "$open_stdout"; then
+        printf 'open failure wrote a report to standard output\n' >&2
+        return 1
+    fi
+
+    expect_report_failure full-device \
+        '*** could not write /dev/full: ' "$@" -o /dev/full
+
+    full_stdout_message='*** could not write standard output: '
+    set +e
+    full_stderr=$(
+        "$binary" -f "$report_dir/basic" -X 2 -I 17 2>&1 >/dev/full)
+    full_code=$?
+    set -e
+    case $full_stderr in
+        "$full_stdout_message"*) ;;
+        *)
+            printf 'full standard output printed unexpected text:\n%s\n' \
+                "$full_stderr" >&2
+            return 1
+            ;;
+    esac
+    if test "$full_code" -ne 1; then
+        printf 'full standard output returned %d, expected 1\n' \
+            "$full_code" >&2
+        return 1
+    fi
+
+    # An ordinary file under a zero-byte limit fails on write, not on open.
+    # Ignoring SIGXFSZ turns the signal into an error from the write.
+    if ! (ulimit -f 0) > /dev/null 2>&1; then
+        return 0
+    fi
+    limit_path="$report_dir/limited.txt"
+    set +e
+    limit_result=$(
+        (
+            ulimit -f 0
+            trap '' XFSZ
+            "$@" -o "$limit_path" 2>&1 >/dev/null
+            printf 'status=%d\n' "$?"
+        )
+    )
+    set -e
+    case $limit_result in
+        "*** could not write $limit_path: "*"
+status=1") ;;
+        *)
+            printf 'limited report printed unexpected text:\n%s\n' \
+                "$limit_result" >&2
+            return 1
+            ;;
+    esac
+}
+
 # A read error is not the end of the input. Release 2.07 treats it as the end,
 # so a directory named `basic.test` evaluates 0 cases and exits 0. This
 # project reports the failure once and exits 1, so the exit status has no
@@ -695,6 +808,7 @@ run_invalid_definition
 run_many_classes
 run_missing_file_format
 run_unwritable_classifier
+run_report_failures
 run_read_error
 run_failure_after_bad_values full '\*\*\* could not close classifier'
 run_failure_after_bad_values test '\*\*\* could not read bad-values\.test: .*'

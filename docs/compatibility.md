@@ -376,18 +376,39 @@ as `-c 25x`, as Release 2.07 does.
 ## Command-line failure messages
 
 The command-line program exits with status 1 after a failure and prints a
-message on the output stream, standard output or the `-o` file. `Error`
-and the option checks print their own text, as in C5.0 Release 2.07. The
-program now also prints the message of every other failure that the library
-raises, in the form `*** message`. These failures include a classifier that
-cannot be written or closed, an internal error, and an allocation failure that
-`Error` did not report. Earlier builds of this project exited 1 without a
-message for them.
+message on the output stream, standard output or the `-o` file, except for a
+failure of that stream itself, which goes to standard error. `Error` and the
+option checks print their own text, as in C5.0 Release 2.07. The program now
+also prints the message of every other failure that the library raises, in the
+form `*** message`. These failures include a classifier that cannot be written
+or closed, an internal error, and an allocation failure that `Error` did not
+report. Earlier builds of this project exited 1 without a message for them.
 
 Release 2.07 ignored the result of writing and closing a `.tree` or `.rules`
 file, so a write failure such as a full disk left a truncated model and exit
 status 0. This project reports `*** could not close classifier` or
 `*** could not write classifier` and exits 1. This difference is deliberate.
+
+Release 2.07 also ignored the result of opening the `-o` file and of writing
+the report. When the file could not be opened, it printed the report on
+standard output, created no file, and exited with status 0. When a write to the
+`-o` file or to standard output failed, such as a write to a full device, it
+lost the report and exited with status 0. This project reports these failures
+on standard error, because the report stream is not available, and exits with
+status 1:
+
+```text
+*** could not open <path>: <reason>
+*** could not write <path>: <reason>
+*** could not write standard output: <reason>
+```
+
+`<reason>` is the operating system's description of the error. The program
+opens the `-o` file before it prints anything, so a failed open prints no
+report. It checks the final flush and close of the `-o` file and the final
+flush and error state of standard output, and it does not close standard
+output. Runs that succeed print the same output and exit with the same status
+as before. This difference is deliberate.
 
 ## Read errors
 

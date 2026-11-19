@@ -43,7 +43,10 @@
 #include <cerrno>
 #include <climits>
 #include <cmath>
+#include <cstdio>
+#include <cstring>
 #include <limits>
+#include <string>
 #include <type_traits>
 
 #if !defined(_WIN32)
@@ -182,19 +185,6 @@ void Run(c50_context *Context, void *UserData)
     setrlimit(RLIMIT_STACK, &RL);
 #endif
 
-
-    /*  Check for output to be saved to a file  */
-
-    if ( Argc > 2 && ! strcmp(Argv[Argc-2], "-o") )
-    {
-	Context->io.output = fopen(Argv[Argc-1], "w");
-	Argc -= 2;
-    }
-
-    if ( ! Context->io.output )
-    {
-	Context->io.output = stdout;
-    }
 
     Context->io.random_initial_seed = time(0) & 07777;
 
@@ -446,6 +436,71 @@ void CleanupCli(c50_context *Context, void *UserData)
     Cleanup(Context);
 }
 
+// Owns the stream that `-o PATH` names. Release 2.07 never checked it, so a
+// failed open sent the report to standard output, and a full disk lost the
+// report without a trace. The destructor releases the stream on every exit. It
+// ignores a failure, because Close has reported it on the normal path.
+
+class ReportFile
+{
+public:
+    ReportFile() = default;
+    ReportFile(const ReportFile &) = delete;
+    ReportFile &operator=(const ReportFile &) = delete;
+    ~ReportFile()
+    {
+        if ( File_ ) std::fclose(File_);
+    }
+
+    // Returns false with errno set if the file cannot be opened.
+
+    bool Open(const char *Path)
+    {
+        File_ = std::fopen(Path, "w");
+        return File_ != nullptr;
+    }
+
+    FILE *Get() const { return File_; }
+
+    bool Close()
+    {
+        FILE *File = File_;
+        File_ = nullptr;
+        return Finish(File, true);
+    }
+
+    // Flushes Stream, checks its error state, and closes it if Close is true.
+    // Returns false after a failure, with errno set to the system's error or
+    // to zero if the stream recorded a failure that the flush did not repeat.
+
+    static bool Finish(FILE *Stream, bool Close)
+    {
+        errno = 0;
+        const bool Flushed = std::fflush(Stream) == 0 && ! std::ferror(Stream);
+        const int FlushError = errno;
+
+        errno = 0;
+        const bool Closed = ! Close || std::fclose(Stream) == 0;
+
+        if ( ! Flushed ) errno = FlushError;
+        return Flushed && Closed;
+    }
+
+private:
+    FILE *File_ = nullptr;
+};
+
+// Reports a failure of Action on Name, with the system's description if errno
+// holds one, on standard error. The report stream has no place to say it.
+
+void ReportFailure(const char *Action, const char *Name)
+/*   -------------  */
+{
+    const char *Reason = errno ? std::strerror(errno) : "write error";
+
+    std::fprintf(stderr, "*** could not %s %s: %s\n", Action, Name, Reason);
+}
+
 } // namespace
 
 int main(int Argc, char *Argv[])
@@ -453,11 +508,28 @@ int main(int Argc, char *Argv[])
 {
     cli_arguments Arguments = {Argc, Argv};
     std::unique_ptr<c50_context> context;
+    ReportFile Report;
+    int Status = 0;
+
     try
     {
         context = c50_make_context();
+
+        /*  Check for output to be saved to a file  */
+
+        context->io.output = stdout;
+        if ( Argc > 2 && ! strcmp(Argv[Argc-2], "-o") )
+        {
+            if ( ! Report.Open(Argv[Argc-1]) )
+            {
+                ReportFailure("open", Argv[Argc-1]);
+                return 1;
+            }
+            context->io.output = Report.Get();
+            Arguments.argc -= 2;
+        }
+
         c50_run_operation(context.get(), Run, CleanupCli, &Arguments);
-        return 0;
     }
     catch (const std::exception &error)
     {
@@ -469,6 +541,19 @@ int main(int Argc, char *Argv[])
             std::fprintf(context && context->io.output ? context->io.output :
                          stderr, "\n*** %s\n", error.what());
         }
-        return 1;
+        Status = 1;
     }
+
+    // The report is complete only when its last buffered bytes reach the file
+    // or standard output. Standard output stays open for the runtime.
+    if ( context ) context->io.output = nullptr;
+    const bool Written = Report.Get() ? Report.Close() :
+                         ReportFile::Finish(stdout, false);
+    if ( ! Written )
+    {
+        ReportFailure("write", Arguments.argc == Argc ? "standard output" :
+                      Argv[Argc-1]);
+        Status = 1;
+    }
+    return Status;
 }
