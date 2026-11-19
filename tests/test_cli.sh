@@ -568,9 +568,18 @@ run_zero_training()
 # Cross-validation with no case left to validate: an empty data file, data in
 # which every case has an unknown class, or a sample that selects no case.
 # Release 2.07 divides by zero and dies from SIGFPE. This project reports the
-# error and exits 1.
+# error and exits 1. One case is refused as well, because a fold needs a case
+# to hold out and a case to train on. Release 2.07 reduces the folds to one,
+# trains on no case, prints a standard error of nan, and exits 0, or crashes
+# when the tree classifies a case. The option `--one` expects the message
+# for one case.
 run_empty_cross_validation()
 {
+    empty_message='*** cannot cross-validate with no cases'
+    if test "$1" = --one; then
+        empty_message='*** cannot cross-validate with one case'
+        shift
+    fi
     empty_name=$1
     empty_names=$2
     empty_data=$3
@@ -595,11 +604,43 @@ run_empty_cross_validation()
         cat "$empty_dir/output.raw" >&2
         return 1
     fi
-    if ! grep -F -x -e '*** cannot cross-validate with no cases' \
+    if ! grep -F -x -e "$empty_message" \
         "$empty_dir/output.raw" > /dev/null; then
         printf 'cross-validation on no cases (%s) did not report the error\n' \
             "$empty_name" >&2
         cat "$empty_dir/output.raw" >&2
+        return 1
+    fi
+}
+
+# Two cases are the least that cross-validation accepts. Each of the two folds
+# trains on one case and holds out the other.
+run_two_case_cross_validation()
+{
+    two_dir="$test_dir/two-case-cross-validation"
+    mkdir "$two_dir"
+    printf 'c.\nx: continuous.\nc: a, b.\n' > "$two_dir/two.names"
+    printf '1, a\n2, b\n' > "$two_dir/two.data"
+
+    set +e
+    (
+        cd "$two_dir"
+        "$binary" -f two -X 2 -I 1 > output.raw 2>&1
+    )
+    two_exit_code=$?
+    set -e
+
+    if test "$two_exit_code" -ne 0; then
+        printf 'cross-validation on two cases returned %d, expected 0\n' \
+            "$two_exit_code" >&2
+        cat "$two_dir/output.raw" >&2
+        return 1
+    fi
+    if ! grep -F -x -e '[ Summary ]' "$two_dir/output.raw" > /dev/null ||
+        grep -F -e 'cannot cross-validate' -e nan "$two_dir/output.raw" \
+            > /dev/null; then
+        printf 'cross-validation on two cases printed unexpected text:\n' >&2
+        cat "$two_dir/output.raw" >&2
         return 1
     fi
 }
@@ -837,8 +878,6 @@ run_zero_training rules '' 'Evaluation on test data (7 cases):' -r
 run_zero_training boost '' 'Evaluation on test data (7 cases):' -t 3
 run_zero_training winnow '' 'Evaluation on test data (7 cases):' -w
 run_zero_training subsets '' 'Evaluation on test data (7 cases):' -s
-run_zero_training --no-test cross-validation '1.0,alpha,false,low
-' 'Evaluation on hold-out data (1 cases):' -X 2
 empty_names_plain='c.
 x: continuous.
 c: a, b.
@@ -862,6 +901,22 @@ run_empty_cross_validation unknown-class "$empty_names_group" '1, a, ?
 run_empty_cross_validation sample-selects-none "$empty_names_group" '1, a, a
 2, b, b
 ' -X 2 -S 1
+run_empty_cross_validation --one one-case "$empty_names_plain" '1, a
+' -X 2
+run_empty_cross_validation --one one-case-rules "$empty_names_plain" '1, a
+' -X 2 -r
+run_empty_cross_validation --one one-case-many-folds "$empty_names_plain" \
+    '1, a
+' -X 10
+run_empty_cross_validation --one unknown-class-leaves-one "$empty_names_group" \
+    '1, a, a
+2, b, ?
+' -X 2
+run_empty_cross_validation --one sample-leaves-one "$empty_names_group" \
+    '1, a, a
+2, b, b
+' -X 2 -S 50 -I 1
+run_two_case_cross_validation
 one_class_data='1, circle, red.
 2, circle, red.
 3, circle, red.
