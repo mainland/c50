@@ -318,6 +318,35 @@ def test_calendar_and_linear_durations_train_in_one_column(
     assert lenient.predict(X).shape == (len(X),)
 
 
+@pytest.mark.parametrize("kind", KINDS)
+def test_equal_counts_of_different_steps_are_ordered_categories(
+    kind: str,
+) -> None:
+    # `2ns` and `ns` are the same unit with different steps. Values of equal
+    # count in them are different instants, so they are different categories,
+    # ordered by step and then by count, whatever the order of the rows.
+    make = np.datetime64 if kind == "date" else np.timedelta64
+    pairs = [(count, step) for count in (1, 2) for step in (2, 1)] * 4
+    values = [make(count, f"{step}ns") for count, step in pairs]
+    labels = np.asarray(
+        ["yes" if step * count == 2 else "no" for count, step in pairs]
+    )
+    forward = C50Classifier(minimum_cases=1).fit(_object_array(values), labels)
+    backward = C50Classifier(minimum_cases=1).fit(
+        _object_array(values[::-1]), labels[::-1]
+    )
+    expected = [(1, 1), (1, 2), (2, 1), (2, 2)]
+    for classifier in (forward, backward):
+        categories = [
+            (np.datetime_data(c.dtype)[1], int(c.view("i8")))
+            for c in classifier.categories_[0]
+        ]
+        assert categories == expected
+    assert without_date(forward.model_.serialized_data) == without_date(
+        backward.model_.serialized_data
+    )
+
+
 # Values that NumPy converts to `int` for reasons other than their unit, with
 # the units that convert other values to objects. The predicate looks at the
 # unit only, so these stay integers, and the feature trains as continuous.

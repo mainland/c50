@@ -825,6 +825,26 @@ def test_cost_matrix_that_does_not_convert_to_float_raises_value_error(
     assert excinfo.value.__cause__ is not None
 
 
+class _FloatRaises:
+    def __init__(self, error: BaseException) -> None:
+        self.error = error
+
+    def __float__(self) -> float:
+        raise self.error
+
+
+def test_cost_matrix_that_exhausts_memory_propagates_memory_error() -> None:
+    # The conversion of one element may exhaust memory. That is not a property
+    # of the matrix, so it is not a ValueError.
+    matrix = _cost_matrix_with(_FloatRaises(MemoryError("exhausted")))
+    with pytest.raises(MemoryError, match="exhausted"):
+        _fit_costs(matrix)
+    matrix = _cost_matrix_with(_FloatRaises(ValueError("refused")))
+    with pytest.raises(ValueError, match="real numbers") as excinfo:
+        _fit_costs(matrix)
+    assert isinstance(excinfo.value.__cause__, ValueError)
+
+
 @pytest.mark.parametrize("name", ["polars", "pyarrow"])
 def test_score_reads_y_and_weights_of_other_libraries(name: str) -> None:
     make = {
