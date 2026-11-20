@@ -42,7 +42,6 @@
 
 #include <array>
 #include <charconv>
-#include <cmath>
 #include <iostream>
 #include <new>
 #include <stdexcept>
@@ -276,74 +275,12 @@ const char
 			"  -----------------------",
 			"      No    Errors   Cost" };
 
-/*  The mean and standard error of one column of fold results.  Release
-    2.07 sums the values and their squares in float.  Each of the two numbers
-    keeps that arithmetic, and so its printed text, whenever it is finite.
-    The squares overflow float for a value above about 1.8e19, the sum
-    overflows near the limit of float, and the difference of two nearly equal
-    sums can be negative.  Release 2.07 prints each of those as infinity or
-    nan.  Only a number that is not finite is recomputed in double, from the
-    deviations about the mean, which neither overflow nor cancel.  The other
-    number of the column is not affected.  */
-
-struct FoldSummary
-{
-    double	mean;
-    double	se;
-};
-
-static FoldSummary Summarise(const std::vector<float> &Values)
-/*                 ---------  */
-{
-    const int	No = static_cast<int>(Values.size());
-    float	Sum = 0, SumSq = 0;
-
-    for ( float V : Values )
-    {
-	Sum += V;
-	SumSq += V * V;
-    }
-
-    FoldSummary Result = { Sum / No, SE(Sum, SumSq, No) };
-
-    if ( No < 2 || (std::isfinite(Result.mean) && std::isfinite(Result.se)) )
-    {
-	return Result;
-    }
-
-    double Mean = 0, Deviations = 0;
-
-    for ( float V : Values ) Mean += V;
-    Mean /= No;
-
-    if ( ! std::isfinite(Result.mean) )
-    {
-	Result.mean = Mean;
-    }
-
-    if ( ! std::isfinite(Result.se) )
-    {
-	for ( float V : Values ) Deviations += (V - Mean) * (V - Mean);
-	Result.se = sqrt(Deviations / (No - 1) / No);
-    }
-
-    return Result;
-}
-
-
 void PrintSummary(const std::vector<Metrics> &Val, const char *Title)
 /*   ------------  */
 {
     const int No = static_cast<int>(Val.size());
     int i, j;
-    FoldSummary Stats[3];
-
-    for ( i = 0 ; i < 3 ; i++ )
-    {
-	std::vector<float> Column;
-	for ( j = 0 ; j < No ; j++ ) Column.push_back(Val[j][i]);
-	Stats[i] = Summarise(Column);
-    }
+    Metrics Sum{}, SumSq{};
 
     for ( i = 0 ; i <= 2 ; i++ )
     {
@@ -371,6 +308,12 @@ void PrintSummary(const std::vector<Metrics> &Val, const char *Title)
 
     for ( j = 0 ; j < No ; j++ )
     {
+	for ( i = 0 ; i < 3 ; i++ )
+	{
+	    Sum[i] += Val[j][i];
+	    SumSq[i] += Val[j][i] * Val[j][i];
+	}
+
 	printf("\t%3d   ", j+1);
 
 	if ( Boost )
@@ -400,14 +343,14 @@ void PrintSummary(const std::vector<Metrics> &Val, const char *Title)
     }
     else
     {
-	printf("%8.1f", Stats[SIZE].mean);
+	printf("%8.1f", Sum[SIZE] / No);
     }
 
-    printf("     %4.1f%%  ", Stats[ERRP].mean);
+    printf("     %4.1f%%  ", Sum[ERRP] / No);
 
     if ( Costs )
     {
-	printf("%5.2f  ", Stats[COST].mean);
+	printf("%5.2f  ", Sum[COST] / No);
     }
 
     printf("\n\tSE    ");
@@ -418,14 +361,14 @@ void PrintSummary(const std::vector<Metrics> &Val, const char *Title)
     }
     else
     {
-	printf("%8.1f", Stats[SIZE].se);
+	printf("%8.1f", SE(Sum[SIZE], SumSq[SIZE], No));
     }
 
-    printf("     %4.1f%%  ", Stats[ERRP].se);
+    printf("     %4.1f%%  ", SE(Sum[ERRP], SumSq[ERRP], No));
 
     if ( Costs )
     {
-	printf("%5.2f  ", Stats[COST].se);
+	printf("%5.2f  ", SE(Sum[COST], SumSq[COST], No));
     }
 
     printf("\n");

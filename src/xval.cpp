@@ -38,9 +38,6 @@
 #include "extern.i"
 #include "c50_api_internal.h"
 
-#include <cmath>
-#include <vector>
-
 namespace c50::core {
 
 
@@ -113,11 +110,6 @@ void CrossVal(c50_context *Context)
 	    Start = (Start + 1) % (SaveMaxCase + 1);
 	}
 
-	/*  A fold's cost is summed in float, as in Release 2.07, and again in
-	    double for the case in which the float sum is not finite.  */
-
-	double FoldCost = 0;
-
 	ConstructClassifiers(Context);
 
 	/*  Check size (if appropriate) and errors  */
@@ -138,7 +130,6 @@ void CrossVal(c50_context *Context)
 		    if ( Context->costs.matrix )
 		    {
 			Context->cross_validation.results[f][2] += Context->costs.matrix[c][Class(Context->cross_validation.blocked_cases[Next])];
-			FoldCost += Context->costs.matrix[c][Class(Context->cross_validation.blocked_cases[Next])];
 		    }
 		}
 
@@ -165,7 +156,6 @@ void CrossVal(c50_context *Context)
 		    if ( Context->costs.matrix )
 		    {
 			Context->cross_validation.results[f][2] += Context->costs.matrix[c][Class(Context->cross_validation.blocked_cases[Next])];
-			FoldCost += Context->costs.matrix[c][Class(Context->cross_validation.blocked_cases[Next])];
 		    }
 		}
 
@@ -178,10 +168,7 @@ void CrossVal(c50_context *Context)
 	}
 
 	Context->cross_validation.results[f][1] = (100.0 * Context->cross_validation.results[f][1]) / Size;
-	if ( std::isfinite(Context->cross_validation.results[f][2]) )
-	    Context->cross_validation.results[f][2] /= Size;
-	else
-	    Context->cross_validation.results[f][2] = static_cast<float>(FoldCost / Size);
+	Context->cross_validation.results[f][2] /= Size;
 
 	c50_diagnostic_printf(Context->io.output, T_EvalHoldOut, Size);
 	Context->cases.max_case = Size-1;
@@ -309,68 +296,12 @@ void Shuffle(c50_context *Context, int *Vec)
 /*************************************************************************/
 
 
-/*  The mean and standard error of one column of fold results.  Release
-    2.07 sums the values and their squares in float.  Each of the two numbers
-    keeps that arithmetic, and so its printed text, whenever it is finite.
-    The squares overflow float for a value above about 1.8e19, the sum
-    overflows near the limit of float, and the difference of two nearly equal
-    sums can be negative.  Release 2.07 prints each of those as infinity or
-    nan.  Only a number that is not finite is recomputed in double, from the
-    deviations about the mean, which neither overflow nor cancel.  The other
-    number of the column is not affected.  */
-
-struct FoldSummary
-{
-    double	mean;
-    double	se;
-};
-
-static FoldSummary Summarise(const std::vector<float> &Values)
-/*                 ---------  */
-{
-    const int	No = static_cast<int>(Values.size());
-    float	Sum = 0, SumSq = 0;
-
-    for ( float V : Values )
-    {
-	Sum += V;
-	SumSq += V * V;
-    }
-
-    FoldSummary Result = { Sum / No, SE(Sum, SumSq, No) };
-
-    if ( No < 2 || (std::isfinite(Result.mean) && std::isfinite(Result.se)) )
-    {
-	return Result;
-    }
-
-    double Mean = 0, Deviations = 0;
-
-    for ( float V : Values ) Mean += V;
-    Mean /= No;
-
-    if ( ! std::isfinite(Result.mean) )
-    {
-	Result.mean = Mean;
-    }
-
-    if ( ! std::isfinite(Result.se) )
-    {
-	for ( float V : Values ) Deviations += (V - Mean) * (V - Mean);
-	Result.se = sqrt(Deviations / (No - 1) / No);
-    }
-
-    return Result;
-}
-
-
-
 void Summary(c50_context *Context)
 /*   -------  */
 {
     int		i, f, t;
     Boolean	PrintSize=true;
-    FoldSummary	Stats[3];
+    float	Sum[3], SumSq[3];
     const char *const FoldHead[] = { F_Fold, F_UFold, "" };
     const char *const StdP[] = { "  " F_DecisionTree16 "  ",
 			    "  ----------------  ", "  " F_SizeErrors "  " };
@@ -383,19 +314,14 @@ void Summary(c50_context *Context)
 			      "  -----------------------",
 			      "  " F_NoErrorsCost };
 
+    for ( i = 0 ; i < 3 ; i++ )
+    {
+	Sum[i] = SumSq[i] = 0;
+    }
+
     ForEach(f, 0, Context->options.folds-1)
     {
 	if ( Context->cross_validation.results[f][0] < 1 ) PrintSize = false;
-    }
-
-    for ( i = 0 ; i < 3 ; i++ )
-    {
-	std::vector<float> Column;
-	ForEach(f, 0, Context->options.folds-1)
-	{
-	    Column.push_back(Context->cross_validation.results[f][i]);
-	}
-	Stats[i] = Summarise(Column);
     }
 
     c50_diagnostic_printf(Context->io.output, "\n\n[ " T_Summary " ]\n\n");
@@ -435,6 +361,12 @@ void Summary(c50_context *Context)
 	    c50_diagnostic_printf(Context->io.output, "%7.2f", Context->cross_validation.results[f][2]);
 	}
 	c50_diagnostic_printf(Context->io.output, "\n");
+
+	for ( i = 0 ; i < 3 ; i++ )
+	{
+	    Sum[i] += Context->cross_validation.results[f][i];
+	    SumSq[i] += Context->cross_validation.results[f][i] * Context->cross_validation.results[f][i];
+	}
     }
 
     c50_diagnostic_printf(Context->io.output, "\n  " T_Mean "\t");
@@ -445,14 +377,14 @@ void Summary(c50_context *Context)
     }
     else
     {
-	c50_diagnostic_printf(Context->io.output, "%6.1f", Stats[0].mean);
+	c50_diagnostic_printf(Context->io.output, "%6.1f", Sum[0] / Context->options.folds);
     }
 
-    c50_diagnostic_printf(Context->io.output, " %10.1f%%", Stats[1].mean);
+    c50_diagnostic_printf(Context->io.output, " %10.1f%%", Sum[1] / Context->options.folds);
 
     if ( Context->costs.matrix )
     {
-	c50_diagnostic_printf(Context->io.output, "%7.2f", Stats[2].mean);
+	c50_diagnostic_printf(Context->io.output, "%7.2f", Sum[2] / Context->options.folds);
     }
 
     c50_diagnostic_printf(Context->io.output, "\n  " T_SE "\t");
@@ -463,14 +395,14 @@ void Summary(c50_context *Context)
     }
     else
     {
-	c50_diagnostic_printf(Context->io.output, "%6.1f", Stats[0].se);
+	c50_diagnostic_printf(Context->io.output, "%6.1f", SE(Sum[0], SumSq[0], Context->options.folds));
     }
 
-    c50_diagnostic_printf(Context->io.output, " %10.1f%%", Stats[1].se);
+    c50_diagnostic_printf(Context->io.output, " %10.1f%%", SE(Sum[1], SumSq[1], Context->options.folds));
 
     if ( Context->costs.matrix )
     {
-	c50_diagnostic_printf(Context->io.output, "%7.2f", Stats[2].se);
+	c50_diagnostic_printf(Context->io.output, "%7.2f", SE(Sum[2], SumSq[2], Context->options.folds));
     }
     c50_diagnostic_printf(Context->io.output, "\n");
 }
