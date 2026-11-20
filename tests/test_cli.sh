@@ -614,6 +614,100 @@ run_two_case_cross_validation()
     fi
 }
 
+# A fold whose error costs sum past the largest float. Release 2.07 sums the
+# costs of a fold in float, so the fold prints a cost of infinity although the
+# average cost per case is finite. The fold cost is then the double sum divided
+# by the fold size. Two of the four cases of each fold are classified wrongly
+# at 3e38 each.
+run_fold_cost_overflow()
+{
+    fold_dir="$test_dir/fold-cost-overflow"
+    mkdir "$fold_dir"
+    printf 'c.\nx: continuous.\nc: a, b.\n' > "$fold_dir/fold.names"
+    printf '1,a\n2,b\n3,a\n4,b\n5,a\n6,b\n7,a\n8,b\n' \
+        > "$fold_dir/fold.data"
+    printf 'a, b: 3e38\nb, a: 3e38\n' > "$fold_dir/fold.costs"
+
+    (
+        cd "$fold_dir"
+        "$binary" -f fold -X 2 -I 1 > output.raw 2>&1
+    )
+    normalize_output "$fold_dir/output.raw" > "$fold_dir/output.actual"
+
+    fold_tab=$(printf '\t')
+    fold_cost=150000000274887787888901997140572635136.00
+    for fold_expected in \
+        "   1${fold_tab}     1       50.0%${fold_cost}" \
+        "   2${fold_tab}     1       50.0%${fold_cost}" \
+        "  Mean${fold_tab}   1.0       50.0%${fold_cost}" \
+        "  SE${fold_tab}   0.0        0.0%   0.00"
+    do
+        if ! grep -F -x -e "$fold_expected" \
+            "$fold_dir/output.actual" > /dev/null; then
+            printf 'overflowing fold cost did not print: %s\n' \
+                "$fold_expected" >&2
+            cat "$fold_dir/output.actual" >&2
+            return 1
+        fi
+    done
+}
+
+# Summaries of cross-validation folds. Release 2.07 sums the fold values and
+# their squares in float. The mean and the standard error each keep that
+# arithmetic, and so its text, whenever it is finite. Only a number that
+# Release 2.07 prints as nan or inf is computed in double. The mean of folds
+# of about 1.7e19 is finite in float but not equal to the mean in double, and
+# its text must stay that of Release 2.07 even though the standard error next
+# to it is nan in float.
+run_summary_case()
+{
+    summary_name=$1
+    summary_classes=$2
+    summary_sequence=$3
+    summary_costs=$4
+    summary_mean=$5
+    summary_se=$6
+
+    summary_dir="$test_dir/summary-$summary_name"
+    mkdir "$summary_dir"
+    printf 'c.\nx: continuous.\nc: %s.\n' "$summary_classes" \
+        > "$summary_dir/summary.names"
+    : > "$summary_dir/summary.data"
+    summary_index=0
+    summary_count=${#summary_sequence}
+    while test "$summary_index" -lt "$summary_count"; do
+        summary_rest=${summary_sequence#?}
+        summary_class=${summary_sequence%"$summary_rest"}
+        summary_sequence=$summary_rest
+        summary_index=$((summary_index + 1))
+        printf '%s,%s\n' "$summary_index" "$summary_class" \
+            >> "$summary_dir/summary.data"
+    done
+    if test -n "$summary_costs"; then
+        printf '%s\n' "$summary_costs" > "$summary_dir/summary.costs"
+    fi
+
+    (
+        cd "$summary_dir"
+        "$binary" -f summary -X 3 -I 1 > output.raw 2>&1
+    )
+    normalize_output "$summary_dir/output.raw" > "$summary_dir/output.actual"
+
+    summary_tab=$(printf '\t')
+    for summary_expected in \
+        "  Mean${summary_tab}${summary_mean}" \
+        "  SE${summary_tab}${summary_se}"
+    do
+        if ! grep -F -x -e "$summary_expected" \
+            "$summary_dir/output.actual" > /dev/null; then
+            printf 'summary (%s) did not print: %s\n' \
+                "$summary_name" "$summary_expected" >&2
+            cat "$summary_dir/output.actual" >&2
+            return 1
+        fi
+    done
+}
+
 # Rules with a costs file on data with no cases or with one class among three.
 # The average cost of the rule normalization is then 0/0. Release 2.07 forms no
 # rules, writes the first class or the only class as the default, and exits 0.
@@ -898,6 +992,32 @@ one_class_data='1, circle, red.
 run_large_cost_summary squares 1e20 2 '      50.0' 50000001002043867136.00
 run_large_cost_summary sum 3e38 4 '     100.0' \
     300000000549775575777803994281145270272.00
+run_fold_cost_overflow
+# Three equal folds of about 1.68e19. The sum of squares overflows float, so
+# the standard error is nan in float, and the mean keeps its float text, which
+# differs from the mean in double.
+run_summary_case equal-moderate 'a, b' aabbba \
+    'a, b: 3.3554434e19
+b, a: 6.7108868e19' \
+    '   1.0       50.0%16777215931280523264.00' \
+    '   0.0        0.0%   0.00'
+# Unequal folds of 3e19, 1e19, and 2.7e19. The standard error is about 6.19e18
+# from the square root of the sum of squared deviations divided by 2 and by 3,
+# and the mean keeps the float text.
+run_summary_case unequal-large 'a, b, c' bcbbccaac \
+    'a, b: 2e19
+a, c: 4e19
+b, a: 6e19
+b, c: 1e19
+c, a: 3e19
+c, b: 5e19' \
+    '   2.0       66.7%22222222911910969344.00' \
+    '   0.0       19.2%6186405065920557056.00'
+# Three equal error rates without costs. Release 2.07 prints a standard error
+# of -nan%, because the float sum of squares is below the square of the sum.
+run_summary_case equal-rate 'a, b' baabbbbbbbabbababbaababbbaababbba '' \
+    '   1.0       36.4%' \
+    '   0.0        0.0%'
 run_rule_costs_degenerate zero-cases ''
 run_rule_costs_degenerate zero-cases-bagged '' -b
 run_rule_costs_degenerate zero-cases-utility '' -u 2

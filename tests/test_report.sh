@@ -131,6 +131,63 @@ run_large_costs sum 4 \
     '2 1 (50.0%) 300000000000000000000000000000000000000' \
     '100.0 300000000549775575777803994281145270272.00'
 
+# Summaries of fold results. Release 2.07 sums the values and their squares in
+# float. The mean and the standard error each keep that arithmetic, and so its
+# text, whenever it is finite. Only a number that Release 2.07 prints as nan or
+# inf is computed in double.
+run_summary_case()
+{
+    summary_name=$1
+    summary_cases=$2
+    summary_input=$3
+    summary_mean=$4
+    summary_se=$5
+
+    summary_folds=$(printf '%s\n' "$summary_input" | wc -l)
+    printf '%s\n' "$summary_input" > "$test_dir/summary-$summary_name.input"
+    "$binary" "$summary_cases" "$summary_folds" 1 0 \
+        < "$test_dir/summary-$summary_name.input" \
+        > "$test_dir/summary-$summary_name.raw"
+    sed -e 's/[[:space:]]*$//' "$test_dir/summary-$summary_name.raw" \
+        > "$test_dir/summary-$summary_name.actual"
+
+    for summary_expected in "	Mean  $summary_mean" "	SE    $summary_se"
+    do
+        if ! grep -F -x -e "$summary_expected" \
+            "$test_dir/summary-$summary_name.actual" > /dev/null; then
+            printf 'summary (%s) did not print: %s\n' \
+                "$summary_name" "$summary_expected" >&2
+            cat "$test_dir/summary-$summary_name.actual" >&2
+            return 1
+        fi
+    done
+}
+
+# The costs 16777217 and 16777219 are 16777216 and 16777220 in float. The sum
+# of squares of the three costs is below the square of their sum in float, so
+# the standard error is nan in float, but the mean is finite and keeps its
+# float text.
+run_summary_case rounded-costs 6 '2 1 (50.0%) 16777217
+2 1 (50.0%) 16777217
+2 1 (50.0%) 16777219' \
+    '     2.0     50.0%  16777218.00' \
+    '     0.0      0.0%   1.33'
+# Unequal folds of 1e20, 2e20, and 3e20. The standard error is about 5.77e19,
+# the square root of the sum of squared deviations divided by 2 and by 3.
+run_summary_case unequal-large 6 '2 1 (50.0%) 100000000000000000000
+2 1 (50.0%) 200000000000000000000
+2 1 (50.0%) 300000000000000000000' \
+    '     2.0     50.0%  200000004008175468544.00' \
+    '     0.0      0.0%  57735028076023169024.00'
+# Equal error rates without costs. The float sum of squares of the sizes is
+# below the square of the sum, so Release 2.07 prints a standard error of
+# -nan%.
+run_summary_case equal-rate 33 '11 1 (9.1%)
+11 1 (9.1%)
+11 1 (9.1%)' \
+    '    11.0      9.1%' \
+    '     0.0      0.0%'
+
 run_failure()
 {
     case_name=$1
