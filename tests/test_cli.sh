@@ -613,6 +613,72 @@ run_empty_cross_validation()
     fi
 }
 
+# Summaries of cross-validation folds. Release 2.07 sums the fold costs and
+# their squares in float. Nine cases with small costs give a standard error of
+# 0.02, where the same sums in double give 0.01.
+run_float_summary()
+{
+    float_dir="$test_dir/float-summary"
+    mkdir "$float_dir"
+    printf 'c.\nx: continuous.\ny: continuous.\nc: a, b.\n' \
+        > "$float_dir/float.names"
+    printf '2,8,a\n9,3,a\n9,1,a\n1,8,b\n8,1,b\n5,1,a\n8,2,b\n3,7,b\n3,7,b\n' \
+        > "$float_dir/float.data"
+    printf 'a, b: 0.36\nb, a: 1.79\n' > "$float_dir/float.costs"
+
+    (
+        cd "$float_dir"
+        "$binary" -f float -X 4 -I 1 > output.raw 2>&1
+    )
+    normalize_output "$float_dir/output.raw" > "$float_dir/output.actual"
+
+    float_tab=$(printf '\t')
+    for float_expected in \
+        "  Mean${float_tab}   1.0       54.2%   0.20" \
+        "  SE${float_tab}   0.0        4.2%   0.02"
+    do
+        if ! grep -F -x -e "$float_expected" \
+            "$float_dir/output.actual" > /dev/null; then
+            printf 'float summary did not print: %s\n' \
+                "$float_expected" >&2
+            cat "$float_dir/output.actual" >&2
+            return 1
+        fi
+    done
+}
+
+# Equal fold costs of 1e20. The sum of their squares overflows float, so
+# Release 2.07 prints a non-finite standard error and a finite mean. The text
+# of the non-finite value depends on the C library, as inf, infinity, nan,
+# -nan, or -nan(ind), and so does its padding, because the column has a fixed
+# width that a long spelling overflows.
+run_large_cost_summary()
+{
+    large_dir="$test_dir/large-cost-summary"
+    mkdir "$large_dir"
+    printf 'c.\nx: continuous.\nc: a, b.\n' > "$large_dir/large.names"
+    printf '1,a\n2,b\n3,a\n4,b\n' > "$large_dir/large.data"
+    printf 'a, b: 1e20\nb, a: 1e20\n' > "$large_dir/large.costs"
+
+    (
+        cd "$large_dir"
+        "$binary" -f large -X 2 -I 1 > output.raw 2>&1
+    )
+    normalize_output "$large_dir/output.raw" > "$large_dir/output.actual"
+
+    large_tab=$(printf '\t')
+    if ! grep -F -x \
+        -e "  Mean${large_tab}   1.0       50.0%50000001002043867136.00" \
+        "$large_dir/output.actual" > /dev/null ||
+        ! grep -E -i -x \
+            "  SE${large_tab}   0\\.0        0\\.0%[[:space:]]*-?(inf(inity)?|nan)(\\(ind\\))?" \
+            "$large_dir/output.actual" > /dev/null; then
+        printf 'large cost summary printed unexpected text:\n' >&2
+        cat "$large_dir/output.actual" >&2
+        return 1
+    fi
+}
+
 # Two cases are the least that cross-validation accepts. Each of the two folds
 # trains on one case and holds out the other.
 run_two_case_cross_validation()
@@ -917,6 +983,8 @@ run_empty_cross_validation --one sample-leaves-one "$empty_names_group" \
 2, b, b
 ' -X 2 -S 50 -I 1
 run_two_case_cross_validation
+run_float_summary
+run_large_cost_summary
 one_class_data='1, circle, red.
 2, circle, red.
 3, circle, red.

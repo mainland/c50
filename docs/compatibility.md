@@ -463,6 +463,28 @@ instead prints `cannot cross-validate with no cases` for no case and
 exits with status 1. Runs with two or more remaining cases are unchanged. This
 difference is deliberate.
 
+## Cross-validation summaries
+
+`c5.0 -X` and `report` compute the summary of a cross-validation in `float`, as
+Release 2.07 does. The program adds the fold values and their squares and takes
+the standard error from the difference of the sum of squares and the square of
+the sum. The fold cost is also a `float` sum, divided by the fold size. The
+output matches Release 2.07, including three inherited limitations:
+
+- A fold value above about 1.8e19 makes the sum of squares infinite. The cost
+  file accepts such costs, and the standard error prints as `inf` or `nan`.
+- Fold values whose sum exceeds the largest `float` print a mean of `inf`.
+  Error costs that sum past the largest `float` print a fold cost of `inf`
+  although the cost per case is finite.
+- The difference of two nearly equal sums can be negative. Equal fold values
+  trigger this in ordinary runs, for example three folds of the same error
+  rate, and some such columns print a standard error of `nan`.
+
+The spelling of `nan` and `inf` depends on the C library, for example `nan`,
+`-nan`, or `nan(ind)`. The summary arithmetic is not corrected, because the
+printed numbers of a run would then differ from those of Release 2.07 for
+ordinary inputs as well.
+
 ## Pruning with two-class costs
 
 With two classes and a costs file, C5.0 weights each training case by a
