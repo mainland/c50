@@ -303,8 +303,14 @@ run_report_failures()
 
     set -- "$binary" -f "$report_dir/basic" -X 2 -I 17
     missing_path="$report_dir/missing/report.txt"
+    # Under MSYS the program receives the path that the shell converts to a
+    # Windows path, and it names that path in the message.
+    open_path=$missing_path
+    if command -v cygpath > /dev/null 2>&1; then
+        open_path=$(cygpath -m "$missing_path")
+    fi
     expect_report_failure open-failure \
-        "*** could not open $missing_path: " "$@" -o "$missing_path"
+        "*** could not open $open_path: " "$@" -o "$missing_path"
     if test -e "$missing_path"; then
         printf 'open failure created %s\n' "$missing_path" >&2
         return 1
