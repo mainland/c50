@@ -88,6 +88,76 @@ run_cross_validation basic rules 1 -r
 run_cross_validation boost boost 0 -t 5
 run_cross_validation basic costs 0
 
+# Release 2.07 sums the costs and their squares in float. Two folds of 30% and
+# 10% errors with costs of 1.55 and 1.30 give a standard error of 0.12, where
+# the same sums in double give 0.13.
+run_float_summary()
+{
+    printf '2 3 (30.0%%) 1.55\n2 1 (10.0%%) 1.30\n' \
+        > "$test_dir/float-summary.input"
+    "$binary" 20 2 1 0 < "$test_dir/float-summary.input" \
+        > "$test_dir/float-summary.raw"
+    sed -e 's/[[:space:]]*$//' "$test_dir/float-summary.raw" \
+        > "$test_dir/float-summary.actual"
+
+    for float_expected in \
+        '	Mean       2.0     20.0%   1.42' \
+        '	SE         0.0     10.0%   0.12'
+    do
+        if ! grep -F -x -e "$float_expected" \
+            "$test_dir/float-summary.actual" > /dev/null; then
+            printf 'float summary did not print: %s\n' \
+                "$float_expected" >&2
+            cat "$test_dir/float-summary.actual" >&2
+            return 1
+        fi
+    done
+}
+
+# Costs near the limit of float. A cost of 1e20 makes the sum of squares
+# overflow float, so Release 2.07 prints a non-finite standard error. Four
+# folds of 3e38 make the sum of costs overflow, so it prints a mean of inf as
+# well. The text of a non-finite value depends on the C library, as inf,
+# infinity, nan, -nan, or -nan(ind), and so does its padding, because the
+# column has a fixed width that a long spelling overflows.
+run_large_costs()
+{
+    large_name=$1
+    large_folds=$2
+    large_line=$3
+    large_mean=$4
+
+    large_input="$test_dir/large-$large_name.input"
+    : > "$large_input"
+    large_fold=0
+    while test "$large_fold" -lt "$large_folds"; do
+        printf '%s\n' "$large_line" >> "$large_input"
+        large_fold=$((large_fold + 1))
+    done
+    "$binary" 4 "$large_folds" 1 0 < "$large_input" \
+        > "$test_dir/large-$large_name.raw"
+    sed -e 's/[[:space:]]*$//' "$test_dir/large-$large_name.raw" \
+        > "$test_dir/large-$large_name.actual"
+
+    if ! grep -E -i -x "$large_mean" \
+        "$test_dir/large-$large_name.actual" > /dev/null ||
+        ! grep -E -i -x \
+            '	SE         0\.0      0\.0%[[:space:]]*-?(inf(inity)?|nan)(\(ind\))?' \
+            "$test_dir/large-$large_name.actual" > /dev/null; then
+        printf 'large costs (%s) printed unexpected text:\n' \
+            "$large_name" >&2
+        cat "$test_dir/large-$large_name.actual" >&2
+        return 1
+    fi
+}
+
+run_float_summary
+run_large_costs squares 2 '2 1 (50.0%) 100000000000000000000' \
+    '	Mean       2\.0     50\.0%  100000002004087734272\.00'
+run_large_costs sum 4 \
+    '2 1 (50.0%) 300000000000000000000000000000000000000' \
+    '	Mean       2\.0     100\.0%[[:space:]]*-?(inf(inity)?|nan)(\(ind\))?'
+
 run_failure()
 {
     case_name=$1
