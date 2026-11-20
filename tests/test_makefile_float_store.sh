@@ -31,22 +31,30 @@ pointer_size() {
     printf '__SIZEOF_POINTER__\n' | $1 -E -P -x c++ - 2> /dev/null
 }
 
-# Print the compile commands of the production program and the report program.
+# Print every command that compiles or links: the production program, the
+# report program, the prediction probe, the debugging program, and the object
+# files that the debugging program links. Every such command contains `-o`.
 commands() {
-    make -n -B "$@" c5.0 report 2> /dev/null | grep -E ' -o (c5\.0|report) '
+    make -n -B "$@" c5.0 report prediction-probe c5.0dbg 2> /dev/null |
+        grep -E ' -o '
 }
 
 # Check every printed command for -ffloat-store when `expected` is yes, and for
-# its absence when `expected` is no.
+# its absence when `expected` is no. Each kind of command must occur, so that a
+# rule that the check no longer reaches fails it.
 check() {
     label=$1
     expected=$2
     shift 2
     commands "$@" > "$work_dir/commands"
-    if test ! -s "$work_dir/commands"; then
-        printf '%s: make printed no compile command\n' "$label" >&2
-        exit 1
-    fi
+    for kind in ' -o c5.0 ' ' -o report ' ' -o prediction-probe ' \
+        ' -o c5.0dbg ' ' -c -o src/'; do
+        if ! grep -q -F -e "$kind" "$work_dir/commands"; then
+            printf '%s: make printed no command containing "%s"\n' \
+                "$label" "$kind" >&2
+            exit 1
+        fi
+    done
     while IFS= read -r line; do
         case $line in
         *-ffloat-store*) present=yes ;;

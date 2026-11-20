@@ -69,17 +69,16 @@ categories in the training data as unordered.
 use `c50.NOT_APPLICABLE` (see
 {ref}`Not-applicable values <not-applicable-values>`). A `Decimal` NaN, quiet
 or signaling, is missing like any other numeric NaN. Infinite continuous
-values, and finite values beyond the single-precision
-range of about 3.4e38, are rejected with a `ValueError` that names the feature
-and, for numeric columns, the first row. C5.0 stores continuous values as
-single-precision floats. An unseen prediction-time category raises
-`ValueError` by default. Set `unknown_categories="missing"` to pass
-unseen categories to C5.0 as missing values. A category that a pandas
-`category` dtype declared during fitting, but that no training row used, is
-always passed as a missing value, as in `HistGradientBoostingClassifier`.
-Such categories are not in `categories_` and do not change the classifier, so
-a filtered DataFrame that keeps unused categories trains the same classifier
-as one without them.
+values, and finite values beyond the single-precision range of about 3.4e38,
+are rejected with a `ValueError` that names the feature and, for numeric
+columns, the first row. C5.0 stores continuous values as single-precision
+floats. An unseen prediction-time category raises `ValueError` by default. Set
+`unknown_categories="missing"` to pass unseen categories to C5.0 as missing
+values. A category that a pandas `category` dtype declared during fitting, but
+that no training row used, is always passed as a missing value, as in
+`HistGradientBoostingClassifier`. Such categories are not in `categories_` and
+do not change the classifier, so a filtered DataFrame that keeps unused
+categories trains the same classifier as one without them.
 
 Real numbers match by value, and other values match only equal values of
 their own type. An integer category matches an equal float, so a model fitted
@@ -304,11 +303,11 @@ library's exception, as does an object whose protocol probe raises. Any
 `MemoryError`, and a `BaseException` that is not an `Exception`, such as the
 `PanicException` of polars 2.0, propagate. So does an error that scikit-learn's
 own conversion of a data frame of step 3 raises. The estimator first converts
-such a data frame, other than a pandas one, once with `numpy.asarray` to find
-out whether it holds dates or durations. An `Exception` from that conversion
-gives the `ValueError` too, and a `MemoryError` propagates, even when a second
-conversion would succeed. Move an array to CPU memory, detach it, or convert
-its dtype first. See the
+such a data frame, other than a pandas one, with `numpy.asarray` to find out
+whether it holds dates or durations. A `MemoryError` from that conversion
+propagates. After any other exception, scikit-learn's conversion decides the
+result. Move an array to CPU memory, detach it, or convert its dtype first.
+See the
 [scikit-learn Array API contract](https://scikit-learn.org/stable/modules/array_api.html).
 
 With `array_api_dispatch=True`, scikit-learn checks that its inputs belong to

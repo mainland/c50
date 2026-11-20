@@ -605,15 +605,34 @@ class _FailsOnce:
         return np.asarray(X, dtype=dtype)
 
 
+class _NeedsObject:
+    """A table that scikit-learn can convert, and NumPy cannot without a dtype.
+
+    A pyarrow table with a date column and an integer column behaves so.
+    """
+
+    columns = (0, 1, 2)
+    shape = X.shape
+
+    def __array__(
+        self, dtype: Any = None, copy: bool | None = None
+    ) -> np.ndarray:
+        if dtype is None:
+            raise TypeError("the table needs a dtype")
+        return np.asarray(X, dtype=dtype)
+
+
 @pytest.mark.parametrize("role", ["fit_X", "predict_X"])
-def test_a_table_conversion_that_fails_once_raises_value_error(
-    role: str,
-) -> None:
-    table = _FailsOnce(RuntimeError("the library failed"))
-    with pytest.raises(ValueError, match="X cannot be converted") as caught:
-        _call(role, table)
-    assert isinstance(caught.value.__cause__, RuntimeError)
-    assert table.calls == 1
+def test_a_table_that_needs_a_dtype_is_left_to_scikit_learn(role: str) -> None:
+    # The estimator converts a table once without a dtype to find out whether
+    # it holds dates. That conversion fails here, and the one of scikit-learn
+    # succeeds, so the table gives the result of the NumPy array.
+    if role == "fit_X":
+        _same_classifier(_fit(X=_NeedsObject()), _reference)
+    else:
+        np.testing.assert_array_equal(
+            _reference.predict(_NeedsObject()), _reference.predict(X)
+        )
 
 
 @pytest.mark.parametrize("role", ["fit_X", "predict_X"])
@@ -622,6 +641,20 @@ def test_exhausted_memory_propagates_from_a_table_conversion(
 ) -> None:
     table = _FailsOnce(MemoryError("the table does not fit"))
     with pytest.raises(MemoryError, match="does not fit"):
+        _call(role, table)
+    assert table.calls == 1
+
+
+@pytest.mark.parametrize("role", ["fit_X", "predict_X"])
+@pytest.mark.parametrize("error", [KeyboardInterrupt, SystemExit])
+def test_a_base_exception_propagates_from_a_table_conversion(
+    role: str, error: type[BaseException]
+) -> None:
+    # The time probe converts a table before scikit-learn does. An interrupt
+    # during that conversion is not an `Exception`, so the estimator neither
+    # translates nor ignores it.
+    table = _FailsOnce(error())
+    with pytest.raises(error):
         _call(role, table)
     assert table.calls == 1
 

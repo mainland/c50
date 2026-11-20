@@ -1422,11 +1422,13 @@ def _time_frame(X: object) -> NDArray[Any] | None:
     ``object``, which turns the values into integers. For any other input the
     result is ``None``.
 
+    This conversion has no dtype, while scikit-learn converts with
+    ``dtype=object``, so it fails for tables that scikit-learn accepts, such as
+    a pyarrow table that holds a date column and an integer column. Any
+    ``Exception`` therefore gives ``None``, and scikit-learn's conversion
+    decides the result.
+
     Raises:
-        ValueError: If the conversion raises an ``Exception`` other than
-            ``MemoryError``, as ``_host_array`` does. A conversion that fails
-            once is not retried, because a retry that succeeds would discard
-            the error.
         MemoryError: If the conversion exhausts memory. It propagates, as does
             a ``BaseException`` that is not an ``Exception``.
     """
@@ -1440,8 +1442,8 @@ def _time_frame(X: object) -> NDArray[Any] | None:
         array = np.asarray(X)
     except MemoryError:
         raise
-    except Exception as exc:
-        raise _conversion_error("X", exc) from exc
+    except Exception:
+        return None
     if array.ndim != 2 or not is_integer_time_dtype(array.dtype):
         return None
     return array
