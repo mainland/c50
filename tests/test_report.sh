@@ -117,8 +117,9 @@ run_float_summary()
 # Costs near the limit of float. A cost of 1e20 makes the sum of squares
 # overflow float, so Release 2.07 prints a non-finite standard error. Four
 # folds of 3e38 make the sum of costs overflow, so it prints a mean of inf as
-# well. The text of a non-finite value depends on the C library: inf, nan,
-# -nan, or nan(ind).
+# well. The text of a non-finite value depends on the C library, as inf,
+# infinity, nan, -nan, or -nan(ind), and so does its padding, because the
+# column has a fixed width that a long spelling overflows.
 run_large_costs()
 {
     large_name=$1
@@ -141,7 +142,7 @@ run_large_costs()
     if ! grep -E -i -x "$large_mean" \
         "$test_dir/large-$large_name.actual" > /dev/null ||
         ! grep -E -i -x \
-            '	SE         0\.0      0\.0%   -?(inf|nan)(\(ind\))?' \
+            '	SE         0\.0      0\.0%[[:space:]]*-?(inf(inity)?|nan)(\(ind\))?' \
             "$test_dir/large-$large_name.actual" > /dev/null; then
         printf 'large costs (%s) printed unexpected text:\n' \
             "$large_name" >&2
@@ -155,7 +156,7 @@ run_large_costs squares 2 '2 1 (50.0%) 100000000000000000000' \
     '	Mean       2\.0     50\.0%  100000002004087734272\.00'
 run_large_costs sum 4 \
     '2 1 (50.0%) 300000000000000000000000000000000000000' \
-    '	Mean       2\.0     100\.0%    -?(inf|nan)(\(ind\))?'
+    '	Mean       2\.0     100\.0%[[:space:]]*-?(inf(inity)?|nan)(\(ind\))?'
 
 run_failure()
 {

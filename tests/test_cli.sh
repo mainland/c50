@@ -649,8 +649,9 @@ run_float_summary()
 
 # Equal fold costs of 1e20. The sum of their squares overflows float, so
 # Release 2.07 prints a non-finite standard error and a finite mean. The text
-# of the non-finite value depends on the C library: inf, nan, -nan, or
-# nan(ind).
+# of the non-finite value depends on the C library, as inf, infinity, nan,
+# -nan, or -nan(ind), and so does its padding, because the column has a fixed
+# width that a long spelling overflows.
 run_large_cost_summary()
 {
     large_dir="$test_dir/large-cost-summary"
@@ -670,7 +671,7 @@ run_large_cost_summary()
         -e "  Mean${large_tab}   1.0       50.0%50000001002043867136.00" \
         "$large_dir/output.actual" > /dev/null ||
         ! grep -E -i -x \
-            "  SE${large_tab}   0\\.0        0\\.0%   -?(inf|nan)(\\(ind\\))?" \
+            "  SE${large_tab}   0\\.0        0\\.0%[[:space:]]*-?(inf(inity)?|nan)(\\(ind\\))?" \
             "$large_dir/output.actual" > /dev/null; then
         printf 'large cost summary printed unexpected text:\n' >&2
         cat "$large_dir/output.actual" >&2
