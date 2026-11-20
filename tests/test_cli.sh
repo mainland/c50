@@ -261,6 +261,8 @@ expect_report_failure()
 # message `write error` in place of the system's description. The case injects
 # one `ENOSPC` into the first write to the report with `strace`, and it needs
 # more than one buffer of output, so that later writes can succeed.
+# LeakSanitizer cannot run under `strace`, so the traced program runs without
+# leak detection.
 expect_transient_write_failure()
 {
     transient_name=$1
@@ -271,6 +273,7 @@ expect_transient_write_failure()
     : > "$transient_target"
     set +e
     transient_stderr=$(
+        ASAN_OPTIONS="${ASAN_OPTIONS:+$ASAN_OPTIONS:}detect_leaks=0" \
         strace -f -o "$report_dir/strace.log" -P "$transient_target" \
             -e trace=write -e inject=write:error=ENOSPC:when=1 \
             "$@" 2>&1 >"$report_dir/transient.stdout")
