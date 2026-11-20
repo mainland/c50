@@ -225,9 +225,11 @@ run_unwritable_classifier()
 # not. Release 2.07 sends the report to standard output when `-o` cannot be
 # opened, and exits 0 when a write to the `-o` file or to standard output
 # fails. This project reports each failure on standard error and exits 1. The
-# cases need a full device or a file-size limit, so they run on Linux and the
-# BSDs, and the limit cases also need a shell that accepts `ulimit -f 0`.
-# Standard error goes to a pipe, because the limit applies to a file there too.
+# failed open runs everywhere. The other cases need a full device or a
+# file-size limit, so they run on Linux and the BSDs, and the limit cases also
+# need a shell that accepts `ulimit -f 0`. Each case that cannot run prints a
+# skip message. Standard error goes to a pipe, because the limit applies to a
+# file there too.
 expect_report_failure()
 {
     failure_name=$1
@@ -253,15 +255,44 @@ expect_report_failure()
     esac
 }
 
+# A write that fails once, when later writes succeed, leaves the stream in its
+# error state without an error number: the final flush succeeds, and `errno`
+# keeps no trace of the earlier failure. The report must still fail, with the
+# message `write error` in place of the system's description. The case injects
+# one `ENOSPC` into the first write to the report with `strace`, and it needs
+# more than one buffer of output, so that later writes can succeed.
+expect_transient_write_failure()
+{
+    transient_name=$1
+    transient_target=$2
+    transient_message=$3
+    shift 3
+
+    : > "$transient_target"
+    set +e
+    transient_stderr=$(
+        strace -f -o "$report_dir/strace.log" -P "$transient_target" \
+            -e trace=write -e inject=write:error=ENOSPC:when=1 \
+            "$@" 2>&1 >"$report_dir/transient.stdout")
+    transient_code=$?
+    set -e
+    if test "$transient_code" -ne 1; then
+        printf 'transient write failure %s returned %d, expected 1\n' \
+            "$transient_name" "$transient_code" >&2
+        return 1
+    fi
+    case $transient_stderr in
+        "$transient_message") ;;
+        *)
+            printf 'transient write failure %s printed unexpected text:\n%s\n' \
+                "$transient_name" "$transient_stderr" >&2
+            return 1
+            ;;
+    esac
+}
+
 run_report_failures()
 {
-    case $(uname -s) in
-        Linux|*BSD) ;;
-        *) return 0 ;;
-    esac
-    if test ! -c /dev/full; then
-        return 0
-    fi
     report_dir="$test_dir/report-failures"
     mkdir "$report_dir"
     cp "$script_dir/fixtures/basic/basic.names" "$report_dir/"
@@ -282,6 +313,20 @@ run_report_failures()
     if test -n "$open_stdout"; then
         printf 'open failure wrote a report to standard output\n' >&2
         return 1
+    fi
+
+    case $(uname -s) in
+        Linux|*BSD) ;;
+        *)
+            printf 'skipping the full-device and file-size report failures:' >&2
+            printf ' they need Linux or a BSD\n' >&2
+            return 0
+            ;;
+    esac
+    if test ! -c /dev/full; then
+        printf 'skipping the full-device and file-size report failures:' >&2
+        printf ' /dev/full is missing\n' >&2
+        return 0
     fi
 
     expect_report_failure full-device \
@@ -307,9 +352,28 @@ run_report_failures()
         return 1
     fi
 
+    if test "$(uname -s)" = Linux && command -v strace > /dev/null 2>&1 &&
+        strace -o /dev/null -e trace=write \
+            -e inject=write:error=ENOSPC:when=1 true > /dev/null 2>&1; then
+        transient_path="$report_dir/transient.txt"
+        set -- "$binary" -f "$report_dir/basic" -X 10 -t 3 -I 17
+        expect_transient_write_failure standard-output \
+            "$report_dir/transient.stdout" \
+            '*** could not write standard output: write error' "$@"
+        expect_transient_write_failure report-file "$transient_path" \
+            "*** could not write $transient_path: write error" \
+            "$@" -o "$transient_path"
+        set -- "$binary" -f "$report_dir/basic" -X 2 -I 17
+    else
+        printf 'skipping the transient report write failure:' >&2
+        printf ' it needs Linux and strace with fault injection\n' >&2
+    fi
+
     # An ordinary file under a zero-byte limit fails on write, not on open.
     # Ignoring SIGXFSZ turns the signal into an error from the write.
     if ! (ulimit -f 0) > /dev/null 2>&1; then
+        printf 'skipping the file-size report failure:' >&2
+        printf ' the shell rejects ulimit -f 0\n' >&2
         return 0
     fi
     limit_path="$report_dir/limited.txt"

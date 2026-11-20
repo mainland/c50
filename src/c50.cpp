@@ -447,6 +447,8 @@ public:
     ReportFile() = default;
     ReportFile(const ReportFile &) = delete;
     ReportFile &operator=(const ReportFile &) = delete;
+    ReportFile(ReportFile &&) = delete;
+    ReportFile &operator=(ReportFile &&) = delete;
     ~ReportFile()
     {
         if ( File_ ) std::fclose(File_);
@@ -462,28 +464,33 @@ public:
 
     FILE *Get() const { return File_; }
 
+    // Flushes and closes the stream, which the object then no longer owns.
+    // Returns false after a failure, with errno set as Flush sets it, or to
+    // the error of the close if the flush succeeded.
+
     bool Close()
     {
         FILE *File = File_;
         File_ = nullptr;
-        return Finish(File, true);
-    }
 
-    // Flushes Stream, checks its error state, and closes it if Close is true.
-    // Returns false after a failure, with errno set to the system's error or
-    // to zero if the stream recorded a failure that the flush did not repeat.
-
-    static bool Finish(FILE *Stream, bool Close)
-    {
-        errno = 0;
-        const bool Flushed = std::fflush(Stream) == 0 && ! std::ferror(Stream);
+        const bool Flushed = Flush(File);
         const int FlushError = errno;
 
         errno = 0;
-        const bool Closed = ! Close || std::fclose(Stream) == 0;
+        const bool Closed = std::fclose(File) == 0;
 
         if ( ! Flushed ) errno = FlushError;
         return Flushed && Closed;
+    }
+
+    // Flushes Stream and checks its error state, and leaves it open. Returns
+    // false after a failure, with errno set to the system's error or to zero
+    // if the stream recorded a failure that the flush did not repeat.
+
+    static bool Flush(FILE *Stream)
+    {
+        errno = 0;
+        return std::fflush(Stream) == 0 && ! std::ferror(Stream);
     }
 
 private:
@@ -548,7 +555,7 @@ int main(int Argc, char *Argv[])
     // or standard output. Standard output stays open for the runtime.
     if ( context ) context->io.output = nullptr;
     const bool Written = Report.Get() ? Report.Close() :
-                         ReportFile::Finish(stdout, false);
+                         ReportFile::Flush(stdout);
     if ( ! Written )
     {
         ReportFailure("write", Arguments.argc == Argc ? "standard output" :
