@@ -603,6 +603,28 @@ nonfinite property, so a model with such bounds could not be loaded or used
 for prediction. The `float-overflow-bounds` fixture records this project's
 output.
 
+## Evaluation percentages above 21 million cases
+
+`c5.0` prints a percentage beside each error count and attribute usage in its
+evaluation report. Release 2.07 computes each from 100 times a case count in
+`int`, which overflows above 21,474,836 cases. The overflow is undefined
+behavior. A build with `-fsanitize=undefined` stops at the first product, and
+an optimized build prints wrapped values. With 21,500,000
+training cases that all use an attribute, Release 2.07 prints `-99%` for its
+usage. With 22,000,000 test cases that the tree misclassifies, it prints
+`(-95.2%)` for the error rate. From 42,949,673 cases the wrapped product is
+positive again, so 44,000,000 errors print a plausible but wrong percentage.
+The counts printed beside the percentages are correct.
+
+This project forms the product in 64 bits, so `c5.0` prints `100%` and
+`(100.0%)` for those runs. The division and its rounding are those of Release
+2.07, and the output below the limit is byte-identical. The utility bands of
+`-u` take `SNRules * u` in `int`, which overflows for about 215,000 rules,
+and `report` takes the line counts of its `Expecting` messages in `int`. This
+project widens both. The library and the Python bindings do not print these
+lines and are not affected. The `report-percent-large` target runs the
+two cases above, and it is not part of the default tests.
+
 ## Class count
 
 The number of classes is not limited, as in C5.0 Release 2.07. The

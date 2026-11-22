@@ -577,6 +577,20 @@ the space:
 cmake --build build --target line-count-large
 ```
 
+## Report percentage check
+
+The `index-overflow` test also checks the arithmetic of the evaluation report
+at the `INT_MAX` boundary, and runs by default. The report prints each
+percentage from 100 times a case count, and the product passes `INT_MAX` above
+21,474,836 cases. The end-to-end check runs `c5.0` on 21,500,000 training cases
+that all use one attribute, and on 22,000,000 misclassified test cases, and
+reads the printed percentages. It needs about 0.6 GiB and a minute or two per
+run. CTest does not run it. Run it on Linux or macOS:
+
+```sh
+cmake --build build --target report-percent-large
+```
+
 ## Training fuzz hunt
 
 CTest replays a seed corpus of the training target, which trains small

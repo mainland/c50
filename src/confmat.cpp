@@ -197,7 +197,7 @@ void PrintUsageInfo(c50_context *Context, CaseNo *Usage)
 	}
 
 	c50_diagnostic_printf(Context->io.output, "\t%7d%%  %s\n",
-	    (int) ((100 * Usage[Best]) / Tests + 0.5), Context->schema.attribute_names[Best]);
+	    UsagePercent(Usage[Best], Tests), Context->schema.attribute_names[Best]);
 
 	Usage[Best] = 0;
     }

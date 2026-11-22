@@ -610,6 +610,22 @@ if(UNIX)
     )
 endif()
 
+# The percentages of the evaluation report take 100 times a case count, which
+# passes INT_MAX above 21,474,836 cases. The test runs `c5.0` on 21,500,000
+# training cases and 22,000,000 test cases. It is not part of the default
+# tests. Run it explicitly with
+# `cmake --build build --target report-percent-large`.
+if(UNIX)
+    add_custom_target(
+        report-percent-large
+        COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/slow/report_percent.sh"
+                $<TARGET_FILE:c50_cli>
+        DEPENDS c50_cli
+        USES_TERMINAL
+        VERBATIM
+    )
+endif()
+
 if(BUILD_TESTING OR C50_BUILD_FUZZERS)
     add_library(
         c50_fuzz_target STATIC

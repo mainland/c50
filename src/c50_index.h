@@ -30,6 +30,33 @@ inline bool GrowsWithinInt(int Size, int Step)
     return Step <= std::numeric_limits<int>::max() - Size;
 }
 
+/* The arithmetic of the evaluation report in 64 bits.  A count of cases
+   times 100, or a count of rules times a band number, passes INT_MAX for
+   about 21 million cases or 214,000 rules, and the product in int then wraps.
+   Each function widens before it multiplies and otherwise keeps the type and
+   rounding of the int expression that it replaces, so that results below the
+   limit are unchanged.  Counts are nonnegative.  */
+
+/* The percentage that the report prints for a count out of Total cases. */
+inline double CountPercent(long long Count, double Total)
+{
+    return 100.0 * Count / Total;
+}
+
+/* The whole percentage of Total cases that use an attribute, rounded.  Total
+   is float, as in the report, so that the division is in float. */
+inline int UsagePercent(long long Count, float Total)
+{
+    return static_cast<int>((100LL * Count) / Total + 0.5);
+}
+
+/* The rule count at which utility band u of Bands starts, before rounding. */
+inline double UtilityBandCut(int Rules, int u, int Bands)
+{
+    return static_cast<double>(static_cast<long long>(Rules) * u /
+                               static_cast<float>(Bands));
+}
+
 }  // namespace c50::core
 
 #endif
