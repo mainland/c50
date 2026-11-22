@@ -535,7 +535,7 @@ void	    GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 			 Boolean AllowUnknownClass);
 DataRec	    GetDataRecInput(c50_context *Context, c50_input *Input,
 			    Boolean Train);
-CaseNo	    CountDataInput(c50_input *Input);
+CaseNo	    CountDataInput(c50_context *Context, c50_input *Input);
 int	    StoreIVal(c50_context *Context, String s);
 void	    FreeData(c50_context *Context);
 void	    CheckValue(c50_context *Context, DataRec Case, Attribute Att);

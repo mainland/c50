@@ -169,6 +169,20 @@ dictionaries grow with the values read instead of reserving `N` pointer slots
 from the declaration. Input lines may exceed the legacy 9,999-byte read
 buffer. Per-token length checks still apply.
 
+The line number in a diagnostic of the names, data, cases, and costs readers
+has 64 bits, where Release 2.07 holds it in an `int`. Text of more than
+2,147,483,647 lines overflowed that counter, so a diagnostic printed a negative
+line number, and a build with `-fsanitize=undefined` stopped. The line number
+is now correct. The counts of cases and of retained label bytes remain
+`int`, as in Release 2.07, and the readers now test them before the addition.
+A text of more than `INT_MAX` cases, or whose count of case records or label
+bytes would pass `INT_MAX`, ends with the out-of-memory error in place of
+wrapping into a negative size. With `sample_fraction` set, Release 2.07 counts
+the cases of such a text in the same `int`, wraps, and trains on a sample of a
+wrong size. For example, 2,148,483,648 cases with a fraction of 0.001 trained
+on 1,014 cases. Both the library and `c5.0` now end that run with the
+out-of-memory error.
+
 A name that appears more than once in an `attributes included:` or
 `attributes excluded:` list means what one occurrence means. Release 2.07
 subtracts the exclusion bit once for each occurrence of a name in an

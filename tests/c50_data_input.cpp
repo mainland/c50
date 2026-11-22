@@ -1,6 +1,8 @@
 /* Copyright 2026 Geoffrey Mainland. */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
+#include <climits>
+
 #include "defns.i"
 #include "extern.i"
 #include "c50_api_internal.h"
@@ -34,12 +36,12 @@ int main(int argc, char *argv[])
          context->schema.case_weight_attribute != 3 ) return 1;
 
     c50_input_init_memory(&data_input, data, sizeof(data) - 1);
-    if ( CountDataInput(&data_input) != 2 ) return 1;
+    if ( CountDataInput(context, &data_input) != 2 ) return 1;
     if ( data_input.next != data_input.data ) return 1;
 
     c50_input_init_memory(&comment_input, trailing_comment,
                           sizeof(trailing_comment) - 1);
-    if ( CountDataInput(&comment_input) != 1 ) return 1;
+    if ( CountDataInput(context, &comment_input) != 1 ) return 1;
     if ( comment_input.next != comment_input.data ) return 1;
 
     GetDataInput(context, &data_input, false, false);
@@ -50,6 +52,18 @@ int main(int argc, char *argv[])
     if ( strcmp(CaseLabel(context, 1), "second") ) return 1;
     SetAvCWt(context);
     if ( context->average_case_weight != 3 ) return 1;
+
+    // The line counter holds more than INT_MAX lines, and a diagnostic prints
+    // the line number that the counter holds.
+    static const char two_lines[] = "first\nsecond\n";
+    c50_input line_input;
+    c50_input_init_memory(&line_input, two_lines, sizeof(two_lines) - 1);
+    context->io.line_number = INT_MAX;
+    if ( InChar(context, &line_input) != 'f' ) return 1;
+    if ( context->io.line_number != 2147483648LL ) return 1;
+    context->error.reset();
+    Error(context, UNKNOWNATT, "missing", Nil);
+    if ( context->error_message.find("line 2147483648 of ") != 0 ) return 1;
 
     Cleanup(context);
 

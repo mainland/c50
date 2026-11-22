@@ -446,7 +446,11 @@ void ErrorContext(c50_context *Context, int ErrNo, const char *S1,
     }
     else
     {
-	AppendFormatted(Buffer, TX_Line(Context->io.line_number, Context->io.file_name.c_str()));
+	/*  The text of TX_Line, with a line number of a wider type than the
+	    int that its format expects.  text.i must stay as imported.  */
+
+	AppendFormatted(Buffer, "*** line %lld of `%s': ",
+			Context->io.line_number, Context->io.file_name.c_str());
     }
 
     switch ( ErrNo )
