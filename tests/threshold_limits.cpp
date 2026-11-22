@@ -101,6 +101,39 @@ void bounds_at_largest_float_are_finite(c50::context &context)
             "the bounds at the largest float are finite");
 }
 
+/* The soft threshold of two values next to -FLT_MAX puts a bound at the
+   negated largest float, which the writer prints as -3.4028235e+38. The
+   loaded model must predict as the trained one does. */
+void bound_at_largest_float_loads(c50::context &context)
+{
+    const std::string lowest = "-3.4028235e+38";
+    const std::string data =
+        "-3.4028234e38,a\n-3.4028234e38,a\n-3.4028234e38,a\n"
+        "-1.1e31,b\n-1.1e31,b\n-1.1e31,b\n";
+    const std::string probes =
+        "-3.4028234e38,?\n-3.4028235e+38,?\n-3e38,?\n-1e38,?\n"
+        "-1.1e31,?\n0,?\n";
+    c50::options options;
+    options.probabilistic_thresholds = true;
+    for (const auto kind :
+         {c50::model_kind::tree, c50::model_kind::rules}) {
+        const c50::model trained =
+            c50::model::train(context, kind, names, data, options);
+        require(trained.serialized_data().find(lowest) != std::string::npos,
+                "the model has a bound at -FLT_MAX");
+        const c50::model loaded = c50::model::load(
+            context, kind, names, trained.serialized_data());
+        const c50::predictions expected = trained.predict(context, probes);
+        const c50::predictions actual = loaded.predict(context, probes);
+        require(expected.size() == actual.size(), "one prediction per probe");
+        for (std::size_t row = 0; row < expected.size(); ++row)
+            require(expected.class_index(row) == actual.class_index(row),
+                    "the loaded model predicts as the trained one");
+        require(actual.class_index(0) == 0, "the lower value is class a");
+        require(actual.class_index(4) == 1, "the higher value is class b");
+    }
+}
+
 } // namespace
 
 int main()
@@ -120,6 +153,7 @@ int main()
             train_pair(context, pair, c50::model_kind::tree, true);
         }
         bounds_at_largest_float_are_finite(context);
+        bound_at_largest_float_loads(context);
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
         return 1;
