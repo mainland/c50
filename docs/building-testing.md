@@ -524,9 +524,9 @@ make reference-comparison
 Run the script directly to compare any `c5.0` program. The optional second
 argument is a directory that holds the files of the import. Without it, the
 script extracts a ref with `git archive`: `$C50_REFERENCE_REF` if set, else the
-import commit `f97414a56b432baf4547193a47e6d695e5f5229b`. A clone that lacks the
-commit, such as a shallow clone of another branch, fails with a message that
-asks for the variable or a directory.
+import commit `f97414a56b432baf4547193a47e6d695e5f5229b`. A clone that lacks
+the commit, such as a shallow clone of another branch, fails with a message
+that asks for the variable or a directory.
 
 ```sh
 tests/reference/run.sh ./c5.0
@@ -602,9 +602,9 @@ cmake --build build --target index-overflow-large
 The `index-overflow` test also checks the helper that guards the `int` counters
 of the text readers, and `data-input-stream` checks that the line number of a
 diagnostic passes `INT_MAX`. The end-to-end check reads a file of 2^31 lines
-and a file of 2^31 + 1 cases through `c5.0`. It needs about 2 GiB and 8.6 GB of
-`TMPDIR`. CTest does not run it. Run it on Linux or macOS with a host that has
-the space:
+and a file of 2^31 + 1 cases through `c5.0`. It needs about 2 GiB and 10.7 GB
+of `TMPDIR`. CTest does not run it. Run it on Linux or macOS with a host that
+has the space:
 
 ```sh
 cmake --build build --target line-count-large
