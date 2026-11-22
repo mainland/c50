@@ -83,3 +83,36 @@ def test_estimator_with_soft_thresholds_handles_large_values(
     y = np.array(["a"] * 5 + ["b"] * 5)
     estimator = C50Classifier(probabilistic_thresholds=True).fit(X, y)
     assert list(estimator.predict(X)) == list(y)
+
+
+# A float with the bits of the unknown marker, and a double that rounds to the
+# smallest float, which has the bits of the not-applicable marker. The learner
+# stores them as known values, and softening the cut must not read past the
+# node. Release 2.07 trains an inconsistent tree on these values without soft
+# thresholds, so the tests check that training completes and a model predicts,
+# not which class.
+MARKER_VALUES = [1.5777218104420236e-30, 1e-45]
+
+
+@pytest.mark.parametrize("value", MARKER_VALUES)
+@pytest.mark.parametrize("kind", KINDS)
+def test_dense_soft_thresholds_train_on_marker_values(
+    value: float, kind: c50.ModelKind
+) -> None:
+    names = "no, yes.\n\nx: continuous.\n"
+    values = np.array([[5.0], [5.0], [value], [value]])
+    classes = np.array([0, 0, 1, 1])
+    options = c50.Options()
+    options.probabilistic_thresholds = True
+    model = c50.train_dense(names, values, classes, kind, options=options)
+    assert model.predict("5, ?\n")[0] in {"no", "yes"}
+
+
+@pytest.mark.parametrize("value", MARKER_VALUES)
+def test_estimator_with_soft_thresholds_handles_marker_values(
+    value: float,
+) -> None:
+    X = np.array([[5.0], [5.0], [value], [value]])
+    y = np.array(["no", "no", "yes", "yes"])
+    estimator = C50Classifier(probabilistic_thresholds=True).fit(X, y)
+    assert estimator.predict(np.array([[5.0]]))[0] in {"no", "yes"}

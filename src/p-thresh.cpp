@@ -210,76 +210,89 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 	    if ( CVal(Context->cases.records[i], Att) <= T->Cut ) SplitI = i;
 	}
 
-	/*  The float sum of two large values of the same sign can
-	    overflow.  Halve each value first in that case, so that the
-	    midpoint and the bounds stay finite  */
+	/*  A case whose stored value is a missing or not-applicable marker
+	    while its flag is unset is read as known, so the cut can fall
+	    at or above the last case of the node.  No case lies above the
+	    cut then, and there is nothing to soften.  Use the cut itself,
+	    and do not read the record after the last case  */
 
-	if ( std::isfinite(CVal(Context->cases.records[SplitI], Att) + CVal(Context->cases.records[SplitI+1], Att)) )
+	if ( SplitI >= Lp )
 	{
-	    T->Mid = (CVal(Context->cases.records[SplitI], Att) + CVal(Context->cases.records[SplitI+1], Att)) / 2;
+	    T->Mid = T->Lower = T->Upper = T->Cut;
 	}
 	else
 	{
-	    T->Mid = CVal(Context->cases.records[SplitI], Att) / 2 + CVal(Context->cases.records[SplitI+1], Att) / 2;
-	}
+		/*  The float sum of two large values of the same sign can
+		    overflow.  Halve each value first in that case, so that the
+		    midpoint and the bounds stay finite  */
 
-	/*  Consider cutoff points below and above the threshold.
-	    The errors on the cases between the cutoff and the threshold
-	    are computed for both the LE and GT branches.  The additional
-	    errors must be less than 0.5SE and, further, the errors
-	    on the "other" branch must not exceed twice the errors
-	    on the "real" branch, both after Laplace adjustment  */
-
-	SE = sqrt(T->Errors * (KnownCases - T->Errors) / (KnownCases + 1E-3))
-	     * 2;
-
-	LEErrs = GTErrs = 0;
-	j = SplitI;
-	for ( i = SplitI ; i > Ap ; i-- )
-	{
-	    RealClass = Class(Context->cases.records[i]);
-
-	    w = Weight(Context->cases.records[i]);
-	    GTErrs += w *
-		( TreeClassify(Context, Context->cases.records[i], T->Branch[3]) != RealClass );
-	    LEErrs += w *
-		( TreeClassify(Context, Context->cases.records[i], T->Branch[2]) != RealClass );
-
-	    if ( CVal(Context->cases.records[i-1], Att) < CVal(Context->cases.records[i], Att) )
-	    {
-		if ( GTErrs > 2 * LEErrs + 1 || GTErrs - LEErrs > 0.5 * SE )
+		if ( std::isfinite(CVal(Context->cases.records[SplitI], Att) + CVal(Context->cases.records[SplitI+1], Att)) )
 		{
-		    break;
+		    T->Mid = (CVal(Context->cases.records[SplitI], Att) + CVal(Context->cases.records[SplitI+1], Att)) / 2;
+		}
+		else
+		{
+		    T->Mid = CVal(Context->cases.records[SplitI], Att) / 2 + CVal(Context->cases.records[SplitI+1], Att) / 2;
 		}
 
-		j = i-1;
-	    }
-	}
-	T->Lower = Min(T->Mid, CVal(Context->cases.records[j], Att));
+		/*  Consider cutoff points below and above the threshold.
+		    The errors on the cases between the cutoff and the threshold
+		    are computed for both the LE and GT branches.  The additional
+		    errors must be less than 0.5SE and, further, the errors
+		    on the "other" branch must not exceed twice the errors
+		    on the "real" branch, both after Laplace adjustment  */
 
-	LEErrs = GTErrs = 0;
-	j = SplitI+1;
-	for ( i = SplitI+1 ; i < Lp ; i++ )
-	{
-	    RealClass = Class(Context->cases.records[i]);
+		SE = sqrt(T->Errors * (KnownCases - T->Errors) / (KnownCases + 1E-3))
+		     * 2;
 
-	    w = Weight(Context->cases.records[i]);
-	    LEErrs += w *
-		( TreeClassify(Context, Context->cases.records[i], T->Branch[2]) != RealClass );
-	    GTErrs += w *
-		( TreeClassify(Context, Context->cases.records[i], T->Branch[3]) != RealClass );
-
-	    if ( CVal(Context->cases.records[i], Att) < CVal(Context->cases.records[i+1], Att) )
-	    {
-		if ( LEErrs > 2 * GTErrs + 1 || LEErrs - GTErrs > 0.5 * SE )
+		LEErrs = GTErrs = 0;
+		j = SplitI;
+		for ( i = SplitI ; i > Ap ; i-- )
 		{
-		    break;
-		}
+		    RealClass = Class(Context->cases.records[i]);
 
-		j = i+1;
-	    }
+		    w = Weight(Context->cases.records[i]);
+		    GTErrs += w *
+			( TreeClassify(Context, Context->cases.records[i], T->Branch[3]) != RealClass );
+		    LEErrs += w *
+			( TreeClassify(Context, Context->cases.records[i], T->Branch[2]) != RealClass );
+
+		    if ( CVal(Context->cases.records[i-1], Att) < CVal(Context->cases.records[i], Att) )
+		    {
+			if ( GTErrs > 2 * LEErrs + 1 || GTErrs - LEErrs > 0.5 * SE )
+			{
+			    break;
+			}
+
+			j = i-1;
+		    }
+		}
+		T->Lower = Min(T->Mid, CVal(Context->cases.records[j], Att));
+
+		LEErrs = GTErrs = 0;
+		j = SplitI+1;
+		for ( i = SplitI+1 ; i < Lp ; i++ )
+		{
+		    RealClass = Class(Context->cases.records[i]);
+
+		    w = Weight(Context->cases.records[i]);
+		    LEErrs += w *
+			( TreeClassify(Context, Context->cases.records[i], T->Branch[2]) != RealClass );
+		    GTErrs += w *
+			( TreeClassify(Context, Context->cases.records[i], T->Branch[3]) != RealClass );
+
+		    if ( CVal(Context->cases.records[i], Att) < CVal(Context->cases.records[i+1], Att) )
+		    {
+			if ( LEErrs > 2 * GTErrs + 1 || LEErrs - GTErrs > 0.5 * SE )
+			{
+			    break;
+			}
+
+			j = i+1;
+		    }
+		}
+		T->Upper = Max(T->Mid, CVal(Context->cases.records[j], Att));
 	}
-	T->Upper = Max(T->Mid, CVal(Context->cases.records[j], Att));
 
 	Verbosity(1,
 	    c50_diagnostic_printf(Context->io.output, "\tLower = %g, Upper = %g\n", T->Lower, T->Upper))

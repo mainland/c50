@@ -603,6 +603,39 @@ nonfinite property, so a model with such bounds could not be loaded or used
 for prediction. The `float-overflow-bounds` fixture records this project's
 output.
 
+## Soft thresholds and values that read as unknown
+
+A continuous value that is stored as the unknown marker is known to the split
+search and to the grouping of cases, because they test the flag that a missing
+value sets, and that flag is clear. Two kinds of value do this. A token that is
+not a number is stored as unknown without setting the flag, in `c5.0` and in
+Release 2.07. A number whose `float` has the bits of the unknown marker, such
+as `1.5777218104420236e-30`, or of the not-applicable marker, such as `1e-45`,
+reaches the same state, in text and in dense input. The threshold adjustment
+tests the stored value, so it skips such a case and can move the cut to the
+smallest known value of the node. Every case of the node is then at or below
+the cut.
+
+Soft thresholds (`-p`) read the case after the last one at the cut to place
+the bounds. Release 2.07 reads past the last case of the node there, and
+crashes with a segmentation fault or reads a stray pointer. The `-p` option
+with trees, rules, and boosting crashes this way on two cases with `-m 1`, and
+on four cases, two at `5` and two at one such value, with the default minimum
+cases. The C++ dense interface, `c50.train_dense`, and
+`C50Classifier(probabilistic_thresholds=True)` reach the same read on finite
+input.
+
+This project uses the cut for the midpoint and for both bounds when no case of
+the node lies above it, and does not read the next case. No classifier that
+Release 2.07 trains to completion changes, because Release 2.07 cannot reach
+that state without reading past the node. The trees that it trains without
+`-p` on such data stay as Release 2.07 trains them, including a tree that
+misclassifies every training case, because those runs do not crash. The
+`soft-threshold-bad-value`, `soft-threshold-unknown-bits`, and
+`soft-threshold-smallest-denormal` fixtures record this project's output,
+because Release 2.07 has none, and the library and Python tests train on the
+same values with text and dense input.
+
 ## Evaluation percentages above 21 million cases
 
 `c5.0` prints a percentage beside each error count and attribute usage in its
