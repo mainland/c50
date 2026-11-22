@@ -184,15 +184,43 @@ on 1,014 cases. Both the library and `c5.0` now end that run with the
 out-of-memory error.
 
 A name that appears more than once in an `attributes included:` or
-`attributes excluded:` list means what one occurrence means. Release 2.07
-subtracts the exclusion bit once for each occurrence of a name in an
-`attributes included:` list. A repeated name leaves the attribute excluded
-with corrupted type bits, and training then dereferences a null pointer or
-writes a model that cannot be loaded. This project clears the bit, so two
-results differ from Release 2.07 for text that it accepts. An explicit
-discrete attribute listed twice is now used, where Release 2.07 drops it. A
-class attribute that the schema declares and the list names twice is now
-accepted, where Release 2.07 reports that the target attribute is missing.
+`attributes excluded:` list means what one occurrence means. This project
+clears the exclusion bit once, whatever the count.
+
+Release 2.07 behaves differently in an `attributes included:` list. It
+subtracts the bit once for each occurrence, so `k` occurrences change the
+status byte by `2 - 2k`, starting from the declared type. Each subtraction
+past zero borrows from the higher type bits. An even count leaves the
+exclusion bit set, so the attribute is dropped if reading and training
+complete. An odd count of 3 or more clears the bit. With either count, the
+borrowed bits can retype the attribute, make every value invalid, or crash
+Release 2.07. The outcome depends on the declared type and the count:
+
+- Continuous, date, time, and timestamp attributes crash the reader at 2 and
+  3 occurrences. At 4 and 5, every value of the attribute is invalid, so
+  Release 2.07 rejects each one. With 10 or more such values it stops with
+  `Error limit exceeded` and exit status 1. With fewer, it trains with the
+  attribute entirely unknown, which is the classifier without it.
+- A `discrete N` attribute has every value invalid at 2 and 3 occurrences, as
+  a continuous attribute does at 4 and 5. It is dropped at 4 and becomes
+  ordered at 5.
+- An explicit discrete attribute is dropped at 2 and 4, and becomes ordered
+  at 3 and 5. An ordered attribute is dropped at 2 and 4, and becomes
+  unordered at 3 and 5. A retyped attribute can change splits, leaf counts, and
+  confidences.
+- An attribute with a definition can be dropped, retyped, or crash training,
+  depending on the type that the definition yields.
+
+Any such text that Release 2.07 accepts can therefore train a different
+classifier from the one that this project trains. A class attribute that the
+schema declares and the list names twice or three times is rejected by Release
+2.07 with ``target attribute `cls' must be specified by a list of discrete
+values``. This project accepts it. Release 2.07 also accepts the class named 4
+or 5 times.
+
+An `attributes excluded:` list is not affected. Release 2.07 sets the bit
+there, which is idempotent, so both programs give the one-occurrence model for
+every type and count.
 
 ### Implicit definitions
 
