@@ -269,7 +269,7 @@ struct c50_progress_state : c50_state_record
 
 struct c50_io_state : c50_state_record
 {
-    int line_number = 0;
+    long long line_number = 0;
     int error_count = 0;
     int attribute_exclusions = 0;
     int timestamp_base = 0;

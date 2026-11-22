@@ -169,6 +169,31 @@ dictionaries grow with the values read instead of reserving `N` pointer slots
 from the declaration. Input lines may exceed the legacy 9,999-byte read
 buffer. Per-token length checks still apply.
 
+The line number in a diagnostic of the names, data, cases, and costs readers
+has 64 bits, where Release 2.07 holds it in an `int`. Text of more than
+2,147,483,647 lines overflowed that counter, so a diagnostic printed a negative
+line number, and a build with `-fsanitize=undefined` stopped. The line number
+is now correct. The counts of cases and of retained label bytes remain
+`int`, as in Release 2.07, and the readers now test them before the addition.
+A text of more than `INT_MAX` cases, or whose count of case records or label
+bytes would pass `INT_MAX`, ends with the out-of-memory error in place of
+wrapping into a negative size. With `sample_fraction` set, Release 2.07 counts
+the cases of such a text in the same `int`, wraps, and trains on a sample of a
+wrong size. For example, 2,148,483,648 cases with a fraction of 0.001 trained
+on 1,014 cases. Both the library and `c5.0` now end that run with the
+out-of-memory error.
+
+A name that appears more than once in an `attributes included:` or
+`attributes excluded:` list means what one occurrence means. Release 2.07
+subtracts the exclusion bit once for each occurrence of a name in an
+`attributes included:` list. A repeated name leaves the attribute excluded
+with corrupted type bits, and training then dereferences a null pointer or
+writes a model that cannot be loaded. This project clears the bit, so two
+results differ from Release 2.07 for text that it accepts. An explicit
+discrete attribute listed twice is now used, where Release 2.07 drops it. A
+class attribute that the schema declares and the list names twice is now
+accepted, where Release 2.07 reports that the target attribute is missing.
+
 ### Implicit definitions
 
 Implicit definitions reject missing and not-applicable literals without a
@@ -178,6 +203,21 @@ date and time recognition remain within the definition buffer. These checks
 make extreme or malformed definitions reject instead of exhausting resources or
 invoking undefined behavior. Accepted definitions within these limits retain
 their existing evaluation behavior.
+
+A definition whose value is a string is rejected with the diagnostic
+for a bad definition, `value must be a number or a logical value`. Such a
+definition is a literal such as `x := "abc".`, or the name of a discrete
+attribute, including an ordered attribute, a `discrete N` attribute, and a
+Boolean attribute that another definition defines. A string has no case value,
+so the imported implementation read the low 32 bits of the address of the
+value's name as a `float`. The learner split on those bits, so the
+classifier differed between runs and between contexts, predictions did not
+match the training cases, and training sometimes failed or crashed. The
+library throws `error_code::parse_error` (`ValueError` in Python) and `c5.0`
+exits 1. Comparisons that yield a logical value, aliases of continuous, date,
+and time attributes, and numeric formulas are unchanged. The only definition
+that Release 2.07 handles meaningfully and this project now rejects is one
+that stays inert: a literal, or an alias that `attributes excluded:` lists.
 
 The evaluator's operand stack grows with the definition, so every definition
 within the nesting limit evaluates, including definitions that leave several
@@ -247,6 +287,26 @@ to satisfy the predictor's `1e-4` case threshold; unlike child nodes, it has no
 parent distribution to use below that threshold. Zero-case child nodes remain
 valid and retain their parent-based prediction behavior. These checks reject
 malformed artifacts before prediction can index their internal structures.
+
+A rule condition must have an outcome that its type has, whatever the order of
+its properties. `result` is valid only on a threshold condition that has
+`cut`. A threshold has either `val="N/A"` or a `cut` with its `result`, not
+both. A discrete condition names a declared value, and a subset condition has
+a single outcome. `model::load` rejects any other text with
+`error_code::parse_error`. Release 2.07's loader accepts such text, such as a
+discrete condition with `result=">"` or a subset condition with a `result`,
+and never fires the rule that holds it. Inspection of such a rule named a value
+that does not exist. The rulesets that the learner writes are unchanged and
+load with the same predictions.
+
+A numeric property is finite when it rounds to a finite `float`, which is what
+the writer prints. The loader once compared the decimal text with `FLT_MAX` as
+a `double`, so it rejected `cut="-3.4028235e+38"`, the text that Release 2.07
+and this project write for a cut at the lowest `float`. Training with such data
+succeeded, and `predict` then threw `error_code::parse_error` for the model
+that it had just written. A file from Release 2.07 with that cut did not load
+either. `model::load` now accepts any number up to the largest that rounds to
+`FLT_MAX`, `3.4028235677973362e+38`, and still rejects a larger one.
 
 `model::load` rejects a serialized tree of more than `max_tree_depth` levels
 with `error_code::parse_error` (`ValueError` in Python), to bound the stack

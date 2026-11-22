@@ -40,6 +40,7 @@
 #include "defns.i"
 #include "extern.i"
 #include "c50_api_internal.h"
+#include "c50_index.h"
 #include <stdint.h>
 
 namespace c50::core {
@@ -103,7 +104,7 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
     {
 	if ( Train )
 	{
-	    Context->sample_from = CountDataInput(Input);
+	    Context->sample_from = CountDataInput(Context, Input);
 	    ResetKR(&Context->random, Context->io.random_initial_seed);	/* initialise KRandom() */
 	}
 	else
@@ -157,6 +158,13 @@ void GetDataInput(c50_context *Context, c50_input *Input, Boolean Train,
 
 	if ( Context->cases.max_case >= CaseSpace )
 	{
+	    /*  The array holds CaseSpace + 1 pointers, so that sum must fit  */
+
+	    if ( ! GrowsWithinInt(CaseSpace, Inc + 1) )
+	    {
+		Error(Context, NOMEM, "", "");
+	    }
+
 	    CaseSpace += Inc;
 	    Realloc(Context->cases.records, CaseSpace+1, DataRec);
 	}
@@ -421,6 +429,22 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 
 
 
+/*  Add one case to the count of cases.  A count that cannot be held in
+    an int is out of memory, as for the case records themselves.  */
+
+static int NextCount(c50_context *Context, int Count)
+/*         ---------  */
+{
+    if ( ! GrowsWithinInt(Count, 1) )
+    {
+	Error(Context, NOMEM, "", "");
+    }
+
+    return Count + 1;
+}
+
+
+
 /*************************************************************************/
 /*                                                                       */
 /*      Count cases in data file					 */
@@ -428,7 +452,7 @@ DataRec GetDataRecInput(c50_context *Context, c50_input *Input, Boolean Train)
 /*************************************************************************/
 
 
-CaseNo CountDataInput(c50_input *Input)
+CaseNo CountDataInput(c50_context *Context, c50_input *Input)
 /*     --------------  */
 {
     char        Last=',';
@@ -438,7 +462,7 @@ CaseNo CountDataInput(c50_input *Input)
     {
 	if ( (Next = c50_input_getc(Input)) == EOF )
 	{
-	    if ( Last != ',' ) Count++;
+	    if ( Last != ',' ) Count = NextCount(Context, Count);
 	    c50_input_rewind(Input);
 	    return Count;
 	}
@@ -449,7 +473,7 @@ CaseNo CountDataInput(c50_input *Input)
 		;
 	    if ( Next == EOF )
 	    {
-		if ( Last != ',' ) Count++;
+		if ( Last != ',' ) Count = NextCount(Context, Count);
 		c50_input_rewind(Input);
 		return Count;
 	    }
@@ -457,7 +481,7 @@ CaseNo CountDataInput(c50_input *Input)
 
 	if ( Next == '\n' )
 	{
-	    if ( Last != ',' ) Count++;
+	    if ( Last != ',' ) Count = NextCount(Context, Count);
 	    Last = ',';
 	}
 	else
@@ -489,11 +513,19 @@ int StoreIVal(c50_context *Context, String S)
 {
     int		StartIx, Length;
 
-    if ( (Length=strlen(S) + 1) + Context->ignored_values_offset >
-	 Context->ignored_values_size )
+    /*  A label has at most 1000 bytes, so the offset and its sum with
+	the length fit in an int while the size does  */
+
+    if ( (Length=strlen(S) + 1) >
+	 Context->ignored_values_size - Context->ignored_values_offset )
     {
 	if ( Context->ignored_values )
 	{
+	    if ( ! GrowsWithinInt(Context->ignored_values_size, 32768) )
+	    {
+		Error(Context, NOMEM, "", "");
+	    }
+
 	    Context->ignored_values_size += 32768;
 	    Realloc(Context->ignored_values, Context->ignored_values_size,
 		    char);

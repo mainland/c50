@@ -28,6 +28,17 @@ int main()
     expect("row", FlatIndex(3, 7, 0), 21);
     expect("small", FlatIndex(3, 7, 5), 26);
 
+    // The readers count cases and bytes in int and test before the addition.
+    expect("grow from zero", GrowsWithinInt(0, 32768), true);
+    expect("grow to INT_MAX", GrowsWithinInt(INT_MAX - 32768, 32768), true);
+    expect("grow past INT_MAX", GrowsWithinInt(INT_MAX - 32767, 32768), false);
+    expect("count at INT_MAX", GrowsWithinInt(INT_MAX, 1), false);
+    expect("count below INT_MAX", GrowsWithinInt(INT_MAX - 1, 1), true);
+    expect("case space at the last block",
+           GrowsWithinInt(INT_MAX - 2049, 2049), true);
+    expect("case space past the last block",
+           GrowsWithinInt(INT_MAX - 2048, 2049), false);
+
     if constexpr (sizeof(std::size_t) < 8) {
         std::puts("index-overflow: size_t is narrower than 64 bits, "
                   "boundary cases skipped");

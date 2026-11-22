@@ -86,6 +86,12 @@ attributes. Dynamic `discrete N`, implicit, ignored, label, class-attribute,
 date, and time declarations remain available only through the text interface.
 Sparse matrices and memory-mapped out-of-core training are not supported.
 
+The text interface counts cases and retained label bytes in a signed `int`, as
+Release 2.07 does. A text that needs more than `INT_MAX` of either ends with the
+out-of-memory error (`std::bad_alloc`, `MemoryError` in Python) before the count
+overflows. The number of lines is not bounded, because the line counter that
+diagnostics print is 64 bits wide.
+
 Per-batch case storage is bounded by `prediction_batch_size`, apart from the
 caller's input and returned score array. One parsed predictor is retained for
 the duration of each estimator prediction call. Training still requires the

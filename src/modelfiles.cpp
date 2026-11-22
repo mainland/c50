@@ -41,6 +41,7 @@
 
 #include <stdarg.h>
 #include <cerrno>
+#include <cmath>
 #include <memory>
 #include <limits>
 
@@ -95,11 +96,22 @@ static int WhichProperty(const char *Name)
 }
 
 
+/*  The writer prints a float, so a number is finite when it rounds to a
+    float below infinity, not only when it is at most FLT_MAX.  The largest
+    such double is the one below the midpoint between FLT_MAX and 2^128.  */
+
+static double LargestFloatNumber()
+{
+    return std::nextafter(0.5 * (static_cast<double>(FLT_MAX) +
+                                 std::ldexp(1.0, 128)), 0.0);
+}
+
+
 static void ValidateNumber(c50_context *Context, int Property)
 {
     const char *value = Context->property_value + 1;
     char *end;
-    double low = 0, high = FLT_MAX;
+    double low = 0, high = LargestFloatNumber();
     bool integer = false;
     switch (Property)
     {
@@ -112,7 +124,7 @@ static void ValidateNumber(c50_context *Context, int Property)
         case SAMPLEP: high = 1; break;
         case COVERP: case OKP: case LIFTP: break;
         case CUTP: case LOWP: case MIDP: case HIGHP:
-            high = std::numeric_limits<ContValue>::max(); low = -high; break;
+            high = LargestFloatNumber(); low = -high; break;
         default: return;
     }
     errno = 0;
@@ -1001,12 +1013,23 @@ Condition InConditionAt(c50_context *Context, c50_input *Input,
     }
     while ( Delim == ' ' );
 
+    /*  Properties may come in any order, so check the outcome against the
+	condition's type once the record is complete.  A threshold has either
+	the N/A value or a cut with its outcome, and only a threshold with a
+	cut has an outcome.  A discrete test names a declared value, which
+	the lookup of the value guarantees, and a subset test has the single
+	outcome 1.  */
+
+    const bool HasVal = Seen & PropertyBit(VALP);
+    const bool HasCut = Seen & PropertyBit(CUTP);
+    const bool HasResult = Seen & PropertyBit(RESULTP);
     if (!C->Tested || !C->TestValue ||
-        (C->NodeType == BrDiscr && (!Discrete(C->Tested) || !(Seen & PropertyBit(VALP)))) ||
+        (HasResult && (C->NodeType != BrThresh || !HasCut)) ||
+        (C->NodeType == BrDiscr && (!Discrete(C->Tested) || !HasVal)) ||
         (C->NodeType == BrThresh &&
-         (!Continuous(C->Tested) ||
-          (!(Seen & PropertyBit(VALP)) && !(Seen & PropertyBit(CUTP))))) ||
-        (C->NodeType == BrSubset && (!Discrete(C->Tested) || !C->Subset)) ||
+         (!Continuous(C->Tested) || HasVal == (HasCut || HasResult))) ||
+        (C->NodeType == BrSubset &&
+         (!Discrete(C->Tested) || !C->Subset || C->TestValue != 1)) ||
         C->NodeType < BrDiscr || C->NodeType > BrSubset)
         Error(Context, MODELFILE, "incomplete or inconsistent condition", "");
     return C;

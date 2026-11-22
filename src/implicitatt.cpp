@@ -181,6 +181,18 @@ void ImplicitAtt(c50_context *Context, c50_input *Nf)
 	    throw c50::exception(c50::error_code::internal_error,
 	                         "invalid implicit expression type stack");
 	}
+	if ( Context->implicit_state->type_stack[0].Type == 'S' )
+	{
+	    /*  A string value has no representation as a defined attribute.
+		Its case values would be pointer bits.  */
+
+	    const std::string Text(Context->implicit_state->buffer.data(),
+				   static_cast<size_t>(Context->implicit_state->buffer_position));
+	    ErrorContext(Context, BADDEF2, Text.c_str(),
+			 "value must be a number or a logical value");
+	    Context->implicit_state->previous_error = true;
+	}
+	else
 	if ( Context->implicit_state->definition_position == 1 && DefOp(Context->schema.attribute_definitions[Context->schema.max_attribute][0]) == OP_ATT &&
 	     strcmp(Context->schema.attribute_names[Context->schema.max_attribute], "case weight") )
 	{

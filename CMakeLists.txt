@@ -402,6 +402,14 @@ if(BUILD_TESTING)
     target_link_libraries(c50_parser_validation PRIVATE C50::cpp)
     list(APPEND C50_COMPILE_TARGETS c50_parser_validation)
     list(APPEND C50_EXECUTABLE_TARGETS c50_parser_validation)
+    add_executable(c50_attribute_lists tests/attribute_lists.cpp)
+    target_link_libraries(c50_attribute_lists PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_attribute_lists)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_attribute_lists)
+    add_executable(c50_implicit_result_types tests/implicit_result_types.cpp)
+    target_link_libraries(c50_implicit_result_types PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_implicit_result_types)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_implicit_result_types)
     add_executable(c50_tree_depth tests/tree_depth.cpp)
     target_include_directories(
         c50_tree_depth
@@ -578,6 +586,21 @@ if(UNIX)
         COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/slow/index_overflow.sh"
                 $<TARGET_FILE:c50_cli> $<TARGET_FILE:c50_index_overflow_train>
         DEPENDS c50_cli c50_index_overflow_train
+        USES_TERMINAL
+        VERBATIM
+    )
+endif()
+
+# The line-count cases read a file of 2^31 lines and a file of 2^31 + 1 cases,
+# which take 2 GiB and about 8.6 GB of TMPDIR. They are not part of the default
+# tests. Run them explicitly with `cmake --build build --target
+# line-count-large`.
+if(UNIX)
+    add_custom_target(
+        line-count-large
+        COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/slow/line_count.sh"
+                $<TARGET_FILE:c50_cli>
+        DEPENDS c50_cli
         USES_TERMINAL
         VERBATIM
     )
@@ -838,6 +861,8 @@ if(BUILD_TESTING)
     add_test(NAME reference-compatibility COMMAND c50_reference_compatibility)
     add_test(NAME cost-validation COMMAND c50_cost_validation)
     add_test(NAME parser-validation COMMAND c50_parser_validation)
+    add_test(NAME attribute-lists COMMAND c50_attribute_lists)
+    add_test(NAME implicit-result-types COMMAND c50_implicit_result_types)
     add_test(NAME tree-depth COMMAND c50_tree_depth)
     set_tests_properties(tree-depth PROPERTIES TIMEOUT 120)
     set_tests_properties(parser-validation PROPERTIES TIMEOUT 120)

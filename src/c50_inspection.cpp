@@ -13,6 +13,18 @@ namespace c50::core {
 
 namespace {
 
+// The name of a declared attribute value. A model that names no such value
+// must not reach this point, so a null name is an internal fault and not
+// text to copy.
+const char *value_name(c50_context *Context, Attribute attribute, int value)
+{
+    const char *name = Context->schema.attribute_value_names[attribute][value];
+    if (!name)
+        throw c50::exception(c50::error_code::internal_error,
+                             "attribute value has no name");
+    return name;
+}
+
 c50::split_condition condition(c50_context *Context, BranchType kind,
                                 Attribute attribute, int outcome,
                                 ContValue cut, Set subset)
@@ -24,7 +36,7 @@ c50::split_condition condition(c50_context *Context, BranchType kind,
         result.includes_not_applicable = In(1, subset);
         for (int value = 2; value <= Context->schema.max_attribute_value[attribute]; ++value)
             if (In(value, subset))
-                result.values.emplace_back(Context->schema.attribute_value_names[attribute][value]);
+                result.values.emplace_back(value_name(Context, attribute, value));
     } else if (outcome == 1) {
         result.kind = c50::condition_kind::not_applicable;
     } else if (kind == BrThresh) {
@@ -33,7 +45,7 @@ c50::split_condition condition(c50_context *Context, BranchType kind,
         result.cut = cut;
     } else {
         result.kind = c50::condition_kind::equals;
-        result.values.emplace_back(Context->schema.attribute_value_names[attribute][outcome]);
+        result.values.emplace_back(value_name(Context, attribute, outcome));
     }
     return result;
 }

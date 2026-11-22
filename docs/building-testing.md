@@ -564,6 +564,19 @@ memory:
 cmake --build build --target index-overflow-large
 ```
 
+## Line-count check
+
+The `index-overflow` test also checks the helper that guards the `int` counters
+of the text readers, and `data-input-stream` checks that the line number of a
+diagnostic passes `INT_MAX`. The end-to-end check reads a file of 2^31 lines
+and a file of 2^31 + 1 cases through `c5.0`. It needs about 2 GiB and 8.6 GB of
+`TMPDIR`. CTest does not run it. Run it on Linux or macOS with a host that has
+the space:
+
+```sh
+cmake --build build --target line-count-large
+```
+
 ## Training fuzz hunt
 
 CTest replays a seed corpus of the training target, which trains small
