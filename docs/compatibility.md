@@ -567,6 +567,64 @@ was developed in this project, and the C50 R package has the same code as
 Release 2.07. The `costs-pruning` and `winnow-costs-pruning` fixtures record
 this project's output, because Release 2.07 has none.
 
+## Thresholds near the limits of `float`
+
+A continuous cut lies halfway between two neighboring attribute values. Release
+2.07 computes the midpoint from the `float` sum of the two values. When both
+values are large and negative, for example `-3e38` and `-2e38`, the sum
+overflows to `-inf` and so does the cut. Every case then goes to the branch for
+values above the cut, tree growth sees the same cases again, and the program
+recurses until the stack overflows. Release 2.07 dies from a segmentation fault
+on such input, with trees and with rules, and so does an earlier build of this
+project. The values are finite and valid. The positive side is safe, because
+the cut that results from an overflow there is not below the upper value and
+the program already falls back to the lower value.
+
+This project keeps the midpoint only when it lies from the lower value up to,
+but not including, the upper value, and otherwise uses the lower value. For the
+input above, the tree is `x <= -3e+38: a (5)` and `x > -3e+38: b (5)`. The
+change affects only runs that crashed. Every midpoint that is a valid cut is
+the same as before. The `float-overflow-cut` fixture records this project's
+output for a tree and for rules, because Release 2.07 has none, and the
+library and Python tests train on the same values with text and dense input.
+
+Soft thresholds (`-p`) compute the same midpoint to place the lower and upper
+bounds of a cut. When the `float` sum of the two values around the cut
+overflows, in either direction, Release 2.07 writes `inf` or `-inf` for the
+midpoint and for a bound. For two cases at `3e38` and `2e38`, `c5.0 -p` then
+classifies every training case above the cut by the lower branch and reports
+5 errors in 10 cases, and the classifier file holds `mid="inf" high="inf"`.
+This project halves each value before it adds them when the sum is not finite,
+so the midpoint and both bounds are finite and the same case set has no
+errors. A sum that is finite gives the midpoint of Release 2.07 unchanged. The
+change alters the classifier only for training values whose `float` sum
+overflows, and it is deliberate: this project's model parser rejects a
+nonfinite property, so a model with such bounds could not be loaded or used
+for prediction. The `float-overflow-bounds` fixture records this project's
+output.
+
+## Evaluation percentages above 21 million cases
+
+`c5.0` prints a percentage beside each error count and attribute usage in its
+evaluation report. Release 2.07 computes each from 100 times a case count in
+`int`, which overflows above 21,474,836 cases. The overflow is undefined
+behavior. A build with `-fsanitize=undefined` stops at the first product, and
+an optimized build prints wrapped values. With 21,500,000
+training cases that all use an attribute, Release 2.07 prints `-99%` for its
+usage. With 22,000,000 test cases that the tree misclassifies, it prints
+`(-95.2%)` for the error rate. From 42,949,673 cases the wrapped product is
+positive again, so 44,000,000 errors print a plausible but wrong percentage.
+The counts printed beside the percentages are correct.
+
+This project forms the product in 64 bits, so `c5.0` prints `100%` and
+`(100.0%)` for those runs. The division and its rounding are those of Release
+2.07, and the output below the limit is byte-identical. The utility bands of
+`-u` take `SNRules * u` in `int`, which overflows for about 215,000 rules,
+and `report` takes the line counts of its `Expecting` messages in `int`. This
+project widens both. The library and the Python bindings do not print these
+lines and are not affected. The `report-percent-large` target runs the
+two cases above, and it is not part of the default tests.
+
 ## Class count
 
 The number of classes is not limited, as in C5.0 Release 2.07. The

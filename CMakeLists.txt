@@ -418,6 +418,10 @@ if(BUILD_TESTING)
     target_link_libraries(c50_tree_depth PRIVATE C50::cpp)
     list(APPEND C50_COMPILE_TARGETS c50_tree_depth)
     list(APPEND C50_EXECUTABLE_TARGETS c50_tree_depth)
+    add_executable(c50_threshold_limits tests/threshold_limits.cpp)
+    target_link_libraries(c50_threshold_limits PRIVATE C50::cpp)
+    list(APPEND C50_COMPILE_TARGETS c50_threshold_limits)
+    list(APPEND C50_EXECUTABLE_TARGETS c50_threshold_limits)
     add_executable(c50_model_inspection tests/model_inspection.cpp)
     target_link_libraries(c50_model_inspection PRIVATE C50::cpp)
     list(APPEND C50_COMPILE_TARGETS c50_model_inspection)
@@ -599,6 +603,22 @@ if(UNIX)
     add_custom_target(
         line-count-large
         COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/slow/line_count.sh"
+                $<TARGET_FILE:c50_cli>
+        DEPENDS c50_cli
+        USES_TERMINAL
+        VERBATIM
+    )
+endif()
+
+# The percentages of the evaluation report take 100 times a case count, which
+# passes INT_MAX above 21,474,836 cases. The test runs `c5.0` on 21,500,000
+# training cases and 22,000,000 test cases. It is not part of the default
+# tests. Run it explicitly with
+# `cmake --build build --target report-percent-large`.
+if(UNIX)
+    add_custom_target(
+        report-percent-large
+        COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tests/slow/report_percent.sh"
                 $<TARGET_FILE:c50_cli>
         DEPENDS c50_cli
         USES_TERMINAL
@@ -863,6 +883,7 @@ if(BUILD_TESTING)
     add_test(NAME parser-validation COMMAND c50_parser_validation)
     add_test(NAME attribute-lists COMMAND c50_attribute_lists)
     add_test(NAME implicit-result-types COMMAND c50_implicit_result_types)
+    add_test(NAME threshold-limits COMMAND c50_threshold_limits)
     add_test(NAME tree-depth COMMAND c50_tree_depth)
     set_tests_properties(tree-depth PROPERTIES TIMEOUT 120)
     set_tests_properties(parser-validation PROPERTIES TIMEOUT 120)

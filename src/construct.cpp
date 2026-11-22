@@ -556,7 +556,7 @@ void EvaluateSingle(c50_context *Context, int Flags)
 
 	ForEach(u, 1, Context->options.utility_bands-1)
 	{
-	    Context->evaluation.utility_bands[u] = rint((double) (Context->rules.sets[0]->SNRules * u / (float) Context->options.utility_bands));
+	    Context->evaluation.utility_bands[u] = rint(UtilityBandCut(Context->rules.sets[0]->SNRules, u, Context->options.utility_bands));
 	}
     }
 	    
@@ -623,7 +623,7 @@ void EvaluateSingle(c50_context *Context, int Flags)
     if ( Context->options.rules )
     {
 	c50_diagnostic_printf(Context->io.output, "  %4d %4d(%4.1f%%)",
-	       Context->rules.sets[0]->SNRules, Errs, 100 * Errs / Tests);
+	       Context->rules.sets[0]->SNRules, Errs, CountPercent(Errs, Tests));
     }
     else
     {
@@ -632,13 +632,13 @@ void EvaluateSingle(c50_context *Context, int Flags)
 	Verbosity(1,
 	{
 	    c50_diagnostic_printf(Context->io.output, "  %4d %4d(%4.1f%%)  ",
-		   TreeSize(Context->trees.raw[0]), RawErrs, 100 * RawErrs / Tests);
+		   TreeSize(Context->trees.raw[0]), RawErrs, CountPercent(RawErrs, Tests));
 	})
 
 	/*  Results for pruned tree  */
 
 	c50_diagnostic_printf(Context->io.output, "  %4d %4d(%4.1f%%)",
-	       TreeSize(Context->trees.pruned[0]), Errs, 100 * Errs / Tests);
+	       TreeSize(Context->trees.pruned[0]), Errs, CountPercent(Errs, Tests));
     }
 
     if ( Context->costs.matrix )
@@ -674,7 +674,7 @@ void EvaluateSingle(c50_context *Context, int Flags)
 	    {
 		c50_diagnostic_printf(Context->io.output, "\t%s%d\t %4d(%4.1f%%)",
 			    ( Context->evaluation.utility_bands[u] == 1 ? "" : "1-" ), Context->evaluation.utility_bands[u],
-			    Context->evaluation.utility_errors[u], 100 * Context->evaluation.utility_errors[u] / Tests);
+			    Context->evaluation.utility_errors[u], CountPercent(Context->evaluation.utility_errors[u], Tests));
 		if ( Context->costs.matrix )
 		{
 		    c50_diagnostic_printf(Context->io.output, "%7.2f", Context->evaluation.utility_costs[u] / Tests);
@@ -796,12 +796,12 @@ void EvaluateBoost(c50_context *Context, int Flags)
 	if ( Context->options.rules )
 	{
 	    c50_diagnostic_printf(Context->io.output, "  %4d %4d(%4.1f%%)",
-		   Context->rules.sets[t]->SNRules, Errs[t], 100 * Errs[t] / Tests);
+		   Context->rules.sets[t]->SNRules, Errs[t], CountPercent(Errs[t], Tests));
 	}
 	else
 	{
 	    c50_diagnostic_printf(Context->io.output, "  %4d %4d(%4.1f%%)",
-		   TreeSize(Context->trees.pruned[t]), Errs[t], 100 * Errs[t] / Tests);
+		   TreeSize(Context->trees.pruned[t]), Errs[t], CountPercent(Errs[t], Tests));
 	}
 
 	if ( Context->costs.matrix )
@@ -817,12 +817,12 @@ void EvaluateBoost(c50_context *Context, int Flags)
     if ( Context->options.rules )
     {
 	c50_diagnostic_printf(Context->io.output, F_Boost "\t  %9d(%4.1f%%)",
-	    BoostErrs, 100 * BoostErrs / Tests);
+	    BoostErrs, CountPercent(BoostErrs, Tests));
     }
     else
     {
 	c50_diagnostic_printf(Context->io.output, F_Boost "\t       %4d(%4.1f%%)",
-		BoostErrs, 100 * BoostErrs / Tests);
+		BoostErrs, CountPercent(BoostErrs, Tests));
     }
 
     if ( Context->costs.matrix )

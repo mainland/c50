@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
 
     if ( ! std::getline(std::cin, Line) )
     {
-	fprintf(stderr, "Expecting %d lines\n", Folds * Repeats);
+	fprintf(stderr, "Expecting %lld lines\n", (long long) Folds * Repeats);
 	return 1;
     }
 
@@ -189,7 +189,7 @@ int main(int argc, char *argv[])
 	{
 	    if ( r + f != 0 && ! std::getline(std::cin, Line) )
 	    {
-		printf("\nExpecting %d lines\n", Folds * Repeats);
+		printf("\nExpecting %lld lines\n", (long long) Folds * Repeats);
 		return 1;
 	    }
 
@@ -231,7 +231,7 @@ int main(int argc, char *argv[])
 
     if ( std::getline(std::cin, Line) )
     {
-	printf("\nExpecting %d lines\n", Folds * Repeats * 2);
+	printf("\nExpecting %lld lines\n", (long long) Folds * Repeats * 2);
 	return 1;
     }
 

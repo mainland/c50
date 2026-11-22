@@ -908,6 +908,17 @@ run_case winnow-case-weight-costs winnow tree --with-costs -w
 run_case costs-pruning tree tree --with-costs -c 5
 run_case costs-pruning rules rules --with-costs -c 5 -r
 run_case winnow-costs-pruning winnow tree --with-costs -w -c 5
+# Two values whose float sum overflows. The cut is the lower value. Release 2.07
+# chooses an infinite cut and crashes, so the expected files come from this
+# project.
+run_case float-overflow-cut tree tree
+run_case float-overflow-cut rules rules -r
+run_case float-overflow-cut soft-thresholds tree -p
+# The soft bounds of two large positive values. Release 2.07 sums them in
+# float, which overflows, and writes an infinite midpoint and upper bound that
+# misclassify every case above the cut. The expected files come from this
+# project.
+run_case float-overflow-bounds soft-thresholds tree -p
 run_case implicit implicit tree
 run_case implicit-unknown tree tree
 run_case implicit-literals tree tree

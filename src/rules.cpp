@@ -38,6 +38,7 @@
 #include "defns.i"
 #include "extern.i"
 #include "c50_api_internal.h"
+#include <algorithm>
 #include <memory>
 
 namespace c50::core {
@@ -274,51 +275,15 @@ void Uncompress(Byte *CL, int *UCL)
 void ListSort(int *L, int Fp, int Lp)
 /*   --------  */
 {
-    int		i, High, Middle, Thresh, Temp;
+    /*  The list holds case numbers, so equal elements are
+	indistinguishable and every correct sort gives the same list.
+	The partition sort of Release 2.07 takes the middle element as
+	pivot, and recurses once per element on lists that are ascending
+	followed by descending, which overflows the stack  */
 
     if ( Fp < Lp )
     {
-	Thresh = L[(Fp+Lp) / 2];
-
-	/*  Divide cases into three groups:
-		Fp .. Middle-1: values < Thresh
-		Middle .. High: values = Thresh
-		High+1 .. Lp:   values > Thresh  */
-
-	for ( Middle = Fp ; L[Middle] < Thresh ; Middle++ )
-	    ;
-
-	for ( High = Lp ; L[High] > Thresh ; High-- )
-	    ;
-
-	for ( i = Middle ; i <= High ; )
-	{
-	    if ( L[i] < Thresh )
-	    {
-		Temp = L[Middle];
-		L[Middle] = L[i];
-		L[i] = Temp;
-		Middle++;
-		i++;
-	    }
-	    else
-	    if ( L[i] > Thresh )
-	    {
-		Temp = L[High];
-		L[High] = L[i];
-		L[i] = Temp;
-		High--;
-	    }
-	    else
-	    {
-		i++;
-	    }
-	}
-
-	/*  Sort the first and third groups  */
-
-	ListSort(L, Fp, Middle-1);
-	ListSort(L, High+1, Lp);
+	std::sort(L + Fp, L + Lp + 1);
     }
 }
 
