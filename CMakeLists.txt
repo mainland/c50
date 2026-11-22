@@ -81,8 +81,18 @@ endif()
 # MSVC deprecates standard C functions such as fopen and sscanf in favor of
 # its bounds-checked extensions, and POSIX names such as strdup in favor of
 # underscored ones. The sources use the standard and POSIX names.
+#
+# Since Visual Studio 17.10, the Microsoft STL constructs std::mutex with a
+# constexpr constructor. Microsoft supports only a msvcp140.dll at least as new
+# as the toolset, and one before 14.38 dereferences a null pointer at the first
+# lock. The Windows wheels do not bundle the runtime, so the system copy may be
+# older. _DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR, the documented escape hatch,
+# restores the run-time constructor that older runtimes support. Define it for
+# the targets of this build only, not as a usage requirement.
 if(MSVC)
-    add_compile_definitions(_CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_WARNINGS)
+    add_compile_definitions(
+        _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_WARNINGS
+        _DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR)
 endif()
 
 include(CTest)

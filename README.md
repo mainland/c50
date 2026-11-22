@@ -91,8 +91,10 @@ published. Releases include wheels for Linux x86-64 and ARM64, macOS arm64 and
 x86-64, and Windows x86-64. The Windows wheels require the latest supported
 [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
 (x64). The wheels do not include it. Without it, `import c50` fails with
-`ImportError` (`DLL load failed`). To build and install from a source checkout
-instead, run this from the repository root:
+`ImportError` (`DLL load failed`). An older Microsoft Visual C++ runtime,
+including an older `msvcp140.dll` that another program loads into the process
+first, is unsupported. To build and install from a source checkout instead,
+run this from the repository root:
 
 ```sh
 python -m pip install .

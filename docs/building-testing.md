@@ -444,6 +444,8 @@ uvx cibuildwheel --only cp312-manylinux_x86_64 dist/c50-*.tar.gz
 musllinux, free-threaded CPython, and prerelease CPython versions are not
 built.
 
+(windows-runtime)=
+
 The Windows wheels require the latest supported Visual C++ Redistributable
 (x64). The extension imports `MSVCP140.dll`, which Python installers do not
 ship, and the wheels do not bundle it. `[tool.cibuildwheel.windows]` sets an
@@ -454,6 +456,17 @@ before the first import. Without it, `import c50` fails with `ImportError`. The
 extension also imports `VCRUNTIME140.dll` and `VCRUNTIME140_1.dll`, which
 CPython for Windows ships next to `python.exe`, and the Universal C Runtime,
 which is part of Windows 10 and later.
+
+An older Visual C++ runtime is unsupported, including an older `msvcp140.dll`
+that another program loads into the process before `c50` does. Since Visual
+Studio 17.10, the Microsoft STL constructs `std::mutex` with a `constexpr`
+constructor, and an `msvcp140.dll` older than the toolset that built the
+extension can then dereference a null pointer at the first lock. The build
+defines `_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR` for MSVC, which Microsoft
+documents as an escape hatch, so that the extension imports
+`_Mtx_init_in_situ` and constructs mutexes at run time. The
+`windows-clean-import` job checks that import. The macro does not make an
+older runtime a supported configuration.
 
 GitHub's Windows runners have the Visual C++ Redistributable, so the wheel
 tests cannot detect a missing runtime DLL. The `windows-clean-import` job
@@ -471,9 +484,11 @@ installer from `https://aka.ms/vc14/vc_redist.x64.exe`. The script then:
    Framework's private `msvcp140_clr0400.dll`, which Server Core includes, does
    not count, because no import of `msvcp140.dll` resolves to it.
 2. Runs `tests/windows_clean_import.py wheel`, which fails if the wheel
-   archive holds a Microsoft runtime DLL, such as `msvcp140*.dll`.
-   `tests/python/test_windows_wheel_runtime.py` runs this archive check on any
-   platform.
+   archive holds a Microsoft runtime DLL, such as `msvcp140*.dll`. It also
+   fails if an extension module does not import `_Mtx_init_in_situ` from
+   `MSVCP140.dll`, which shows that the module constructs its mutexes at run
+   time. `tests/python/test_windows_wheel_runtime.py` runs both checks on any
+   platform, with a minimal PE image that it builds.
 3. Unpacks the wheel into a directory that it adds to the interpreter's
    `._pth` file. A wheel has no runtime dependencies, so unpacking installs it.
 4. Runs `tests/windows_clean_import.py absent`, which requires that

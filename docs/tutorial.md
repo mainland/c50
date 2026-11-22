@@ -11,6 +11,10 @@ Install the estimator, pandas, and scikit-learn:
 python -m pip install 'c50[sklearn]' pandas
 ```
 
+On Windows, the wheels require the latest supported Microsoft Visual C++
+Redistributable (x64) and do not include it. An older runtime is unsupported.
+See {ref}`the Windows runtime requirement <windows-runtime>`.
+
 The examples download their data from [OpenML](https://www.openml.org) with
 scikit-learn's `fetch_openml`, which verifies each file's checksum and caches
 it under `~/scikit_learn_data`. Only the first run needs network access. Run
