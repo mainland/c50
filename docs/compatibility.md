@@ -190,6 +190,21 @@ make extreme or malformed definitions reject instead of exhausting resources or
 invoking undefined behavior. Accepted definitions within these limits retain
 their existing evaluation behavior.
 
+A definition whose value is a string is rejected with the diagnostic
+for a bad definition, `value must be a number or a logical value`. Such a
+definition is a literal such as `x := "abc".`, or the name of a discrete
+attribute, including an ordered attribute, a `discrete N` attribute, and a
+Boolean attribute that another definition defines. A string has no case value,
+so the imported implementation read the low 32 bits of the address of the
+value's name as a `float`. The learner split on those bits, so the
+classifier differed between runs and between contexts, predictions did not
+match the training cases, and training sometimes failed or crashed. The
+library throws `error_code::parse_error` (`ValueError` in Python) and `c5.0`
+exits 1. Comparisons that yield a logical value, aliases of continuous, date,
+and time attributes, and numeric formulas are unchanged. The only definition
+that Release 2.07 handles meaningfully and this project now rejects is one
+that stays inert: a literal, or an alias that `attributes excluded:` lists.
+
 The evaluator's operand stack grows with the definition, so every definition
 within the nesting limit evaluates, including definitions that leave several
 operands pending at each level, such as `1 + 1 * 1 ^ (` repeated. Release 2.07
