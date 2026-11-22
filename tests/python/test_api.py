@@ -893,3 +893,11 @@ def test_dense_functions_read_arrays_of_any_layout_and_byte_order() -> None:
         assert without_date(model.serialized_data) == without_date(
             masked.serialized_data
         )
+
+
+def test_count_index_rejects_a_missing_name() -> None:
+    from c50 import _c50
+
+    with pytest.raises(TypeError):
+        _c50._count_index(1.5, None)  # type: ignore[arg-type]
+    assert _c50._count_index(3, "limit") == 3

@@ -197,14 +197,14 @@ py::object count_index(const py::handle &source, count_problem &problem)
 
 // The TypeError for an unsuitable count argument.
 [[noreturn]] void reject_count(
-    const py::handle &source, const char *field, count_problem problem)
+    const py::handle &source, const std::string &field, count_problem problem)
 {
     if ( problem == count_problem::boolean )
     {
-        throw py::type_error(std::string(field) + " must not be a bool");
+        throw py::type_error(field + " must not be a bool");
     }
     throw py::type_error(
-        std::string(field) + " must be an integer, not " +
+        field + " must be an integer, not " +
         std::string(py::str(py::type::of(source).attr("__name__"))));
 }
 
@@ -1370,7 +1370,7 @@ GIL while training, loading, or predicting.
 
     module.def(
         "_count_index",
-        [](const py::object &value, const char *name) {
+        [](const py::object &value, const std::string &name) {
             count_problem problem;
             py::object number = count_index(value, problem);
             if ( !number )
