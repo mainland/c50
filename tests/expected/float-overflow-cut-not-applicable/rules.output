@@ -1,0 +1,40 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `float-overflow-cut-not-applicable'
+	Rule-based classifiers
+
+Read 7 cases (1 attributes) from float-overflow-cut-not-applicable.data
+
+Rules:
+
+Rule 1: (2, lift 1.8)
+	x = N/A
+	->  class b  [0.750]
+
+Default class: a
+
+
+Evaluation on training data (7 cases):
+
+	        Rules
+	  ----------------
+	    No      Errors
+
+	     1    1(14.3%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     4          (a): class a
+	     1     2    (b): class b
+
+
+	Attribute usage:
+
+	     29%  x
+
+
+Time: <elapsed> secs

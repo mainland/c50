@@ -201,13 +201,18 @@ void EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace, SplitRes
 	/*  Set threshold, making sure that rounding problems do not
 	    cause it to reach upper value  */
 
-	/*  The float sum of two large values of the same sign can overflow,
-	    which makes the threshold infinite.  Only a threshold from the
-	    lower value up to, but not including, the upper value is kept  */
+	/*  A threshold at or above the upper value falls back to the lower
+	    value, as in Release 2.07.  The float sum of two large negative
+	    values can also overflow, which makes the threshold -inf.  Release
+	    2.07 completes in that case only when the node has not-applicable
+	    cases for the attribute, which stay out of the branch for larger
+	    values, and this project keeps its threshold then.  Without them
+	    every case goes above the threshold and growth repeats on the same
+	    cases until the stack overflows, so use the lower value  */
 
 	Result.Threshold = (ContValue) (0.5 * (Workspace.LowVal + Workspace.HighVal));
-	if ( ! ( Result.Threshold >= Workspace.LowVal &&
-		 Result.Threshold < Workspace.HighVal ) )
+	if ( Result.Threshold >= Workspace.HighVal ||
+	     ( Result.Threshold < Workspace.LowVal && ! ( Workspace.ValFreq[1] > 0 ) ) )
 	{
 	    Result.Threshold = Workspace.LowVal;
 	}

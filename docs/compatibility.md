@@ -572,21 +572,41 @@ this project's output, because Release 2.07 has none.
 A continuous cut lies halfway between two neighboring attribute values. Release
 2.07 computes the midpoint from the `float` sum of the two values. When both
 values are large and negative, for example `-3e38` and `-2e38`, the sum
-overflows to `-inf` and so does the cut. Every case then goes to the branch for
-values above the cut, tree growth sees the same cases again, and the program
-recurses until the stack overflows. Release 2.07 dies from a segmentation fault
-on such input, with trees and with rules, and so does an earlier build of this
-project. The values are finite and valid. The positive side is safe, because
-the cut that results from an overflow there is not below the upper value and
-the program already falls back to the lower value.
+overflows to `-inf` and so does the cut. Release 2.07 then writes the cut as
+the lowest training value, `-3e+38`, but it computes the leaf counts as if the
+cut were `-inf`, so the `<=` branch is empty and holds no cases. Where the
+cases go next depends on the not-applicable cases of the node.
 
-This project keeps the midpoint only when it lies from the lower value up to,
-but not including, the upper value, and otherwise uses the lower value. For the
-input above, the tree is `x <= -3e+38: a (5)` and `x > -3e+38: b (5)`. The
-change affects only runs that crashed. Every midpoint that is a valid cut is
-the same as before. The `float-overflow-cut` fixture records this project's
-output for a tree and for rules, because Release 2.07 has none, and the
-library and Python tests train on the same values with text and dense input.
+- When the node has not-applicable cases for the attribute, they stay out of
+  the `>` branch, so that branch holds fewer cases than the node and growth
+  ends. Release 2.07 completes with the empty `<=` branch, which takes the
+  class of its parent. This project reproduces that tree, its leaf counts, and
+  its probabilities. The cases `-3e38` and `-3e38` of class `a`, `-2e38` of
+  class `b`, `0` and `0` of class `a`, and two `N/A` cases of class `b` give
+  `x <= -3e+38: a (0)`, `x = N/A: b (2)`, and `x > -3e+38: a (5/1)`. With soft
+  thresholds (`-p`), Release 2.07 crashes on this input. The
+  `float-overflow-cut-not-applicable` fixture records the output of Release
+  2.07 for a tree, rules, and boosting.
+- Otherwise every case goes to the `>` branch, tree growth sees the same cases
+  again, and the program recurses until the stack overflows. Release 2.07 dies
+  from a segmentation fault on such input, with trees and with rules, and so
+  does an earlier build of this project. The values are finite and valid.
+
+The positive side is safe, because the cut that results from an overflow there
+is not below the upper value and the program already falls back to the lower
+value.
+
+This project falls back to the lower value for a midpoint that is not below the
+upper value, as Release 2.07 does. It falls back for a midpoint below the lower
+value only when the node has no not-applicable cases for the attribute. When
+the node has them, this project keeps the overflowed cut that Release 2.07
+keeps. For five cases at `-3e38` of class `a` and five at `-2e38` of class `b`,
+the tree is `x <= -3e+38: a (5)` and `x > -3e+38: b (5)`. Only runs that
+crashed change. Every midpoint that is a valid cut, and every overflowed cut
+that Release 2.07 completes with, is the same as before. The
+`float-overflow-cut` fixture records this project's output for a tree and for
+rules, because Release 2.07 has none, and the library and Python tests train on
+the same values with text and dense input.
 
 Soft thresholds (`-p`) compute the same midpoint to place the lower and upper
 bounds of a cut. When the `float` sum of the two values around the cut

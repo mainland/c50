@@ -914,6 +914,14 @@ run_case winnow-costs-pruning winnow tree --with-costs -w -c 5
 run_case float-overflow-cut tree tree
 run_case float-overflow-cut rules rules -r
 run_case float-overflow-cut soft-thresholds tree -p
+# The same overflow when the node has not-applicable cases. Release 2.07
+# completes with an empty branch for the lowest value, because the cut it
+# writes, the lowest value, differs from the infinite cut that it counted
+# with. This project reproduces that tree, and the expected files come from
+# Release 2.07.
+run_case float-overflow-cut-not-applicable tree tree
+run_case float-overflow-cut-not-applicable rules rules -r
+run_case float-overflow-cut-not-applicable boost tree -b
 # The soft bounds of two large positive values. Release 2.07 sums them in
 # float, which overflows, and writes an infinite midpoint and upper bound that
 # misclassify every case above the cut. The expected files come from this
