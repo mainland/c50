@@ -6,13 +6,16 @@
 # with it. The wheel must bundle no Microsoft runtime DLL, and on a system
 # without the redistributable it must fail to import. After the script installs
 # the redistributable, the wheel must import, use the system msvcp140.dll,
-# and train. Run it in a Windows Server Core container with these directories
+# and train. Last, an msvcp140.dll older than 14.38, which the wheel's mutexes
+# must tolerate, is planted in three ways and the wheel must lock a mutex in
+# each. Run it in a Windows Server Core container with these directories
 # mounted:
 #
 #   C:\wheelhouse  holds the wheels, read-only.
 #   C:\embed       holds an unpacked embeddable CPython, read-only.
 #   C:\tests       holds this script and windows_clean_import.py, read-only.
 #   C:\vcredist    holds vc_redist.x64.exe, read-only.
+#   C:\stale       holds an msvcp140.dll older than 14.38, read-only.
 #
 # Usage: windows_clean_import.ps1 -Tag cp312
 
@@ -89,6 +92,28 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not unpack the wheel.' }
 & $exe 'C:\tests\windows_clean_import.py' absent
 if ($LASTEXITCODE -ne 0) { throw "The import check failed with status $LASTEXITCODE." }
 
+# Plant an old msvcp140.dll next to python.exe, where the loader finds it
+# before System32. Run each case in its own process, and collect the failures
+# so that one case does not hide the others.
+$stale = 'C:\stale\msvcp140.dll'
+if (-not (Test-Path -LiteralPath $stale)) {
+    throw "The old runtime $stale is missing."
+}
+$planted = Join-Path $python 'msvcp140.dll'
+$failures = @()
+function Invoke-StaleCase {
+    param([string]$Case, [string]$Dll)
+    & $exe 'C:\tests\windows_clean_import.py' stale $Case $Dll
+    if ($LASTEXITCODE -ne 0) {
+        $script:failures += "$Case (status $LASTEXITCODE)"
+    }
+}
+
+# An old runtime where the system has no other: the old copy is all there is.
+Copy-Item -LiteralPath $stale -Destination $planted
+Invoke-StaleCase 'system' $planted
+Remove-Item -LiteralPath $planted
+
 # Install the redistributable only if Microsoft signed the installer.
 $installer = 'C:\vcredist\vc_redist.x64.exe'
 $signature = Get-AuthenticodeSignature -LiteralPath $installer
@@ -115,3 +140,14 @@ if (-not (Test-Path -LiteralPath $systemRuntime)) {
 # and trains.
 & $exe 'C:\tests\windows_clean_import.py' present
 if ($LASTEXITCODE -ne 0) { throw "The import test failed with status $LASTEXITCODE." }
+
+# The other two cases need the current runtime in System32, which the old copy
+# must displace. A stale conda environment keeps its copy next to python.exe,
+# and another package may load an old copy before c50 does.
+Copy-Item -LiteralPath $stale -Destination $planted
+Invoke-StaleCase 'conda' $planted
+Remove-Item -LiteralPath $planted
+Invoke-StaleCase 'preloaded' $stale
+if ($failures.Count -gt 0) {
+    throw "The stale runtime check failed for: $($failures -join ', ')."
+}

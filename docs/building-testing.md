@@ -26,7 +26,7 @@ their current results.
 | Python 3.11 | joblib 1.3.0, NumPy 1.26.4, pandas 2.2.3, scikit-learn 1.6.1 | `validation.yml`, `python-and-docs` | Python tests, mypy, stubtest, and the benchmark smoke test |
 | Python 3.11 through 3.14 | Latest releases | `validation.yml`, `python-and-docs` | As for the minimum versions. Python 3.12 also runs the tutorial test and builds the documentation. |
 | Wheels for CPython 3.11 through 3.14 | Linux x86-64 and ARM64, macOS arm64 and x86-64, Windows AMD64 | `wheels.yml`, `wheels` | Build from the source distribution and test each wheel |
-| Windows AMD64 wheels for CPython 3.11 through 3.14 | `windows-2022` runner, `servercore:ltsc2022` container with process isolation, embeddable CPython | `wheels.yml`, `windows-clean-import` | Check that each wheel bundles no runtime DLL and fails to import in a container without the Visual C++ Redistributable, then install the redistributable and import, train, and predict with a tree and a ruleset |
+| Windows AMD64 wheels for CPython 3.11 through 3.14 | `windows-2022` runner, `servercore:ltsc2022` container with process isolation, embeddable CPython | `wheels.yml`, `windows-clean-import` | Check that each wheel bundles no runtime DLL and fails to import in a container without the Visual C++ Redistributable, then install the redistributable and import, train, and predict with a tree and a ruleset. Also lock a mutex in a process that uses a planted `msvcp140.dll` older than 14.38 |
 
 Free-threaded Python, GPU arrays, and other compiler or platform combinations
 are not tested. Seven tests run only on Linux. `in-memory-without-files`,
@@ -476,7 +476,12 @@ in a `mcr.microsoft.com/windows/servercore:ltsc2022` container started with
 `--isolation=process`, with the wheelhouse, the tests, an embeddable CPython
 from python.org, and `vc_redist.x64.exe` mounted read-only. The job checks the
 downloaded embeddable package against a pinned SHA-256 digest and downloads the
-installer from `https://aka.ms/vc14/vc_redist.x64.exe`. The script then:
+installer from `https://aka.ms/vc14/vc_redist.x64.exe`. It also mounts an
+`msvcp140.dll` older than 14.38, which the job takes from the conda-forge
+package `vc14_runtime` 14.36.32532 (build `hdcecf7f_17`). The job checks the
+package and the DLL against pinned SHA-256 digests and unpacks the package on
+the runner with `zstd`. The repository holds no Microsoft binary. The script
+then:
 
 1. Fails if `System32`, `SysWOW64`, or a `PATH` directory holds a C++ library
    of the Visual C++ Redistributable, such as `msvcp140.dll`, `msvcp140_1.dll`,
@@ -493,13 +498,44 @@ installer from `https://aka.ms/vc14/vc_redist.x64.exe`. The script then:
    `._pth` file. A wheel has no runtime dependencies, so unpacking installs it.
 4. Runs `tests/windows_clean_import.py absent`, which requires that
    `import c50` fails with `ImportError`.
-5. Verifies that the installer has a valid Authenticode signature from
+5. Copies the old `msvcp140.dll` next to `python.exe` and runs
+   `tests/windows_clean_import.py stale system DLL`. No other copy exists yet,
+   as on a system with an old redistributable and nothing newer.
+6. Verifies that the installer has a valid Authenticode signature from
    Microsoft Corporation, and installs the redistributable without a user
    interface and without a restart.
-6. Runs `tests/windows_clean_import.py present`, which imports `c50`, requires
+7. Runs `tests/windows_clean_import.py present`, which imports `c50`, requires
    that the process loaded `msvcp140.dll` from `System32`, and trains and
    predicts with a tree and a ruleset from text input. The test does not
    install NumPy, so it does not cover dense input.
+8. Runs the remaining two stale cases. `conda` puts the old copy next to
+   `python.exe` again, as a stale conda environment does, and `preloaded`
+   loads it with `ctypes.WinDLL` before `import c50`, as another package might.
+   The current runtime is now in `System32`, so each case shows that the old
+   copy displaces it.
+
+Each `stale` case runs in a child process of its own. It first requires that
+`msvcp140.dll` in the process is the planted file, so that a pass cannot come
+from the system copy. It then trains 12000 cases and locks the `Predictor`
+mutex with `prepare_predictor().predict_details`, and trains again with
+`split_workers=2`, which starts `std::async` tasks. The multi-worker path runs
+only for a node of at least 10000 cases and two attributes, so the data is that
+large. A case that fails, including one that dies of an access violation (exit
+status `0xC0000005`), is reported by name, and the other cases still run. The
+script fails after the last case.
+
+No hosted run has yet exercised the stale check, so neither its pass nor its
+failure has been observed. The expected failure is inferred from a disassembly
+of `msvcp140.dll` 14.29 and 14.36 and from the STL and pybind11 sources.
+Without `_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR`, each case should crash with an
+access violation during `import c50`, because pybind11 locks a mutex of the
+extension's own while the module initializes. The crash then precedes the check
+of the planted copy and the `Predictor` lock, so the case's output shows no
+`c50 from` line before its failure. The check covers one old runtime,
+14.36.32532, and does not show that every older version works.
+`tests/python/test_windows_wheel_runtime.py` tests the parts that load no DLL
+on any platform: the status interpretation, the check of the loaded path with
+the module list stubbed, and the training data.
 
 The `checksums` job needs the `windows-clean-import` job, so a failure blocks
 the digests that a release uses. The job does not test pip installation,

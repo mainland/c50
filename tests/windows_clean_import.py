@@ -5,7 +5,7 @@
 """Check a Windows wheel against the Visual C++ Redistributable.
 
 `tests/windows_clean_import.ps1` runs this script with an embeddable CPython in
-a container, in three modes. The script needs only the standard library and the
+a container, in four modes. The script needs only the standard library and the
 wheel.
 
 - `wheel WHEEL` checks that the wheel archive holds no Microsoft C++ runtime
@@ -17,16 +17,44 @@ wheel.
 - `present` runs after the installation. It checks that `c50` imports, that the
   process uses the system copy of `msvcp140.dll`, and that a text-input model
   of each kind trains and predicts.
+- `stale CASE DLL` checks that a process that uses the older `msvcp140.dll` at
+  the path DLL can lock a mutex. The case is `system`, `conda`, or
+  `preloaded`, as described below.
+
+An extension built without `_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR` leaves the
+state of each `std::mutex` zero. An `msvcp140.dll` older than 14.38 reads a
+function pointer from that state at the first lock, so the process dies with an
+access violation. Three situations put such a copy in the process, and each is
+a case of the `stale` mode:
+
+- `system` plants the old copy next to `python.exe` before the redistributable
+  is installed, the way a system with an old redistributable supplies it.
+- `conda` plants it next to `python.exe` after the installation, the way a
+  stale conda environment does. The application directory precedes `System32`
+  in the search order.
+- `preloaded` loads the old copy with `ctypes.WinDLL` before `import c50`, the
+  way another package would. The loader reuses a loaded module of the same
+  name.
+
+Each case runs in a child process, so that a crash is a failure of that case
+and the other cases still run. The child checks that the process loaded the
+planted copy, so that a pass cannot come from the system copy. It then locks
+the `Predictor` mutex with `prepare_predictor().predict_details` and runs the
+multi-worker training path with `split_workers=2`, which starts `std::async`
+tasks that construct a mutex and a condition variable.
 """
 
 from __future__ import annotations
 
 import ctypes
 import os
+import random
 import re
 import struct
+import subprocess
 import sys
 import zipfile
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -174,6 +202,119 @@ def loaded_modules() -> dict[str, str]:
     return modules
 
 
+STALE_CASES = ("system", "conda", "preloaded")
+
+# The exit status of a process that dies of an access violation, as the
+# unsigned value of the Windows exit code. A signed status, as PowerShell
+# reports it, is the same value modulo 2**32.
+ACCESS_VIOLATION = 0xC0000005
+
+# The size of the data that `lock_both` trains on. The multi-worker training
+# path runs only for a node with at least 10000 cases and two attributes. See
+# `CanEvaluateQueueInParallel` in `src/formtree.cpp`.
+STALE_ATTRIBUTES = 3
+STALE_TRAINING_CASES = 12000
+
+# Hold the handle of a preloaded runtime, so that the module stays loaded.
+_preloaded: list[ctypes.CDLL] = []
+
+
+def describe_status(status: int) -> str:
+    """Describe the exit status of a child process."""
+    if status & 0xFFFFFFFF == ACCESS_VIOLATION:
+        return (
+            f"access violation ({ACCESS_VIOLATION:#x}), which a mutex built "
+            "by a constexpr constructor causes when it meets an old runtime"
+        )
+    return f"exit status {status}"
+
+
+def check_planted(planted: Path, modules: Mapping[str, str]) -> None:
+    """Require that the process loaded `planted` as its `msvcp140.dll`."""
+    actual = modules.get("msvcp140.dll")
+    assert actual is not None, f"msvcp140.dll is not loaded: {dict(modules)}"
+    loaded = Path(actual).resolve()
+    expected = planted.resolve()
+    assert os.path.normcase(loaded) == os.path.normcase(expected), (
+        f"the process loaded {loaded} and not the planted {expected}, so "
+        "this case does not test an old runtime"
+    )
+
+
+def stale_data() -> tuple[str, str]:
+    """Return a names file and training data with enough cases to train in
+    parallel."""
+    attributes = [f"a{index}" for index in range(STALE_ATTRIBUTES)]
+    names = "low, high.\n" + "".join(f"{a}: continuous.\n" for a in attributes)
+    generator = random.Random(0)
+    rows = []
+    for _ in range(STALE_TRAINING_CASES):
+        values = [generator.randrange(100) for _ in attributes]
+        label = "high" if sum(values) >= 150 else "low"
+        rows.append(", ".join([*map(str, values), label]) + "\n")
+    return names, "".join(rows)
+
+
+def lock_both() -> None:
+    """Take the `Predictor` lock and run the multi-worker training path."""
+    import c50
+
+    names, data = stale_data()
+    model = c50.train(names, data)
+    cases = "10, 10, 10, ?\n90, 90, 90, ?\n"
+    sys.stdout.flush()
+    print("locking the Predictor mutex", flush=True)
+    result = model.prepare_predictor().predict_details(cases)
+    assert result.labels == ["low", "high"], result.labels
+    print("locking the multi-worker training path", flush=True)
+    parallel = c50.train(names, data, split_workers=2)
+    result = parallel.predict_details(cases)
+    assert result.labels == ["low", "high"], result.labels
+
+
+def run_stale_child(
+    case: str,
+    planted: Path,
+    modules: Callable[[], Mapping[str, str]] = loaded_modules,
+) -> None:
+    """Run one case in this process. The caller isolates the process."""
+    if case == "preloaded":
+        _preloaded.append(ctypes.WinDLL(str(planted)))
+    else:
+        directory = Path(sys.executable).resolve().parent
+        assert planted.resolve().parent == directory, (
+            f"{planted} is not next to {sys.executable}"
+        )
+    import c50
+
+    print(f"c50 from {c50.__file__}", flush=True)
+    check_planted(planted, modules())
+    print(f"planted runtime in use: {planted}", flush=True)
+    lock_both()
+
+
+def run_stale_case(
+    case: str,
+    planted: Path,
+    run: Callable[..., subprocess.CompletedProcess[bytes]] = subprocess.run,
+) -> bool:
+    """Run one case in a child process and report whether it passed."""
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "stale-child",
+        case,
+        str(planted),
+    ]
+    print(f"stale runtime case {case}", flush=True)
+    status = run(command, check=False).returncode
+    if status == 0:
+        print(f"case {case}: ok", flush=True)
+        return True
+    print(f"case {case}: FAILED with {describe_status(status)}", flush=True)
+    return False
+
+
 def check_wheel(wheel: Path) -> None:
     """Require a wheel that bundles no Microsoft runtime DLL."""
     bundled = bundled_runtime(wheel)
@@ -233,6 +374,15 @@ def main(argv: list[str]) -> int:
     print(f"python {sys.version}")
     if len(argv) == 2 and argv[0] == "wheel":
         check_wheel(Path(argv[1]))
+    elif len(argv) == 3 and argv[0] in ("stale", "stale-child"):
+        if argv[1] not in STALE_CASES:
+            print(f"unknown case {argv[1]!r}: use one of {STALE_CASES}")
+            return 2
+        planted = Path(argv[2])
+        if argv[0] == "stale-child":
+            run_stale_child(argv[1], planted)
+        elif not run_stale_case(argv[1], planted):
+            return 1
     elif argv == ["absent"]:
         check_absent()
     elif argv == ["present"]:
@@ -243,7 +393,10 @@ def main(argv: list[str]) -> int:
         check_model(c50.ModelKind.TREE)
         check_model(c50.ModelKind.RULES)
     else:
-        print("usage: windows_clean_import.py wheel WHEEL | absent | present")
+        print(
+            "usage: windows_clean_import.py wheel WHEEL | absent | present"
+            " | stale CASE DLL"
+        )
         return 2
     print("ok")
     return 0

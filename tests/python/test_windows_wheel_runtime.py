@@ -5,13 +5,15 @@
 """The Windows wheel check recognizes a bundled Microsoft runtime DLL.
 
 The container job that runs `tests/windows_clean_import.py` needs Windows. This
-test runs the archive check of that script on any platform.
+test runs the archive check of that script on any platform, and the parts of
+its stale-runtime mode that do not load a DLL.
 """
 
 from __future__ import annotations
 
 import importlib.util
 import struct
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -169,3 +171,90 @@ def test_input_that_is_not_a_pe_image_is_an_error() -> None:
         CHECK.pe_imports(b"\x7fELF" + bytes(100))
     with pytest.raises(ValueError, match="malformed"):
         CHECK.pe_imports(b"MZ" + bytes(10))
+
+
+def test_stale_cases_are_the_three_ways_an_old_runtime_arrives() -> None:
+    assert CHECK.STALE_CASES == ("system", "conda", "preloaded")
+
+
+@pytest.mark.parametrize("status", [0xC0000005, -1073741819])
+def test_access_violation_is_named_in_either_signedness(status: int) -> None:
+    assert "access violation" in CHECK.describe_status(status)
+
+
+def test_other_exit_status_is_reported_as_a_number() -> None:
+    assert CHECK.describe_status(1) == "exit status 1"
+
+
+def test_planted_runtime_that_the_process_loaded_passes(
+    tmp_path: Path,
+) -> None:
+    planted = tmp_path / "msvcp140.dll"
+    planted.write_bytes(b"")
+    CHECK.check_planted(planted, {"msvcp140.dll": str(planted)})
+
+
+def test_other_runtime_than_the_planted_one_fails_loudly(
+    tmp_path: Path,
+) -> None:
+    planted = tmp_path / "stale" / "msvcp140.dll"
+    system = tmp_path / "System32" / "msvcp140.dll"
+    for path in (planted, system):
+        path.parent.mkdir()
+        path.write_bytes(b"")
+    with pytest.raises(AssertionError, match="not the planted"):
+        CHECK.check_planted(planted, {"msvcp140.dll": str(system)})
+
+
+def test_missing_runtime_module_fails_loudly(tmp_path: Path) -> None:
+    with pytest.raises(AssertionError, match="not loaded"):
+        CHECK.check_planted(tmp_path / "msvcp140.dll", {"other.dll": "x"})
+
+
+def completed(status: int):
+    def run(
+        command: list[str], **options: object
+    ) -> subprocess.CompletedProcess[bytes]:
+        run.command = command  # type: ignore[attr-defined]
+        return subprocess.CompletedProcess(command, status)
+
+    return run
+
+
+def test_case_that_exits_zero_passes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    run = completed(0)
+    assert CHECK.run_stale_case("conda", tmp_path / "msvcp140.dll", run)
+    assert "case conda: ok" in capsys.readouterr().out
+    assert run.command[-3:-1] == ["stale-child", "conda"]
+
+
+def test_case_that_crashes_is_a_failure_that_names_the_case(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    run = completed(-1073741819)
+    assert not CHECK.run_stale_case("preloaded", tmp_path / "m.dll", run)
+    out = capsys.readouterr().out
+    assert "case preloaded: FAILED" in out
+    assert "access violation" in out
+
+
+def test_main_returns_failure_for_a_failed_case(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(CHECK, "run_stale_case", lambda case, dll: False)
+    assert CHECK.main(["stale", "system", str(tmp_path / "m.dll")]) == 1
+
+
+def test_main_rejects_an_unknown_case(tmp_path: Path) -> None:
+    assert CHECK.main(["stale", "other", str(tmp_path / "m.dll")]) == 2
+
+
+def test_training_data_is_large_enough_to_train_in_parallel() -> None:
+    names, data = CHECK.stale_data()
+    rows = data.splitlines()
+    assert len(rows) >= 10000
+    assert names.count("continuous") >= 2
+    assert {row.rsplit(", ", 1)[1] for row in rows} == {"low", "high"}
+    assert {row.count(",") for row in rows} == {CHECK.STALE_ATTRIBUTES}

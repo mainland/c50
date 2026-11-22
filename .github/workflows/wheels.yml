@@ -87,8 +87,10 @@ jobs:
   # brings its own vcruntime140.dll and vcruntime140_1.dll. The script checks
   # that the wheel holds no runtime DLL, that it fails to import, installs the
   # redistributable from Microsoft after it verifies the installer's signature,
-  # and then imports and trains. The container shares the runner's kernel
-  # (process isolation), and the runner image matches ltsc2022.
+  # and then imports and trains. It also plants a pre-14.38 msvcp140.dll, which
+  # the extension must tolerate when it locks a mutex. The container shares
+  # the runner's kernel (process isolation), and the runner image matches
+  # ltsc2022.
   windows-clean-import:
     needs: wheels
     runs-on: windows-2022
@@ -134,6 +136,47 @@ jobs:
           Invoke-WebRequest -UseBasicParsing `
             -OutFile vcredist\vc_redist.x64.exe `
             https://aka.ms/vc14/vc_redist.x64.exe
+      # An msvcp140.dll older than 14.38 crashes an extension that builds its
+      # mutexes with the constexpr constructor. Take 14.36.32532 from the
+      # conda-forge package vc14_runtime, build hdcecf7f_17 for win-64. The
+      # package and the DLL are pinned by SHA-256. The package digest agrees
+      # with the one that conda-forge's index lists (api.anaconda.org/package/
+      # conda-forge/vc14_runtime/files) and with a download checked on Linux,
+      # which also gave the DLL digest. A .conda package is a ZIP archive that
+      # holds a .tar.zst, and the runner image provides zstd.
+      - name: Fetch an msvcp140.dll older than 14.38
+        env:
+          PACKAGE: vc14_runtime-14.36.32532-hdcecf7f_17.conda
+          PACKAGE_SHA256: b317d49af32d5c031828e62c08d56f01d9a64cd3f40d4cccb052bc38c7a9e62e
+          DLL_SHA256: 74892d9b4028c05debaf0b9b5d9dc6d22f7956fa7d7eee00c681318c26792823
+        run: |
+          Invoke-WebRequest -UseBasicParsing -OutFile $env:PACKAGE `
+            "https://conda.anaconda.org/conda-forge/win-64/$env:PACKAGE"
+          $actual = (Get-FileHash -Algorithm SHA256 $env:PACKAGE).Hash
+          if ($actual -ne $env:PACKAGE_SHA256) {
+            throw "SHA-256 of $env:PACKAGE is $actual, not $env:PACKAGE_SHA256."
+          }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [System.IO.Compression.ZipFile]::ExtractToDirectory(
+            (Join-Path $PWD $env:PACKAGE), (Join-Path $PWD 'conda'))
+          $archive = @(Get-ChildItem conda -Filter 'pkg-*.tar.zst' -File)
+          if ($archive.Count -ne 1) {
+            throw "Expected one pkg-*.tar.zst in $env:PACKAGE."
+          }
+          zstd --decompress --quiet --force $archive[0].FullName -o pkg.tar
+          if ($LASTEXITCODE -ne 0) { throw "zstd exited with status $LASTEXITCODE." }
+          New-Item -ItemType Directory -Path stale | Out-Null
+          # Use the system bsdtar, because the tar of Git for Windows reads
+          # a drive letter as a host name.
+          & "$env:SystemRoot\System32\tar.exe" -xf pkg.tar -C stale msvcp140.dll
+          if ($LASTEXITCODE -ne 0) { throw "tar exited with status $LASTEXITCODE." }
+          $dll = Join-Path stale msvcp140.dll
+          $actual = (Get-FileHash -Algorithm SHA256 $dll).Hash
+          if ($actual -ne $env:DLL_SHA256) {
+            throw "SHA-256 of $dll is $actual, not $env:DLL_SHA256."
+          }
+          $version = (Get-Item $dll).VersionInfo.FileVersion
+          Write-Host "Old runtime: $version"
       - name: Pull the Server Core image
         run: docker pull $env:IMAGE
       - name: Check the wheel in a container without the C++ runtime
@@ -145,6 +188,7 @@ jobs:
             --mount "type=bind,source=$PWD\embed,target=C:\embed,readonly" `
             --mount "type=bind,source=$PWD\tests,target=C:\tests,readonly" `
             --mount "type=bind,source=$PWD\vcredist,target=C:\vcredist,readonly" `
+            --mount "type=bind,source=$PWD\stale,target=C:\stale,readonly" `
             $env:IMAGE powershell -NoProfile -NonInteractive `
             -File C:\tests\windows_clean_import.ps1 -Tag $env:TAG
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
