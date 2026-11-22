@@ -197,13 +197,13 @@ keeps it alive, so native code reads its UTF-8 representation in place after
 the binding releases the GIL.
 
 `train_dense` copies `values` and `not_applicable` before releasing the GIL.
-With `copy=False`, it reads a float64, C-contiguous `values` array and a
-C-contiguous bool `not_applicable` array directly, and the caller must ensure
-that no thread modifies either array until training returns. Other dtypes and
-layouts of `values`, and other layouts of `not_applicable`, are converted into
-a temporary array. A `not_applicable` array must have a bool dtype and the
-shape of `values`. The scikit-learn estimator uses
-`copy=False` for its private encoded matrix.
+With `copy=False`, it reads a float64, C-contiguous, and aligned `values`
+array and a C-contiguous bool `not_applicable` array directly, and the caller
+must ensure that no thread modifies either array until training returns. Other
+dtypes and layouts of `values`, an unaligned `values` array, and other layouts
+of `not_applicable` are converted into a temporary array. A `not_applicable`
+array must have a bool dtype and the shape of `values`. The scikit-learn
+estimator uses `copy=False` for its private encoded matrix.
 
 Python `Model` objects expose immutable classifier data. `Options` remains a
 mutable value object. `train` and `train_dense` copy it when the call begins,
