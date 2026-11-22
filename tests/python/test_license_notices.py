@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -31,8 +32,13 @@ def check(
     tmp_path: Path,
     files: dict[str, str],
     main_files: tuple[str, ...] | None = None,
+    reference_ref: str | None = "main",
 ) -> tuple[int, str]:
-    """Check `files`, as tracked after a `main` branch of `main_files`."""
+    """Check `files`, as tracked after a `main` branch of `main_files`.
+
+    The checker compares its tables with `reference_ref`, as it does with the
+    ref in `C50_REFERENCE_REF`. None leaves the variable unset.
+    """
     subprocess.run(
         ["git", "init", "-q", "-b", "main", str(tmp_path)], check=True
     )
@@ -48,12 +54,20 @@ def check(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    environment = {
+        name: value
+        for name, value in os.environ.items()
+        if name != "C50_REFERENCE_REF"
+    }
+    if reference_ref is not None:
+        environment["C50_REFERENCE_REF"] = reference_ref
     result = subprocess.run(
         [sys.executable, "-I", str(CHECKER)],
         cwd=tmp_path,
         capture_output=True,
         text=True,
         check=False,
+        env=environment,
     )
     return result.returncode, result.stderr
 
@@ -131,6 +145,19 @@ def test_table_rejects_a_source_without_an_entry(tmp_path: Path) -> None:
     )
     assert status == 1
     assert "unlisted.c of main has no entry for src/unlisted.cpp" in message
+
+
+def test_table_ignores_a_branch_named_main(tmp_path: Path) -> None:
+    # Moving `main` must not change the result. Without the variable, the check
+    # compares against the import commit, which this repository lacks.
+    status, message = check(
+        tmp_path,
+        {"src/renamed.cpp": SPDX + "int x;\n"},
+        main_files=("c50.c",),
+        reference_ref=None,
+    )
+    assert status == 0, message
+    assert "no Release 2.07 import commit" in message
 
 
 @pytest.mark.parametrize(

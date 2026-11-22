@@ -8,9 +8,11 @@
 #
 # usage: build_reference.sh [SOURCE_DIR] OUTPUT
 #
-# SOURCE_DIR holds the files of the `main` branch. Without it, the script
+# SOURCE_DIR holds the files of the Release 2.07 import. Without it, the script
 # extracts a ref from the enclosing repository with `git archive`. The ref is
-# C50_REFERENCE_REF if set, else `main`, else `origin/main`.
+# C50_REFERENCE_REF if set, else the import commit
+# f97414a56b432baf4547193a47e6d695e5f5229b. A shallow clone
+# that lacks the commit needs SOURCE_DIR or the variable.
 #
 # C50_REFERENCE_CFLAGS adds compiler flags. `-DVerbOpt` builds the
 # verbose-diagnostics program, `c5.0dbg`.
@@ -39,20 +41,10 @@ if test -z "$source_dir"; then
     script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd)
     mkdir "$work_dir/main"
     top_dir=$(git -C "$script_dir" rev-parse --show-toplevel)
-    ref=${C50_REFERENCE_REF:-}
-    if test -z "$ref"; then
-        for candidate in main origin/main; do
-            if git -C "$top_dir" rev-parse --verify --quiet \
-                "$candidate^{commit}" > /dev/null; then
-                ref=$candidate
-                break
-            fi
-        done
-    fi
-    if test -z "$ref" || ! git -C "$top_dir" rev-parse --verify --quiet \
+    ref=${C50_REFERENCE_REF:-f97414a56b432baf4547193a47e6d695e5f5229b}
+    if ! git -C "$top_dir" rev-parse --verify --quiet \
         "$ref^{commit}" > /dev/null; then
-        printf 'no Release 2.07 ref: %s\n' \
-            "${ref:-neither main nor origin/main exists}" >&2
+        printf 'no Release 2.07 ref: %s\n' "$ref" >&2
         printf 'Set C50_REFERENCE_REF or pass SOURCE_DIR.\n' >&2
         exit 1
     fi

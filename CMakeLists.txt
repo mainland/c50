@@ -559,8 +559,8 @@ if(NOT C50_PRIVATE_CORE)
     )
 endif()
 
-# The comparison with Release 2.07 builds the imported program from the `main`
-# branch and trains generated data, so it is not part of the default tests.
+# The comparison with Release 2.07 builds the imported program from its import
+# commit and trains generated data, so it is not part of the default tests.
 # Run it explicitly with `cmake --build build --target reference-comparison`.
 if(UNIX)
     add_custom_target(

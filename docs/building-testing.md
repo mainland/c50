@@ -17,7 +17,7 @@ their current results.
 | Linux x86-64 | GCC | `sanitizers.yml`, `native` | CTest under ThreadSanitizer |
 | Linux x86-64 | AFL++ `afl-clang-lto` | `sanitizers.yml`, `afl-seed-replay` | Replay of the checked-in fuzz seeds |
 | Linux ARM64 | GCC on `ubuntu-24.04-arm` | `validation.yml`, `native` | Native build, CTest, and installed consumers |
-| Linux x86-64 and ARM64, macOS ARM64 | GCC on `ubuntu-24.04` and `ubuntu-24.04-arm`, AppleClang on `macos-15` | `reference-comparison.yml`, `release-207` | Trees, rules, and console output compared with C5.0 Release 2.07 built from `main`. ARM64 and macOS also build with `-ffp-contract=off`. |
+| Linux x86-64 and ARM64, macOS ARM64 | GCC on `ubuntu-24.04` and `ubuntu-24.04-arm`, AppleClang on `macos-15` | `reference-comparison.yml`, `release-207` | Trees, rules, and console output compared with C5.0 Release 2.07 built from its import commit. ARM64 and macOS also build with `-ffp-contract=off`. |
 | macOS ARM64 | AppleClang on `macos-15` | `validation.yml`, `native` | Native build, CTest, and installed consumers |
 | Linux x86-64 and ARM64, macOS ARM64 | GCC on Linux, AppleClang on macOS | `validation.yml`, `private-core` | Release build and CTest with `C50_PRIVATE_CORE`, the Python packages' core configuration |
 | Linux x86-64 | Clang on `ubuntu-24.04` | `validation.yml`, `private-core-clang` | Release build and CTest with `C50_PRIVATE_CORE` and no interprocedural optimization variable, so that the programs link against Clang's LLVM bitcode core |
@@ -74,12 +74,13 @@ lacks RuleQuest's copyright line or a `Modified` line, and when
 follow code of Release 2.07, lacks RuleQuest's credit. The check looks for the
 copyright line only, not for the permission paragraph under it. It also fails
 when `src/text.i` or `xval`, the imported files that this project did not
-modify, differs from its blob on `main`. The script holds those blob
-identifiers, so a clone without a `main` branch checks them too. When `main` or
-`origin/main` exists, the script also checks that each source file of Release
-2.07 has an entry in its tables and that the entry names a tracked file, so an
-import that is renamed and stripped of its notices fails. The test skips
-outside a Git checkout.
+modify, differs from its blob in the import. The script holds those blob
+identifiers, so a clone without the import commit checks them too. When the
+import commit `f97414a56b432baf4547193a47e6d695e5f5229b` exists locally, or the
+ref in `C50_REFERENCE_REF` when set, the script also checks that each source
+file of Release 2.07 has an entry in its tables and that the entry names a
+tracked file, so an import that is renamed and stripped of its notices fails.
+The test skips outside a Git checkout.
 
 Native CI configures a C++14 project default to verify that each target
 declares its own C++17 requirement. The platform labels follow the
@@ -477,7 +478,7 @@ the estimator, or the dependencies of the `sklearn` extra.
 
 The `reference-comparison` check trains generated data with the library's
 `c5.0` and with C5.0 Release 2.07 and requires identical results. It builds
-the imported program from the `main` branch with the Makefile's flags,
+the imported program from its import commit with the Makefile's flags,
 `gcc -ffloat-store -O3`, without `csh`, and adds `-ffp-contract=off`. That
 flag keeps the reference to x86-64 arithmetic on targets with fused
 multiply-add and changes nothing on x86-64. The check does not run in the
@@ -490,10 +491,11 @@ make reference-comparison
 ```
 
 Run the script directly to compare any `c5.0` program. The optional second
-argument is a directory that holds the files of `main`. Without it, the script
-extracts a ref with `git archive`: `$C50_REFERENCE_REF` if set, else `main`,
-else `origin/main`. A clone that has none of them, such as a shallow clone of
-another branch, fails with a message that asks for the variable or a directory.
+argument is a directory that holds the files of the import. Without it, the
+script extracts a ref with `git archive`: `$C50_REFERENCE_REF` if set, else the
+import commit `f97414a56b432baf4547193a47e6d695e5f5229b`. A clone that lacks the
+commit, such as a shallow clone of another branch, fails with a message that
+asks for the variable or a directory.
 
 ```sh
 tests/reference/run.sh ./c5.0
