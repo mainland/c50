@@ -8,9 +8,9 @@
 # usage: run.sh CANDIDATE [REFERENCE_SOURCE_DIR]
 #
 # CANDIDATE is the library's c5.0 program. REFERENCE_SOURCE_DIR holds the
-# files of the Release 2.07 import. Without it, the script extracts a ref from the
-# repository, as `build_reference.sh` describes. Set C50_COMPARE_JOBS to change
-# the number of parallel cases.
+# files of the Release 2.07 import. Without it, the script extracts a ref from
+# the repository, as `build_reference.sh` describes. Set C50_COMPARE_JOBS to
+# change the number of parallel cases.
 
 set -eu
 

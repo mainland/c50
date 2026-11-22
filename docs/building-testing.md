@@ -524,9 +524,9 @@ make reference-comparison
 Run the script directly to compare any `c5.0` program. The optional second
 argument is a directory that holds the files of the import. Without it, the
 script extracts a ref with `git archive`: `$C50_REFERENCE_REF` if set, else the
-import commit `f97414a56b432baf4547193a47e6d695e5f5229b`. A clone that lacks the
-commit, such as a shallow clone of another branch, fails with a message that
-asks for the variable or a directory.
+import commit `f97414a56b432baf4547193a47e6d695e5f5229b`. A clone that lacks
+the commit, such as a shallow clone of another branch, fails with a message
+that asks for the variable or a directory.
 
 ```sh
 tests/reference/run.sh ./c5.0
