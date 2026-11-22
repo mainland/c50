@@ -18,6 +18,12 @@
 
 using namespace c50::core;
 
+namespace c50::core
+{
+/* Sort L[Fp..Lp] of case numbers, defined in rules.cpp. */
+void ListSort(int *L, int Fp, int Lp);
+}
+
 namespace
 {
 
@@ -372,6 +378,133 @@ void handles_extremes()
     }
 }
 
+/* Reference copy of ListSort from C5.0 Release 2.07 GPL Edition, Copyright
+   2010 Rulequest Research Pty Ltd. Its result defines the list that Compress
+   reads. */
+void rulequest_listsort(int *L, int Fp, int Lp)
+{
+    if ( Fp < Lp )
+    {
+        const int Thresh = L[(Fp + Lp) / 2];
+        int Middle, High;
+
+        for ( Middle = Fp; L[Middle] < Thresh; Middle++ )
+            ;
+        for ( High = Lp; L[High] > Thresh; High-- )
+            ;
+        for ( int i = Middle; i <= High; )
+        {
+            if ( L[i] < Thresh )
+            {
+                std::swap(L[Middle], L[i]);
+                Middle++;
+                i++;
+            }
+            else if ( L[i] > Thresh )
+            {
+                std::swap(L[High], L[i]);
+                High--;
+            }
+            else
+            {
+                i++;
+            }
+        }
+
+        rulequest_listsort(L, Fp, Middle - 1);
+        rulequest_listsort(L, High + 1, Lp);
+    }
+}
+
+/* A list as ListSort receives it: element 0 holds the length. */
+std::vector<int> list_of(const std::vector<int> &elements)
+{
+    std::vector<int> list;
+    list.reserve(elements.size() + 1);
+    list.push_back(static_cast<int>(elements.size()));
+    list.insert(list.end(), elements.begin(), elements.end());
+    return list;
+}
+
+void require_list_order(const std::vector<int> &elements,
+                        const std::string &what)
+{
+    std::vector<int> expected = list_of(elements);
+    std::vector<int> actual = expected;
+    rulequest_listsort(expected.data(), 1, expected[0]);
+    ListSort(actual.data(), 1, actual[0]);
+    require(actual == expected, "ListSort order, " + what);
+}
+
+/* Every list of up to eight elements from three values, which includes
+   equal elements, and large random lists, give the list of Release 2.07. */
+void list_sort_reproduces_rulequest_order()
+{
+    std::size_t combinations = 1;
+    for ( std::size_t length = 0; length <= 8; ++length )
+    {
+        for ( std::size_t encoded = 0; encoded < combinations; ++encoded )
+        {
+            std::size_t remaining = encoded;
+            std::vector<int> elements;
+            for ( std::size_t index = 0; index < length; ++index )
+            {
+                elements.push_back(static_cast<int>(remaining % 3));
+                remaining /= 3;
+            }
+            require_list_order(elements,
+                               context("length", length) + ", " +
+                                   context("encoding", encoded));
+        }
+        combinations *= 3;
+    }
+
+    deterministic_generator generator(UINT64_C(577215));
+    for ( const std::size_t distinct_values : {8U, 1000U, 1000000U} )
+    {
+        std::vector<int> elements;
+        for ( std::size_t index = 0; index < 100000; ++index )
+        {
+            elements.push_back(
+                static_cast<int>(generator.next() % distinct_values));
+        }
+        require_list_order(elements,
+                           context("distinct values", distinct_values));
+    }
+}
+
+/* After a condition is deleted, the list of covered cases holds the promoted
+   cases in ascending order, followed by the original cases in descending
+   order. When the two sets alternate, the middle element is the second
+   largest at every level of the partition sort of Release 2.07, which
+   recurses once per two elements and overflows the stack. */
+void list_sort_handles_ascending_then_descending()
+{
+    constexpr int count = 400000;
+    std::vector<int> elements;
+    elements.reserve(count);
+    for ( int index = 0; index < count / 2; ++index )
+    {
+        elements.push_back(2 * index);
+    }
+    for ( int index = count / 2 - 1; index >= 0; --index )
+    {
+        elements.push_back(2 * index + 1);
+    }
+
+    std::vector<int> list = list_of(elements);
+    ListSort(list.data(), 1, list[0]);
+    require(list[0] == count, "the length is untouched");
+    // The elements are 0 to count - 1, so the sorted list counts upward.
+    require(list[1] == 0 &&
+                std::adjacent_find(list.begin() + 1, list.end(),
+                                   [](int left, int right)
+                                   {
+                                       return right != left + 1;
+                                   }) == list.end(),
+            "the alternating list is sorted");
+}
+
 } // namespace
 
 int main()
@@ -384,6 +517,8 @@ int main()
         preserves_and_orders_records();
         handles_large_inputs();
         handles_extremes();
+        list_sort_reproduces_rulequest_order();
+        list_sort_handles_ascending_then_descending();
     }
     catch ( const std::exception &error )
     {
