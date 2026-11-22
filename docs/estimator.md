@@ -7,6 +7,10 @@ C5.0 interface. Install it with NumPy and scikit-learn support:
 python -m pip install 'c50[sklearn]'
 ```
 
+On Windows, the wheels require the latest supported Microsoft Visual C++
+Redistributable (x64) and do not include it. An older runtime is unsupported.
+See {ref}`the Windows runtime requirement <windows-runtime>`.
+
 Importing `c50` does not import NumPy or scikit-learn. Applications that use
 the estimator import it from the optional module:
 

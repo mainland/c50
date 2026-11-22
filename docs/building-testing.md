@@ -444,6 +444,8 @@ uvx cibuildwheel --only cp312-manylinux_x86_64 dist/c50-*.tar.gz
 musllinux, free-threaded CPython, and prerelease CPython versions are not
 built.
 
+(windows-runtime)=
+
 The Windows wheels require the latest supported Visual C++ Redistributable
 (x64). The extension imports `MSVCP140.dll`, which Python installers do not
 ship, and the wheels do not bundle it. `[tool.cibuildwheel.windows]` sets an
