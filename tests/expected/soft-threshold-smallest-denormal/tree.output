@@ -1,0 +1,38 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `soft-threshold-smallest-denormal'
+	Probability thresholds
+	Tests require 2 branches with >=1 cases
+
+Read 2 cases (1 attributes) from soft-threshold-smallest-denormal.data
+
+Decision tree:
+
+x <= 5: yes (1)
+x > 5: no (1)
+
+
+Evaluation on training data (2 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2    2(100.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	           1    (a): class no
+	     1          (b): class yes
+
+
+	Attribute usage:
+
+	    100%  x
+
+
+Time: <elapsed> secs

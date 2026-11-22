@@ -134,6 +134,61 @@ void bound_at_largest_float_loads(c50::context &context)
     }
 }
 
+/* A value whose float has the bits of an unknown or a not-applicable marker
+   is read as known by the split and as missing by the threshold adjustment,
+   so every case of the node can end up below the adjusted cut. Softening the
+   cut then must not read past the node. */
+const char *const marker_values[] = {"1.5777218104420236e-30", "1e-45"};
+
+void soft_thresholds_train_on_marker_values(c50::context &context)
+{
+    c50::options options;
+    options.probabilistic_thresholds = true;
+    const std::string marker_names = "no, yes.\n\nx: continuous.\n";
+    for (const char *marker : marker_values) {
+        const std::string value = marker;
+        const std::string data =
+            "5,no\n5,no\n" + value + ",yes\n" + value + ",yes\n";
+        for (const auto kind :
+             {c50::model_kind::tree, c50::model_kind::rules}) {
+            const c50::model text = c50::model::train(
+                context, kind, marker_names, data, options);
+            require(text.serialized_data().size() > 0, "a serialized model");
+        }
+
+        const double dense_value = std::stod(value);
+        const std::vector<double> values = {5, 5, dense_value, dense_value};
+        const std::vector<std::size_t> classes = {0, 0, 1, 1};
+        const c50::dense_dataset dense(values.data(), values.size(), 1,
+                                       classes.data());
+        for (const auto kind :
+             {c50::model_kind::tree, c50::model_kind::rules}) {
+            const c50::model model = c50::model::train(
+                context, kind, marker_names, dense, options);
+            require(model.serialized_data().size() > 0,
+                    "a model from dense data");
+        }
+    }
+}
+
+/* A value that is not a number is stored as unknown. Text training rejects it
+   with a parse error, and must not read past the node on the way. */
+void soft_thresholds_reject_a_bad_value(c50::context &context)
+{
+    c50::options options;
+    options.probabilistic_thresholds = true;
+    const std::string marker_names = "no, yes.\n\nx: continuous.\n";
+    bool rejected = false;
+    try {
+        (void) c50::model::train(context, c50::model_kind::tree,
+                                 marker_names,
+                                 "5,no\n5,no\nbad,yes\nbad,yes\n", options);
+    } catch (const c50::exception &error) {
+        rejected = error.code() == c50::error_code::parse_error;
+    }
+    require(rejected, "a bad value is rejected as a parse error");
+}
+
 } // namespace
 
 int main()
@@ -154,6 +209,8 @@ int main()
         }
         bounds_at_largest_float_are_finite(context);
         bound_at_largest_float_loads(context);
+        soft_thresholds_train_on_marker_values(context);
+        soft_thresholds_reject_a_bad_value(context);
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
         return 1;

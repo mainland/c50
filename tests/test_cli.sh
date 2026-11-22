@@ -914,11 +914,31 @@ run_case winnow-costs-pruning winnow tree --with-costs -w -c 5
 run_case float-overflow-cut tree tree
 run_case float-overflow-cut rules rules -r
 run_case float-overflow-cut soft-thresholds tree -p
+# The same overflow when the node has not-applicable cases. Release 2.07
+# completes with an empty branch for the lowest value, because the cut it
+# writes, the lowest value, differs from the infinite cut that it counted
+# with. This project reproduces that tree, and the expected files come from
+# Release 2.07.
+run_case float-overflow-cut-not-applicable tree tree
+run_case float-overflow-cut-not-applicable rules rules -r
+run_case float-overflow-cut-not-applicable boost tree -b
 # The soft bounds of two large positive values. Release 2.07 sums them in
 # float, which overflows, and writes an infinite midpoint and upper bound that
 # misclassify every case above the cut. The expected files come from this
 # project.
 run_case float-overflow-bounds soft-thresholds tree -p
+# A continuous value that is not a number is read as unknown without setting
+# the flag that a missing value sets, and so is a number whose float has the
+# bits of an unknown value or of a not-applicable value. The split then puts
+# every case of the node on one side of the adjusted cut. Release 2.07 reads
+# past the last case of the node when it softens that cut and crashes. The
+# expected files come from this project, which keeps the cut as the bounds in
+# that case.
+run_case soft-threshold-bad-value tree tree -p -m 1
+run_case soft-threshold-bad-value rules rules -p -m 1 -r
+run_case soft-threshold-bad-value boost tree -p -m 1 -b
+run_case soft-threshold-unknown-bits tree tree -p -m 1
+run_case soft-threshold-smallest-denormal tree tree -p -m 1
 run_case implicit implicit tree
 run_case implicit-unknown tree tree
 run_case implicit-literals tree tree

@@ -1,0 +1,35 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `soft-threshold-bad-value'
+	Probability thresholds
+	Tests require 2 branches with >=1 cases
+	Rule-based classifiers
+
+*** line 2 of `soft-threshold-bad-value.data': bad value of `bad' for attribute `x'
+
+Read 2 cases (1 attributes) from soft-threshold-bad-value.data
+
+Rules:
+
+Default class: no
+
+
+Evaluation on training data (2 cases):
+
+	        Rules
+	  ----------------
+	    No      Errors
+
+	     0    1(50.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     1          (a): class no
+	     1          (b): class yes
+
+
+Time: <elapsed> secs
