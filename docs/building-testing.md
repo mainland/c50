@@ -26,7 +26,7 @@ their current results.
 | Python 3.11 | joblib 1.3.0, NumPy 1.26.4, pandas 2.2.3, scikit-learn 1.6.1 | `validation.yml`, `python-and-docs` | Python tests, mypy, stubtest, and the benchmark smoke test |
 | Python 3.11 through 3.14 | Latest releases | `validation.yml`, `python-and-docs` | As for the minimum versions. Python 3.12 also runs the tutorial test and builds the documentation. |
 | Wheels for CPython 3.11 through 3.14 | Linux x86-64 and ARM64, macOS arm64 and x86-64, Windows AMD64 | `wheels.yml`, `wheels` | Build from the source distribution and test each wheel |
-| Windows AMD64 wheels for CPython 3.11 through 3.14 | `windows-2022` runner, `servercore:ltsc2022` container with process isolation, embeddable CPython | `wheels.yml`, `windows-clean-import` | Import each wheel and train and predict with a tree and a ruleset in a container without the Visual C++ Redistributable |
+| Windows AMD64 wheels for CPython 3.11 through 3.14 | `windows-2022` runner, `servercore:ltsc2022` container with process isolation, embeddable CPython | `wheels.yml`, `windows-clean-import` | Check that each wheel bundles no runtime DLL and fails to import in a container without the Visual C++ Redistributable, then install the redistributable and import, train, and predict with a tree and a ruleset |
 
 Free-threaded Python, GPU arrays, and other compiler or platform combinations
 are not tested. Seven tests run only on Linux. `in-memory-without-files`,
@@ -444,33 +444,47 @@ uvx cibuildwheel --only cp312-manylinux_x86_64 dist/c50-*.tar.gz
 musllinux, free-threaded CPython, and prerelease CPython versions are not
 built.
 
-The Windows wheels import `MSVCP140.dll`, which Python installers do not ship.
-`[tool.cibuildwheel.windows]` runs `delvewheel repair`, which copies the DLL
-into the wheel's `c50.libs` directory. The repair runs only on a Windows
-build. The extension also imports `VCRUNTIME140.dll` and
-`VCRUNTIME140_1.dll`, which CPython for Windows ships next to `python.exe`, and
-the Universal C Runtime, which is part of Windows 10 and later.
+The Windows wheels require the latest supported Visual C++ Redistributable
+(x64). The extension imports `MSVCP140.dll`, which Python installers do not
+ship, and the wheels do not bundle it. `[tool.cibuildwheel.windows]` sets an
+empty `repair-wheel-command`, so no repair step copies a DLL into the wheel. A
+user installs the redistributable from
+[Microsoft](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
+before the first import. Without it, `import c50` fails with `ImportError`. The
+extension also imports `VCRUNTIME140.dll` and `VCRUNTIME140_1.dll`, which
+CPython for Windows ships next to `python.exe`, and the Universal C Runtime,
+which is part of Windows 10 and later.
 
 GitHub's Windows runners have the Visual C++ Redistributable, so the wheel
 tests cannot detect a missing runtime DLL. The `windows-clean-import` job
-tests each Windows wheel where the redistributable is absent. For each of
-CPython 3.11 through 3.14, it runs `tests/windows_clean_import.ps1` in a
-`mcr.microsoft.com/windows/servercore:ltsc2022` container started with
-`--isolation=process`, with the wheelhouse, the tests, and an embeddable
-CPython from python.org mounted read-only. The job checks the downloaded
-embeddable package against a pinned SHA-256 digest. The script then:
+tests each Windows wheel where the redistributable is absent and then present.
+For each of CPython 3.11 through 3.14, it runs `tests/windows_clean_import.ps1`
+in a `mcr.microsoft.com/windows/servercore:ltsc2022` container started with
+`--isolation=process`, with the wheelhouse, the tests, an embeddable CPython
+from python.org, and `vc_redist.x64.exe` mounted read-only. The job checks the
+downloaded embeddable package against a pinned SHA-256 digest and downloads the
+installer from `https://aka.ms/vc14/vc_redist.x64.exe`. The script then:
 
 1. Fails if `System32`, `SysWOW64`, or a `PATH` directory holds a C++ library
    of the Visual C++ Redistributable, such as `msvcp140.dll`, `msvcp140_1.dll`,
    or `concrt140.dll`, because the test would prove nothing. The .NET
    Framework's private `msvcp140_clr0400.dll`, which Server Core includes, does
    not count, because no import of `msvcp140.dll` resolves to it.
-2. Unpacks the wheel into a directory that it adds to the interpreter's
+2. Runs `tests/windows_clean_import.py wheel`, which fails if the wheel
+   archive holds a Microsoft runtime DLL, such as `msvcp140*.dll`.
+   `tests/python/test_windows_wheel_runtime.py` runs this archive check on any
+   platform.
+3. Unpacks the wheel into a directory that it adds to the interpreter's
    `._pth` file. A wheel has no runtime dependencies, so unpacking installs it.
-3. Runs `tests/windows_clean_import.py`, which imports `c50`, requires that
-   the process loaded the wheel's `msvcp140-<hash>.dll` and no system
-   `msvcp140.dll`, and trains and predicts with a tree and a ruleset from text
-   input. The test does not install NumPy, so it does not cover dense input.
+4. Runs `tests/windows_clean_import.py absent`, which requires that
+   `import c50` fails with `ImportError`.
+5. Verifies that the installer has a valid Authenticode signature from
+   Microsoft Corporation, and installs the redistributable without a user
+   interface and without a restart.
+6. Runs `tests/windows_clean_import.py present`, which imports `c50`, requires
+   that the process loaded `msvcp140.dll` from `System32`, and trains and
+   predicts with a tree and a ruleset from text input. The test does not
+   install NumPy, so it does not cover dense input.
 
 The `checksums` job needs the `windows-clean-import` job, so a failure blocks
 the digests that a release uses. The job does not test pip installation,

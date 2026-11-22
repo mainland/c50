@@ -88,7 +88,10 @@ python -m pip install --pre c50
 
 `--pre` is needed while only prerelease versions, such as `1.0.0rc1`, are
 published. Releases include wheels for Linux x86-64 and ARM64, macOS arm64 and
-x86-64, and Windows x86-64. To build and install from a source checkout
+x86-64, and Windows x86-64. The Windows wheels require the latest supported
+[Microsoft Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
+(x64). The wheels do not include it. Without it, `import c50` fails with
+`ImportError` (`DLL load failed`). To build and install from a source checkout
 instead, run this from the repository root:
 
 ```sh
@@ -215,6 +218,9 @@ files that this project created carry their own copyright and
 `SPDX-License-Identifier` lines. Documentation pages, test fixtures and
 expected outputs, and marker files such as `py.typed` carry none and fall under
 the same license.
+
+The Windows wheels do not contain Microsoft's C++ runtime. They use the
+`msvcp140.dll` of the Visual C++ Redistributable that the system provides.
 
 C5.0 and RuleQuest are associated with RuleQuest Research Pty Ltd. This
 modernization project is based on the GPL source release and is not an official
