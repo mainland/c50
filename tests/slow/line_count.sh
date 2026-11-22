@@ -7,7 +7,7 @@
 # first check puts a bad value on line 2^31, and the diagnostic must print
 # that line number. The second counts 2^31 + 1 cases with sampling on, which
 # must end with the out-of-memory error and not a sample of a wrapped count.
-# The files take 2 GiB and about 8.6 GB of TMPDIR, and each run reads one.
+# The files take 2 GiB and about 10.7 GB of TMPDIR, and each run reads one.
 #
 # usage: line_count.sh C5.0 [LINES]
 #

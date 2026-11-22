@@ -606,8 +606,8 @@ if(UNIX)
 endif()
 
 # The line-count cases read a file of 2^31 lines and a file of 2^31 + 1 cases,
-# which take 2 GiB and about 8.6 GB of TMPDIR. They are not part of the default
-# tests. Run them explicitly with `cmake --build build --target
+# which take 2 GiB and about 10.7 GB of TMPDIR. They are not part of the
+# default tests. Run them explicitly with `cmake --build build --target
 # line-count-large`.
 if(UNIX)
     add_custom_target(
