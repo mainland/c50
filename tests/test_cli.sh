@@ -913,6 +913,12 @@ run_case winnow-costs-pruning winnow tree --with-costs -w -c 5
 # project.
 run_case float-overflow-cut tree tree
 run_case float-overflow-cut rules rules -r
+run_case float-overflow-cut soft-thresholds tree -p
+# The soft bounds of two large positive values. Release 2.07 sums them in
+# float, which overflows, and writes an infinite midpoint and upper bound that
+# misclassify every case above the cut. The expected files come from this
+# project.
+run_case float-overflow-bounds soft-thresholds tree -p
 run_case implicit implicit tree
 run_case implicit-unknown tree tree
 run_case implicit-literals tree tree

@@ -38,6 +38,7 @@
 #include "defns.i"
 #include "extern.i"
 #include "c50_api_internal.h"
+#include <cmath>
 
 namespace c50::core {
 
@@ -209,7 +210,18 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 	    if ( CVal(Context->cases.records[i], Att) <= T->Cut ) SplitI = i;
 	}
 
-	T->Mid = (CVal(Context->cases.records[SplitI], Att) + CVal(Context->cases.records[SplitI+1], Att)) / 2;
+	/*  The float sum of two large values of the same sign can
+	    overflow.  Halve each value first in that case, so that the
+	    midpoint and the bounds stay finite  */
+
+	if ( std::isfinite(CVal(Context->cases.records[SplitI], Att) + CVal(Context->cases.records[SplitI+1], Att)) )
+	{
+	    T->Mid = (CVal(Context->cases.records[SplitI], Att) + CVal(Context->cases.records[SplitI+1], Att)) / 2;
+	}
+	else
+	{
+	    T->Mid = CVal(Context->cases.records[SplitI], Att) / 2 + CVal(Context->cases.records[SplitI+1], Att) / 2;
+	}
 
 	/*  Consider cutoff points below and above the threshold.
 	    The errors on the cases between the cutoff and the threshold

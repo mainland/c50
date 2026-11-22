@@ -588,6 +588,21 @@ the same as before. The `float-overflow-cut` fixture records this project's
 output for a tree and for rules, because Release 2.07 has none, and the
 library and Python tests train on the same values with text and dense input.
 
+Soft thresholds (`-p`) compute the same midpoint to place the lower and upper
+bounds of a cut. When the `float` sum of the two values around the cut
+overflows, in either direction, Release 2.07 writes `inf` or `-inf` for the
+midpoint and for a bound. For two cases at `3e38` and `2e38`, `c5.0 -p` then
+classifies every training case above the cut by the lower branch and reports
+5 errors in 10 cases, and the classifier file holds `mid="inf" high="inf"`.
+This project halves each value before it adds them when the sum is not finite,
+so the midpoint and both bounds are finite and the same case set has no
+errors. A sum that is finite gives the midpoint of Release 2.07 unchanged. The
+change alters the classifier only for training values whose `float` sum
+overflows, and it is deliberate: this project's model parser rejects a
+nonfinite property, so a model with such bounds could not be loaded or used
+for prediction. The `float-overflow-bounds` fixture records this project's
+output.
+
 ## Class count
 
 The number of classes is not limited, as in C5.0 Release 2.07. The

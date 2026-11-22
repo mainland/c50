@@ -57,3 +57,29 @@ def test_estimator_separates_a_pair_whose_sum_overflows(
     estimator.fit(X, y)
     predicted = estimator.predict(np.array([[pair[0]], [pair[1]]]))
     assert list(predicted) == ["a", "b"]
+
+
+SOFT_PAIRS = [*PAIRS, (-3.4e38, -3e36), (3e36, 3.4e38)]
+
+
+@pytest.mark.parametrize("pair", SOFT_PAIRS)
+def test_soft_thresholds_stay_finite_for_large_values(
+    pair: tuple[float, float],
+) -> None:
+    low, high = pair
+    data = f"{low!r}, a\n" * 5 + f"{high!r}, b\n" * 5
+    options = c50.Options()
+    options.probabilistic_thresholds = True
+    model = c50.train(NAMES, data, options=options)
+    assert "inf" not in model.serialized_data
+    assert model.predict(cases(pair)) == ["a", "b"]
+
+
+@pytest.mark.parametrize("pair", SOFT_PAIRS)
+def test_estimator_with_soft_thresholds_handles_large_values(
+    pair: tuple[float, float],
+) -> None:
+    X = np.array([[pair[0]]] * 5 + [[pair[1]]] * 5)
+    y = np.array(["a"] * 5 + ["b"] * 5)
+    estimator = C50Classifier(probabilistic_thresholds=True).fit(X, y)
+    assert list(estimator.predict(X)) == list(y)
