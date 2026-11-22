@@ -101,8 +101,8 @@ test: c5.0 report prediction-probe
 	./tests/test_predictions.sh
 
 
-# Compare c5.0 with Release 2.07, which the script builds from `main`. This
-# builds and trains generated data, so `test` does not run it.
+# Compare c5.0 with Release 2.07, which the script builds from its import
+# commit. This builds and trains generated data, so `test` does not run it.
 reference-comparison: c5.0
 	./tests/reference/run.sh ./c5.0
 

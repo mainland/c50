@@ -2,25 +2,49 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Import a Windows wheel and train a model, with a runtime-DLL audit.
+"""Check a Windows wheel against the Visual C++ Redistributable.
 
 `tests/windows_clean_import.ps1` runs this script with an embeddable CPython in
-a container that has no Visual C++ Redistributable. The script needs only the
-standard library and the wheel. It checks three things:
+a container, in three modes. The script needs only the standard library and the
+wheel.
 
-- `c50` imports from the directory that holds the unpacked wheel.
-- The wheel's bundled `msvcp140-<hash>.dll` is the copy of the C++ runtime
-  that the process uses, and no system copy of `msvcp140.dll` is loaded.
-- A text-input model of each kind trains and predicts.
+- `wheel WHEEL` checks that the wheel archive holds no Microsoft C++ runtime
+  DLL. The wheel relies on the Visual C++ Redistributable of the system.
+- `absent` runs before the redistributable is installed. It checks that
+  `import c50` fails with `ImportError`, so that the requirement is real.
+- `present` runs after the installation. It checks that `c50` imports, that the
+  process uses the system copy of `msvcp140.dll`, and that a text-input model
+  of each kind trains and predicts.
 """
 
 from __future__ import annotations
 
 import ctypes
+import os
+import re
 import sys
+import zipfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import c50
+if TYPE_CHECKING:
+    import c50
+
+# The Microsoft C++ runtime libraries that a wheel must not carry. The name may
+# have a hash suffix, as a repair tool gives a bundled copy.
+RUNTIME_DLL = re.compile(
+    r"(?:msvcp|vcruntime|concrt|vcomp|vccorlib)[\w-]*\.dll", re.IGNORECASE
+)
+
+
+def bundled_runtime(wheel: Path) -> list[str]:
+    """Return the members of the wheel that are Microsoft runtime DLLs."""
+    with zipfile.ZipFile(wheel) as archive:
+        return sorted(
+            name
+            for name in archive.namelist()
+            if RUNTIME_DLL.fullmatch(name.rsplit("/", 1)[-1])
+        )
 
 
 def loaded_modules() -> dict[str, str]:
@@ -58,23 +82,43 @@ def loaded_modules() -> dict[str, str]:
     return modules
 
 
-def check_runtime() -> None:
-    """Require the bundled C++ runtime and reject a system copy."""
+def check_wheel(wheel: Path) -> None:
+    """Require a wheel that bundles no Microsoft runtime DLL."""
+    bundled = bundled_runtime(wheel)
+    assert not bundled, f"the wheel bundles runtime DLLs: {bundled}"
+    print(f"{wheel.name} bundles no Microsoft runtime DLL")
+
+
+def check_absent() -> None:
+    """Require that `import c50` fails where the runtime is missing."""
+    try:
+        import c50
+    except ImportError as error:
+        print(f"import c50 failed without the runtime: {error}")
+        return
+    raise AssertionError(f"import c50 succeeded without the runtime: {c50}")
+
+
+def check_system_runtime() -> None:
+    """Require that the process uses the system `msvcp140.dll`."""
+    import c50
+
     package = Path(c50.__file__).resolve().parent
-    libs = package.parent / "c50.libs"
-    bundled = sorted(libs.glob("msvcp140-*.dll"))
-    assert len(bundled) == 1, f"expected one bundled msvcp140 in {libs}"
+    assert not (package.parent / "c50.libs").exists(), "the wheel has c50.libs"
     modules = loaded_modules()
-    name = bundled[0].name.lower()
-    assert name in modules, f"{name} is not loaded: {sorted(modules)}"
-    assert Path(modules[name]).resolve() == bundled[0].resolve()
-    system = [path for key, path in modules.items() if key == "msvcp140.dll"]
-    assert not system, f"a system C++ runtime is loaded: {system}"
-    print(f"bundled runtime in use: {modules[name]}")
+    assert "msvcp140.dll" in modules, f"msvcp140.dll is not loaded: {modules}"
+    system = Path(os.environ["SYSTEMROOT"], "System32", "msvcp140.dll")
+    actual = Path(modules["msvcp140.dll"]).resolve()
+    assert os.path.normcase(actual) == os.path.normcase(system.resolve()), (
+        f"msvcp140.dll is {actual}, not {system}"
+    )
+    print(f"system runtime in use: {actual}")
 
 
 def check_model(kind: c50.ModelKind) -> None:
     """Train a small model of the given kind and check its predictions."""
+    import c50
+
     model = c50.Model.train(
         "low, high.\nx: continuous.\n",
         "0, low\n1, low\n3, high\n4, high\n",
@@ -85,15 +129,26 @@ def check_model(kind: c50.ModelKind) -> None:
     print(f"{kind.name}: predicted {result.labels}")
 
 
-def main() -> None:
-    """Run the checks and print the interpreter and wheel locations."""
+def main(argv: list[str]) -> int:
+    """Run the mode that the arguments name."""
     print(f"python {sys.version}")
-    print(f"c50 from {c50.__file__}")
-    check_runtime()
-    check_model(c50.ModelKind.TREE)
-    check_model(c50.ModelKind.RULES)
+    if len(argv) == 2 and argv[0] == "wheel":
+        check_wheel(Path(argv[1]))
+    elif argv == ["absent"]:
+        check_absent()
+    elif argv == ["present"]:
+        import c50
+
+        print(f"c50 from {c50.__file__}")
+        check_system_runtime()
+        check_model(c50.ModelKind.TREE)
+        check_model(c50.ModelKind.RULES)
+    else:
+        print("usage: windows_clean_import.py wheel WHEEL | absent | present")
+        return 2
     print("ok")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main(sys.argv[1:]))

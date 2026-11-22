@@ -8,7 +8,9 @@ Usage: python tests/check_sdist.py <sdist.tar.gz>
 
 Run it from a Git checkout of the revision that built the sdist. Apart from the
 generated PKG-INFO, every archive member must be a tracked file, and every
-tracked file must be in the archive unless pyproject.toml excludes it.
+tracked file must be in the archive unless EXCLUDED names it. EXCLUDED lists
+the files that sdist.exclude in pyproject.toml drops, so the check does not
+accept whatever the patterns drop.
 """
 
 from __future__ import annotations
@@ -17,8 +19,10 @@ import subprocess
 import sys
 import tarfile
 
-# Tracked files that sdist.exclude in pyproject.toml deliberately omits.
-EXCLUDED: set[str] = set()
+# Tracked files that sdist.exclude in pyproject.toml deliberately omits. The
+# retained release benchmark result is tracked for the performance tables and
+# stays out of the archive.
+EXCLUDED: set[str] = {"benchmarks/results/release.json"}
 
 
 def main() -> int:

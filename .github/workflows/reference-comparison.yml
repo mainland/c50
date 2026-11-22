@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Build C5.0 Release 2.07 from the `main` branch and train generated data
+  # Build C5.0 Release 2.07 from its import commit and train generated data
   # with it and with the library's c5.0. The trees, rules, and console output
   # must match. The script builds the reference with -ffp-contract=off, so it
   # keeps the x86-64 arithmetic on every runner. The default ARM64 and macOS
@@ -51,7 +51,8 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
+          # The commit of the Release 2.07 import, which no branch can move.
+          ref: f97414a56b432baf4547193a47e6d695e5f5229b
           path: release-207
           persist-credentials: false
       - name: Configure

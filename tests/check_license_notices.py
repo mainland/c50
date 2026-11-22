@@ -11,20 +11,22 @@ Run it from a Git checkout. The checks are:
 - Every tracked file of a kind that can carry a comment contains an
   SPDX-License-Identifier line, except the fixtures, expected outputs, and the
   unmodified imported files named below.
-- Every file that descends from a file of C5.0 Release 2.07 (the `main`
-  branch) keeps RuleQuest's copyright line and carries a `Modified` line, as
+- Every file that descends from a file of C5.0 Release 2.07 (the import
+  commit) keeps RuleQuest's copyright line and carries a `Modified` line, as
   section 5(a) of the GNU General Public License requires. The root
   `Makefile` is among them.
-- Each unmodified imported file is byte-identical to its blob on `main`. The
-  script holds those blob identifiers, so the check needs no `main` branch.
+- Each unmodified imported file is byte-identical to its blob in the import.
+  The script holds those blob identifiers, so the check needs no copy of the
+  import.
 - `TrainModel` in `src/c50_model.cpp`, `src/c50_sort.h`, and
   `tests/sort_properties.cpp` follow code of Release 2.07 and credit
   RuleQuest.
 
-When a local `main` or `origin/main` exists, the script also checks that every
-source file of `main` has a counterpart in the tables below and that the
+When the import commit exists locally, the script also checks that every source
+file of the import has a counterpart in the tables below and that the
 counterpart is a tracked file, so an import that is renamed and stripped of its
-notices fails. A shallow clone without either ref skips that comparison and
+notices fails. The environment variable `C50_REFERENCE_REF` names another ref
+for the import. A shallow clone without the commit skips that comparison and
 says so on standard error.
 
 The script exits with status 77 when the directory is not a Git checkout.
@@ -32,10 +34,14 @@ The script exits with status 77 when the directory is not a Git checkout.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
+
+# The commit of the Release 2.07 import, which no branch can move.
+IMPORT_COMMIT = "f97414a56b432baf4547193a47e6d695e5f5229b"
 
 COMMENT_SUFFIXES = {
     ".c", ".cmake", ".cpp", ".cff", ".dict", ".h", ".hpp", ".i", ".in",
@@ -64,22 +70,23 @@ MODIFIED_IMPORTS = frozenset({"Makefile"}).union(
     )
 )  # fmt: skip
 # Imported files that this project did not modify, with their Git blob
-# identifiers on `main`. They keep their original notice and need no SPDX line.
+# identifiers in the import. They keep their original notice and need no SPDX
+# line.
 UNMODIFIED_IMPORTS = {
     "src/text.i": "23e272f778c8a12ac3998bc4fb8cd21c407a1673",
     "xval": "b062799d9b6e63ead77b6a91d38f42074ce0ba49",
 }
-# Files that are not descendants of a file of `main` by name, but contain code
-# that follows one and credit RuleQuest for it.
+# Files that are not descendants of a file of the import by name, but contain
+# code that follows one and credit RuleQuest for it.
 CREDITED_FILES = frozenset(
     {"src/c50_model.cpp", "src/c50_sort.h", "tests/sort_properties.cpp"}
 )
 
 RULEQUEST = re.compile(rb"copyright 2010 rulequest research pty ltd", re.I)
 MODIFIED = re.compile(rb"^\s*(?:/\*|#|//)?\s*Modified\b", re.M)
-# Files of `main` that have no counterpart to check.
+# Files of the import that have no counterpart to check.
 UNNOTICED_MAIN_FILES = {"gpl.txt"}
-# Files of `main` that keep their name at the root.
+# Files of the import that keep their name at the root.
 ROOT_MAIN_FILES = {"Makefile", "xval"}
 
 
@@ -110,7 +117,7 @@ def needs_notice(name: str) -> bool:
 
 
 def counterpart(main_name: str) -> str | None:
-    """Return the current path of a source file of `main`."""
+    """Return the current path of a source file of the import."""
     if main_name in UNNOTICED_MAIN_FILES:
         return None
     if main_name in ROOT_MAIN_FILES:
@@ -120,23 +127,23 @@ def counterpart(main_name: str) -> str | None:
     return "src/" + main_name
 
 
-def main_files() -> tuple[str, set[str]] | None:
-    for ref in ("main", "origin/main"):
-        result = subprocess.run(
-            ["git", "ls-tree", "--name-only", f"{ref}^{{commit}}"],
-            capture_output=True,
-            check=False,
-        )
-        if result.returncode == 0:
-            return ref, set(result.stdout.decode().split())
-    return None
+def import_files() -> tuple[str, set[str]] | None:
+    ref = os.environ.get("C50_REFERENCE_REF") or IMPORT_COMMIT
+    result = subprocess.run(
+        ["git", "ls-tree", "--name-only", f"{ref}^{{commit}}"],
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    return ref, set(result.stdout.decode().split())
 
 
 def check_table(tracked: set[str]) -> list[str]:
-    found = main_files()
+    found = import_files()
     if found is None:
         print(
-            "note: no main or origin/main branch; skipped the comparison of "
+            "note: no Release 2.07 import commit; skipped the comparison of "
             "the imported file tables with Release 2.07",
             file=sys.stderr,
         )

@@ -2,13 +2,17 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# Prove that a Windows wheel imports and trains on a system without the
-# Visual C++ Redistributable. Run it in a Windows Server Core container with
-# these directories mounted:
+# Prove that a Windows wheel needs the Visual C++ Redistributable and works
+# with it. The wheel must bundle no Microsoft runtime DLL, and on a system
+# without the redistributable it must fail to import. After the script installs
+# the redistributable, the wheel must import, use the system msvcp140.dll,
+# and train. Run it in a Windows Server Core container with these directories
+# mounted:
 #
 #   C:\wheelhouse  holds the wheels, read-only.
 #   C:\embed       holds an unpacked embeddable CPython, read-only.
 #   C:\tests       holds this script and windows_clean_import.py, read-only.
+#   C:\vcredist    holds vc_redist.x64.exe, read-only.
 #
 # Usage: windows_clean_import.ps1 -Tag cp312
 
@@ -72,10 +76,42 @@ if ($wheels.Count -ne 1) {
 }
 Write-Host "Wheel: $($wheels[0].Name)"
 
+# The wheel itself must not carry the runtime.
+& $exe 'C:\tests\windows_clean_import.py' wheel $wheels[0].FullName
+if ($LASTEXITCODE -ne 0) { throw "The wheel check failed with status $LASTEXITCODE." }
+
 # A wheel is a ZIP archive whose root is the site directory, so unpacking it
 # is an installation. The wheel has no runtime dependencies.
 & $exe -m zipfile -e $wheels[0].FullName $site
 if ($LASTEXITCODE -ne 0) { throw 'Could not unpack the wheel.' }
 
-& $exe 'C:\tests\windows_clean_import.py'
+# Without the redistributable, the import must fail with ImportError.
+& $exe 'C:\tests\windows_clean_import.py' absent
+if ($LASTEXITCODE -ne 0) { throw "The import check failed with status $LASTEXITCODE." }
+
+# Install the redistributable only if Microsoft signed the installer.
+$installer = 'C:\vcredist\vc_redist.x64.exe'
+$signature = Get-AuthenticodeSignature -LiteralPath $installer
+if ($signature.Status -ne 'Valid') {
+    throw "The signature of $installer is $($signature.Status)."
+}
+$signer = $signature.SignerCertificate.Subject
+if ($signer -notmatch '(^|, )CN=Microsoft Corporation(,|$)') {
+    throw "$installer is signed by $signer, not Microsoft Corporation."
+}
+Write-Host "Installer signed by: $signer"
+$install = Start-Process -FilePath $installer `
+    -ArgumentList '/install', '/quiet', '/norestart' -Wait -PassThru
+# 3010 asks for a restart, which the test does not need.
+if (@(0, 3010) -notcontains $install.ExitCode) {
+    throw "The redistributable installer exited with status $($install.ExitCode)."
+}
+$systemRuntime = Join-Path $env:SystemRoot 'System32\msvcp140.dll'
+if (-not (Test-Path -LiteralPath $systemRuntime)) {
+    throw "The installer did not provide $systemRuntime."
+}
+
+# With the redistributable, the wheel imports, uses the system msvcp140.dll,
+# and trains.
+& $exe 'C:\tests\windows_clean_import.py' present
 if ($LASTEXITCODE -ne 0) { throw "The import test failed with status $LASTEXITCODE." }

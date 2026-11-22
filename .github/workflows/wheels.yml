@@ -80,12 +80,15 @@ jobs:
           name: wheels-${{ matrix.os }}-${{ matrix.archs }}
           path: wheelhouse/*.whl
 
-  # GitHub's Windows runners have the Visual C++ Redistributable, so the wheel
-  # tests above cannot notice a missing runtime DLL. Run each wheel in a Server
-  # Core container, which lacks the redistributable, with an embeddable CPython
-  # that brings its own vcruntime140.dll and vcruntime140_1.dll. The container
-  # shares the runner's kernel (process isolation), and the runner image matches
-  # ltsc2022.
+  # The Windows wheels need the Visual C++ Redistributable and do not bundle
+  # it. GitHub's Windows runners have the redistributable, so the wheel tests
+  # above cannot notice a missing runtime DLL. Run each wheel in a Server Core
+  # container, which lacks the redistributable, with an embeddable CPython that
+  # brings its own vcruntime140.dll and vcruntime140_1.dll. The script checks
+  # that the wheel holds no runtime DLL, that it fails to import, installs the
+  # redistributable from Microsoft after it verifies the installer's signature,
+  # and then imports and trains. The container shares the runner's kernel
+  # (process isolation), and the runner image matches ltsc2022.
   windows-clean-import:
     needs: wheels
     runs-on: windows-2022
@@ -125,9 +128,15 @@ jobs:
             throw "SHA-256 of $zip is $actual, not $env:PYTHON_SHA256."
           }
           Expand-Archive -Path $zip -DestinationPath embed
+      - name: Fetch the Visual C++ Redistributable
+        run: |
+          New-Item -ItemType Directory -Path vcredist | Out-Null
+          Invoke-WebRequest -UseBasicParsing `
+            -OutFile vcredist\vc_redist.x64.exe `
+            https://aka.ms/vc14/vc_redist.x64.exe
       - name: Pull the Server Core image
         run: docker pull $env:IMAGE
-      - name: Import and train in a container without the C++ runtime
+      - name: Check the wheel in a container without the C++ runtime
         env:
           TAG: ${{ matrix.tag }}
         run: |
@@ -135,6 +144,7 @@ jobs:
             --mount "type=bind,source=$PWD\wheelhouse,target=C:\wheelhouse,readonly" `
             --mount "type=bind,source=$PWD\embed,target=C:\embed,readonly" `
             --mount "type=bind,source=$PWD\tests,target=C:\tests,readonly" `
+            --mount "type=bind,source=$PWD\vcredist,target=C:\vcredist,readonly" `
             $env:IMAGE powershell -NoProfile -NonInteractive `
             -File C:\tests\windows_clean_import.ps1 -Tag $env:TAG
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
