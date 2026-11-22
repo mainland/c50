@@ -54,16 +54,18 @@ private:
     std::optional<std::string> copy_;
 };
 
-// The feature matrix of a training call. Its conversion to a C-contiguous
-// float64 array is the one that every dense function performs, but an object
-// that NumPy cannot convert, such as an array of words or a ragged list, raises
-// ValueError that names the argument. pybind11 would raise an unnamed
+// The feature matrix of a training call. Its conversion to a C-contiguous,
+// aligned float64 array is the one that every dense function performs, but an
+// object that NumPy cannot convert, such as an array of words or a ragged list,
+// raises ValueError that names the argument. pybind11 would raise an unnamed
 // TypeError for it.
 class training_matrix
 {
 public:
-    using array_type =
-        py::array_t<double, py::array::c_style | py::array::forcecast>;
+    using array_type = py::array_t<
+        double,
+        py::array::c_style | py::array::forcecast |
+            py::detail::npy_api::NPY_ARRAY_ALIGNED_>;
 
     training_matrix() = default;
     explicit training_matrix(array_type array) : array_(std::move(array)) {}
@@ -195,14 +197,14 @@ py::object count_index(const py::handle &source, count_problem &problem)
 
 // The TypeError for an unsuitable count argument.
 [[noreturn]] void reject_count(
-    const py::handle &source, const char *field, count_problem problem)
+    const py::handle &source, const std::string &field, count_problem problem)
 {
     if ( problem == count_problem::boolean )
     {
-        throw py::type_error(std::string(field) + " must not be a bool");
+        throw py::type_error(field + " must not be a bool");
     }
     throw py::type_error(
-        std::string(field) + " must be an integer, not " +
+        field + " must be an integer, not " +
         std::string(py::str(py::type::of(source).attr("__name__"))));
 }
 
@@ -326,10 +328,10 @@ struct type_caster<text_argument>
     }
 };
 
-// Accept what a float64 array parameter accepts. A float64 C-contiguous array
-// is read directly. In the converting pass, NumPy converts anything else, and
-// a failure raises ValueError that chains its cause instead of rejecting the
-// argument.
+// Accept what a float64 array parameter accepts. A float64, C-contiguous, and
+// aligned array is read directly. In the converting pass, NumPy converts
+// anything else, and a failure raises ValueError that chains its cause instead
+// of rejecting the argument.
 template <>
 struct type_caster<training_matrix>
 {
@@ -513,11 +515,12 @@ text without a tree depth limit, because the library wrote it.
 
 Training runs without the global interpreter lock, so by default it copies
 ``values`` and ``not_applicable`` first. With ``copy=False``, training reads a
-float64, C-contiguous ``values`` array and a C-contiguous bool
+float64, C-contiguous, and aligned ``values`` array and a C-contiguous bool
 ``not_applicable`` array directly, which avoids holding a second copy of the
 matrices. The caller must then ensure that no thread modifies either array
-until the call returns. Arrays with another dtype or layout are always
-converted into a temporary array that no other code can modify.
+until the call returns. Arrays with another dtype or layout, and a ``values``
+array that is not aligned, are always converted into a temporary array that
+no other code can modify.
 
 Args:
     names: Contents of a C5.0 names file.
@@ -637,9 +640,15 @@ Raises:
     MemoryError: If memory is exhausted.
 )doc";
 
+// The aligned flag makes NumPy copy an array whose data does not start at a
+// multiple of the element alignment, such as one from numpy.frombuffer at an
+// odd offset. The native loads and copies read the elements through typed
+// pointers, which is undefined for a misaligned address.
 template<class T>
 using dense_values = py::array_t<
-    T, py::array::c_style | py::array::forcecast>;
+    T,
+    py::array::c_style | py::array::forcecast |
+        py::detail::npy_api::NPY_ARRAY_ALIGNED_>;
 
 // A validated not-applicable mask for one dense call. It owns whatever keeps
 // the bytes alive while the GIL is released: a private copy, or a reference to
@@ -1361,7 +1370,7 @@ GIL while training, loading, or predicting.
 
     module.def(
         "_count_index",
-        [](const py::object &value, const char *name) {
+        [](const py::object &value, const std::string &name) {
             count_problem problem;
             py::object number = count_index(value, problem);
             if ( !number )
