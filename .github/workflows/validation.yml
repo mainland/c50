@@ -28,15 +28,19 @@ jobs:
           - os: ubuntu-24.04
             cc: gcc
             cxx: g++
+            standard: 14
           - os: ubuntu-24.04
             cc: clang
             cxx: clang++
+            standard: 20
           - os: ubuntu-24.04-arm
             cc: gcc
             cxx: g++
+            standard: 14
           - os: macos-15
             cc: clang
             cxx: clang++
+            standard: 14
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -45,14 +49,15 @@ jobs:
       - name: Generate a decimal-comma locale
         if: runner.os == 'Linux'
         run: sudo locale-gen de_DE.UTF-8
-      # Verify that targets request C++17 even with an older project default.
+      # Verify that targets request C++17 even with an older project default,
+      # and that the sources also build as C++20 on one entry.
       # Every job treats warnings as errors: -Werror here and /WX on Windows.
       - name: Configure
         run: >-
           cmake -S . -B build
           -DCMAKE_BUILD_TYPE=Debug
           -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
-          -DCMAKE_CXX_STANDARD=14
+          -DCMAKE_CXX_STANDARD=${{ matrix.standard }}
           -DCMAKE_CXX_FLAGS='-Wall -Wextra -Wpedantic -Werror'
       - name: Build and test native and installed interfaces
         run: |

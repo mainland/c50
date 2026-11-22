@@ -82,8 +82,10 @@ file of Release 2.07 has an entry in its tables and that the entry names a
 tracked file, so an import that is renamed and stripped of its notices fails.
 The test skips outside a Git checkout.
 
-Native CI configures a C++14 project default to verify that each target
-declares its own C++17 requirement. The platform labels follow the
+Native CI configures a C++14 project default on three entries to verify that
+each target declares its own C++17 requirement, and a C++20 project default on
+the Linux Clang entry to verify that the sources build as C++20. The platform
+labels follow the
 [GitHub-hosted runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 
 ## Windows
