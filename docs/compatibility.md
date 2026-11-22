@@ -169,6 +169,17 @@ dictionaries grow with the values read instead of reserving `N` pointer slots
 from the declaration. Input lines may exceed the legacy 9,999-byte read
 buffer. Per-token length checks still apply.
 
+A name that appears more than once in an `attributes included:` or
+`attributes excluded:` list means what one occurrence means. Release 2.07
+subtracts the exclusion bit once for each occurrence of a name in an
+`attributes included:` list. A repeated name leaves the attribute excluded
+with corrupted type bits, and training then dereferences a null pointer or
+writes a model that cannot be loaded. This project clears the bit, so two
+results differ from Release 2.07 for text that it accepts. An explicit
+discrete attribute listed twice is now used, where Release 2.07 drops it. A
+class attribute that the schema declares and the list names twice is now
+accepted, where Release 2.07 reports that the target attribute is missing.
+
 ### Implicit definitions
 
 Implicit definitions reject missing and not-applicable literals without a

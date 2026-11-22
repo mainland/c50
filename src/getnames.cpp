@@ -302,7 +302,7 @@ void GetNames(c50_context *Context, c50_input *Nf)
 		else
 		if ( Context->io.attribute_exclusions == 1 )
 		{
-		    Context->schema.special_status[Att] -= SKIP;
+		    Context->schema.special_status[Att] &= ~SKIP;
 		}
 		else
 		{
