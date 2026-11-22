@@ -567,6 +567,27 @@ was developed in this project, and the C50 R package has the same code as
 Release 2.07. The `costs-pruning` and `winnow-costs-pruning` fixtures record
 this project's output, because Release 2.07 has none.
 
+## Thresholds near the limits of `float`
+
+A continuous cut lies halfway between two neighboring attribute values. Release
+2.07 computes the midpoint from the `float` sum of the two values. When both
+values are large and negative, for example `-3e38` and `-2e38`, the sum
+overflows to `-inf` and so does the cut. Every case then goes to the branch for
+values above the cut, tree growth sees the same cases again, and the program
+recurses until the stack overflows. Release 2.07 dies from a segmentation fault
+on such input, with trees and with rules, and so does an earlier build of this
+project. The values are finite and valid. The positive side is safe, because
+the cut that results from an overflow there is not below the upper value and
+the program already falls back to the lower value.
+
+This project keeps the midpoint only when it lies from the lower value up to,
+but not including, the upper value, and otherwise uses the lower value. For the
+input above, the tree is `x <= -3e+38: a (5)` and `x > -3e+38: b (5)`. The
+change affects only runs that crashed. Every midpoint that is a valid cut is
+the same as before. The `float-overflow-cut` fixture records this project's
+output for a tree and for rules, because Release 2.07 has none, and the
+library and Python tests train on the same values with text and dense input.
+
 ## Class count
 
 The number of classes is not limited, as in C5.0 Release 2.07. The

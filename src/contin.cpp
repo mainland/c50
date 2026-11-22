@@ -201,8 +201,13 @@ void EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace, SplitRes
 	/*  Set threshold, making sure that rounding problems do not
 	    cause it to reach upper value  */
 
-	if ( (Result.Threshold = (ContValue) (0.5 * (Workspace.LowVal + Workspace.HighVal)))
-	     >= Workspace.HighVal )
+	/*  The float sum of two large values of the same sign can overflow,
+	    which makes the threshold infinite.  Only a threshold from the
+	    lower value up to, but not including, the upper value is kept  */
+
+	Result.Threshold = (ContValue) (0.5 * (Workspace.LowVal + Workspace.HighVal));
+	if ( ! ( Result.Threshold >= Workspace.LowVal &&
+		 Result.Threshold < Workspace.HighVal ) )
 	{
 	    Result.Threshold = Workspace.LowVal;
 	}

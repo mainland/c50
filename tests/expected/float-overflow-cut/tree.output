@@ -1,0 +1,36 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `float-overflow-cut'
+
+Read 10 cases (1 attributes) from float-overflow-cut.data
+
+Decision tree:
+
+x <= -3e+38: a (5)
+x > -3e+38: b (5)
+
+
+Evaluation on training data (10 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2    0( 0.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     5          (a): class a
+	           5    (b): class b
+
+
+	Attribute usage:
+
+	    100%  x
+
+
+Time: <elapsed> secs

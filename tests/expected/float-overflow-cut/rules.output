@@ -1,0 +1,44 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `float-overflow-cut'
+	Rule-based classifiers
+
+Read 10 cases (1 attributes) from float-overflow-cut.data
+
+Rules:
+
+Rule 1: (5, lift 1.7)
+	x <= -3e+38
+	->  class a  [0.857]
+
+Rule 2: (5, lift 1.7)
+	x > -3e+38
+	->  class b  [0.857]
+
+Default class: a
+
+
+Evaluation on training data (10 cases):
+
+	        Rules
+	  ----------------
+	    No      Errors
+
+	     2    0( 0.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     5          (a): class a
+	           5    (b): class b
+
+
+	Attribute usage:
+
+	    100%  x
+
+
+Time: <elapsed> secs
