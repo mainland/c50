@@ -274,6 +274,17 @@ parent distribution to use below that threshold. Zero-case child nodes remain
 valid and retain their parent-based prediction behavior. These checks reject
 malformed artifacts before prediction can index their internal structures.
 
+A rule condition must have an outcome that its type has, whatever the order of
+its properties. `result` is valid only on a threshold condition that has
+`cut`. A threshold has either `val="N/A"` or a `cut` with its `result`, not
+both. A discrete condition names a declared value, and a subset condition has
+a single outcome. `model::load` rejects any other text with
+`error_code::parse_error`. Release 2.07's loader accepts such text, such as a
+discrete condition with `result=">"` or a subset condition with a `result`,
+and never fires the rule that holds it. Inspection of such a rule named a value
+that does not exist. The rulesets that the learner writes are unchanged and
+load with the same predictions.
+
 `model::load` rejects a serialized tree of more than `max_tree_depth` levels
 with `error_code::parse_error` (`ValueError` in Python), to bound the stack
 that parsing needs for untrusted text. The root is level 1, and the default is

@@ -152,6 +152,61 @@ static void structure(c50::context &context)
         throw std::runtime_error("deep rule matching changed predictions");
 }
 
+// A condition's outcome must be one that its type has. Release 2.07 accepts
+// the rejected texts, and its matcher never fires a rule that holds one. The
+// inspection of such a rule named a value that does not exist.
+static void condition_outcomes(c50::context &context)
+{
+    const auto rules = c50::model_kind::rules;
+    const std::string multi_names =
+        "yes, no.\ne: a, b.\nd: discrete 5.\no: [ordered] lo, mid, hi, top.\n"
+        "x: continuous.\n";
+    const std::string class_names =
+        "target.\ntarget: yes, no.\nx: continuous.\n";
+    const std::string one = header + "rules=\"1\" default=\"yes\"\n"
+        "conds=\"1\" cover=\"10\" ok=\"9\" lift=\"1.5\" class=\"no\"\n";
+    const std::string two = header + "rules=\"2\" default=\"yes\"\n"
+        "conds=\"2\" cover=\"10\" ok=\"9\" lift=\"1.5\" class=\"no\"\n"
+        "type=\"3\" att=\"e\" elts=\"a\" result=\">\"\n"
+        "type=\"2\" att=\"x\" cut=\"100\" result=\"<\"\n"
+        "conds=\"1\" cover=\"10\" ok=\"9\" lift=\"1.5\" class=\"no\"\n"
+        "type=\"3\" att=\"e\" elts=\"a\"\n";
+    for (const auto &bad : {
+        "type=\"1\" att=\"d\" val=\"N/A\" result=\">\"\n",
+        "type=\"1\" att=\"d\" val=\"N/A\" result=\"<\"\n",
+        "type=\"1\" att=\"e\" val=\"N/A\" result=\">\"\n",
+        "type=\"1\" att=\"o\" val=\"top\" result=\">\"\n",
+        "type=\"1\" result=\">\" att=\"o\" val=\"top\"\n",
+        "type=\"3\" att=\"e\" elts=\"a\" result=\">\"\n",
+        "type=\"3\" att=\"e\" elts=\"a\" result=\"<\"\n",
+        "type=\"3\" att=\"e\" elts=\"a\" val=\"b\"\n",
+        "type=\"2\" att=\"x\" val=\"N/A\" result=\">\"\n",
+        "type=\"2\" att=\"x\" val=\"N/A\" cut=\"1\"\n",
+        "type=\"2\" att=\"x\" val=\"N/A\" cut=\"1\" result=\"<\"\n",
+        "type=\"2\" att=\"x\" cut=\"1\"\n",
+        "type=\"2\" att=\"x\" result=\">\"\n",
+        "type=\"2\" att=\"e\" cut=\"1\" result=\">\"\n"})
+        rejects([&] { c50::model::load(context, rules, multi_names, one + bad); });
+    rejects([&] { c50::model::load(context, rules, class_names, one +
+        "type=\"1\" att=\"target\" val=\"yes\" result=\">\"\n"); });
+    rejects([&] { c50::model::load(context, rules, multi_names, two); });
+
+    // The same conditions without the outcome that their types lack load,
+    // and inspection names each one.
+    for (const auto &good : {
+        "type=\"1\" att=\"d\" val=\"N/A\"\n",
+        "type=\"1\" att=\"e\" val=\"b\"\n",
+        "type=\"3\" att=\"e\" elts=\"a\"\n",
+        "type=\"2\" att=\"x\" val=\"N/A\"\n",
+        "type=\"2\" att=\"x\" cut=\"1\" result=\">\"\n",
+        "type=\"2\" result=\"<\" att=\"x\" cut=\"1\"\n"}) {
+        const auto model = c50::model::load(context, rules, multi_names, one + good);
+        const auto inspection = model.inspect(context);
+        if (inspection.rulesets.size() != 1)
+            throw std::runtime_error("well-formed condition did not inspect");
+    }
+}
+
 int main()
 {
     try {
@@ -296,6 +351,7 @@ int main()
                          growing_header + "\n" + header + leaf);
         c50::model::train(context, kind, growing_names, growing_data);
         structure(context);
+        condition_outcomes(context);
         if (model.predict(context, "0, ?\n").class_index(0) != 0) return 1;
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
