@@ -299,6 +299,15 @@ and never fires the rule that holds it. Inspection of such a rule named a value
 that does not exist. The rulesets that the learner writes are unchanged and
 load with the same predictions.
 
+A numeric property is finite when it rounds to a finite `float`, which is what
+the writer prints. The loader once compared the decimal text with `FLT_MAX` as
+a `double`, so it rejected `cut="-3.4028235e+38"`, the text that Release 2.07
+and this project write for a cut at the lowest `float`. Training with such data
+succeeded, and `predict` then threw `error_code::parse_error` for the model
+that it had just written. A file from Release 2.07 with that cut did not load
+either. `model::load` now accepts any number up to the largest that rounds to
+`FLT_MAX`, `3.4028235677973362e+38`, and still rejects a larger one.
+
 `model::load` rejects a serialized tree of more than `max_tree_depth` levels
 with `error_code::parse_error` (`ValueError` in Python), to bound the stack
 that parsing needs for untrusted text. The root is level 1, and the default is

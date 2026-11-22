@@ -207,6 +207,66 @@ static void condition_outcomes(c50::context &context)
     }
 }
 
+// The writer prints a cut as a float, so the text of -FLT_MAX, which is a
+// little below that value as a double, must load. A number that rounds to
+// infinity as a float must not.
+static void float_limit_cuts(c50::context &context)
+{
+    const auto tree = c50::model_kind::tree;
+    const auto rules = c50::model_kind::rules;
+    const std::string lowest = "-3.4028235e+38";
+    const std::string highest = "3.4028235e+38";
+
+    // Training writes the cut that the lower neighbour of the split gives.
+    std::string cases;
+    for (int row = 0; row < 5; ++row)
+        cases += "-3.4028235e+38, no\n0, yes\n";
+    for (const auto kind : {tree, rules}) {
+        const auto trained = c50::model::train(context, kind, names, cases);
+        if (trained.serialized_data().find(lowest) == std::string::npos)
+            throw std::runtime_error("the model has no cut at -FLT_MAX");
+        const auto loaded = c50::model::load(context, kind, names,
+                                             trained.serialized_data());
+        const std::string probes = "-3.4028235e+38, ?\n0, ?\n";
+        const auto expected = trained.predict(context, probes);
+        const auto actual = loaded.predict(context, probes);
+        if (actual.class_index(0) != 0 || actual.class_index(1) != 1 ||
+            expected.class_index(0) != 0 || expected.class_index(1) != 1)
+            throw std::runtime_error("a cut at -FLT_MAX changed predictions");
+    }
+
+    // Text that Release 2.07 wrote for such a cut, in both formats.
+    const auto written = c50::model::load(context, tree, names, header +
+        "type=\"2\" class=\"no\" att=\"x\" forks=\"3\" cut=\"" + lowest +
+        "\" freq=\"5,5\"\n" + "type=\"0\" class=\"no\" freq=\"0,0\"\n" +
+        "type=\"0\" class=\"no\" freq=\"5,0\"\n" +
+        "type=\"0\" class=\"yes\" freq=\"0,5\"\n");
+    const auto written_predictions =
+        written.predict(context, "-3.4028235e+38, ?\n1, ?\n");
+    if (written_predictions.class_index(0) != 0 ||
+        written_predictions.class_index(1) != 1)
+        throw std::runtime_error("a written cut changed predictions");
+    for (const auto &cut : {lowest, highest}) {
+        c50::model::load(context, rules, names, header +
+            "rules=\"1\" default=\"no\"\n"
+            "conds=\"1\" cover=\"3.4028235e+38\" ok=\"1\" lift=\"1\" "
+            "class=\"no\"\ntype=\"2\" att=\"x\" cut=\"" + cut +
+            "\" result=\">\"\n");
+    }
+
+    // The next float would be infinity, so these round to it.
+    for (const auto &cut : {"3.4028236e+38", "-3.4028236e+38", "1e39"})
+        rejects([&] { c50::model::load(context, rules, names, header +
+            "rules=\"1\" default=\"no\"\n"
+            "conds=\"1\" cover=\"1\" ok=\"1\" lift=\"1\" class=\"no\"\n"
+            "type=\"2\" att=\"x\" cut=\"" + std::string(cut) +
+            "\" result=\">\"\n"); });
+    rejects([&] { c50::model::load(context, rules, names, header +
+        "rules=\"1\" default=\"no\"\n"
+        "conds=\"0\" cover=\"3.4028236e+38\" ok=\"1\" lift=\"1\" "
+        "class=\"no\"\n"); });
+}
+
 int main()
 {
     try {
@@ -352,6 +412,7 @@ int main()
         c50::model::train(context, kind, growing_names, growing_data);
         structure(context);
         condition_outcomes(context);
+        float_limit_cuts(context);
         if (model.predict(context, "0, ?\n").class_index(0) != 0) return 1;
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
