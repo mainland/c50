@@ -178,3 +178,43 @@ def test_estimator_trains_on_overflowing_cut_with_marker_values() -> None:
     y = np.array(["c0"] * 6 + ["c1"] * 2)
     estimator = C50Classifier().fit(X, y)
     assert len(estimator.predict(X)) == len(y)
+
+
+# When the cut is at the last case of a node, the case after it lies past the
+# node, and Release 2.07 reads whatever the case array holds there. This
+# project does not, and uses the cut for the midpoint and both bounds. A value
+# with the bits of the not-applicable marker puts the lowest case of the first
+# node there.
+SOFT_NAMES = "no, yes.\n\nx: continuous.\ny: continuous.\n"
+SOFT_ROWS = [(5, 0, 0), (5, 0, 0), (1e-45, 0, 1), (1e-45, 0, 1)] + [
+    (9, 10, 1)
+] * 4
+
+
+def test_text_soft_thresholds_use_the_bare_cut_at_the_last_case() -> None:
+    labels = ["no", "yes"]
+    data = "".join(f"{x!r}, {y!r}, {labels[c]}\n" for x, y, c in SOFT_ROWS)
+    options = c50.Options()
+    options.probabilistic_thresholds = True
+    model = c50.train(SOFT_NAMES, data, options=options)
+    assert 'att="x" forks="3" cut="5"\n' in model.serialized_data
+
+
+def test_dense_soft_thresholds_use_the_bare_cut_at_the_last_case() -> None:
+    values = np.array([[x, y] for x, y, _ in SOFT_ROWS])
+    classes = np.array([c for _, _, c in SOFT_ROWS])
+    options = c50.Options()
+    options.probabilistic_thresholds = True
+    model = c50.train_dense(SOFT_NAMES, values, classes, options=options)
+    assert 'att="x" forks="3" cut="5"\n' in model.serialized_data
+
+
+def test_estimator_soft_thresholds_use_the_bare_cut_at_the_last_case() -> None:
+    X = np.array([[x, y] for x, y, _ in SOFT_ROWS])
+    y = np.array(["no" if c == 0 else "yes" for _, _, c in SOFT_ROWS])
+    estimator = C50Classifier(probabilistic_thresholds=True).fit(X, y)
+    assert len(estimator.predict(X)) == len(y)
+    assert (
+        'att="feature_0" forks="3" cut="5"\n'
+        in estimator.model_.serialized_data
+    )

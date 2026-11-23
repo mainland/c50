@@ -970,6 +970,27 @@ run_case soft-threshold-bad-value rules rules -p -m 1 -r
 run_case soft-threshold-bad-value boost tree -p -m 1 -b
 run_case soft-threshold-unknown-bits tree tree -p -m 1
 run_case soft-threshold-smallest-denormal tree tree -p -m 1
+# The bounds of a cut at the last case of a node would read the case after it,
+# which lies past the node. Release 2.07 reads whatever the case array holds
+# there. This project uses the cut for the midpoint and both bounds, so each
+# cut below is written bare. The first input puts a value with the bits of a
+# marker next to the cut, and the second softens the cuts of three
+# cross-validation folds. The expected files come from this project.
+run_case soft-threshold-next-case tree tree -p
+run_case soft-threshold-held-out-case tree - -p -X 3 -I 1
+# The loader parses the last case of the data into the slot after the last kept
+# case and then discards it, because its class is unknown or because sampling
+# leaves it out. Release 2.07 reads that case for the bounds, and this project
+# does not. The expected files come from this project.
+run_case soft-threshold-discarded-case tree tree -p -m 1
+run_case soft-threshold-sampled-case tree tree -p -m 1 -S 50 -I 6
+# With boosting, a bare cut changes the case weights of every later trial,
+# because boosting reweights the cases by classifying them through the softened
+# tree. Release 2.07 forms the bounds of the cut at 13 on y from a case outside
+# its node and writes the bare cut, yet its later trials differ in leaf counts
+# and in the in-node bounds of the cuts on x. The expected files come from this
+# project.
+run_case soft-threshold-boosting tree tree -p -t 5 -m 1
 run_case implicit implicit tree
 run_case implicit-unknown tree tree
 run_case implicit-literals tree tree

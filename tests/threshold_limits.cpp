@@ -290,6 +290,71 @@ void overflowed_cut_with_markers_and_boosting(c50::context &context)
                 "the loaded model predicts as the trained one does");
 }
 
+/* When the cut is at the last case of a node, the case after it lies past the
+   node. Release 2.07 reads whatever the case array holds there, so this
+   project does not read it and uses the cut for the midpoint and both bounds.
+   A value that has the bits of the not-applicable marker puts the lowest case
+   of the first node there. The inner cut on x must have no bounds, in text and
+   in dense input. */
+void soft_thresholds_use_the_bare_cut_at_the_last_case(c50::context &context)
+{
+    const std::string next_names =
+        "no, yes.\n\nx: continuous.\ny: continuous.\n";
+    const std::string data =
+        "5,0,no\n5,0,no\n1e-45,0,yes\n1e-45,0,yes\n"
+        "9,10,yes\n9,10,yes\n9,10,yes\n9,10,yes\n";
+    const std::vector<double> values = {5, 0,  5,  0,  1e-45, 0,  1e-45, 0,
+                                        9, 10, 9,  10, 9,     10, 9,     10};
+    const std::vector<std::size_t> classes = {0, 0, 1, 1, 1, 1, 1, 1};
+    const c50::dense_dataset dense(values.data(), classes.size(), 2,
+                                   classes.data());
+    c50::options options;
+    options.probabilistic_thresholds = true;
+    const c50::model from_text = c50::model::train(
+        context, c50::model_kind::tree, next_names, data, options);
+    const c50::model from_dense = c50::model::train(
+        context, c50::model_kind::tree, next_names, dense, options);
+    for (const c50::model *model : {&from_text, &from_dense}) {
+        require(model->serialized_data().find(
+                    "att=\"x\" forks=\"3\" cut=\"5\"\n") != std::string::npos,
+                "the inner cut has no bounds");
+    }
+}
+
+/* The loader parses a case into the next slot before it decides to keep it.
+   Release 2.07 reads a discarded case there when it softens the cut at the
+   last kept case, and this project does not. With a sample of half the
+   cases and a seed of 6, the cases `7` and `8` are left out, and the cut at 5
+   has no bounds. A context that trained on other data first, as dense data,
+   must give the same result. */
+void soft_thresholds_ignore_a_discarded_case(c50::context &context)
+{
+    const std::string sampled_names = "no, yes.\n\nx: continuous.\n";
+    const std::string data = "5,no\n1e-45,yes\n5,no\n1e-45,yes\n7,no\n8,yes\n";
+    const std::vector<double> values = {5, 1e-45};
+    const std::vector<std::size_t> classes = {0, 1};
+    const c50::dense_dataset dense(values.data(), 2, 1, classes.data());
+    c50::options options;
+    options.probabilistic_thresholds = true;
+    options.minimum_cases = 1;
+    for (int round = 0; round < 2; ++round) {
+        const c50::model unsampled = c50::model::train(
+            context, c50::model_kind::tree, sampled_names, dense, options);
+        require(unsampled.serialized_data().find("low=") == std::string::npos,
+                "the dense cut has no bounds");
+        options.sample_fraction = 0.5;
+        options.random_seed = 6;
+        const c50::model model = c50::model::train(
+            context, c50::model_kind::tree, sampled_names, data, options);
+        options.sample_fraction = 0;
+        require(model.serialized_data().find("cut=\"5\"\n") !=
+                    std::string::npos,
+                "the sampled cut is at 5");
+        require(model.serialized_data().find("low=") == std::string::npos,
+                "the sampled cut has no bounds");
+    }
+}
+
 } // namespace
 
 int main()
@@ -314,6 +379,8 @@ int main()
         soft_thresholds_reject_a_bad_value(context);
         overflowed_cut_trains_on_every_node_shape(context);
         overflowed_cut_with_markers_and_boosting(context);
+        soft_thresholds_use_the_bare_cut_at_the_last_case(context);
+        soft_thresholds_ignore_a_discarded_case(context);
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
         return 1;

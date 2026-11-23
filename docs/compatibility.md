@@ -669,25 +669,41 @@ tests the stored value, so it skips such a case and can move the cut to the
 smallest known value of the node. Every case of the node is then at or below
 the cut.
 
-Soft thresholds (`-p`) read the case after the last one at the cut to place
-the bounds. Release 2.07 reads past the last case of the node there, and
-crashes with a segmentation fault or reads a stray pointer. The `-p` option
-with trees, rules, and boosting crashes this way on two cases with `-m 1`, and
-on four cases, two at `5` and two at one such value, with the default minimum
-cases. The C++ dense interface, `c50.train_dense`, and
+Soft thresholds (`-p`) read the case after the last one at the cut to place the
+bounds. When the cut is at the last case of the node, that case lies past the
+node, and Release 2.07 reads the slot of the case array after it. The slot
+holds the first case of a sibling node, a case that cross-validation holds out,
+a case that the loader parsed and then discarded or that the end of the file
+cut short, or nothing that was written. When nothing was written there, Release
+2.07 crashes with a segmentation fault or reads a stray pointer. The `-p`
+option with trees, rules, and boosting crashes this way on two cases with `-m
+1`, and on four cases, two at `5` and two at one such value, with the default
+minimum cases. The C++ dense interface, `c50.train_dense`, and
 `C50Classifier(probabilistic_thresholds=True)` reach the same read on finite
 input.
 
-This project uses the cut for the midpoint and for both bounds when no case of
-the node lies above it, and does not read the next case. No classifier that
-Release 2.07 trains to completion changes, because Release 2.07 cannot reach
-that state without reading past the node. The trees that it trains without
-`-p` on such data stay as Release 2.07 trains them, including a tree that
-misclassifies every training case, because those runs do not crash. The
-`soft-threshold-bad-value`, `soft-threshold-unknown-bits`, and
-`soft-threshold-smallest-denormal` fixtures record this project's output,
-because Release 2.07 has none, and the library and Python tests train on the
-same values with text and dense input.
+This project uses the cut for the midpoint and for both bounds whenever the cut
+is at the last case of the node, and does not read the next case. The result of
+Release 2.07 there depends on memory outside the node, so a run with such a cut
+can differ from Release 2.07. The difference starts at the bounds of that cut.
+The bounds change how the training cases classify, so the error counts of a
+single tree can differ even when its model file is the same. With boosting,
+every later trial can differ as well, in its structure, its leaf classes, the
+in-node bounds of its cuts, and its predictions, because boosting reweights the
+cases by classifying them through the softened tree. Release 2.07 can also
+write a bare cut to the model file while it classified with bounds from a case
+outside the node, so the model file alone can hide the difference. For a single
+tree without boosting, the bounds of a cut whose next case lies in the node are
+the same as before, by reading the code. The trees that Release 2.07 trains
+without `-p` are unchanged, including a tree that misclassifies every training
+case, because those runs do not read the case. The `soft-threshold-bad-value`,
+`soft-threshold-unknown-bits`, and `soft-threshold-smallest-denormal` fixtures
+record this project's output, because Release 2.07 has none. The
+`soft-threshold-next-case`, `soft-threshold-held-out-case`,
+`soft-threshold-discarded-case`, and `soft-threshold-sampled-case` fixtures
+record this project's bare cut where Release 2.07 writes bounds from a sibling
+node, from a held-out case, and from a discarded case. The library and Python
+tests train on the same values with text and dense input.
 
 ## Evaluation percentages above 21 million cases
 

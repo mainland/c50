@@ -1,0 +1,87 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `soft-threshold-boosting'
+	Probability thresholds
+	5 boosting trials
+	Tests require 2 branches with >=1 cases
+
+Read 16 cases (2 attributes) from soft-threshold-boosting.data
+
+-----  Trial 0:  -----
+
+Decision tree:
+
+x <= 1.401298e-45 (4): yes (2)
+x >= 5 (4):
+:...x <= 8 (8.5):
+    :...y <= 13: no (6)
+    :   y > 13: yes (1)
+    x >= 9 (8.5):
+    :...x <= 9 (9.5): yes (5)
+        x >= 10 (9.5): no (2)
+
+-----  Trial 1:  -----
+
+Decision tree:
+
+x <= 1.401298e-45 (4): yes (2.6)
+x >= 5 (4):
+:...x <= 5 (8.5): no (7.4/0.9)
+    x >= 9 (8.5):
+    :...x <= 9 (9.5): yes (4.3)
+        x >= 10 (9.5): no (1.7)
+
+-----  Trial 2:  -----
+
+Decision tree:
+
+x <= 1.401298e-45 (4): yes (2.9)
+x >= 5 (4):
+:...x <= 5 (8.5): no (7.5/0.8)
+    x >= 9 (8.5):
+    :...x <= 9 (9.5): yes (4)
+        x >= 10 (9.5): no (1.6)
+
+-----  Trial 3:  -----
+
+Decision tree:
+
+x <= 1.401298e-45 (4): yes (3)
+x >= 5 (4):
+:...x <= 5 (8.5): no (7.6/0.8)
+    x >= 9 (8.5):
+    :...x <= 9 (9.5): yes (3.8)
+        x >= 10 (9.5): no (1.5)
+
+*** boosting reduced to 4 trials since last classifier is very accurate
+
+
+Evaluation on training data (16 cases):
+
+Trial	    Decision Tree
+-----	  ----------------
+	  Size      Errors
+
+   0	     5    1( 6.2%)
+   1	     4    1( 6.2%)
+   2	     4    1( 6.2%)
+   3	     4    1( 6.2%)
+boost	          1( 6.2%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     8     1    (a): class no
+	           7    (b): class yes
+
+
+	Attribute usage:
+
+	    100%  x
+	     44%  y
+
+
+Time: <elapsed> secs

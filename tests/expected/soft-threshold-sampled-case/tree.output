@@ -1,0 +1,55 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `soft-threshold-sampled-case'
+	Probability thresholds
+	Tests require 2 branches with >=1 cases
+	Use 50% of data for training
+	Random seed 6
+
+Read 3 cases (1 attributes) from soft-threshold-sampled-case.data
+
+Decision tree:
+
+x <= 5: yes (2)
+x > 5: no (1)
+
+
+Evaluation on training data (3 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2    1(33.3%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	           1    (a): class no
+	           2    (b): class yes
+
+
+	Attribute usage:
+
+	    100%  x
+
+
+Evaluation on test data (3 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2    2(66.7%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     1     1    (a): class no
+	     1          (b): class yes
+
+
+Time: <elapsed> secs

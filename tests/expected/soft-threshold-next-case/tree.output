@@ -1,0 +1,55 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `soft-threshold-next-case'
+	Probability thresholds
+
+Read 8 cases (2 attributes) from soft-threshold-next-case.data
+
+Decision tree:
+
+y >= 10 (5): yes (4)
+y <= 0 (5):
+:...x <= 5: yes (2)
+    x > 5: no (2)
+
+
+Evaluation on training data (8 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     3    4(50.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	           2    (a): class no
+	     2     4    (b): class yes
+
+
+	Attribute usage:
+
+	    100%  y
+	     50%  x
+
+
+Evaluation on test data (2 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     3    0( 0.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     2          (a): class no
+	                (b): class yes
+
+
+Time: <elapsed> secs

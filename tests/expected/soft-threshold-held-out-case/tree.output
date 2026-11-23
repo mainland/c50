@@ -1,0 +1,82 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `soft-threshold-held-out-case'
+	Probability thresholds
+	Cross-validate using 3 folds
+	Random seed 1
+
+Read 20 cases (1 attributes) from soft-threshold-held-out-case.data
+
+
+[ Fold 1 ]
+
+Decision tree:
+
+x <= 5: yes (7)
+x > 5: no (7)
+
+Evaluation on hold-out data (6 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2    6(100.0%)   <<
+
+
+[ Fold 2 ]
+
+Decision tree:
+
+x <= 5: yes (7)
+x > 5: no (6)
+
+Evaluation on hold-out data (7 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2    4(57.1%)   <<
+
+
+[ Fold 3 ]
+
+Decision tree:
+
+x <= 5: yes (6)
+x > 5: no (7)
+
+Evaluation on hold-out data (7 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2    7(100.0%)   <<
+
+
+[ Summary ]
+
+Fold	    Decision Tree
+----	  ----------------
+	  Size      Errors
+
+   1	     2      100.0%
+   2	     2       57.1%
+   3	     2      100.0%
+
+  Mean	   2.0       85.7%
+  SE	   0.0       14.3%
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	          10    (a): class no
+	     7     3    (b): class yes
+
+
+Time: <elapsed> secs
