@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -189,6 +190,106 @@ void soft_thresholds_reject_a_bad_value(c50::context &context)
     require(rejected, "a bad value is rejected as a parse error");
 }
 
+/* Two large negative values whose float sum overflows are not a valid cut, so
+   the cut is the lower value. A node with not-applicable cases keeps the two
+   cases that the gain counted below the cut, where Release 2.07 leaves that
+   branch empty. The tree must be finite and predict the data, whether the
+   not-applicable cases carry too little weight for their own branch, or the
+   attribute holds only values that read as not applicable and as unknown
+   through their bits. */
+void overflowed_cut_trains_on_every_node_shape(c50::context &context)
+{
+    const std::string weight_names =
+        "c0, c1.\n\nx0: continuous.\ncase weight: continuous.\n";
+    const std::string weighted =
+        "-3e38,0.3,c0\n-3.4e38,1e-3,c0\nN/A,1e-3,c0\n-3.4e38,1e-3,c0\n"
+        "-3e38,1.7,c1\n-3.4e38,2.9,c1\n-3.4e38,1,c1\n";
+    const std::string marker_names = "c0, c1.\n\nx: continuous.\n";
+    const std::string marker_text =
+        "?,c0\n?,c0\n-2e38,c0\n-2e38,c0\n1e-45,c0\n1e-45,c0\n"
+        "-3.4028234e38,c1\n-3.4028234e38,c1\n";
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const std::vector<double> marker_column = {
+        nan, nan, -2e38, -2e38, 1e-45, 1e-45, -3.4028234e38, -3.4028234e38};
+    const std::vector<std::size_t> marker_classes = {0, 0, 0, 0, 0, 0, 1, 1};
+    const c50::dense_dataset marker_dense(marker_column.data(),
+                                          marker_column.size(), 1,
+                                          marker_classes.data());
+
+    const c50::model counted = c50::model::train(
+        context, c50::model_kind::tree, names,
+        "-3e38,a\n-3e38,a\n-2e38,b\n0,a\n0,a\nN/A,b\nN/A,b\n");
+    require(counted.serialized_data().find("class=\"a\" freq=\"2,0\"") !=
+                std::string::npos,
+            "the branch of the lower value holds its cases");
+
+    for (const auto kind : {c50::model_kind::tree, c50::model_kind::rules}) {
+        const c50::model with_weights = c50::model::train(
+            context, kind, weight_names, weighted);
+        require(with_weights.serialized_data().size() > 0,
+                "a model from weighted text");
+        const c50::model from_text = c50::model::train(
+            context, kind, marker_names, marker_text);
+        require(from_text.serialized_data().size() > 0,
+                "a model from marker text");
+        const c50::model from_dense = c50::model::train(
+            context, kind, marker_names, marker_dense);
+        require(from_dense.serialized_data().size() > 0,
+                "a model from marker dense data");
+    }
+}
+
+/* Dense data with a not-applicable value in the first column, values with the
+   bits of the markers for unknown and not-applicable values in the others, and
+   large negative values whose midpoints overflow. Ten boosting trials with
+   soft thresholds divide the cases again under changed weights. Training must
+   finish, and the model must load and predict as the trained one does. */
+void overflowed_cut_with_markers_and_boosting(c50::context &context)
+{
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const std::vector<double> values = {
+        0, 2e38, nan,
+        1.5777218104420236e-30, -1.8e38, -2e38,
+        0, 2.5, 2.5,
+        -3e38, 2.5, 9,
+        -3e38, 1e-45, -1.8e38,
+        -3e38, -0.0, 2.5,
+        -3e38, -1, -0.0,
+        -2e38, -3e38, -1.8e38,
+        1e-30, -0.0, 1.4012984643248171e-45,
+        1e-45, -2e38, -3.4028234e38,
+        -3.4028234e38, 5, 2e38,
+        -1.8e38, 2.5, 9,
+        -1.8e38, 1e-45, 9};
+    const std::vector<unsigned char> not_applicable = {
+        1, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,
+        0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0};
+    const std::vector<std::size_t> classes = {2, 1, 2, 0, 2, 2, 2,
+                                              1, 0, 2, 1, 0, 0};
+    const std::string dense_names =
+        "c0, c1, c2.\n\nx0: continuous.\nx1: continuous.\n"
+        "x2: continuous.\n";
+    const c50::dense_dataset dense(values.data(), classes.size(), 3,
+                                   classes.data(), 0, not_applicable.data());
+
+    c50::options options;
+    options.minimum_cases = 1;
+    options.probabilistic_thresholds = true;
+    options.trials = 10;
+    const c50::model model = c50::model::train(
+        context, c50::model_kind::tree, dense_names, dense, options);
+    const c50::model loaded = c50::model::load(
+        context, c50::model_kind::tree, model.names_data(),
+        model.serialized_data(), model.costs_data());
+    const c50::predictions expected = model.predict(context, dense);
+    const c50::predictions actual = loaded.predict(context, dense);
+    require(expected.size() == classes.size(), "one prediction per case");
+    require(actual.size() == classes.size(), "one prediction per case");
+    for (std::size_t row = 0; row < expected.size(); ++row)
+        require(expected.class_index(row) == actual.class_index(row),
+                "the loaded model predicts as the trained one does");
+}
+
 } // namespace
 
 int main()
@@ -211,6 +312,8 @@ int main()
         bound_at_largest_float_loads(context);
         soft_thresholds_train_on_marker_values(context);
         soft_thresholds_reject_a_bad_value(context);
+        overflowed_cut_trains_on_every_node_shape(context);
+        overflowed_cut_with_markers_and_boosting(context);
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
         return 1;

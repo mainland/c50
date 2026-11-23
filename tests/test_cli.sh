@@ -917,11 +917,42 @@ run_case float-overflow-cut soft-thresholds tree -p
 # The same overflow when the node has not-applicable cases. Release 2.07
 # completes with an empty branch for the lowest value, because the cut it
 # writes, the lowest value, differs from the infinite cut that it counted
-# with. This project reproduces that tree, and the expected files come from
-# Release 2.07.
+# with. This project cuts at the lower value, so the branch holds the cases
+# that the gain counted. The expected files come from this project.
 run_case float-overflow-cut-not-applicable tree tree
 run_case float-overflow-cut-not-applicable rules rules -r
 run_case float-overflow-cut-not-applicable boost tree -b
+# The same overflow when the attribute has no not-applicable cases but a value
+# with the bits of the marker. Release 2.07 recurses on the same cases until
+# the stack overflows, and the expected files come from this project.
+run_case float-overflow-cut-marker-value tree tree
+run_case float-overflow-cut-marker-value rules rules -r
+# The not-applicable weight lies just at the minimum weight of a leaf. Release
+# 2.07 sums it in float, which forms the branch of not-applicable cases, so it
+# completes with no errors on the test cases and a tree that tests y. This
+# project cuts at the lower value and tests x. The expected files come from
+# this project.
+run_case float-overflow-cut-weight-sum tree tree
+run_case float-overflow-cut-weight-sum rules rules -r
+# A branch for the not-applicable cases forms, and the node below the branch
+# has the overflowed cut again. Release 2.07 recurses without end there. The
+# expected files come from this project.
+run_case float-overflow-cut-below-branch tree tree
+run_case float-overflow-cut-below-branch rules rules -r
+# The trial tree of winnowing classifies cases through the cuts, which must be
+# the cuts that were counted. Release 2.07 winnows case-weighted data with an
+# average weight of zero and keeps no attribute. The expected files come from
+# this project.
+run_case float-overflow-cut-winnow tree tree -w
+# Not-applicable cases of small weight and a case of unknown value. Release
+# 2.07 divides the node by the infinite cut and meets the same cases again, but
+# the rounded weight of the unknown case grows with each repetition. After
+# about a thousand it lifts the weight of the not-applicable branch to the
+# minimum weight of a leaf, and the recursion ends with a tree that tests only
+# the other attribute. This project cuts at the lower value, so it tests the
+# attribute that the gain chose. The expected files come from this project.
+run_case float-overflow-cut-drift tree tree
+run_case float-overflow-cut-drift rules rules -r
 # The soft bounds of two large positive values. Release 2.07 sums them in
 # float, which overflows, and writes an infinite midpoint and upper bound that
 # misclassify every case above the cut. The expected files come from this

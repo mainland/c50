@@ -1,0 +1,37 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `float-overflow-cut-below-branch'
+
+Read 12 cases (1 attributes) from float-overflow-cut-below-branch.data
+
+Decision tree:
+
+x = N/A: a (2)
+x <= -3e+38: a (5)
+x > -3e+38: b (5)
+
+
+Evaluation on training data (12 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     3    0( 0.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     7          (a): class a
+	           5    (b): class b
+
+
+	Attribute usage:
+
+	    100%  x
+
+
+Time: <elapsed> secs

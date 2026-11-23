@@ -10,7 +10,11 @@ Read 7 cases (1 attributes) from float-overflow-cut-not-applicable.data
 
 Rules:
 
-Rule 1: (2, lift 1.8)
+Rule 1: (2, lift 1.3)
+	x <= -3e+38
+	->  class a  [0.750]
+
+Rule 2: (2, lift 1.8)
 	x = N/A
 	->  class b  [0.750]
 
@@ -23,7 +27,7 @@ Evaluation on training data (7 cases):
 	  ----------------
 	    No      Errors
 
-	     1    1(14.3%)   <<
+	     2    1(14.3%)   <<
 
 
 	   (a)   (b)    <-classified as
@@ -34,7 +38,7 @@ Evaluation on training data (7 cases):
 
 	Attribute usage:
 
-	     29%  x
+	     57%  x
 
 
 Time: <elapsed> secs
