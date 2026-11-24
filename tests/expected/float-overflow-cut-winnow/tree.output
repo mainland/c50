@@ -1,0 +1,44 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `float-overflow-cut-winnow'
+	Winnow attributes
+
+Read 12 cases (3 attributes) from float-overflow-cut-winnow.data
+Using relative case weighting
+
+1 attribute winnowed
+Estimated importance of remaining attributes:
+
+     <1%  x0
+
+Decision tree:
+
+x0 = N/A: a (4)
+x0 <= -3e+38: a (2.7)
+x0 > -3e+38: b (5.3/1.4)
+
+
+Evaluation on training data (12 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     3    3(25.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     6     2    (a): class a
+	     1     3    (b): class b
+
+
+	Attribute usage:
+
+	     92%  x0
+
+
+Time: <elapsed> secs

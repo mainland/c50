@@ -1,0 +1,53 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `float-overflow-cut-drift'
+
+Read 20 cases (3 attributes) from float-overflow-cut-drift.data
+Using relative case weighting
+
+Decision tree:
+
+x = N/A: a (0)
+x <= -3e+38: a (10)
+x > -3e+38: b (10)
+
+
+Evaluation on training data (20 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     3    1( 5.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	    11          (a): class a
+	     1     8    (b): class b
+
+
+	Attribute usage:
+
+	     95%  x
+
+
+Evaluation on test data (2 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     3    2(100.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	           1    (a): class a
+	     1          (b): class b
+
+
+Time: <elapsed> secs

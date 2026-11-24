@@ -917,11 +917,42 @@ run_case float-overflow-cut soft-thresholds tree -p
 # The same overflow when the node has not-applicable cases. Release 2.07
 # completes with an empty branch for the lowest value, because the cut it
 # writes, the lowest value, differs from the infinite cut that it counted
-# with. This project reproduces that tree, and the expected files come from
-# Release 2.07.
+# with. This project cuts at the lower value, so the branch holds the cases
+# that the gain counted. The expected files come from this project.
 run_case float-overflow-cut-not-applicable tree tree
 run_case float-overflow-cut-not-applicable rules rules -r
 run_case float-overflow-cut-not-applicable boost tree -b
+# The same overflow when the attribute has no not-applicable cases but a value
+# with the bits of the marker. Release 2.07 recurses on the same cases until
+# the stack overflows, and the expected files come from this project.
+run_case float-overflow-cut-marker-value tree tree
+run_case float-overflow-cut-marker-value rules rules -r
+# The not-applicable weight lies just at the minimum weight of a leaf. Release
+# 2.07 sums it in float, which forms the branch of not-applicable cases, so it
+# completes with no errors on the test cases and a tree that tests y. This
+# project cuts at the lower value and tests x. The expected files come from
+# this project.
+run_case float-overflow-cut-weight-sum tree tree
+run_case float-overflow-cut-weight-sum rules rules -r
+# A branch for the not-applicable cases forms, and the node below the branch
+# has the overflowed cut again. Release 2.07 recurses without end there. The
+# expected files come from this project.
+run_case float-overflow-cut-below-branch tree tree
+run_case float-overflow-cut-below-branch rules rules -r
+# The trial tree of winnowing classifies cases through the cuts, which must be
+# the cuts that were counted. Release 2.07 winnows case-weighted data with an
+# average weight of zero and keeps no attribute. The expected files come from
+# this project.
+run_case float-overflow-cut-winnow tree tree -w
+# Not-applicable cases of small weight and a case of unknown value. Release
+# 2.07 divides the node by the infinite cut and meets the same cases again, but
+# the rounded weight of the unknown case grows with each repetition. After
+# about a thousand it lifts the weight of the not-applicable branch to the
+# minimum weight of a leaf, and the recursion ends with a tree that tests only
+# the other attribute. This project cuts at the lower value, so it tests the
+# attribute that the gain chose. The expected files come from this project.
+run_case float-overflow-cut-drift tree tree
+run_case float-overflow-cut-drift rules rules -r
 # The soft bounds of two large positive values. Release 2.07 sums them in
 # float, which overflows, and writes an infinite midpoint and upper bound that
 # misclassify every case above the cut. The expected files come from this
@@ -939,6 +970,27 @@ run_case soft-threshold-bad-value rules rules -p -m 1 -r
 run_case soft-threshold-bad-value boost tree -p -m 1 -b
 run_case soft-threshold-unknown-bits tree tree -p -m 1
 run_case soft-threshold-smallest-denormal tree tree -p -m 1
+# The bounds of a cut at the last case of a node would read the case after it,
+# which lies past the node. Release 2.07 reads whatever the case array holds
+# there. This project uses the cut for the midpoint and both bounds, so each
+# cut below is written bare. The first input puts a value with the bits of a
+# marker next to the cut, and the second softens the cuts of three
+# cross-validation folds. The expected files come from this project.
+run_case soft-threshold-next-case tree tree -p
+run_case soft-threshold-held-out-case tree - -p -X 3 -I 1
+# The loader parses the last case of the data into the slot after the last kept
+# case and then discards it, because its class is unknown or because sampling
+# leaves it out. Release 2.07 reads that case for the bounds, and this project
+# does not. The expected files come from this project.
+run_case soft-threshold-discarded-case tree tree -p -m 1
+run_case soft-threshold-sampled-case tree tree -p -m 1 -S 50 -I 6
+# With boosting, a bare cut changes the case weights of every later trial,
+# because boosting reweights the cases by classifying them through the softened
+# tree. Release 2.07 forms the bounds of the cut at 13 on y from a case outside
+# its node and writes the bare cut, yet its later trials differ in leaf counts
+# and in the in-node bounds of the cuts on x. The expected files come from this
+# project.
+run_case soft-threshold-boosting tree tree -p -t 5 -m 1
 run_case implicit implicit tree
 run_case implicit-unknown tree tree
 run_case implicit-literals tree tree

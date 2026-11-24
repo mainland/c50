@@ -116,3 +116,105 @@ def test_estimator_with_soft_thresholds_handles_marker_values(
     y = np.array(["no", "no", "yes", "yes"])
     estimator = C50Classifier(probabilistic_thresholds=True).fit(X, y)
     assert estimator.predict(np.array([[5.0]]))[0] in {"no", "yes"}
+
+
+# An overflowed midpoint is not a valid cut, so the lower value is the cut
+# whatever else the node holds. With a not-applicable case in the node, the
+# first test also pins the tree: the branch of the lowest value holds its two
+# cases, where Release 2.07 leaves it empty. The inputs after it hold a
+# not-applicable case that is too light for its own branch, a value whose bits
+# are those of the unknown marker, and a value whose bits are those of the
+# not-applicable marker. Each must train.
+def test_overflowed_cut_keeps_the_cases_that_the_gain_counted() -> None:
+    data = "-3e38,a\n-3e38,a\n-2e38,b\n0,a\n0,a\nN/A,b\nN/A,b\n"
+    model = c50.train("a, b.\n\nx: continuous.\n", data)
+    assert 'att="x" forks="3" cut="-3e+38"' in model.serialized_data
+    assert 'class="a" freq="2,0"' in model.serialized_data
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_text_training_with_a_tiny_not_applicable_weight(
+    kind: c50.ModelKind,
+) -> None:
+    names = "c0, c1.\n\nx0: continuous.\ncase weight: continuous.\n"
+    data = (
+        "-3e38, 0.3, c0\n-3.4e38, 1e-3, c0\nN/A, 1e-3, c0\n"
+        "-3.4e38, 1e-3, c0\n-3e38, 1.7, c1\n-3.4e38, 2.9, c1\n"
+        "-3.4e38, 1, c1\n"
+    )
+    model = c50.train(names, data, kind)
+    assert model.serialized_data
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_text_training_with_a_marker_value_and_a_light_not_applicable_case(
+    kind: c50.ModelKind,
+) -> None:
+    names = "a, b.\n\nx: continuous.\ncase weight: continuous.\n"
+    marker = "1.5777218104420236e-30"
+    data = (
+        "-3e38, 1, a\n" * 5
+        + "-2e38, 1, b\n" * 5
+        + "N/A, 0.03, a\n"
+        + "".join(f"{marker}, 1, {c}\n" for c in "ababababab")
+    )
+    model = c50.train(names, data, kind)
+    assert model.serialized_data
+
+
+def test_estimator_trains_on_overflowing_cut_with_marker_values() -> None:
+    X = np.array(
+        [
+            [np.nan],
+            [np.nan],
+            [-2e38],
+            [-2e38],
+            [1e-45],
+            [1e-45],
+            [-3.4028234e38],
+            [-3.4028234e38],
+        ]
+    )
+    y = np.array(["c0"] * 6 + ["c1"] * 2)
+    estimator = C50Classifier().fit(X, y)
+    assert len(estimator.predict(X)) == len(y)
+
+
+# When the cut is at the last case of a node, the case after it lies past the
+# node, and Release 2.07 reads whatever the case array holds there. This
+# project does not, and uses the cut for the midpoint and both bounds. A value
+# with the bits of the not-applicable marker puts the lowest case of the first
+# node there.
+SOFT_NAMES = "no, yes.\n\nx: continuous.\ny: continuous.\n"
+SOFT_ROWS = [(5, 0, 0), (5, 0, 0), (1e-45, 0, 1), (1e-45, 0, 1)] + [
+    (9, 10, 1)
+] * 4
+
+
+def test_text_soft_thresholds_use_the_bare_cut_at_the_last_case() -> None:
+    labels = ["no", "yes"]
+    data = "".join(f"{x!r}, {y!r}, {labels[c]}\n" for x, y, c in SOFT_ROWS)
+    options = c50.Options()
+    options.probabilistic_thresholds = True
+    model = c50.train(SOFT_NAMES, data, options=options)
+    assert 'att="x" forks="3" cut="5"\n' in model.serialized_data
+
+
+def test_dense_soft_thresholds_use_the_bare_cut_at_the_last_case() -> None:
+    values = np.array([[x, y] for x, y, _ in SOFT_ROWS])
+    classes = np.array([c for _, _, c in SOFT_ROWS])
+    options = c50.Options()
+    options.probabilistic_thresholds = True
+    model = c50.train_dense(SOFT_NAMES, values, classes, options=options)
+    assert 'att="x" forks="3" cut="5"\n' in model.serialized_data
+
+
+def test_estimator_soft_thresholds_use_the_bare_cut_at_the_last_case() -> None:
+    X = np.array([[x, y] for x, y, _ in SOFT_ROWS])
+    y = np.array(["no" if c == 0 else "yes" for _, _, c in SOFT_ROWS])
+    estimator = C50Classifier(probabilistic_thresholds=True).fit(X, y)
+    assert len(estimator.predict(X)) == len(y)
+    assert (
+        'att="feature_0" forks="3" cut="5"\n'
+        in estimator.model_.serialized_data
+    )

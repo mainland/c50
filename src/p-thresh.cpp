@@ -210,11 +210,18 @@ void FindBounds(c50_context *Context, Tree T, CaseNo Fp, CaseNo Lp)
 	    if ( CVal(Context->cases.records[i], Att) <= T->Cut ) SplitI = i;
 	}
 
-	/*  A case whose stored value is a missing or not-applicable marker
-	    while its flag is unset is read as known, so the cut can fall
-	    at or above the last case of the node.  No case lies above the
-	    cut then, and there is nothing to soften.  Use the cut itself,
-	    and do not read the record after the last case  */
+	/*  The bounds read the case after the last one at the cut.  When the
+	    cut is at the last case of the node, that case lies past the node.
+	    A case whose stored value is a missing or not-applicable marker
+	    while its flag is unset is read as known, so the cut can fall there.
+	    Release 2.07 reads whatever the case array holds in the slot: the
+	    first case of a sibling node, a case that cross-validation holds
+	    out, a case that the loader parsed and discarded, or memory that
+	    nothing wrote.  The bounds then depend on memory outside the node.
+	    The same holds when no applicable known case is left in the node
+	    (Ap > Lp), where there is no case to read at all.  Use the cut
+	    itself for the midpoint and both bounds, and do not read the record
+	    after the last case  */
 
 	if ( SplitI >= Lp )
 	{

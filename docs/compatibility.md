@@ -598,43 +598,48 @@ this project's output, because Release 2.07 has none.
 ## Thresholds near the limits of `float`
 
 A continuous cut lies halfway between two neighboring attribute values. Release
-2.07 computes the midpoint from the `float` sum of the two values. When both
+2.07 scores the split between the two values by the case counts on each side,
+and only then computes the cut from the `float` sum of the values. When both
 values are large and negative, for example `-3e38` and `-2e38`, the sum
-overflows to `-inf` and so does the cut. Release 2.07 then writes the cut as
-the lowest training value, `-3e+38`, but it computes the leaf counts as if the
-cut were `-inf`, so the `<=` branch is empty and holds no cases. Where the
-cases go next depends on the not-applicable cases of the node.
+overflows to `-inf` and so does the cut. The split that `Divide` then performs
+is not the split that was scored: every applicable case is above `-inf`, so
+the `<=` branch is empty. Release 2.07 then does one of three things.
 
-- When the node has not-applicable cases for the attribute, they stay out of
-  the `>` branch, so that branch holds fewer cases than the node and growth
-  ends. Release 2.07 completes with the empty `<=` branch, which takes the
-  class of its parent. This project reproduces that tree, its leaf counts, and
-  its probabilities. The cases `-3e38` and `-3e38` of class `a`, `-2e38` of
-  class `b`, `0` and `0` of class `a`, and two `N/A` cases of class `b` give
-  `x <= -3e+38: a (0)`, `x = N/A: b (2)`, and `x > -3e+38: a (5/1)`. With soft
-  thresholds (`-p`), Release 2.07 crashes on this input. The
-  `float-overflow-cut-not-applicable` fixture records the output of Release
-  2.07 for a tree, rules, and boosting.
-- Otherwise every case goes to the `>` branch, tree growth sees the same cases
-  again, and the program recurses until the stack overflows. Release 2.07 dies
-  from a segmentation fault on such input, with trees and with rules, and so
-  does an earlier build of this project. The values are finite and valid.
+- It repeats the node on the same cases, which recurses until the stack
+  overflows, and dies from a segmentation fault. This is the usual outcome,
+  with trees and with rules.
+- It completes because the node has not-applicable cases for the attribute.
+  They form a branch of their own and stay out of the `>` branch, so the node
+  is not repeated. The cases `-3e38` and `-3e38` of class `a`, `-2e38` of class
+  `b`, `0` and `0` of class `a`, and two `N/A` cases of class `b` give
+  `x <= -3e+38: a (0)`, `x = N/A: b (2)`, and `x > -3e+38: a (5/1)`.
+- It completes after a rounding drift. The weights of the unknown cases change
+  by rounding with each repetition of the node. After many repetitions, 1,133
+  in one input, the branch of not-applicable cases reaches its minimum weight
+  or another test wins. The tree that results can test another attribute.
 
-The positive side is safe, because the cut that results from an overflow there
-is not below the upper value and the program already falls back to the lower
-value.
+In the runs that complete with the overflowed cut in the tree, the pruned tree
+writes a cut that disagrees with its counts. `AdjustAllThresholds` moves each
+cut to the greatest training value at or below it, and `-inf` has none, so it
+becomes the smallest value. The tree above writes `x <= -3e+38` over an empty
+leaf. The drift outcome has no test on the attribute, so it writes no such cut.
 
-This project falls back to the lower value for a midpoint that is not below the
-upper value, as Release 2.07 does. It falls back for a midpoint below the lower
-value only when the node has no not-applicable cases for the attribute. When
-the node has them, this project keeps the overflowed cut that Release 2.07
-keeps. For five cases at `-3e38` of class `a` and five at `-2e38` of class `b`,
-the tree is `x <= -3e+38: a (5)` and `x > -3e+38: b (5)`. Only runs that
-crashed change. Every midpoint that is a valid cut, and every overflowed cut
-that Release 2.07 completes with, is the same as before. The
-`float-overflow-cut` fixture records this project's output for a tree and for
-rules, because Release 2.07 has none, and the library and Python tests train on
-the same values with text and dense input.
+This project uses the lower value for every midpoint that is not in
+`[LowVal, HighVal)`. Release 2.07 already does so for a midpoint at or above
+the upper value, which is the positive overflow. The partition then matches
+the scored split and growth makes progress at every node. A run whose sum
+overflows therefore differs from Release 2.07 where Release 2.07 completes,
+and this is deliberate, because the result of Release 2.07 there depends on a
+rounding path or on how a recursion happens to end. For the cases above, the
+tree is `x = N/A: b (2)`, `x <= -3e+38: a (2)`, and `x > -3e+38: a (3/1)`. A
+run whose midpoint sum is finite is unchanged. The `float-overflow-cut`
+fixture records this project's output for a tree, for rules, and for soft
+thresholds, because Release 2.07 crashes. The
+`float-overflow-cut-not-applicable` and `float-overflow-cut-weight-sum`
+fixtures hold this project's output for runs that Release 2.07 completes with
+another tree, and `float-overflow-cut-drift` holds it for a run that completes
+after a rounding drift. The library and Python tests train on the same values
+with text and dense input.
 
 Soft thresholds (`-p`) compute the same midpoint to place the lower and upper
 bounds of a cut. When the `float` sum of the two values around the cut
@@ -664,25 +669,41 @@ tests the stored value, so it skips such a case and can move the cut to the
 smallest known value of the node. Every case of the node is then at or below
 the cut.
 
-Soft thresholds (`-p`) read the case after the last one at the cut to place
-the bounds. Release 2.07 reads past the last case of the node there, and
-crashes with a segmentation fault or reads a stray pointer. The `-p` option
-with trees, rules, and boosting crashes this way on two cases with `-m 1`, and
-on four cases, two at `5` and two at one such value, with the default minimum
-cases. The C++ dense interface, `c50.train_dense`, and
+Soft thresholds (`-p`) read the case after the last one at the cut to place the
+bounds. When the cut is at the last case of the node, that case lies past the
+node, and Release 2.07 reads the slot of the case array after it. The slot
+holds the first case of a sibling node, a case that cross-validation holds out,
+a case that the loader parsed and then discarded or that the end of the file
+cut short, or nothing that was written. When nothing was written there, Release
+2.07 crashes with a segmentation fault or reads a stray pointer. The `-p`
+option with trees, rules, and boosting crashes this way on two cases with `-m
+1`, and on four cases, two at `5` and two at one such value, with the default
+minimum cases. The C++ dense interface, `c50.train_dense`, and
 `C50Classifier(probabilistic_thresholds=True)` reach the same read on finite
 input.
 
-This project uses the cut for the midpoint and for both bounds when no case of
-the node lies above it, and does not read the next case. No classifier that
-Release 2.07 trains to completion changes, because Release 2.07 cannot reach
-that state without reading past the node. The trees that it trains without
-`-p` on such data stay as Release 2.07 trains them, including a tree that
-misclassifies every training case, because those runs do not crash. The
-`soft-threshold-bad-value`, `soft-threshold-unknown-bits`, and
-`soft-threshold-smallest-denormal` fixtures record this project's output,
-because Release 2.07 has none, and the library and Python tests train on the
-same values with text and dense input.
+This project uses the cut for the midpoint and for both bounds whenever the cut
+is at the last case of the node, and does not read the next case. The result of
+Release 2.07 there depends on memory outside the node, so a run with such a cut
+can differ from Release 2.07. The difference starts at the bounds of that cut.
+The bounds change how the training cases classify, so the error counts of a
+single tree can differ even when its model file is the same. With boosting,
+every later trial can differ as well, in its structure, its leaf classes, the
+in-node bounds of its cuts, and its predictions, because boosting reweights the
+cases by classifying them through the softened tree. Release 2.07 can also
+write a bare cut to the model file while it classified with bounds from a case
+outside the node, so the model file alone can hide the difference. For a single
+tree without boosting, the bounds of a cut whose next case lies in the node are
+the same as before, by reading the code. The trees that Release 2.07 trains
+without `-p` are unchanged, including a tree that misclassifies every training
+case, because those runs do not read the case. The `soft-threshold-bad-value`,
+`soft-threshold-unknown-bits`, and `soft-threshold-smallest-denormal` fixtures
+record this project's output, because Release 2.07 has none. The
+`soft-threshold-next-case`, `soft-threshold-held-out-case`,
+`soft-threshold-discarded-case`, and `soft-threshold-sampled-case` fixtures
+record this project's bare cut where Release 2.07 writes bounds from a sibling
+node, from a held-out case, and from a discarded case. The library and Python
+tests train on the same values with text and dense input.
 
 ## Evaluation percentages above 21 million cases
 

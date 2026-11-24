@@ -1,0 +1,60 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `float-overflow-cut-drift'
+	Rule-based classifiers
+
+Read 20 cases (3 attributes) from float-overflow-cut-drift.data
+Using relative case weighting
+
+Rules:
+
+Rule 1: (10, lift 1.8)
+	x <= -3e+38
+	->  class a  [0.916]
+
+Rule 2: (10, lift 1.8)
+	x > -3e+38
+	->  class b  [0.916]
+
+Default class: a
+
+
+Evaluation on training data (20 cases):
+
+	        Rules
+	  ----------------
+	    No      Errors
+
+	     2    1( 5.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	    11          (a): class a
+	     1     8    (b): class b
+
+
+	Attribute usage:
+
+	     80%  x
+
+
+Evaluation on test data (2 cases):
+
+	        Rules
+	  ----------------
+	    No      Errors
+
+	     2    2(100.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	           1    (a): class a
+	     1          (b): class b
+
+
+Time: <elapsed> secs

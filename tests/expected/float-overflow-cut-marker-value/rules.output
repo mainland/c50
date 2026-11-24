@@ -1,0 +1,44 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `float-overflow-cut-marker-value'
+	Rule-based classifiers
+
+Read 8 cases (1 attributes) from float-overflow-cut-marker-value.data
+
+Rules:
+
+Rule 1: (2, lift 1.0)
+	x > -3.402823e+38
+	->  class c0  [0.750]
+
+Rule 2: (2, lift 3.0)
+	x <= -3.402823e+38
+	->  class c1  [0.750]
+
+Default class: c0
+
+
+Evaluation on training data (8 cases):
+
+	        Rules
+	  ----------------
+	    No      Errors
+
+	     2    0( 0.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     6          (a): class c0
+	           2    (b): class c1
+
+
+	Attribute usage:
+
+	     50%  x
+
+
+Time: <elapsed> secs

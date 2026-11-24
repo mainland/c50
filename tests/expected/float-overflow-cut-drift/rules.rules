@@ -1,0 +1,7 @@
+id="See5/C5.0 2.07 GPL Edition <date>"
+entries="1"
+rules="2" default="a"
+conds="1" cover="9.97438" ok="9.97438" lift="1.83078" class="a"
+type="2" att="x" cut="-3e+38" result="<"
+conds="1" cover="9.97438" ok="9.97438" lift="1.83518" class="b"
+type="2" att="x" cut="-3e+38" result=">"

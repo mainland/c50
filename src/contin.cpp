@@ -203,16 +203,16 @@ void EvalContinuousAtt(c50_context *Context, SplitWorkspace &Workspace, SplitRes
 
 	/*  A threshold at or above the upper value falls back to the lower
 	    value, as in Release 2.07.  The float sum of two large negative
-	    values can also overflow, which makes the threshold -inf.  Release
-	    2.07 completes in that case only when the node has not-applicable
-	    cases for the attribute, which stay out of the branch for larger
-	    values, and this project keeps its threshold then.  Without them
-	    every case goes above the threshold and growth repeats on the same
-	    cases until the stack overflows, so use the lower value  */
+	    values can also overflow, which makes the threshold -inf, below the
+	    lower value.  Release 2.07 keeps it, and Divide then puts every
+	    applicable case above a cut that the gain did not score, so the
+	    written cut disagrees with the counts.  Use the lower value
+	    for any threshold outside the two values, so that the split that
+	    Divide performs is the split that was scored  */
 
 	Result.Threshold = (ContValue) (0.5 * (Workspace.LowVal + Workspace.HighVal));
-	if ( Result.Threshold >= Workspace.HighVal ||
-	     ( Result.Threshold < Workspace.LowVal && ! ( Workspace.ValFreq[1] > 0 ) ) )
+	if ( ! ( Result.Threshold >= Workspace.LowVal &&
+		 Result.Threshold < Workspace.HighVal ) )
 	{
 	    Result.Threshold = Workspace.LowVal;
 	}

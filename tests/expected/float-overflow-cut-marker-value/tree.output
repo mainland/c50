@@ -1,0 +1,36 @@
+
+C5.0 [Release 2.07 GPL Edition] <timestamp>
+-------------------------------
+
+    Options:
+	Application `float-overflow-cut-marker-value'
+
+Read 8 cases (1 attributes) from float-overflow-cut-marker-value.data
+
+Decision tree:
+
+x <= -3.402823e+38: c1 (2.7/0.7)
+x > -3.402823e+38: c0 (5.3)
+
+
+Evaluation on training data (8 cases):
+
+	    Decision Tree
+	  ----------------
+	  Size      Errors
+
+	     2    0( 0.0%)   <<
+
+
+	   (a)   (b)    <-classified as
+	  ----  ----
+	     6          (a): class c0
+	           2    (b): class c1
+
+
+	Attribute usage:
+
+	     75%  x
+
+
+Time: <elapsed> secs
