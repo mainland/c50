@@ -470,7 +470,7 @@ option checks print their own text, as in C5.0 Release 2.07. The program now
 also prints the message of every other failure that the library raises, in the
 form `*** message`. These failures include a classifier that cannot be written
 or closed, an internal error, and an allocation failure that `Error` did not
-report. Earlier builds of this project exited 1 without a message for them.
+report.
 
 Release 2.07 ignored the result of writing and closing a `.tree` or `.rules`
 file, so a write failure such as a full disk left a truncated model and exit
@@ -731,8 +731,7 @@ two cases above, and it is not part of the default tests.
 
 The number of classes is not limited, as in C5.0 Release 2.07. The
 `many-classes` fixture trains a schema of 4,097 classes and compares its trees,
-rules, and console output with Release 2.07. Earlier builds of this project
-rejected more than 4,096 classes.
+rules, and console output with Release 2.07.
 
 Memory grows with the square of the class count, as it does in Release 2.07.
 Evaluation allocates a confusion matrix of `(classes + 1)^2` integers, and
