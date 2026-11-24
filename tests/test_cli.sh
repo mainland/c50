@@ -260,7 +260,13 @@ expect_report_failure()
 # keeps no trace of the earlier failure. The report must still fail, with the
 # message `write error` in place of the system's description. The case injects
 # one `ENOSPC` into the first write to the report with `strace`, and it needs
-# more than one buffer of output, so that later writes can succeed.
+# more than one buffer of output, so that later writes can succeed. The C
+# library sizes the stream buffer from the `st_blksize` of the target, so a
+# file system that reports a large block size, such as ZFS with a 128 KiB
+# record size, takes the whole report in one write. The injected failure then
+# lands on the final flush, which leaves `errno` set. A run without fault
+# injection first counts the writes to the target, and the case skips when
+# there are fewer than two.
 # LeakSanitizer cannot run under `strace`, so the traced program runs without
 # leak detection.
 expect_transient_write_failure()
@@ -269,6 +275,21 @@ expect_transient_write_failure()
     transient_target=$2
     transient_message=$3
     shift 3
+
+    : > "$transient_target"
+    set +e
+    ASAN_OPTIONS="${ASAN_OPTIONS:+$ASAN_OPTIONS:}detect_leaks=0" \
+    strace -f -o "$report_dir/strace.log" -P "$transient_target" \
+        -e trace=write "$@" > "$report_dir/transient.stdout" 2> /dev/null
+    set -e
+    transient_writes=$(grep -c 'write(' "$report_dir/strace.log" || true)
+    if test "$transient_writes" -lt 2; then
+        printf 'skipping the transient %s write failure:' \
+            "$transient_name" >&2
+        printf ' the output takes one write to %s\n' \
+            "$transient_target" >&2
+        return 0
+    fi
 
     : > "$transient_target"
     set +e
